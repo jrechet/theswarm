@@ -1,0 +1,149 @@
+name: CD
+
+on:
+  workflow_call:
+    inputs:
+      action:
+        description: 'Deployment action'
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Deployment action'
+        required: true
+        type: choice
+        options:
+          - deploy
+          - redeploy
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: '3.12'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  STACK_NAME: theswarm
+
+jobs:
+  build:
+    if: inputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ github.sha }}
+            type=raw,value=latest
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: [build]
+    if: inputs.action == 'deploy'
+    runs-on: [self-hosted, jre-server]
+    environment: int
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create .env file
+        run: |
+          echo "MATTERMOST_BOT_TOKEN=${{ secrets.MATTERMOST_BOT_TOKEN }}" >> .env
+          echo "GITHUB_TOKEN=${{ secrets.BOT_GITHUB_TOKEN }}" >> .env
+          echo "SWARM_PO_MM_TOKEN=${{ secrets.SWARM_PO_MM_TOKEN }}" >> .env
+          echo "SWARM_PO_GITHUB_REPO=${{ secrets.SWARM_PO_GITHUB_REPO }}" >> .env
+          echo "SWARM_PO_GITHUB_REPOS=${{ secrets.SWARM_PO_GITHUB_REPOS }}" >> .env
+          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> .env
+          echo "EXTERNAL_URL=${{ secrets.EXTERNAL_URL }}" >> .env
+      - name: Deploy
+        run: |
+          export TS_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          export TS_TAG=${{ github.sha }}
+          echo "Deploying $TS_IMAGE:$TS_TAG"
+
+          for i in $(seq 1 5); do
+            echo "Pulling image (attempt $i/5)..."
+            if docker pull $TS_IMAGE:$TS_TAG; then break; fi
+            echo "Pull failed, retrying in 15s..."
+            sleep 15
+          done
+
+          docker stack up -c docker-compose.yml ${{ env.STACK_NAME }}
+      - name: Verify deployment health
+        run: |
+          echo "Waiting for service to stabilise..."
+          sleep 15
+          for i in $(seq 1 20); do
+            TASK_STATE=$(docker service ps theswarm_theswarm --format '{{.CurrentState}}' --filter 'desired-state=running' | head -1)
+            echo "Attempt $i/20 - state: $TASK_STATE"
+            if echo "$TASK_STATE" | grep -qi "running"; then
+              echo "TheSwarm is running"
+              break
+            fi
+            if [ $i -eq 20 ]; then
+              echo "ERROR: TheSwarm failed to start"
+              docker service ps theswarm_theswarm --no-trunc 2>&1 | head -20
+              docker service logs theswarm_theswarm --tail 50 --no-trunc 2>&1 || true
+              exit 1
+            fi
+            sleep 15
+          done
+
+  redeploy:
+    if: inputs.action == 'redeploy'
+    runs-on: [self-hosted, jre-server]
+    environment: int
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create .env file
+        run: |
+          echo "MATTERMOST_BOT_TOKEN=${{ secrets.MATTERMOST_BOT_TOKEN }}" >> .env
+          echo "GITHUB_TOKEN=${{ secrets.BOT_GITHUB_TOKEN }}" >> .env
+          echo "SWARM_PO_MM_TOKEN=${{ secrets.SWARM_PO_MM_TOKEN }}" >> .env
+          echo "SWARM_PO_GITHUB_REPO=${{ secrets.SWARM_PO_GITHUB_REPO }}" >> .env
+          echo "SWARM_PO_GITHUB_REPOS=${{ secrets.SWARM_PO_GITHUB_REPOS }}" >> .env
+          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> .env
+          echo "EXTERNAL_URL=${{ secrets.EXTERNAL_URL }}" >> .env
+      - name: Redeploy (latest)
+        run: |
+          export TS_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          export TS_TAG=latest
+          docker pull $TS_IMAGE:$TS_TAG
+          docker stack up -c docker-compose.yml ${{ env.STACK_NAME }}

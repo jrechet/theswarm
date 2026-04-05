@@ -1,0 +1,44 @@
+services:
+  theswarm:
+    image: ${TS_IMAGE:-theswarm}:${TS_TAG:-latest}
+    ports:
+      - "8091:8091"
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - /home/debian/.claude:/home/botuser/.claude:ro
+      - /home/debian/.claude.json:/home/botuser/.claude.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8091/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - default
+      - mattermost_mattermost-internal
+      - traefik-public
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.theswarm.rule=Host(`bots.jrec.fr`) && PathPrefix(`/swarm`)"
+        - "traefik.http.routers.theswarm.entrypoints=websecure"
+        - "traefik.http.routers.theswarm.tls=true"
+        - "traefik.http.routers.theswarm.tls.certresolver=letsencrypt"
+        - "traefik.http.services.theswarm.loadbalancer.server.port=8091"
+
+networks:
+  default:
+    name: theswarm_default
+  mattermost_mattermost-internal:
+    external: true
+  traefik-public:
+    external: true
