@@ -81,7 +81,7 @@ jobs:
         run: |
           echo "MATTERMOST_BOT_TOKEN=${{ secrets.MATTERMOST_BOT_TOKEN }}" >> .env
           echo "GITHUB_TOKEN=${{ secrets.BOT_GITHUB_TOKEN }}" >> .env
-          echo "SWARM_PO_MM_TOKEN=${{ secrets.SWARM_PO_MM_TOKEN }}" >> .env
+          echo "SWARM_PO_MATTERMOST_TOKEN=${{ secrets.SWARM_PO_MATTERMOST_TOKEN }}" >> .env
           echo "SWARM_PO_GITHUB_REPO=${{ secrets.SWARM_PO_GITHUB_REPO }}" >> .env
           echo "SWARM_PO_GITHUB_REPOS=${{ secrets.SWARM_PO_GITHUB_REPOS }}" >> .env
           echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> .env
@@ -136,7 +136,7 @@ jobs:
         run: |
           echo "MATTERMOST_BOT_TOKEN=${{ secrets.MATTERMOST_BOT_TOKEN }}" >> .env
           echo "GITHUB_TOKEN=${{ secrets.BOT_GITHUB_TOKEN }}" >> .env
-          echo "SWARM_PO_MM_TOKEN=${{ secrets.SWARM_PO_MM_TOKEN }}" >> .env
+          echo "SWARM_PO_MATTERMOST_TOKEN=${{ secrets.SWARM_PO_MATTERMOST_TOKEN }}" >> .env
           echo "SWARM_PO_GITHUB_REPO=${{ secrets.SWARM_PO_GITHUB_REPO }}" >> .env
           echo "SWARM_PO_GITHUB_REPOS=${{ secrets.SWARM_PO_GITHUB_REPOS }}" >> .env
           echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> .env

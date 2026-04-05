@@ -55,7 +55,7 @@ def load_swarm_settings(config_path: str = "theswarm.yaml") -> SwarmSettings:
     yaml_data = load_yaml_with_env(config_path)
 
     # Inject env vars
-    if token := os.getenv("SWARM_PO_MM_TOKEN"):
+    if token := os.getenv("SWARM_PO_MATTERMOST_TOKEN") or os.getenv("SWARM_PO_MM_TOKEN"):
         yaml_data.setdefault("agents", {}).setdefault("swarm_po", {})["mm_token"] = token
     # Backward compat: single SWARM_PO_GITHUB_REPO sets both github_repos and default_repo
     if repo := os.getenv("SWARM_PO_GITHUB_REPO"):
