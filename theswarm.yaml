@@ -1,0 +1,18 @@
+mattermost:
+  base_url: "https://chat.jrec.fr"
+  channel_name: "swarm-bots-logs"
+
+server:
+  host: "0.0.0.0"
+  port: 8091
+  external_url: "https://bots.jrec.fr"
+
+agents:
+  swarm_po:
+    enabled: true
+    llm_backend: "claude-code"
+    github_repos:
+      - "jrechet/swarm-todo-app"
+    default_repo: "jrechet/swarm-todo-app"
+    team_channel: "swarm-team"
+    channel: "swarm-bots-logs"
