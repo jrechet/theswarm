@@ -20,8 +20,8 @@ log = logging.getLogger(__name__)
 _seq_url = os.getenv("SEQ_URL", "")
 _seq_api_key = os.getenv("SEQ_API_KEY", "")
 if _seq_url:
-    from seqlog import StructuredLogHandler
-    _seq_handler = StructuredLogHandler(
+    from seqlog import SeqLogHandler
+    _seq_handler = SeqLogHandler(
         server_url=_seq_url,
         api_key=_seq_api_key or None,
         batch_size=10,
