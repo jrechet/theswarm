@@ -16,22 +16,87 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ── Seq structured logging ───────────────────────────────────────────
+# ── Seq structured logging (CLEF over HTTP) ─────────────────────────
 _seq_url = os.getenv("SEQ_URL", "")
 _seq_api_key = os.getenv("SEQ_API_KEY", "")
 if _seq_url:
-    import seqlog
-    _console_handlers = list(logging.getLogger().handlers)
-    seqlog.log_to_seq(
+    import datetime
+    import threading
+    import urllib.request
+
+    class _SeqCLEFHandler(logging.Handler):
+        """Sends log records to Seq as CLEF JSON via HTTP POST."""
+
+        _LEVEL_MAP = {"DEBUG": "Debug", "INFO": "Information",
+                      "WARNING": "Warning", "ERROR": "Error", "CRITICAL": "Fatal"}
+
+        def __init__(self, server_url: str, api_key: str | None = None,
+                     batch_size: int = 10, flush_interval: float = 2.0):
+            super().__init__()
+            self._url = server_url.rstrip("/") + "/api/events/raw"
+            self._api_key = api_key
+            self._batch_size = batch_size
+            self._flush_interval = flush_interval
+            self._buffer: list[str] = []
+            self._lock = threading.Lock()
+            self._timer: threading.Timer | None = None
+            self._start_timer()
+
+        def _start_timer(self) -> None:
+            self._timer = threading.Timer(self._flush_interval, self._flush)
+            self._timer.daemon = True
+            self._timer.start()
+
+        def emit(self, record: logging.LogRecord) -> None:
+            try:
+                ts = datetime.datetime.fromtimestamp(
+                    record.created, tz=datetime.timezone.utc
+                ).isoformat()
+                import json as _json
+                entry = _json.dumps({
+                    "@t": ts,
+                    "@mt": record.getMessage(),
+                    "@l": self._LEVEL_MAP.get(record.levelname, record.levelname),
+                    "LoggerName": record.name,
+                    "from": "theswarm",
+                })
+                with self._lock:
+                    self._buffer.append(entry)
+                    if len(self._buffer) >= self._batch_size:
+                        self._flush_locked()
+            except Exception:
+                self.handleError(record)
+
+        def _flush(self) -> None:
+            with self._lock:
+                self._flush_locked()
+            self._start_timer()
+
+        def _flush_locked(self) -> None:
+            if not self._buffer:
+                return
+            payload = "\n".join(self._buffer)
+            self._buffer.clear()
+            threading.Thread(target=self._send, args=(payload,), daemon=True).start()
+
+        def _send(self, payload: str) -> None:
+            try:
+                req = urllib.request.Request(
+                    self._url, data=payload.encode(),
+                    headers={"Content-Type": "application/vnd.serilog.clef"},
+                )
+                if self._api_key:
+                    req.add_header("X-Seq-ApiKey", self._api_key)
+                urllib.request.urlopen(req, timeout=5)
+            except Exception:
+                pass  # don't break the app if Seq is down
+
+    _seq_handler = _SeqCLEFHandler(
         server_url=_seq_url,
         api_key=_seq_api_key or None,
-        level=logging.INFO,
-        batch_size=10,
-        auto_flush_timeout=2,
-        override_root_logger=True,
     )
-    for h in _console_handlers:
-        logging.getLogger().addHandler(h)
+    _seq_handler.setLevel(logging.INFO)
+    logging.getLogger().addHandler(_seq_handler)
 
 
 # ── Minimal settings for swarm service ────────────────────────────────
