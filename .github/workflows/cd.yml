@@ -86,6 +86,8 @@ jobs:
           echo "SWARM_PO_GITHUB_REPOS=${{ secrets.SWARM_PO_GITHUB_REPOS }}" >> .env
           echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> .env
           echo "EXTERNAL_URL=${{ secrets.EXTERNAL_URL }}" >> .env
+          echo "SEQ_URL=${{ secrets.SEQ_URL }}" >> .env
+          echo "SEQ_API_KEY=${{ secrets.SEQ_API_KEY }}" >> .env
       - name: Deploy
         run: |
           export TS_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}

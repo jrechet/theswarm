@@ -16,6 +16,20 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+# ── Seq structured logging ───────────────────────────────────────────
+_seq_url = os.getenv("SEQ_URL", "")
+_seq_api_key = os.getenv("SEQ_API_KEY", "")
+if _seq_url:
+    import seqlog
+    seqlog.log_to_seq(
+        server_url=_seq_url,
+        api_key=_seq_api_key or None,
+        level=logging.INFO,
+        batch_size=10,
+        auto_flush_timeout=2,
+        override_root_logger=True,
+    )
+
 
 # ── Minimal settings for swarm service ────────────────────────────────
 

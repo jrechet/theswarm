@@ -24,4 +24,4 @@ USER botuser
 
 EXPOSE 8091
 
-CMD ["uv", "run", "python", "-m", "theswarm"]
+CMD [".venv/bin/python", "-m", "theswarm"]
