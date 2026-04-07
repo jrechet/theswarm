@@ -26,51 +26,72 @@ class BudgetExceeded(Exception):
         super().__init__(f"{role} exceeded token budget: {used:,} > {budget:,}")
 
 
-async def _write_cycle_learnings(base_state: dict, qa_state: dict, reviews: list[dict], _progress) -> None:
-    """Write cycle learnings to AGENT_MEMORY.md after QA completes."""
-    from theswarm.memory import append_to_memory_batch
+async def _write_cycle_learnings(
+    base_state: dict,
+    cycle_result: dict,
+    _progress,
+) -> None:
+    """Run retrospective and update structured agent memory after a cycle.
+
+    Uses Claude to analyze the cycle and extract actionable learnings,
+    then appends them to AGENT_MEMORY.jsonl. Triggers compaction if
+    memory exceeds 50 entries.
+    """
+    from theswarm.memory_store import (
+        append_entries, load_entries, make_entry,
+        run_retrospective, compact_memory,
+    )
 
     github = base_state.get("github")
+    claude = base_state.get("claude")
     if not github:
         return
 
-    await _progress("Memory", "Writing cycle learnings…")
+    await _progress("Memory", "Running retrospective…")
 
-    entries = []
+    # Collect basic facts (always, even without Claude)
+    fact_entries = []
+    demo = cycle_result.get("demo_report", {})
+    security = demo.get("quality_gates", {}).get("security", {}) if demo else {}
+    coverage_gate = demo.get("quality_gates", {}).get("coverage", {}) if demo else {}
 
-    # QA: record security scan results
-    security = qa_state.get("security_scan", {})
-    semgrep = security.get("semgrep", {})
-    if semgrep.get("findings"):
-        for finding in semgrep["findings"][:3]:  # max 3
-            entries.append((
-                "Erreurs à éviter",
-                f"Semgrep: {finding.get('check_id', 'unknown')} in {finding.get('path', '?')}",
-                "QA",
-            ))
-
-    # QA: record coverage
-    coverage = security.get("coverage_pct")
-    if coverage is not None:
-        entries.append((
-            "Stack technique",
-            f"Code coverage: {coverage}%",
-            "QA",
+    if coverage_gate.get("percent"):
+        fact_entries.append(make_entry(
+            category="stack",
+            content=f"Code coverage: {coverage_gate['percent']}%",
+            agent="QA",
+            cycle_date=cycle_result.get("date", ""),
         ))
 
-    # TechLead: record review patterns
-    changes_requested = [r for r in reviews if r.get("decision") == "REQUEST_CHANGES"]
-    for r in changes_requested[:2]:  # max 2
-        issues = r.get("issues", [])
-        for issue in issues[:1]:  # just the main issue
-            entries.append((
-                "Erreurs à éviter",
-                f"PR #{r['pr_number']}: {issue.get('description', 'review issue')[:100]}",
-                "TechLead",
-            ))
+    if security.get("semgrep_high", 0) > 0:
+        fact_entries.append(make_entry(
+            category="errors",
+            content=f"Semgrep found {security['semgrep_high']} high-severity findings",
+            agent="QA",
+            cycle_date=cycle_result.get("date", ""),
+        ))
 
-    if entries:
-        await append_to_memory_batch(github, entries)
+    # Run Claude-powered retrospective if available
+    retro_entries = []
+    if claude:
+        try:
+            retro_entries = await run_retrospective(github, claude, cycle_result)
+        except Exception:
+            log.exception("Retrospective failed")
+
+    all_new = fact_entries + retro_entries
+    if all_new:
+        await append_entries(github, all_new)
+        await _progress("Memory", f"Added {len(all_new)} memory entries ({len(retro_entries)} from retrospective)")
+
+    # Compact if memory is getting large
+    if claude:
+        try:
+            compacted = await compact_memory(github, claude, threshold=50)
+            if compacted:
+                await _progress("Memory", "Memory compacted")
+        except Exception:
+            log.exception("Memory compaction failed")
 
 
 def _build_base_state(config: CycleConfig) -> dict:
@@ -229,10 +250,6 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
     total_cost += qa_cost
     _check_budget(Role.QA, qa_state.get("tokens_used", 0))
 
-    # --- MEMORY: write learnings from the cycle ---
-    if config.is_real_mode:
-        await _write_cycle_learnings(base_state, qa_state, all_reviews, _progress)
-
     # --- EVENING: PO validates + reports ---
     await _progress("PO", "Generating daily report…")
     po_evening = build_po_graph()
@@ -265,6 +282,10 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
         "demo_report": qa_state.get("demo_report"),
         "daily_report": po_ev_state.get("daily_report", ""),
     }
+
+    # --- MEMORY: retrospective + learnings ---
+    if config.is_real_mode:
+        await _write_cycle_learnings(base_state, result, _progress)
 
     # --- PERSIST: write cycle history ---
     from theswarm.cycle_log import append_cycle_log

@@ -11,21 +11,57 @@ log = logging.getLogger(__name__)
 
 
 async def load_context(state: AgentState) -> dict[str, Any]:
-    """Load GOLDEN_RULES + AGENT_MEMORY + DoD from the target repo."""
+    """Load GOLDEN_RULES + relevant agent memory + DoD from the target repo.
+
+    Memory is now role-aware: each agent gets the categories most relevant
+    to its work, formatted as structured entries rather than raw markdown.
+    """
     github = state.get("github")
     if github is None:
         log.warning("No GitHub client — skipping context load")
         return {"context": "(no context — stub run)"}
 
     parts: list[str] = []
-    for path in ("GOLDEN_RULES.md", "AGENT_MEMORY.md", "DOD.md"):
+
+    # Load static docs
+    for path in ("GOLDEN_RULES.md", "DOD.md"):
         try:
             content = await github.get_file_content(path)
             parts.append(content)
         except Exception:
             log.debug("Could not load %s", path)
 
+    # Load structured memory (role-aware)
+    phase = state.get("phase", "")
+    role = _infer_role(phase)
+    try:
+        from theswarm.memory_store import load_entries, query, format_for_prompt
+        entries = await load_entries(github)
+        relevant = query(entries, role=role, limit=25)
+        memory_text = format_for_prompt(relevant, max_chars=3000)
+        parts.append(f"## Agent Memory\n\n{memory_text}")
+    except Exception:
+        # Fall back to legacy AGENT_MEMORY.md
+        try:
+            content = await github.get_file_content("AGENT_MEMORY.md")
+            parts.append(content)
+        except Exception:
+            log.debug("Could not load agent memory")
+
     return {"context": "\n\n---\n\n".join(parts) if parts else "(empty context)"}
+
+
+def _infer_role(phase: str) -> str | None:
+    """Infer the agent role from the current phase for memory filtering."""
+    phase_role_map = {
+        "morning": "po",
+        "evening": "po",
+        "breakdown": "techlead",
+        "review_loop": "techlead",
+        "development": "dev",
+        "demo": "qa",
+    }
+    return phase_role_map.get(phase)
 
 
 def stub_result(role: Role, phase: str, detail: str = "") -> dict[str, Any]:
