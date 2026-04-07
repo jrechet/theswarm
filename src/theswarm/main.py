@@ -189,8 +189,23 @@ async def _connect_mattermost(config: MattermostConfig, server_config=None, labe
 # ── Start ─────────────────────────────────────────────────────────────
 
 
+def _validate_env() -> list[str]:
+    """Check required env vars and return a list of warnings (empty = all good)."""
+    warnings: list[str] = []
+    if not os.getenv("GITHUB_TOKEN"):
+        warnings.append("GITHUB_TOKEN is not set — GitHub operations will fail")
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        warnings.append("ANTHROPIC_API_KEY is not set — agent cycles will fail")
+    return warnings
+
+
 async def start() -> None:
     settings = load_swarm_settings()
+
+    # Pre-flight env var check
+    env_warnings = _validate_env()
+    for w in env_warnings:
+        log.warning("ENV: %s", w)
 
     from theswarm.gateway import SwarmGateway
 
@@ -258,11 +273,12 @@ async def start() -> None:
             return JSONResponse(status_code=403, content={"error": "forbidden"})
 
         post_id = body.get("post_id", "")
+        user_id = body.get("user_id", "")
         action_id = context.get("action_id", "") or body.get("action", "")
         agent_event = AgentEvent(
             event_type="chat_action",
             source="mattermost",
-            payload={"action_id": action_id, "post_id": post_id, "context": context},
+            payload={"action_id": action_id, "post_id": post_id, "user_id": user_id, "context": context},
         )
         await gw.route_event(agent_event)
         return {"update": {"message": "Action received."}}

@@ -63,12 +63,19 @@ class SwarmGateway:
                 if self._swarm_po_cycle_running:
                     swarm_po_status = f"running (phase: {self._swarm_po_current_phase})"
             vcs_map = getattr(self, "_swarm_po_vcs_map", {})
+            has_github = bool(getattr(self, "_swarm_po_github", None))
+            has_chat = bool(self._swarm_po_chat)
+            overall = "ok" if (has_github and has_chat) else "degraded"
             return {
-                "status": "ok",
+                "status": overall,
                 "service": "theswarm",
                 "bots": {"swarm_po": swarm_po_status},
                 "repos": list(vcs_map.keys()),
                 "default_repo": getattr(self, "_swarm_po_default_repo", ""),
+                "checks": {
+                    "github": "connected" if has_github else "missing",
+                    "chat": "connected" if has_chat else "missing",
+                },
             }
 
     def register(self, event_type: str, handler) -> None:
