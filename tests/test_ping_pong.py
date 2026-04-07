@@ -39,13 +39,14 @@ async def test_ping_posts_interactive_buttons():
     chat.post_dm_interactive.assert_called_once()
     call_args = chat.post_dm_interactive.call_args
     assert call_args[0][0] == "user1"  # user_id
-    assert "Ping" in call_args[0][1]  # text contains Ping
+    assert call_args[0][1]  # has some text
 
     actions = call_args.kwargs.get("actions") or call_args[0][2]
     assert len(actions) == 2
-    assert actions[0]["name"] == "Pong"
-    assert actions[0]["id"].startswith("swarm_po_pong:")
-    assert actions[1]["name"] == "Dismiss"
+    assert actions[0]["name"] == "Ping"
+    assert actions[0]["id"].startswith("swarm_po_ping:")
+    assert actions[1]["name"] == "Pong"
+    assert actions[1]["id"].startswith("swarm_po_pong:")
 
 
 async def test_ping_is_in_known_actions():
@@ -58,7 +59,7 @@ async def test_ping_is_in_known_actions():
 
 
 async def test_pong_callback_posts_pong(gateway):
-    """Clicking the Pong button posts 'Pong!' to the user's DM."""
+    """Clicking the Pong button posts 'pong' to the user's DM."""
     from theswarm.gateway.wiring import wire_swarm_po
 
     chat = AsyncMock()
@@ -80,7 +81,32 @@ async def test_pong_callback_posts_pong(gateway):
     )
     await gateway.route_event(event)
 
-    chat.post_dm.assert_called_once_with("user1", "🏓 Pong!")
+    chat.post_dm.assert_called_once_with("user1", "pong")
+
+
+async def test_ping_callback_posts_ping(gateway):
+    """Clicking the Ping button posts 'ping' to the user's DM."""
+    from theswarm.gateway.wiring import wire_swarm_po
+
+    chat = AsyncMock()
+    team_chat = AsyncMock()
+    vcs_map = {"owner/repo": MagicMock()}
+
+    wire_swarm_po(gateway, vcs_map, "owner/repo", chat, team_chat)
+
+    event = AgentEvent(
+        event_type="chat_action",
+        source="mattermost",
+        payload={
+            "action_id": "swarm_po_ping:ping",
+            "post_id": "post123",
+            "user_id": "user1",
+            "context": {"action_id": "swarm_po_ping:ping"},
+        },
+    )
+    await gateway.route_event(event)
+
+    chat.post_dm.assert_called_once_with("user1", "ping")
 
 
 async def test_dismiss_callback_is_silent(gateway):
@@ -136,7 +162,7 @@ async def test_full_ping_pong_flow(gateway):
     assert chat.post_dm_interactive.call_count == 1
     call_args = chat.post_dm_interactive.call_args
     actions = call_args.kwargs.get("actions") or call_args[0][2]
-    pong_action_id = actions[0]["id"]
+    pong_action_id = actions[1]["id"]
     assert pong_action_id.startswith("swarm_po_pong:")
 
     # Step 2: User clicks Pong button → Mattermost sends callback
@@ -152,5 +178,5 @@ async def test_full_ping_pong_flow(gateway):
     )
     await gateway.route_event(event)
 
-    # Step 3: Verify "Pong!" was posted
-    chat.post_dm.assert_called_once_with("user1", "🏓 Pong!")
+    # Step 3: Verify "pong" was posted
+    chat.post_dm.assert_called_once_with("user1", "pong")

@@ -218,10 +218,10 @@ async def _handle_ping(user_id: str, chat) -> None:
     """Respond with interactive buttons to verify the callback flow works."""
     await chat.post_dm_interactive(
         user_id,
-        "🏓 Ping!",
+        "🏓 Choose a button:",
         actions=[
+            {"id": "swarm_po_ping:ping", "name": "Ping", "style": "default"},
             {"id": "swarm_po_pong:ping", "name": "Pong", "style": "good"},
-            {"id": "swarm_po_dismiss:ping", "name": "Dismiss", "style": "default"},
         ],
     )
 
