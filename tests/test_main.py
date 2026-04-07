@@ -101,6 +101,15 @@ async def test_keyword_nlu_help(keyword_nlu):
     assert intent.action == "help"
 
 
+async def test_keyword_nlu_ping(keyword_nlu):
+    """!ping must route to the ping action, not 'unknown'."""
+    intent = await keyword_nlu.parse_intent("!ping", "swarm_po", [])
+    assert intent.action == "ping"
+
+    intent = await keyword_nlu.parse_intent("ping", "swarm_po", [])
+    assert intent.action == "ping"
+
+
 async def test_keyword_nlu_status(keyword_nlu):
     intent = await keyword_nlu.parse_intent("status", "swarm_po", [])
     assert intent.action == "show_status"

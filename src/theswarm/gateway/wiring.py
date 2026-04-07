@@ -44,10 +44,16 @@ def wire_swarm_po(gw: SwarmGateway, vcs_map: dict, default_repo: str, chat, team
         pending_id = parts[1]
 
         # Ping/pong callback — no pending stories needed
+        if action_type == "swarm_po_ping":
+            user_id = event.payload.get("user_id", "")
+            if chat and user_id:
+                await chat.post_dm(user_id, "ping")
+            return
+
         if action_type == "swarm_po_pong":
             user_id = event.payload.get("user_id", "")
             if chat and user_id:
-                await chat.post_dm(user_id, "🏓 Pong!")
+                await chat.post_dm(user_id, "pong")
             return
 
         if action_type == "swarm_po_dismiss":

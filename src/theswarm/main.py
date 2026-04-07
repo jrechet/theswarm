@@ -356,6 +356,7 @@ class _KeywordNLU:
         msg = message.lower().strip()
 
         keywords = {
+            "ping": "ping",
             "help": "help",
             "aide": "help",
             "status": "show_status",
