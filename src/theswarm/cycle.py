@@ -9,12 +9,21 @@ from theswarm.agents.dev import build_dev_graph
 from theswarm.agents.po import build_po_graph
 from theswarm.agents.qa import build_qa_graph
 from theswarm.agents.techlead import build_techlead_graph
-from theswarm.config import CycleConfig, Phase
+from theswarm.config import CycleConfig, Phase, Role
 from theswarm.token_counter import TokenTracker
 
 log = logging.getLogger(__name__)
 
 MAX_DEV_ITERATIONS = 5  # safety cap per cycle
+
+
+class BudgetExceeded(Exception):
+    """Raised when a role exceeds its token budget."""
+    def __init__(self, role: str, used: int, budget: int) -> None:
+        self.role = role
+        self.used = used
+        self.budget = budget
+        super().__init__(f"{role} exceeded token budget: {used:,} > {budget:,}")
 
 
 async def _write_cycle_learnings(base_state: dict, qa_state: dict, reviews: list[dict], _progress) -> None:
@@ -126,6 +135,15 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
             except Exception:
                 pass
 
+    # Per-role token accumulators for budget enforcement
+    role_tokens: dict[str, int] = {r.value: 0 for r in Role}
+
+    def _check_budget(role: Role, new_tokens: int) -> None:
+        role_tokens[role.value] += new_tokens
+        budget = config.token_budget.get(role, 0)
+        if budget and role_tokens[role.value] > budget:
+            raise BudgetExceeded(role.value, role_tokens[role.value], budget)
+
     print(f"\n{'=' * 60}")
     print(f"SWARM CYCLE — {today}")
     print(f"{'=' * 60}\n")
@@ -134,17 +152,28 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
     await _ensure_workspace(config)
     base_state = _build_base_state(config)
 
+    # Ensure branch protection on first run
+    if config.is_real_mode and base_state.get("github"):
+        await _progress("System", "Checking branch protection…")
+        await base_state["github"].ensure_branch_protection()
+
     # --- MORNING: PO daily planning ---
     await _progress("PO", "Starting daily planning…")
     po = build_po_graph()
     po_state = await po.ainvoke({**base_state, "phase": Phase.MORNING.value})
-    tracker.record("po_morning", po_state.get("tokens_used", 0))
+    po_cost = po_state.get("cost_usd", 0.0)
+    tracker.record("po_morning", po_state.get("tokens_used", 0), po_cost)
+    total_cost += po_cost
+    _check_budget(Role.PO, po_state.get("tokens_used", 0))
 
     # --- MORNING: Tech Lead story breakdown ---
     await _progress("TechLead", "Breaking down stories into tasks…")
     tl = build_techlead_graph()
     tl_state = await tl.ainvoke({**base_state, "phase": "breakdown"})
-    tracker.record("techlead_breakdown", tl_state.get("tokens_used", 0))
+    tl_bd_cost = tl_state.get("cost_usd", 0.0)
+    tracker.record("techlead_breakdown", tl_state.get("tokens_used", 0), tl_bd_cost)
+    total_cost += tl_bd_cost
+    _check_budget(Role.TECHLEAD, tl_state.get("tokens_used", 0))
 
     # --- DEVELOPMENT: Dev implements → TechLead reviews → repeat ---
     await _progress("Dev", "Starting development loop…")
@@ -153,8 +182,10 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
         dev = build_dev_graph()
         dev_state = await dev.ainvoke({**base_state, "phase": Phase.DEVELOPMENT.value})
         dev_cost = dev_state.get("cost_usd", 0.0)
-        tracker.record(f"dev_iter{iteration}", dev_state.get("tokens_used", 0))
+        dev_tokens = dev_state.get("tokens_used", 0)
+        tracker.record(f"dev_iter{iteration}", dev_tokens, dev_cost)
         total_cost += dev_cost
+        _check_budget(Role.DEV, dev_tokens)
 
         pr = dev_state.get("pr")
         if pr:
@@ -172,8 +203,10 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
         tl_review = build_techlead_graph()
         tl_state = await tl_review.ainvoke({**base_state, "phase": "review_loop"})
         tl_cost = tl_state.get("cost_usd", 0.0)
-        tracker.record(f"techlead_review_iter{iteration}", tl_state.get("tokens_used", 0))
+        tl_tokens = tl_state.get("tokens_used", 0)
+        tracker.record(f"techlead_review_iter{iteration}", tl_tokens, tl_cost)
         total_cost += tl_cost
+        _check_budget(Role.TECHLEAD, tl_tokens)
 
         reviews = tl_state.get("reviews", [])
         all_reviews.extend(reviews)
@@ -191,7 +224,10 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
     await _progress("QA", "Running tests + security scan…")
     qa = build_qa_graph()
     qa_state = await qa.ainvoke({**base_state, "phase": Phase.DEMO.value})
-    tracker.record("qa", qa_state.get("tokens_used", 0))
+    qa_cost = qa_state.get("cost_usd", 0.0)
+    tracker.record("qa", qa_state.get("tokens_used", 0), qa_cost)
+    total_cost += qa_cost
+    _check_budget(Role.QA, qa_state.get("tokens_used", 0))
 
     # --- MEMORY: write learnings from the cycle ---
     if config.is_real_mode:
@@ -205,7 +241,9 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
         "phase": Phase.EVENING.value,
         "demo_report": qa_state.get("demo_report"),
     })
-    tracker.record("po_evening", po_ev_state.get("tokens_used", 0))
+    po_ev_cost = po_ev_state.get("cost_usd", 0.0)
+    tracker.record("po_evening", po_ev_state.get("tokens_used", 0), po_ev_cost)
+    total_cost += po_ev_cost
 
     # --- SUMMARY ---
     print(f"\n{'=' * 60}")
@@ -218,7 +256,7 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
 
     await _progress("PO", "Cycle complete!")
 
-    return {
+    result = {
         "date": today,
         "tokens": tracker.total_tokens,
         "cost_usd": total_cost,
@@ -227,6 +265,17 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
         "demo_report": qa_state.get("demo_report"),
         "daily_report": po_ev_state.get("daily_report", ""),
     }
+
+    # --- PERSIST: write cycle history ---
+    from theswarm.cycle_log import append_cycle_log
+    await append_cycle_log(config, result)
+
+    # --- CLEANUP: remove workspace ---
+    if config.is_real_mode:
+        from theswarm.tools.git import cleanup_workspace
+        await cleanup_workspace(config.workspace_dir)
+
+    return result
 
 
 async def run_dev_only(config: CycleConfig) -> dict:
@@ -245,14 +294,12 @@ async def run_dev_only(config: CycleConfig) -> dict:
     dev_state = await dev.ainvoke({**base_state, "phase": Phase.DEVELOPMENT.value})
     dev_tokens = dev_state.get("tokens_used", 0)
     dev_cost = dev_state.get("cost_usd", 0.0)
-    tracker.record("dev", dev_tokens)
+    tracker.record("dev", dev_tokens, dev_cost)
 
     print(f"\n{'=' * 60}")
     print("DEV AGENT DONE")
     print(f"{'=' * 60}")
     tracker.print_summary()
-    if dev_cost > 0:
-        print(f"Claude API cost: ${dev_cost:.4f}")
 
     pr = dev_state.get("pr")
     if pr:
@@ -282,14 +329,12 @@ async def run_techlead_only(config: CycleConfig) -> dict:
     tl_state = await tl.ainvoke({**base_state, "phase": "review_loop"})
     tl_tokens = tl_state.get("tokens_used", 0)
     tl_cost = tl_state.get("cost_usd", 0.0)
-    tracker.record("techlead", tl_tokens)
+    tracker.record("techlead", tl_tokens, tl_cost)
 
     print(f"\n{'=' * 60}")
     print("TECHLEAD AGENT DONE")
     print(f"{'=' * 60}")
     tracker.print_summary()
-    if tl_cost > 0:
-        print(f"Claude API cost: ${tl_cost:.4f}")
 
     reviews = tl_state.get("reviews", [])
     for r in reviews:

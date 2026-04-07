@@ -19,9 +19,10 @@ log = logging.getLogger(__name__)
 class MattermostAdapter(ChatPort):
     """ChatPort backed by Mattermost via mattermostdriver."""
 
-    def __init__(self, config: MattermostConfig, server_config: ServerConfig | None = None) -> None:
+    def __init__(self, config: MattermostConfig, server_config: ServerConfig | None = None, callback_token: str = "") -> None:
         self.config = config
         self.server_config = server_config
+        self.callback_token = callback_token
         self._driver: Driver | None = None
         self._channel_id: str | None = None
         self._bot_user_id: str | None = None
@@ -89,15 +90,21 @@ class MattermostAdapter(ChatPort):
                 continue
         raise ValueError(f"Channel '{channel_name}' not found in any team")
 
-    async def post_message(self, channel: str, text: str) -> str:
-        """Post a simple text message. channel can be a name or ID."""
+    async def post_message(self, channel: str, text: str, *, root_id: str = "") -> str:
+        """Post a simple text message. channel can be a name or ID.
+
+        If root_id is set, the message is posted as a threaded reply.
+        """
         channel_id = self._channel_id if channel == self.config.channel_name else channel
+        payload: dict[str, str] = {"channel_id": channel_id, "message": text}
+        if root_id:
+            payload["root_id"] = root_id
         resp = await asyncio.to_thread(
             self._driver.posts.create_post,
-            {"channel_id": channel_id, "message": text},
+            payload,
         )
         post_id = resp.get("id", "")
-        log.debug("Posted message %s to channel %s", post_id, channel_id)
+        log.debug("Posted message %s to channel %s (root=%s)", post_id, channel_id, root_id or "none")
         return post_id
 
     async def post_dm(self, user_id: str, text: str) -> str:
@@ -158,6 +165,8 @@ class MattermostAdapter(ChatPort):
             action_id = action.get("id", "action")
             ctx = dict(action.get("context", {}))
             ctx["action_id"] = action_id
+            if self.callback_token:
+                ctx["_token"] = self.callback_token
             mm_actions.append({
                 "id": action_id,
                 "name": action.get("name", "Action"),

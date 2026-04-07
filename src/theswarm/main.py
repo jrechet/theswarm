@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import secrets
 
 from theswarm_common.config import MattermostConfig, ServerConfig, OllamaConfig, load_yaml_with_env
 from theswarm_common.models import AgentEvent
@@ -170,12 +171,12 @@ def load_swarm_settings(config_path: str = "theswarm.yaml") -> SwarmSettings:
 # ── Mattermost connection helper ──────────────────────────────────────
 
 
-async def _connect_mattermost(config: MattermostConfig, server_config=None, label: str = ""):
+async def _connect_mattermost(config: MattermostConfig, server_config=None, label: str = "", callback_token: str = ""):
     """Helper: create, connect and return a MattermostAdapter, or None on failure."""
     if not config.base_url or not config.bot_token:
         return None
     from theswarm_common.chat.mattermost import MattermostAdapter
-    adapter = MattermostAdapter(config, server_config)
+    adapter = MattermostAdapter(config, server_config, callback_token=callback_token)
     try:
         await adapter.connect()
         log.info("Mattermost [%s]: connected", label)
@@ -208,6 +209,7 @@ async def start() -> None:
             channel_name=settings.agents.swarm_po.channel,
         ),
         server_config=settings.server, label="@swarm-po",
+        callback_token=gw.callback_token,
     )
 
     # Team channel chat (uses same adapter, different channel)
@@ -240,11 +242,21 @@ async def start() -> None:
 
     # ── Mattermost action callback ────────────────────────────────────
     import starlette.requests
+    from fastapi.responses import JSONResponse
 
     @gw.app.post("/swarm/mattermost/callback")
     async def mattermost_callback(request: starlette.requests.Request):
         body = await request.json()
         context = body.get("context", {})
+
+        # Verify callback token to reject forged requests
+        if not secrets.compare_digest(
+            context.get("_token", ""),
+            gw.callback_token,
+        ):
+            log.warning("Mattermost callback: invalid token, rejecting request")
+            return JSONResponse(status_code=403, content={"error": "forbidden"})
+
         post_id = body.get("post_id", "")
         action_id = context.get("action_id", "") or body.get("action", "")
         agent_event = AgentEvent(
@@ -345,13 +357,13 @@ class _KeywordNLU:
 
         for keyword, action in keywords.items():
             if keyword in msg:
-                return Intent(action=action, confidence=0.9, params={})
+                return Intent(action=action, confidence=0.9, params={}, raw_text=message)
 
         # Default: assume it's a feature description for story creation
         if len(msg) > 10:
-            return Intent(action="create_stories", confidence=0.6, params={})
+            return Intent(action="create_stories", confidence=0.6, params={}, raw_text=message)
 
-        return Intent(action="unknown", confidence=0.1, params={})
+        return Intent(action="unknown", confidence=0.1, params={}, raw_text=message)
 
 
 # ── Entry point ───────────────────────────────────────────────────────
