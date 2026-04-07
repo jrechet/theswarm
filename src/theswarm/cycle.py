@@ -184,130 +184,131 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
     await _ensure_workspace(config)
     base_state = _build_base_state(config)
 
-    # Ensure branch protection on first run
-    if config.is_real_mode and base_state.get("github"):
-        await _progress("System", "Checking branch protection…")
-        await base_state["github"].ensure_branch_protection()
+    try:
+        # Ensure branch protection on first run
+        if config.is_real_mode and base_state.get("github"):
+            await _progress("System", "Checking branch protection…")
+            await base_state["github"].ensure_branch_protection()
 
-    # --- MORNING: PO daily planning ---
-    await _progress("PO", "Starting daily planning…")
-    po = build_po_graph()
-    po_state = await po.ainvoke({**base_state, "phase": Phase.MORNING.value})
-    po_cost = po_state.get("cost_usd", 0.0)
-    tracker.record("po_morning", po_state.get("tokens_used", 0), po_cost)
-    total_cost += po_cost
-    _check_budget(Role.PO, po_state.get("tokens_used", 0))
+        # --- MORNING: PO daily planning ---
+        await _progress("PO", "Starting daily planning…")
+        po = build_po_graph()
+        po_state = await po.ainvoke({**base_state, "phase": Phase.MORNING.value})
+        po_cost = po_state.get("cost_usd", 0.0)
+        tracker.record("po_morning", po_state.get("tokens_used", 0), po_cost)
+        total_cost += po_cost
+        _check_budget(Role.PO, po_state.get("tokens_used", 0))
 
-    # --- MORNING: Tech Lead story breakdown ---
-    await _progress("TechLead", "Breaking down stories into tasks…")
-    tl = build_techlead_graph()
-    tl_state = await tl.ainvoke({**base_state, "phase": "breakdown"})
-    tl_bd_cost = tl_state.get("cost_usd", 0.0)
-    tracker.record("techlead_breakdown", tl_state.get("tokens_used", 0), tl_bd_cost)
-    total_cost += tl_bd_cost
-    _check_budget(Role.TECHLEAD, tl_state.get("tokens_used", 0))
+        # --- MORNING: Tech Lead story breakdown ---
+        await _progress("TechLead", "Breaking down stories into tasks…")
+        tl = build_techlead_graph()
+        tl_state = await tl.ainvoke({**base_state, "phase": "breakdown"})
+        tl_bd_cost = tl_state.get("cost_usd", 0.0)
+        tracker.record("techlead_breakdown", tl_state.get("tokens_used", 0), tl_bd_cost)
+        total_cost += tl_bd_cost
+        _check_budget(Role.TECHLEAD, tl_state.get("tokens_used", 0))
 
-    # --- DEVELOPMENT: Dev implements → TechLead reviews → repeat ---
-    await _progress("Dev", "Starting development loop…")
-    for iteration in range(1, MAX_DEV_ITERATIONS + 1):
-        await _progress("Dev", f"Iteration {iteration}/{MAX_DEV_ITERATIONS} — picking next task…")
-        dev = build_dev_graph()
-        dev_state = await dev.ainvoke({**base_state, "phase": Phase.DEVELOPMENT.value})
-        dev_cost = dev_state.get("cost_usd", 0.0)
-        dev_tokens = dev_state.get("tokens_used", 0)
-        tracker.record(f"dev_iter{iteration}", dev_tokens, dev_cost)
-        total_cost += dev_cost
-        _check_budget(Role.DEV, dev_tokens)
+        # --- DEVELOPMENT: Dev implements → TechLead reviews → repeat ---
+        await _progress("Dev", "Starting development loop…")
+        for iteration in range(1, MAX_DEV_ITERATIONS + 1):
+            await _progress("Dev", f"Iteration {iteration}/{MAX_DEV_ITERATIONS} — picking next task…")
+            dev = build_dev_graph()
+            dev_state = await dev.ainvoke({**base_state, "phase": Phase.DEVELOPMENT.value})
+            dev_cost = dev_state.get("cost_usd", 0.0)
+            dev_tokens = dev_state.get("tokens_used", 0)
+            tracker.record(f"dev_iter{iteration}", dev_tokens, dev_cost)
+            total_cost += dev_cost
+            _check_budget(Role.DEV, dev_tokens)
 
-        pr = dev_state.get("pr")
-        if pr:
-            all_prs.append(pr)
-            await _progress("Dev", f"PR #{pr['number']} opened: {pr['url']}")
-        else:
-            task = dev_state.get("task")
-            if task is None:
-                await _progress("Dev", "No more ready tasks — ending dev loop")
-                break
-            await _progress("Dev", f"No PR produced for task #{task['number']}")
+            pr = dev_state.get("pr")
+            if pr:
+                all_prs.append(pr)
+                await _progress("Dev", f"PR #{pr['number']} opened: {pr['url']}")
+            else:
+                task = dev_state.get("task")
+                if task is None:
+                    await _progress("Dev", "No more ready tasks — ending dev loop")
+                    break
+                await _progress("Dev", f"No PR produced for task #{task['number']}")
 
-        # TechLead reviews and merges
-        await _progress("TechLead", "Reviewing open PRs…")
-        tl_review = build_techlead_graph()
-        tl_state = await tl_review.ainvoke({**base_state, "phase": "review_loop"})
-        tl_cost = tl_state.get("cost_usd", 0.0)
-        tl_tokens = tl_state.get("tokens_used", 0)
-        tracker.record(f"techlead_review_iter{iteration}", tl_tokens, tl_cost)
-        total_cost += tl_cost
-        _check_budget(Role.TECHLEAD, tl_tokens)
+            # TechLead reviews and merges
+            await _progress("TechLead", "Reviewing open PRs…")
+            tl_review = build_techlead_graph()
+            tl_state = await tl_review.ainvoke({**base_state, "phase": "review_loop"})
+            tl_cost = tl_state.get("cost_usd", 0.0)
+            tl_tokens = tl_state.get("tokens_used", 0)
+            tracker.record(f"techlead_review_iter{iteration}", tl_tokens, tl_cost)
+            total_cost += tl_cost
+            _check_budget(Role.TECHLEAD, tl_tokens)
 
-        reviews = tl_state.get("reviews", [])
-        all_reviews.extend(reviews)
-        merged = tl_state.get("merged_prs", [])
-        for r in reviews:
-            await _progress("TechLead", f"PR #{r['pr_number']}: {r['decision']}")
-        if merged:
-            await _progress("TechLead", f"Merged: {merged}")
+            reviews = tl_state.get("reviews", [])
+            all_reviews.extend(reviews)
+            merged = tl_state.get("merged_prs", [])
+            for r in reviews:
+                await _progress("TechLead", f"PR #{r['pr_number']}: {r['decision']}")
+            if merged:
+                await _progress("TechLead", f"Merged: {merged}")
 
-        # Pull latest into workspace so next iteration builds on merged code
-        if merged:
-            await _pull_latest(config)
+            # Pull latest into workspace so next iteration builds on merged code
+            if merged:
+                await _pull_latest(config)
 
-    # --- DEMO: QA generates demo ---
-    await _progress("QA", "Running tests + security scan…")
-    qa = build_qa_graph()
-    qa_state = await qa.ainvoke({**base_state, "phase": Phase.DEMO.value})
-    qa_cost = qa_state.get("cost_usd", 0.0)
-    tracker.record("qa", qa_state.get("tokens_used", 0), qa_cost)
-    total_cost += qa_cost
-    _check_budget(Role.QA, qa_state.get("tokens_used", 0))
+        # --- DEMO: QA generates demo ---
+        await _progress("QA", "Running tests + security scan…")
+        qa = build_qa_graph()
+        qa_state = await qa.ainvoke({**base_state, "phase": Phase.DEMO.value})
+        qa_cost = qa_state.get("cost_usd", 0.0)
+        tracker.record("qa", qa_state.get("tokens_used", 0), qa_cost)
+        total_cost += qa_cost
+        _check_budget(Role.QA, qa_state.get("tokens_used", 0))
 
-    # --- EVENING: PO validates + reports ---
-    await _progress("PO", "Generating daily report…")
-    po_evening = build_po_graph()
-    po_ev_state = await po_evening.ainvoke({
-        **base_state,
-        "phase": Phase.EVENING.value,
-        "demo_report": qa_state.get("demo_report"),
-    })
-    po_ev_cost = po_ev_state.get("cost_usd", 0.0)
-    tracker.record("po_evening", po_ev_state.get("tokens_used", 0), po_ev_cost)
-    total_cost += po_ev_cost
+        # --- EVENING: PO validates + reports ---
+        await _progress("PO", "Generating daily report…")
+        po_evening = build_po_graph()
+        po_ev_state = await po_evening.ainvoke({
+            **base_state,
+            "phase": Phase.EVENING.value,
+            "demo_report": qa_state.get("demo_report"),
+        })
+        po_ev_cost = po_ev_state.get("cost_usd", 0.0)
+        tracker.record("po_evening", po_ev_state.get("tokens_used", 0), po_ev_cost)
+        total_cost += po_ev_cost
 
-    # --- SUMMARY ---
-    print(f"\n{'=' * 60}")
-    print("CYCLE COMPLETE")
-    print(f"{'=' * 60}")
-    tracker.print_summary()
-    print(f"\nClaude API cost: ${total_cost:.2f}")
-    print(f"PRs opened: {len(all_prs)}")
-    print(f"PRs merged: {sum(1 for r in all_reviews if r.get('decision') == 'APPROVE')}")
+        # --- SUMMARY ---
+        print(f"\n{'=' * 60}")
+        print("CYCLE COMPLETE")
+        print(f"{'=' * 60}")
+        tracker.print_summary()
+        print(f"\nClaude API cost: ${total_cost:.2f}")
+        print(f"PRs opened: {len(all_prs)}")
+        print(f"PRs merged: {sum(1 for r in all_reviews if r.get('decision') == 'APPROVE')}")
 
-    await _progress("PO", "Cycle complete!")
+        await _progress("PO", "Cycle complete!")
 
-    result = {
-        "date": today,
-        "tokens": tracker.total_tokens,
-        "cost_usd": total_cost,
-        "prs": all_prs,
-        "reviews": all_reviews,
-        "demo_report": qa_state.get("demo_report"),
-        "daily_report": po_ev_state.get("daily_report", ""),
-    }
+        result = {
+            "date": today,
+            "tokens": tracker.total_tokens,
+            "cost_usd": total_cost,
+            "prs": all_prs,
+            "reviews": all_reviews,
+            "demo_report": qa_state.get("demo_report"),
+            "daily_report": po_ev_state.get("daily_report", ""),
+        }
 
-    # --- MEMORY: retrospective + learnings ---
-    if config.is_real_mode:
-        await _write_cycle_learnings(base_state, result, _progress)
+        # --- MEMORY: retrospective + learnings ---
+        if config.is_real_mode:
+            await _write_cycle_learnings(base_state, result, _progress)
 
-    # --- PERSIST: write cycle history ---
-    from theswarm.cycle_log import append_cycle_log
-    await append_cycle_log(config, result)
+        # --- PERSIST: write cycle history ---
+        from theswarm.cycle_log import append_cycle_log
+        await append_cycle_log(config, result)
 
-    # --- CLEANUP: remove workspace ---
-    if config.is_real_mode:
-        from theswarm.tools.git import cleanup_workspace
-        await cleanup_workspace(config.workspace_dir)
-
-    return result
+        return result
+    finally:
+        # Cleanup workspace even on failure
+        if config.is_real_mode:
+            from theswarm.tools.git import cleanup_workspace
+            await cleanup_workspace(config.workspace_dir)
 
 
 async def run_dev_only(config: CycleConfig) -> dict:

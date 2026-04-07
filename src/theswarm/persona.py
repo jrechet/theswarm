@@ -24,6 +24,7 @@ KNOWN_ACTIONS = [
     "show_report",
     "list_stories",
     "list_repos",
+    "ping",
     "help",
 ]
 
@@ -120,6 +121,9 @@ async def handle_dm(
     elif intent.action == "list_repos":
         await _handle_list_repos(user_id, chat, gateway)
 
+    elif intent.action == "ping":
+        await _handle_ping(user_id, chat)
+
 
 # ── Intent handlers ────────────────────────────────────────────────────────
 
@@ -208,6 +212,18 @@ async def _handle_list_repos(user_id: str, chat, gateway) -> None:
         default = " _(default)_" if repo == default_repo else ""
         lines.append(f"• `{repo}`{default}")
     await chat.post_dm(user_id, "\n".join(lines))
+
+
+async def _handle_ping(user_id: str, chat) -> None:
+    """Respond with interactive buttons to verify the callback flow works."""
+    await chat.post_dm_interactive(
+        user_id,
+        "🏓 Ping!",
+        actions=[
+            {"id": "swarm_po_pong:ping", "name": "Pong", "style": "good"},
+            {"id": "swarm_po_dismiss:ping", "name": "Dismiss", "style": "default"},
+        ],
+    )
 
 
 async def _handle_list_stories(user_id: str, chat, gateway) -> None:

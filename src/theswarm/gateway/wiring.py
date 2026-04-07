@@ -43,6 +43,16 @@ def wire_swarm_po(gw: SwarmGateway, vcs_map: dict, default_repo: str, chat, team
         action_type = parts[0]
         pending_id = parts[1]
 
+        # Ping/pong callback — no pending stories needed
+        if action_type == "swarm_po_pong":
+            user_id = event.payload.get("user_id", "")
+            if chat and user_id:
+                await chat.post_dm(user_id, "🏓 Pong!")
+            return
+
+        if action_type == "swarm_po_dismiss":
+            return  # silently dismiss
+
         pending = gw._swarm_po_pending_stories.pop(pending_id, None)
         if not pending:
             log.warning("SwarmPO: no pending stories for id=%s", pending_id)
