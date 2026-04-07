@@ -18,7 +18,7 @@ async def test_stub_cycle_runs():
 
 def test_token_tracker():
     tracker = TokenTracker()
-    tracker.record("dev", 100_000)
-    tracker.record("qa", 50_000)
+    tracker.record("dev", 100_000, cost_usd=0.30)
+    tracker.record("qa", 50_000, cost_usd=0.15)
     assert tracker.total_tokens == 150_000
     assert tracker.total_cost == pytest.approx(0.45, abs=0.01)

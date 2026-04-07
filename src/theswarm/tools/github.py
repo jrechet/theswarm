@@ -141,9 +141,44 @@ class GitHubClient:
         pr = await self._run(self._repo.get_pull, pr_number)
         await self._run(pr.create_review, body=body, event=event)
 
+    async def create_pr_comment(self, pr_number: int, body: str) -> None:
+        """Post a comment on a PR (issue comment, not review)."""
+        issue = await self._run(self._repo.get_issue, pr_number)
+        await self._run(issue.create_comment, body)
+
     async def merge_pr(self, pr_number: int, merge_method: str = "squash") -> None:
         pr = await self._run(self._repo.get_pull, pr_number)
         await self._run(pr.merge, merge_method=merge_method)
+
+    async def delete_branch(self, branch_name: str) -> None:
+        """Delete a remote branch after merge."""
+        try:
+            ref = await self._run(self._repo.get_git_ref, f"heads/{branch_name}")
+            await self._run(ref.delete)
+        except GithubException:
+            pass  # branch already deleted or doesn't exist
+
+    async def ensure_branch_protection(
+        self, branch: str = "main", required_reviews: int = 1,
+    ) -> None:
+        """Set up branch protection rules if not already configured."""
+        try:
+            branch_obj = await self._run(self._repo.get_branch, branch)
+            if branch_obj.protected:
+                return  # already protected
+            await self._run(
+                branch_obj.edit_protection,
+                required_approving_review_count=required_reviews,
+                enforce_admins=False,
+                dismiss_stale_reviews=True,
+                require_code_owner_reviews=False,
+            )
+        except GithubException as e:
+            # May fail on free repos or insufficient permissions
+            import logging
+            logging.getLogger(__name__).warning(
+                "Could not set branch protection on %s: %s", branch, e
+            )
 
     # ── Files ───────────────────────────────────────────────────────────
 

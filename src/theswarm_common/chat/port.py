@@ -11,8 +11,11 @@ class ChatPort(Protocol):
         """Connect to the chat platform."""
         ...
 
-    async def post_message(self, channel: str, text: str) -> str:
-        """Post a text message. Returns the message ID."""
+    async def post_message(self, channel: str, text: str, *, root_id: str = "") -> str:
+        """Post a text message. Returns the message ID.
+
+        If root_id is set, the message is posted as a reply in that thread.
+        """
         ...
 
     async def post_dm(self, user_id: str, text: str) -> str:

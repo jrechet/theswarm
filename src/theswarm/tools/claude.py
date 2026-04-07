@@ -109,16 +109,15 @@ class ClaudeCLI:
     async def run_tests(
         self,
         workdir: str,
-        command: str,
+        command: list[str],
         *,
         timeout: int = 300,
     ) -> dict:
         """Run a shell test command and return pass/fail + output."""
-        parts = command.split()
-        log.info("Running tests in %s: %s", workdir, command)
+        log.info("Running tests in %s: %s", workdir, " ".join(command))
 
         proc = await asyncio.create_subprocess_exec(
-            *parts,
+            *command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=workdir,

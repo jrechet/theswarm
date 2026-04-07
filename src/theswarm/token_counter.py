@@ -17,11 +17,9 @@ class TokenRecord:
 @dataclass
 class TokenTracker:
     """Accumulates token usage across a cycle and prints a summary."""
-    cost_per_million: float = 3.0  # Claude Sonnet ~$3/M tokens
     records: list[TokenRecord] = field(default_factory=list)
 
-    def record(self, agent: str, tokens: int) -> TokenRecord:
-        cost_usd = tokens / 1_000_000 * self.cost_per_million
+    def record(self, agent: str, tokens: int, cost_usd: float = 0.0) -> TokenRecord:
         rec = TokenRecord(agent=agent, tokens=tokens, cost_usd=cost_usd)
         self.records.append(rec)
         print(f"  -> {agent}: {tokens:,} tokens (${cost_usd:.4f})")

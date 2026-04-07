@@ -79,7 +79,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Create .env file
         run: |
-          echo "MATTERMOST_BOT_TOKEN=${{ secrets.MATTERMOST_BOT_TOKEN }}" >> .env
+          echo "MATTERMOST_BOT_TOKEN=${{ secrets.MATTERMOST_BOT_TOKEN }}" > .env
           echo "GITHUB_TOKEN=${{ secrets.BOT_GITHUB_TOKEN }}" >> .env
           echo "SWARM_PO_MATTERMOST_TOKEN=${{ secrets.SWARM_PO_MATTERMOST_TOKEN }}" >> .env
           echo "SWARM_PO_GITHUB_REPO=${{ secrets.SWARM_PO_GITHUB_REPO }}" >> .env
@@ -136,13 +136,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Create .env file
         run: |
-          echo "MATTERMOST_BOT_TOKEN=${{ secrets.MATTERMOST_BOT_TOKEN }}" >> .env
+          echo "MATTERMOST_BOT_TOKEN=${{ secrets.MATTERMOST_BOT_TOKEN }}" > .env
           echo "GITHUB_TOKEN=${{ secrets.BOT_GITHUB_TOKEN }}" >> .env
           echo "SWARM_PO_MATTERMOST_TOKEN=${{ secrets.SWARM_PO_MATTERMOST_TOKEN }}" >> .env
           echo "SWARM_PO_GITHUB_REPO=${{ secrets.SWARM_PO_GITHUB_REPO }}" >> .env
           echo "SWARM_PO_GITHUB_REPOS=${{ secrets.SWARM_PO_GITHUB_REPOS }}" >> .env
           echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> .env
           echo "EXTERNAL_URL=${{ secrets.EXTERNAL_URL }}" >> .env
+          echo "SEQ_URL=${{ secrets.SEQ_URL }}" >> .env
+          echo "SEQ_API_KEY=${{ secrets.SEQ_API_KEY }}" >> .env
       - name: Redeploy (latest)
         run: |
           export TS_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
