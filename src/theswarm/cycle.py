@@ -79,10 +79,21 @@ async def _write_cycle_learnings(
         except Exception:
             log.exception("Retrospective failed")
 
-    all_new = fact_entries + retro_entries
+    # Run auto-learning from feedback signals (M6)
+    feedback_entries = []
+    if claude:
+        try:
+            from theswarm.feedback import process_cycle_feedback
+            feedback_entries = await process_cycle_feedback(github, claude, cycle_result)
+            if feedback_entries:
+                await _progress("Memory", f"Extracted {len(feedback_entries)} lessons from feedback")
+        except Exception:
+            log.exception("Feedback processing failed")
+
+    all_new = fact_entries + retro_entries + feedback_entries
     if all_new:
         await append_entries(github, all_new)
-        await _progress("Memory", f"Added {len(all_new)} memory entries ({len(retro_entries)} from retrospective)")
+        await _progress("Memory", f"Added {len(all_new)} memory entries ({len(retro_entries)} retro, {len(feedback_entries)} feedback)")
 
     # Compact if memory is getting large
     if claude:
