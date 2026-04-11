@@ -49,10 +49,6 @@ DEV_TASK_PROMPT = """\
 
 {task_body}
 
-## Project context
-
-{context}
-
 ## Instructions
 
 1. Read the existing code to understand the project structure
@@ -112,16 +108,19 @@ async def implement_task(state: AgentState) -> dict:
     branch_name = _make_branch_name(task)
     await git_ops.create_branch(workspace, branch_name)
 
-    # Build the prompt
+    # Build the prompt — context goes into the (cached) system prompt
     context = state.get("context", "")
+    system = DEV_SYSTEM
+    if context:
+        system = f"{DEV_SYSTEM}\n\n## Project Context\n\n{context}"
+
     prompt = DEV_TASK_PROMPT.format(
         task_title=task["title"],
         task_body=task["body"],
-        context=context,
     )
 
-    # Run Claude in the workspace
-    result = await claude.run(prompt, workdir=workspace)
+    # Run Claude in the workspace; system is cached across iterations
+    result = await claude.run(prompt, system=system, workdir=workspace)
     log.info("Claude implementation done: %d tokens, $%.4f",
              result.total_tokens, result.cost_usd)
 
