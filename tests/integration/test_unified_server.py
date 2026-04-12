@@ -1,4 +1,4 @@
-"""Integration tests: unified server creates a web app with both v2 and legacy routes."""
+"""Integration tests: unified server creates a single web app with all routes."""
 
 from __future__ import annotations
 
@@ -22,13 +22,6 @@ async def app(tmp_path):
     cycle_repo = SQLiteCycleRepository(conn)
     bus = EventBus()
     web_app = create_web_app(project_repo, cycle_repo, bus)
-
-    # Mount legacy routes (same as server.py does)
-    from theswarm.dashboard import register_dashboard_routes
-    from theswarm.api import register_api_routes
-    register_dashboard_routes(web_app)
-    register_api_routes(web_app, allowed_repos=[])
-
     yield web_app
     await conn.close()
 
@@ -40,8 +33,8 @@ async def client(app):
         yield c
 
 
-class TestV2Routes:
-    """v2 Clean Architecture routes work."""
+class TestDashboardRoutes:
+    """Dashboard and core routes work."""
 
     async def test_dashboard_home(self, client):
         resp = await client.get("/")
@@ -56,38 +49,43 @@ class TestV2Routes:
         assert resp.status_code == 200
 
 
-class TestLegacyRoutes:
-    """Old dashboard and API routes mounted alongside v2."""
+class TestAPIRoutes:
+    """API routes work."""
 
-    async def test_legacy_dashboard(self, client):
-        resp = await client.get("/swarm/dashboard")
+    async def test_api_projects(self, client):
+        resp = await client.get("/api/projects")
         assert resp.status_code == 200
-        assert "TheSwarm Dashboard" in resp.text
+        assert resp.json() == []
 
-    async def test_legacy_dashboard_state(self, client):
-        resp = await client.get("/swarm/dashboard/state")
+    async def test_api_dashboard(self, client):
+        resp = await client.get("/api/dashboard")
+        assert resp.status_code == 200
+
+    async def test_api_live_state(self, client):
+        resp = await client.get("/api/live/state")
         assert resp.status_code == 200
         data = resp.json()
         assert "cycle_running" in data
 
-    async def test_legacy_api_cycles(self, client):
+    async def test_api_cycles_list(self, client):
         resp = await client.get("/api/cycles")
         assert resp.status_code == 200
+        assert "cycles" in resp.json()
+
+    async def test_api_live_history_no_repo(self, client):
+        resp = await client.get("/api/live/history")
+        assert resp.status_code == 200
         data = resp.json()
-        assert "cycles" in data
+        assert data["history"] == []
 
 
-class TestBothCoexist:
-    """v2 and legacy routes can coexist without conflicts."""
+class TestAllRoutesCoexist:
+    """Dashboard, API, and live routes all work together."""
 
-    async def test_v2_health_and_legacy_dashboard(self, client):
+    async def test_dashboard_and_api(self, client):
         health = await client.get("/health")
-        dashboard = await client.get("/swarm/dashboard")
+        projects = await client.get("/api/projects")
+        live = await client.get("/api/live/state")
         assert health.status_code == 200
-        assert dashboard.status_code == 200
-
-    async def test_v2_projects_and_legacy_api(self, client):
-        projects = await client.get("/projects", follow_redirects=True)
-        api_cycles = await client.get("/api/cycles")
         assert projects.status_code == 200
-        assert api_cycles.status_code == 200
+        assert live.status_code == 200

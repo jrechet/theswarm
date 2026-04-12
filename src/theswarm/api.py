@@ -1,11 +1,7 @@
-"""Headless API — trigger and monitor dev cycles via REST.
+"""Headless cycle models — CycleTracker and CycleRequest/CycleRecord.
 
-POST /api/cycle          — start a cycle (returns cycle_id immediately)
-GET  /api/cycle/{id}     — check cycle status
-GET  /api/cycles         — list recent cycles
-POST /api/cycle/{id}/cancel — cancel a running cycle (best-effort)
-
-When callback_url is provided, a POST is sent on completion with the cycle result.
+Route registration has moved to presentation/web/routes/api.py.
+This module only contains the in-memory models used by cycle execution.
 """
 
 from __future__ import annotations
@@ -18,7 +14,6 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
@@ -110,8 +105,8 @@ def get_cycle_tracker() -> CycleTracker:
     return _tracker
 
 
-async def _send_callback(url: str, payload: dict) -> None:
-    """POST cycle result to the callback URL."""
+async def send_callback(url: str, payload: dict) -> None:
+    """POST cycle result to a callback URL."""
     try:
         import urllib.request
         data = json.dumps(payload).encode()
@@ -127,7 +122,7 @@ async def _send_callback(url: str, payload: dict) -> None:
         log.exception("Failed to send callback to %s", url)
 
 
-async def _run_api_cycle(
+async def run_api_cycle(
     cycle_id: str,
     repo: str,
     description: str,
@@ -180,7 +175,7 @@ async def _run_api_cycle(
         )
 
         if callback_url:
-            await _send_callback(callback_url, {
+            await send_callback(callback_url, {
                 "cycle_id": cycle_id,
                 "status": "completed",
                 "result": result,
@@ -200,56 +195,10 @@ async def _run_api_cycle(
             completed_at=datetime.now().isoformat(timespec="seconds"),
         )
         if callback_url:
-            await _send_callback(callback_url, {
+            await send_callback(callback_url, {
                 "cycle_id": cycle_id,
                 "status": "failed",
                 "error": error_msg,
             })
     finally:
         dash.end_cycle()
-
-
-def register_api_routes(app: FastAPI, allowed_repos: list[str] | None = None) -> None:
-    """Register headless API routes on a FastAPI app."""
-    repos = allowed_repos or []
-
-    @app.post("/api/cycle")
-    async def start_cycle(req: CycleRequest):
-        tracker = get_cycle_tracker()
-        record = tracker.create(req)
-
-        task = asyncio.create_task(
-            _run_api_cycle(record.id, req.repo, req.description, req.callback_url, repos)
-        )
-        tracker.set_task(record.id, task)
-
-        return {
-            "cycle_id": record.id,
-            "status": record.status.value,
-            "repo": record.repo,
-        }
-
-    @app.get("/api/cycle/{cycle_id}")
-    async def get_cycle(cycle_id: str):
-        tracker = get_cycle_tracker()
-        record = tracker.get(cycle_id)
-        if not record:
-            raise HTTPException(status_code=404, detail="Cycle not found")
-        return record.model_dump()
-
-    @app.get("/api/cycles")
-    async def list_cycles(limit: int = 20):
-        tracker = get_cycle_tracker()
-        records = tracker.list_recent(limit=min(limit, 100))
-        return {"cycles": [r.model_dump() for r in records]}
-
-    @app.post("/api/cycle/{cycle_id}/cancel")
-    async def cancel_cycle(cycle_id: str):
-        tracker = get_cycle_tracker()
-        record = tracker.get(cycle_id)
-        if not record:
-            raise HTTPException(status_code=404, detail="Cycle not found")
-        if record.status not in (CycleStatus.QUEUED, CycleStatus.RUNNING):
-            raise HTTPException(status_code=409, detail=f"Cycle is {record.status.value}")
-        cancelled = tracker.cancel(cycle_id)
-        return {"cancelled": cancelled, "cycle_id": cycle_id}

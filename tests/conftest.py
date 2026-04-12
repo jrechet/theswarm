@@ -23,12 +23,11 @@ def mock_settings():
 
 @pytest.fixture()
 def gateway(mock_settings):
-    """Create a SwarmGateway with mock settings and patched dashboard registration."""
-    with patch("theswarm.dashboard.register_dashboard_routes"):
-        from theswarm.gateway.app import SwarmGateway
+    """Create a SwarmGateway with mock settings."""
+    from theswarm.gateway.app import SwarmGateway
 
-        gw = SwarmGateway(mock_settings)
-        return gw
+    gw = SwarmGateway(mock_settings)
+    return gw
 
 
 @pytest.fixture()

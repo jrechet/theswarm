@@ -406,21 +406,16 @@ async def start_server(host: str = "0.0.0.0", port: int = 8091, db_path: str = "
         await bridge.route_event(agent_event)
         return {"update": {"message": "Action received."}}
 
-    # ── Legacy dashboard + API routes ────────────────────────────
-    # Mount old dashboard routes under /swarm/ prefix for backward compat
-    from theswarm.dashboard import register_dashboard_routes, get_dashboard_state
-    register_dashboard_routes(app)
-
-    # Set dashboard state for legacy routes
+    # ── Dashboard state for live cycle tracking ────────────────
+    from theswarm.dashboard import get_dashboard_state
     dash = get_dashboard_state()
     dash.github_repo = default_repo
     ext_url = getattr(settings.server, "external_url", "")
     if ext_url:
         dash.base_url = ext_url.rstrip("/")
 
-    # Headless API
-    from theswarm.api import register_api_routes
-    register_api_routes(app, allowed_repos=github_repos)
+    # Store allowed repos on app.state for headless API
+    app.state.allowed_repos = github_repos
 
     # ── WS listener for DMs ──────────────────────────────────────
     if swarm_po_chat:
@@ -462,7 +457,7 @@ async def start_server(host: str = "0.0.0.0", port: int = 8091, db_path: str = "
     log.info("========================================")
     log.info("  Swarm-PO:  %s", status)
     log.info("  GitHub:    %s repo(s)", len(vcs_map))
-    log.info("  Chat:      %s", "connected" if has_chat else "not configured")
+    log.info("  Chat:      %s", "connected" if swarm_po_chat else "not configured")
     log.info("  Dashboard: http://%s:%s", host, port)
     log.info("  Database:  %s", db_path)
     log.info("========================================")

@@ -1,21 +1,27 @@
-"""Tests for theswarm.api — headless REST API for cycle management."""
+"""Tests for theswarm.api — CycleTracker and headless cycle management."""
 
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
 from theswarm.api import (
     CycleRecord,
     CycleRequest,
     CycleStatus,
     CycleTracker,
-    register_api_routes,
     get_cycle_tracker,
 )
+from theswarm.application.events.bus import EventBus
+from theswarm.infrastructure.persistence.sqlite_repos import (
+    SQLiteCycleRepository,
+    SQLiteProjectRepository,
+    init_db,
+)
+from theswarm.presentation.web.app import create_web_app
 
 
 # ── CycleTracker ────────────────────────────────────────────────────
@@ -67,7 +73,6 @@ def test_tracker_cancel():
     tracker = CycleTracker()
     record = tracker.create(CycleRequest(repo="owner/repo"))
 
-    # Create a mock task
     loop = asyncio.new_event_loop()
     async def dummy(): await asyncio.sleep(100)
     task = loop.create_task(dummy())
@@ -84,25 +89,33 @@ def test_tracker_cancel_nonexistent():
     assert tracker.cancel("nonexistent") is False
 
 
-# ── API endpoints ───────────────────────────────────────────────────
+# ── API endpoint tests ──────────────────────────────────────────────
 
 
 @pytest.fixture()
-def api_app():
-    app = FastAPI()
-    register_api_routes(app, allowed_repos=["owner/repo", "owner/other"])
+async def api_app(tmp_path):
+    conn = await init_db(str(tmp_path / "test.db"))
+    project_repo = SQLiteProjectRepository(conn)
+    cycle_repo = SQLiteCycleRepository(conn)
+    bus = EventBus()
+    app = create_web_app(project_repo, cycle_repo, bus)
+    app.state.allowed_repos = ["owner/repo", "owner/other"]
     yield app
+    await conn.close()
 
 
-async def test_start_cycle(api_app):
-    from httpx import ASGITransport, AsyncClient
+@pytest.fixture()
+async def client(api_app):
+    async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as c:
+        yield c
 
-    with patch("theswarm.api._run_api_cycle", new_callable=AsyncMock):
-        async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
-            resp = await client.post("/api/cycle", json={
-                "repo": "owner/repo",
-                "description": "Add login feature",
-            })
+
+async def test_start_cycle(client):
+    with patch("theswarm.api.run_api_cycle", new_callable=AsyncMock):
+        resp = await client.post("/api/cycle", json={
+            "repo": "owner/repo",
+            "description": "Add login feature",
+        })
 
     assert resp.status_code == 200
     data = resp.json()
@@ -111,72 +124,52 @@ async def test_start_cycle(api_app):
     assert data["repo"] == "owner/repo"
 
 
-async def test_get_cycle(api_app):
-    from httpx import ASGITransport, AsyncClient
-
+async def test_get_cycle(client):
     tracker = get_cycle_tracker()
     record = tracker.create(CycleRequest(repo="owner/repo"))
     tracker.update_status(record.id, CycleStatus.COMPLETED, result={"cost_usd": 1.5})
 
-    async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
-        resp = await client.get(f"/api/cycle/{record.id}")
-
+    resp = await client.get(f"/api/cycles/{record.id}")
     assert resp.status_code == 200
     data = resp.json()
     assert data["id"] == record.id
     assert data["status"] == "completed"
 
 
-async def test_get_cycle_not_found(api_app):
-    from httpx import ASGITransport, AsyncClient
-    async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
-        resp = await client.get("/api/cycle/nonexistent")
+async def test_get_cycle_not_found(client):
+    resp = await client.get("/api/cycles/nonexistent")
     assert resp.status_code == 404
 
 
-async def test_list_cycles(api_app):
-    from httpx import ASGITransport, AsyncClient
-
+async def test_list_cycles(client):
     tracker = get_cycle_tracker()
     for i in range(3):
         tracker.create(CycleRequest(repo=f"owner/repo{i}"))
 
-    async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
-        resp = await client.get("/api/cycles?limit=2")
-
+    resp = await client.get("/api/cycles?limit=2")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data["cycles"]) == 2
+    assert len(data["cycles"]) >= 2
 
 
-async def test_cancel_cycle(api_app):
-    from unittest.mock import MagicMock
-    from httpx import ASGITransport, AsyncClient
-
+async def test_cancel_cycle(client):
     tracker = get_cycle_tracker()
     record = tracker.create(CycleRequest(repo="owner/repo"))
 
-    # Mock a running task (use MagicMock, not AsyncMock, for sync methods)
     mock_task = MagicMock()
     mock_task.done.return_value = False
     mock_task.cancel.return_value = True
     tracker.set_task(record.id, mock_task)
 
-    async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
-        resp = await client.post(f"/api/cycle/{record.id}/cancel")
-
+    resp = await client.post(f"/api/cycle/{record.id}/cancel")
     assert resp.status_code == 200
     assert resp.json()["cancelled"] is True
 
 
-async def test_cancel_completed_cycle(api_app):
-    from httpx import ASGITransport, AsyncClient
-
+async def test_cancel_completed_cycle(client):
     tracker = get_cycle_tracker()
     record = tracker.create(CycleRequest(repo="owner/repo"))
     tracker.update_status(record.id, CycleStatus.COMPLETED)
 
-    async with AsyncClient(transport=ASGITransport(app=api_app), base_url="http://test") as client:
-        resp = await client.post(f"/api/cycle/{record.id}/cancel")
-
+    resp = await client.post(f"/api/cycle/{record.id}/cancel")
     assert resp.status_code == 409

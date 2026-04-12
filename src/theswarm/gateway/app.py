@@ -33,15 +33,6 @@ class SwarmGateway:
         # checked on every callback to reject forged requests.
         self.callback_token: str = secrets.token_urlsafe(32)
 
-        # Dashboard
-        from theswarm.dashboard import register_dashboard_routes
-        register_dashboard_routes(self.app)
-
-        # Headless API (allowed repos wired later via wire_swarm_po)
-        from theswarm.api import register_api_routes
-        allowed = getattr(settings, "_api_allowed_repos", [])
-        register_api_routes(self.app, allowed_repos=allowed)
-
         # Swarm PO state
         self._swarm_po_chat = None
         self._swarm_po_team_chat = None
