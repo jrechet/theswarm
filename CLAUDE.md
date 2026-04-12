@@ -18,24 +18,26 @@ uv run pytest tests/ -v --tb=short
 # Run a single test
 uv run pytest tests/test_cycle.py::test_stub_cycle_runs -v
 
-# Start the server (default mode, listens on :8091)
+# Start the unified server (web dashboard + Mattermost + GitHub, listens on :8091)
 uv run python -m theswarm
 
-# CLI cycle modes (require SWARM_GITHUB_REPO env var)
+# CLI commands
+uv run python -m theswarm serve                                # explicit serve (same as no args)
+uv run python -m theswarm serve --port 9000                    # custom port
+uv run python -m theswarm projects list                        # list registered projects
+uv run python -m theswarm projects add my-app owner/my-app     # register a project
+uv run python -m theswarm projects remove my-app               # remove a project
+uv run python -m theswarm cycle --project my-app               # run cycle for registered project
+uv run python -m theswarm schedule set my-app "0 8 * * 1-5"   # set cron schedule
+uv run python -m theswarm schedule list                        # list schedules
+uv run python -m theswarm validate                             # check env vars
+uv run python -m theswarm status                               # system status
+uv run python -m theswarm dashboard                            # TUI dashboard
+
+# Legacy cycle modes (require SWARM_GITHUB_REPO env var)
 uv run python -m theswarm --cycle           # full daily cycle
 uv run python -m theswarm --dev-only        # dev agent only
 uv run python -m theswarm --techlead-only   # techlead review only
-
-# v2 CLI (Clean Architecture layer)
-uv run python -m theswarm.presentation.cli.main serve          # web dashboard on :8091
-uv run python -m theswarm.presentation.cli.main dashboard      # TUI dashboard
-uv run python -m theswarm.presentation.cli.main projects list  # list registered projects
-uv run python -m theswarm.presentation.cli.main projects add my-app owner/my-app
-uv run python -m theswarm.presentation.cli.main cycle --project my-app
-uv run python -m theswarm.presentation.cli.main schedule set my-app "0 8 * * 1-5"
-uv run python -m theswarm.presentation.cli.main schedule list
-uv run python -m theswarm.presentation.cli.main validate       # check env vars
-uv run python -m theswarm.presentation.cli.main status
 
 # Docker
 docker compose up
@@ -48,9 +50,9 @@ docker compose up
 - **`theswarm`** — the autonomous dev team (agents, cycle orchestration, gateway)
 - **`theswarm_common`** — shared infrastructure (Mattermost adapter, config loader, models) originally shared with a sibling `swarm-bots` platform project
 
-### Clean Architecture / DDD Layer (v2)
+### Clean Architecture / DDD Layer
 
-The v2 architecture lives alongside the original code, organized as Clean Architecture with DDD:
+The architecture is organized as Clean Architecture with DDD. The unified server (`presentation/web/server.py`) starts the v2 web app and bridges in the original Mattermost/GitHub/persona integration via `GatewayBridge`:
 
 ```
 src/theswarm/
@@ -96,16 +98,17 @@ Each agent is a `StateGraph` compiled graph in `src/theswarm/agents/`. They shar
 5. **QA** — writes Playwright E2E tests, runs unit + E2E + semgrep security scan, generates demo report
 6. **PO** (evening) — validates demo report, writes daily report
 
-### Key components (original)
+### Key components (original, bridged into v2)
 
-- **`gateway.py`** — FastAPI app, Mattermost callback handling, wires the PO persona, runs cycles
-- **`persona.py`** — NLU-driven DM handler for `@swarm-po` (intent → action dispatch)
-- **`memory.py`** — Appends structured learnings to `AGENT_MEMORY.md` in the target repo
+- **`presentation/web/server.py`** — Unified server startup: creates v2 web app, connects Mattermost/GitHub, wires persona via `GatewayBridge`
+- **`gateway/wiring.py`** — Event handlers for Mattermost button callbacks (story approval, ping/pong)
+- **`persona.py`** — NLU-driven DM handler for `@swarm-po` (intent -> action dispatch)
+- **`cycle.py`** — Orchestrates full daily cycle (PO -> TechLead -> Dev -> QA)
 - **`tools/claude.py`** — Anthropic Messages API wrapper (`ClaudeCLI`)
 - **`tools/github.py`** — Async PyGithub wrapper (runs blocking calls in executor)
 - **`tools/git.py`** — Local git CLI operations (clone, branch, commit, push)
 
-### Key components (v2 Clean Architecture)
+### Key components (Clean Architecture layer)
 
 - **EventBus** — in-process pub/sub, wires domain events to SSE, TUI, and webhooks
 - **SQLite persistence** — aiosqlite repos for projects, cycles, schedules, memory, reports
@@ -114,7 +117,8 @@ Each agent is a `StateGraph` compiled graph in `src/theswarm/agents/`. They shar
 - **WebhookHandler** — GitHub webhook with HMAC-SHA256 verification
 - **ImprovementEngine** — analyzes cycle reports, generates improvement suggestions
 - **ReportGenerator** — builds DemoReport from Cycle with quality gates
-- **StartupValidator** — fail-fast env var validation before running
+- **StartupValidator** — fail-fast env var validation (runs at server boot)
+- **GatewayBridge** — thin adapter connecting persona.py and wiring.py to the v2 web app
 
 ### Issue label state machine
 
@@ -155,7 +159,7 @@ Docker Swarm + Traefik on a self-hosted runner. CI runs tests on push/PR, then t
   - `tests/presentation/` — CLI, web app (httpx ASGI), TUI (Textual pilot) tests
   - `tests/integration/` — cross-layer end-to-end tests
   - `tests/test_*.py` — original agent and tool tests (flat structure)
-- 860+ tests, all passing
+- 890+ tests, all passing
 
 ## Skill routing
 

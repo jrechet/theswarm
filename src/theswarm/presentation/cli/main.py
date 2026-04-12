@@ -1,9 +1,14 @@
-"""CLI entry point: theswarm [command]."""
+"""Unified CLI entry point: theswarm [command].
+
+This is the single entry point for TheSwarm. All commands route through here.
+Default (no command) starts the full server with Mattermost, GitHub, and web dashboard.
+"""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import sys
 
 
@@ -14,17 +19,22 @@ def create_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
 
-    # serve
-    serve_p = sub.add_parser("serve", help="Start the web dashboard")
+    # serve (default when no command given)
+    serve_p = sub.add_parser("serve", help="Start the full server (web + Mattermost + GitHub)")
     serve_p.add_argument("--host", default="0.0.0.0", help="Bind host")
     serve_p.add_argument("--port", type=int, default=8091, help="Bind port")
     serve_p.add_argument("--db", default="", help="SQLite database path")
 
+    # run-cycle (legacy --cycle / --dev-only / --techlead-only)
+    rc_p = sub.add_parser("run-cycle", help="Run an agent cycle from CLI")
+    rc_p.add_argument("--dev-only", action="store_true", help="Run only the Dev agent")
+    rc_p.add_argument("--techlead-only", action="store_true", help="Run only the TechLead agent")
+
     # dashboard (TUI)
     sub.add_parser("dashboard", help="Open the terminal dashboard")
 
-    # cycle
-    cycle_p = sub.add_parser("cycle", help="Run a development cycle")
+    # cycle (v2 — run cycle for a registered project)
+    cycle_p = sub.add_parser("cycle", help="Run a development cycle for a registered project")
     cycle_p.add_argument("--project", required=True, help="Project ID")
     cycle_p.add_argument("--triggered-by", default="cli", help="Trigger source")
 
@@ -32,7 +42,7 @@ def create_parser() -> argparse.ArgumentParser:
     proj_p = sub.add_parser("projects", help="Manage projects")
     proj_sub = proj_p.add_subparsers(dest="projects_command")
 
-    list_p = proj_sub.add_parser("list", help="List all projects")
+    proj_sub.add_parser("list", help="List all projects")
 
     add_p = proj_sub.add_parser("add", help="Register a new project")
     add_p.add_argument("project_id", help="Project slug")
@@ -60,7 +70,7 @@ def create_parser() -> argparse.ArgumentParser:
     sched_sub.add_parser("list", help="List enabled schedules")
 
     # status
-    status_p = sub.add_parser("status", help="Show system status")
+    sub.add_parser("status", help="Show system status")
 
     # validate
     sub.add_parser("validate", help="Validate startup configuration")
@@ -81,23 +91,48 @@ async def _init_db(db_path: str = "") -> "aiosqlite.Connection":
 
 
 async def cmd_serve(args: argparse.Namespace) -> None:
-    import uvicorn
-    from theswarm.application.events.bus import EventBus
-    from theswarm.infrastructure.persistence.sqlite_repos import (
-        SQLiteCycleRepository,
-        SQLiteProjectRepository,
+    """Start the full TheSwarm server: web dashboard + Mattermost + GitHub."""
+    from theswarm.presentation.web.server import start_server
+    await start_server(host=args.host, port=args.port, db_path=args.db)
+
+
+async def cmd_run_cycle(args: argparse.Namespace) -> None:
+    """Run a legacy agent cycle (full, dev-only, or techlead-only)."""
+    from theswarm.config import CycleConfig
+    from theswarm.cycle import run_daily_cycle, run_dev_only, run_techlead_only
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
     )
-    from theswarm.presentation.web.app import create_web_app
 
-    conn = await _init_db(args.db)
-    project_repo = SQLiteProjectRepository(conn)
-    cycle_repo = SQLiteCycleRepository(conn)
-    bus = EventBus()
+    config = CycleConfig.from_env()
 
-    app = create_web_app(project_repo, cycle_repo, bus)
-    config = uvicorn.Config(app, host=args.host, port=args.port, log_level="info")
-    server = uvicorn.Server(config)
-    await server.serve()
+    if not config.is_real_mode:
+        print("Running in STUB mode (no SWARM_GITHUB_REPO set)")
+        print("Set SWARM_GITHUB_REPO=owner/repo to run for real.\n")
+
+    if args.dev_only:
+        if not config.is_real_mode:
+            print("ERROR: --dev-only requires SWARM_GITHUB_REPO")
+            sys.exit(1)
+        print(f"Mode: DEV ONLY — repo: {config.github_repo}")
+        result = await run_dev_only(config)
+    elif args.techlead_only:
+        if not config.is_real_mode:
+            print("ERROR: --techlead-only requires SWARM_GITHUB_REPO")
+            sys.exit(1)
+        print(f"Mode: TECHLEAD ONLY — repo: {config.github_repo}")
+        result = await run_techlead_only(config)
+    else:
+        if not config.is_real_mode:
+            print("ERROR: run-cycle requires SWARM_GITHUB_REPO")
+            sys.exit(1)
+        print(f"Mode: DAILY CYCLE — repo: {config.github_repo}")
+        result = await run_daily_cycle(config)
+
+    print(f"\nDone. Total cost: ${result['cost_usd']:.2f}")
 
 
 async def cmd_dashboard(args: argparse.Namespace) -> None:
@@ -222,7 +257,7 @@ async def cmd_schedule(args: argparse.Namespace) -> None:
             schedule = await handler.handle(
                 SetScheduleCommand(project_id=args.project_id, cron=args.cron),
             )
-            print(f"Schedule set: {args.project_id} → {schedule.cron}")
+            print(f"Schedule set: {args.project_id} -> {schedule.cron}")
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
@@ -299,6 +334,7 @@ def main(argv: list[str] | None = None) -> None:
 
     cmd_map = {
         "serve": cmd_serve,
+        "run-cycle": cmd_run_cycle,
         "dashboard": cmd_dashboard,
         "cycle": cmd_cycle,
         "projects": cmd_projects,

@@ -172,7 +172,7 @@ class TestHealthRoutes:
         data = r.json()
         assert data["status"] == "ok"
         assert "uptime_seconds" in data
-        assert data["checks"]["database"] == "ok"
+        assert data["checks"]["database"] == "connected"
 
 
 # ── API ──────────────────────────────────────────────────────────
