@@ -19,7 +19,7 @@ from theswarm.application.queries.list_cycles import ListCyclesQuery
 from theswarm.application.queries.list_projects import ListProjectsQuery
 from theswarm.domain.cycles.ports import CycleRepository
 from theswarm.domain.projects.ports import ProjectRepository
-from theswarm.presentation.web.routes import api, cycles, dashboard, health, projects
+from theswarm.presentation.web.routes import api, cycles, dashboard, health, projects, reports, webhooks
 from theswarm.presentation.web.sse import SSEHub
 
 _HERE = Path(__file__).parent
@@ -83,6 +83,8 @@ def create_web_app(
     app.include_router(projects.router)
     app.include_router(cycles.router)
     app.include_router(health.router)
+    app.include_router(reports.router)
+    app.include_router(webhooks.router)
     app.include_router(api.router)
 
     # Static files

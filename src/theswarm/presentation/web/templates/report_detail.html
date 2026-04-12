@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Report {{ report.id }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="page-title">Report: {{ report.id }}</h1>
+    <p class="subtitle">
+        Project: <strong>{{ report.project_id }}</strong> |
+        Cycle: {{ report.cycle_id }} |
+        {{ report.created_at.strftime('%Y-%m-%d %H:%M UTC') }}
+    </p>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">{{ report.summary.stories_completed }}/{{ report.summary.stories_total }}</div>
+            <div class="stat-label">Stories</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ report.summary.prs_merged }}</div>
+            <div class="stat-label">PRs Merged</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ report.summary.tests_passing }}/{{ report.summary.tests_total }}</div>
+            <div class="stat-label">Tests</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ "%.1f"|format(report.summary.coverage_percent) }}%</div>
+            <div class="stat-label">Coverage</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${{ "%.2f"|format(report.summary.cost_usd) }}</div>
+            <div class="stat-label">Cost</div>
+        </div>
+    </div>
+
+    {% if report.quality_gates %}
+    <h2>Quality Gates</h2>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr><th>Gate</th><th>Status</th><th>Detail</th></tr>
+            </thead>
+            <tbody>
+                {% for g in report.quality_gates %}
+                <tr class="gate-{{ g.status.value }}">
+                    <td>{{ g.name }}</td>
+                    <td><span class="badge badge-{{ g.status.value }}">{{ g.status.value }}</span></td>
+                    <td>{{ g.detail }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if report.stories %}
+    <h2>Stories</h2>
+    {% for s in report.stories %}
+    <div class="card story-card">
+        <h3>{{ s.title }}</h3>
+        <p>
+            Ticket: {{ s.ticket_id }}
+            {% if s.pr_number %} | PR #{{ s.pr_number }}{% endif %}
+            | Status: <span class="badge">{{ s.status }}</span>
+        </p>
+        {% if s.files_changed %}
+        <p class="diff-stats">
+            {{ s.files_changed }} files changed,
+            <span class="additions">+{{ s.lines_added }}</span>
+            <span class="deletions">-{{ s.lines_removed }}</span>
+        </p>
+        {% endif %}
+
+        {% if s.screenshots_before or s.screenshots_after %}
+        <div class="screenshots">
+            {% for a in s.screenshots_before %}
+            <div class="screenshot before">
+                <span class="label">Before: {{ a.label }}</span>
+            </div>
+            {% endfor %}
+            {% for a in s.screenshots_after %}
+            <div class="screenshot after">
+                <span class="label">After: {{ a.label }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if s.diff_highlights %}
+        <h4>Key Changes</h4>
+        {% for dh in s.diff_highlights %}
+        <div class="diff-highlight">
+            <code>{{ dh.file_path }}</code>
+            {% if dh.annotation %}<p>{{ dh.annotation }}</p>{% endif %}
+            <pre>{{ dh.hunk }}</pre>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if report.agent_learnings %}
+    <h2>Agent Learnings</h2>
+    <ul class="learnings">
+        {% for l in report.agent_learnings %}
+        <li>{{ l }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="actions">
+        <a href="/reports/" class="btn btn-secondary">Back to Reports</a>
+    </div>
+</div>
+{% endblock %}

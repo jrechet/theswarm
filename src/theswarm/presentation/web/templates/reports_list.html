@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="page-title">Demo Reports</h1>
+
+    {% if project_id %}
+    <p class="subtitle">Showing reports for <strong>{{ project_id }}</strong></p>
+    {% endif %}
+
+    {% if not reports %}
+    <div class="empty-state">
+        <p>No reports yet. Reports are generated after completed cycles.</p>
+    </div>
+    {% else %}
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Report</th>
+                    <th>Project</th>
+                    <th>Stories</th>
+                    <th>PRs Merged</th>
+                    <th>Coverage</th>
+                    <th>Cost</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in reports %}
+                <tr>
+                    <td><a href="/reports/{{ r.id }}">{{ r.id }}</a></td>
+                    <td>{{ r.project_id }}</td>
+                    <td>{{ r.summary.stories_completed }}/{{ r.summary.stories_total }}</td>
+                    <td>{{ r.summary.prs_merged }}</td>
+                    <td>{{ "%.1f"|format(r.summary.coverage_percent) }}%</td>
+                    <td>${{ "%.2f"|format(r.summary.cost_usd) }}</td>
+                    <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
