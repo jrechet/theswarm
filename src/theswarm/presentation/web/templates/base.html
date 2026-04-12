@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}TheSwarm{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.2" defer></script>
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/" class="logo">TheSwarm</a>
+    <div class="nav-links">
+      <a href="/">Dashboard</a>
+      <a href="/projects/">Projects</a>
+      <a href="/health">Health</a>
+    </div>
+    <div class="nav-status" id="sse-status">Connecting...</div>
+  </nav>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="/static/js/sse.js" defer></script>
+</body>
+</html>

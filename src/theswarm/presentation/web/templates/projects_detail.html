@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ project.id }} — TheSwarm{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ project.id }}</h1>
+  <div class="header-actions">
+    <form method="POST" action="/cycles/trigger" style="display:inline">
+      <input type="hidden" name="project_id" value="{{ project.id }}">
+      <button type="submit" class="btn btn-primary">Run Cycle</button>
+    </form>
+    <form method="POST" action="/projects/{{ project.id }}/delete"
+          style="display:inline"
+          onsubmit="return confirm('Delete {{ project.id }}?')">
+      <button type="submit" class="btn btn-danger">Delete</button>
+    </form>
+  </div>
+</div>
+
+<div class="detail-grid">
+  <div class="card">
+    <h2>Configuration</h2>
+    <dl class="detail-list">
+      <dt>Repository</dt>
+      <dd>{{ project.repo }}</dd>
+      <dt>Framework</dt>
+      <dd><span class="badge">{{ project.framework }}</span></dd>
+      <dt>Ticket Source</dt>
+      <dd><span class="badge badge-subtle">{{ project.ticket_source }}</span></dd>
+      <dt>Default Branch</dt>
+      <dd>{{ project.default_branch }}</dd>
+      <dt>Test Command</dt>
+      <dd>{{ project.test_command or "auto" }}</dd>
+      <dt>Source Dir</dt>
+      <dd>{{ project.source_dir }}</dd>
+      <dt>Max Stories/Day</dt>
+      <dd>{{ project.max_daily_stories }}</dd>
+      <dt>Team Channel</dt>
+      <dd>{{ project.team_channel or "—" }}</dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>Recent Cycles</h2>
+    <div hx-get="/cycles/?project_id={{ project.id }}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <p class="empty-state">Loading...</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — TheSwarm{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid">
+
+  <section class="card stats-card">
+    <h2>Overview</h2>
+    <div class="stat-row">
+      <div class="stat">
+        <span class="stat-value">{{ dashboard.projects | length }}</span>
+        <span class="stat-label">Projects</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">{{ dashboard.active_cycles | length }}</span>
+        <span class="stat-label">Active Cycles</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">${{ "%.2f" | format(dashboard.total_cost_today) }}</span>
+        <span class="stat-label">Cost Today</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Active Cycles</h2>
+    {% if dashboard.active_cycles %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Status</th>
+          <th>Triggered By</th>
+          <th>Cost</th>
+          <th>Phases</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in dashboard.active_cycles %}
+        <tr>
+          <td><a href="/cycles/{{ c.id }}">{{ c.project_id }}</a></td>
+          <td><span class="badge badge-{{ c.status }}">{{ c.status }}</span></td>
+          <td>{{ c.triggered_by }}</td>
+          <td>${{ "%.2f" | format(c.total_cost_usd) }}</td>
+          <td>{{ c.phases | length }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state">No active cycles. <a href="/projects/">Start one from a project.</a></p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Live Activity</h2>
+    <div id="activity-feed"
+         hx-ext="sse"
+         sse-connect="/api/events"
+         sse-swap="message"
+         hx-swap="afterbegin">
+      <p class="empty-state">Waiting for events...</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Projects</h2>
+    {% if dashboard.projects %}
+    <div class="project-grid">
+      {% for p in dashboard.projects %}
+      <a href="/projects/{{ p.id }}" class="project-card">
+        <h3>{{ p.id }}</h3>
+        <span class="badge">{{ p.framework }}</span>
+        <span class="repo-url">{{ p.repo }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-state"><a href="/projects/new">Add your first project</a></p>
+    {% endif %}
+  </section>
+
+</div>
+{% endblock %}

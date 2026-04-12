@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Projects — TheSwarm{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Projects</h1>
+  <a href="/projects/new" class="btn btn-primary">+ Add Project</a>
+</div>
+
+{% if projects %}
+<div class="project-grid">
+  {% for p in projects %}
+  <a href="/projects/{{ p.id }}" class="project-card">
+    <h3>{{ p.id }}</h3>
+    <div class="project-meta">
+      <span class="badge">{{ p.framework }}</span>
+      <span class="badge badge-subtle">{{ p.ticket_source }}</span>
+    </div>
+    <span class="repo-url">{{ p.repo }}</span>
+    <span class="project-detail">Max {{ p.max_daily_stories }} stories/day</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state-large">
+  <p>No projects registered yet.</p>
+  <a href="/projects/new" class="btn btn-primary">Add your first project</a>
+</div>
+{% endif %}
+{% endblock %}

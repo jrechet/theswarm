@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Add Project — TheSwarm{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Add Project</h1>
+</div>
+
+<form method="POST" action="/projects/" class="form-card">
+  <div class="form-group">
+    <label for="project_id">Project ID (slug)</label>
+    <input type="text" id="project_id" name="project_id" placeholder="my-app" required>
+  </div>
+
+  <div class="form-group">
+    <label for="repo">Repository (owner/repo)</label>
+    <input type="text" id="repo" name="repo" placeholder="owner/my-app" required>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="framework">Framework</label>
+      <select id="framework" name="framework">
+        <option value="auto">Auto-detect</option>
+        <option value="fastapi">FastAPI</option>
+        <option value="django">Django</option>
+        <option value="flask">Flask</option>
+        <option value="nextjs">Next.js</option>
+        <option value="express">Express</option>
+        <option value="generic">Generic</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="ticket_source">Ticket Source</label>
+      <select id="ticket_source" name="ticket_source">
+        <option value="github">GitHub Issues</option>
+        <option value="jira">Jira</option>
+        <option value="linear">Linear</option>
+        <option value="gitlab">GitLab</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label for="team_channel">Team Channel (optional)</label>
+    <input type="text" id="team_channel" name="team_channel" placeholder="dev-team">
+  </div>
+
+  <div class="form-actions">
+    <a href="/projects/" class="btn btn-subtle">Cancel</a>
+    <button type="submit" class="btn btn-primary">Add Project</button>
+  </div>
+</form>
+{% endblock %}
