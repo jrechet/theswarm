@@ -172,13 +172,26 @@ class _KeywordNLU:
         from theswarm_common.chat import Intent
         msg = message.lower().strip()
 
+        # Exact/phrase matches first (order matters: longer phrases before substrings)
+        phrase_keywords = {
+            "plan du jour": "show_plan",
+            "list stories": "list_stories",
+            "list repos": "list_repos",
+            "list projects": "list_repos",
+            "list repo": "list_repos",
+            "list project": "list_repos",
+        }
+        for phrase, action in phrase_keywords.items():
+            if phrase in msg:
+                return Intent(action=action, confidence=0.95, params={}, raw_text=message)
+
+        # Single-word keywords
         keywords = {
             "ping": "ping",
             "help": "help",
             "aide": "help",
             "status": "show_status",
             "plan": "show_plan",
-            "plan du jour": "show_plan",
             "rapport": "show_report",
             "report": "show_report",
             "backlog": "list_stories",
@@ -187,14 +200,23 @@ class _KeywordNLU:
             "start": "run_cycle",
             "lance": "run_cycle",
             "repos": "list_repos",
+            "projects": "list_repos",
+            "projet": "list_repos",
         }
 
         for keyword, action in keywords.items():
             if keyword in msg:
                 return Intent(action=action, confidence=0.9, params={}, raw_text=message)
 
-        if len(msg) > 10:
+        # Only treat as story creation if it looks like a feature request
+        # (contains verbs like "want", "add", "build", "create", "make", "implement")
+        story_signals = ["want", "add", "build", "create", "make", "implement",
+                         "veux", "ajoute", "besoin", "fais", "développe"]
+        if len(msg) > 10 and any(s in msg for s in story_signals):
             return Intent(action="create_stories", confidence=0.6, params={}, raw_text=message)
+
+        if len(msg) > 10:
+            return Intent(action="unknown", confidence=0.3, params={}, raw_text=message)
 
         return Intent(action="unknown", confidence=0.1, params={}, raw_text=message)
 
