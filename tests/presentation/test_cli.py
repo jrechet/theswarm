@@ -77,6 +77,34 @@ class TestParser:
         args = parser.parse_args(["status"])
         assert args.command == "status"
 
+    def test_schedule_set(self):
+        parser = create_parser()
+        args = parser.parse_args(["schedule", "set", "my-app", "0 8 * * 1-5"])
+        assert args.command == "schedule"
+        assert args.schedule_command == "set"
+        assert args.project_id == "my-app"
+        assert args.cron == "0 8 * * 1-5"
+
+    def test_schedule_disable(self):
+        parser = create_parser()
+        args = parser.parse_args(["schedule", "disable", "my-app"])
+        assert args.schedule_command == "disable"
+
+    def test_schedule_delete(self):
+        parser = create_parser()
+        args = parser.parse_args(["schedule", "delete", "my-app"])
+        assert args.schedule_command == "delete"
+
+    def test_schedule_list(self):
+        parser = create_parser()
+        args = parser.parse_args(["schedule", "list"])
+        assert args.schedule_command == "list"
+
+    def test_validate(self):
+        parser = create_parser()
+        args = parser.parse_args(["validate"])
+        assert args.command == "validate"
+
 
 class TestMain:
     def test_no_command_exits_0(self):
@@ -191,3 +219,50 @@ class TestMain:
             main(["cycle", "--project", "p1"])
             captured = capsys.readouterr()
             assert "Cycle started:" in captured.out
+
+    def test_schedule_set_and_list(self, tmp_path, capsys):
+        db_path = str(tmp_path / "test.db")
+
+        with patch("theswarm.presentation.cli.main._init_db") as mock_init:
+            async def fake_init(path=""):
+                from theswarm.infrastructure.persistence.sqlite_repos import init_db
+                return await init_db(db_path)
+
+            mock_init.side_effect = fake_init
+
+            main(["projects", "add", "s1", "o/s1"])
+            main(["schedule", "set", "s1", "0 8 * * 1-5"])
+            captured = capsys.readouterr()
+            assert "Schedule set" in captured.out
+
+            main(["schedule", "list"])
+            captured = capsys.readouterr()
+            assert "s1" in captured.out
+
+    def test_schedule_set_unknown_project(self, tmp_path):
+        db_path = str(tmp_path / "test.db")
+
+        with patch("theswarm.presentation.cli.main._init_db") as mock_init:
+            async def fake_init(path=""):
+                from theswarm.infrastructure.persistence.sqlite_repos import init_db
+                return await init_db(db_path)
+
+            mock_init.side_effect = fake_init
+
+            with pytest.raises(SystemExit) as exc_info:
+                main(["schedule", "set", "nope", "0 8 * * *"])
+            assert exc_info.value.code == 1
+
+    def test_validate_passes(self, monkeypatch, capsys):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp-test")
+        monkeypatch.setenv("MATTERMOST_BOT_TOKEN", "mm-test")
+        main(["validate"])
+        captured = capsys.readouterr()
+        assert "Validation passed" in captured.out
+
+    def test_validate_fails(self, monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with pytest.raises(SystemExit) as exc_info:
+            main(["validate"])
+        assert exc_info.value.code == 1

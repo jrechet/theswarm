@@ -43,8 +43,27 @@ def create_parser() -> argparse.ArgumentParser:
     rm_p = proj_sub.add_parser("remove", help="Remove a project")
     rm_p.add_argument("project_id", help="Project slug to remove")
 
+    # schedule
+    sched_p = sub.add_parser("schedule", help="Manage schedules")
+    sched_sub = sched_p.add_subparsers(dest="schedule_command")
+
+    sched_set = sched_sub.add_parser("set", help="Set a cron schedule")
+    sched_set.add_argument("project_id", help="Project slug")
+    sched_set.add_argument("cron", help="Cron expression (5 fields)")
+
+    sched_disable = sched_sub.add_parser("disable", help="Disable a schedule")
+    sched_disable.add_argument("project_id", help="Project slug")
+
+    sched_delete = sched_sub.add_parser("delete", help="Delete a schedule")
+    sched_delete.add_argument("project_id", help="Project slug")
+
+    sched_sub.add_parser("list", help="List enabled schedules")
+
     # status
     status_p = sub.add_parser("status", help="Show system status")
+
+    # validate
+    sub.add_parser("validate", help="Validate startup configuration")
 
     return parser
 
@@ -176,6 +195,83 @@ async def cmd_projects(args: argparse.Namespace) -> None:
             sys.exit(1)
 
 
+async def cmd_schedule(args: argparse.Namespace) -> None:
+    from theswarm.application.commands.manage_schedule import (
+        DeleteScheduleCommand,
+        DeleteScheduleHandler,
+        DisableScheduleCommand,
+        DisableScheduleHandler,
+        SetScheduleCommand,
+        SetScheduleHandler,
+    )
+    from theswarm.application.queries.get_schedule import (
+        ListEnabledSchedulesQuery,
+    )
+    from theswarm.infrastructure.persistence.sqlite_repos import (
+        SQLiteProjectRepository,
+        SQLiteScheduleRepository,
+    )
+
+    conn = await _init_db()
+    project_repo = SQLiteProjectRepository(conn)
+    schedule_repo = SQLiteScheduleRepository(conn)
+
+    if args.schedule_command == "set":
+        handler = SetScheduleHandler(project_repo, schedule_repo)
+        try:
+            schedule = await handler.handle(
+                SetScheduleCommand(project_id=args.project_id, cron=args.cron),
+            )
+            print(f"Schedule set: {args.project_id} → {schedule.cron}")
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.schedule_command == "disable":
+        handler = DisableScheduleHandler(schedule_repo)
+        try:
+            await handler.handle(DisableScheduleCommand(project_id=args.project_id))
+            print(f"Schedule disabled: {args.project_id}")
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.schedule_command == "delete":
+        handler = DeleteScheduleHandler(schedule_repo)
+        try:
+            await handler.handle(DeleteScheduleCommand(project_id=args.project_id))
+            print(f"Schedule deleted: {args.project_id}")
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.schedule_command == "list" or args.schedule_command is None:
+        query = ListEnabledSchedulesQuery(schedule_repo)
+        schedules = await query.execute()
+        if not schedules:
+            print("No enabled schedules.")
+            return
+        for s in schedules:
+            print(f"  {s.project_id:<20} {s.cron:<20} last_run={s.last_run or 'never'}")
+
+
+async def cmd_validate(args: argparse.Namespace) -> None:
+    from theswarm.application.services.startup_validator import StartupValidator
+
+    validator = StartupValidator()
+    result = validator.validate(require_api_keys=True)
+
+    if result.warnings:
+        for w in result.warnings:
+            print(f"  WARNING: {w}")
+    if result.errors:
+        for e in result.errors:
+            print(f"  ERROR: {e}")
+        sys.exit(1)
+    else:
+        print("Validation passed.")
+
+
 async def cmd_status(args: argparse.Namespace) -> None:
     from theswarm.application.queries.get_dashboard import GetDashboardQuery
     from theswarm.infrastructure.persistence.sqlite_repos import (
@@ -206,6 +302,8 @@ def main(argv: list[str] | None = None) -> None:
         "dashboard": cmd_dashboard,
         "cycle": cmd_cycle,
         "projects": cmd_projects,
+        "schedule": cmd_schedule,
+        "validate": cmd_validate,
         "status": cmd_status,
     }
 
