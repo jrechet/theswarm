@@ -12,6 +12,7 @@ import logging
 import os
 import secrets
 
+import anthropic
 import uvicorn
 from fastapi.responses import JSONResponse
 
@@ -23,6 +24,7 @@ from theswarm.infrastructure.persistence.sqlite_repos import (
     init_db,
 )
 from theswarm.presentation.web.app import create_web_app
+from theswarm.tools.claude import _estimate_cost
 
 log = logging.getLogger(__name__)
 
@@ -163,62 +165,92 @@ def _load_settings():
     return SwarmSettings(**yaml_data)
 
 
-# ── Keyword NLU ──────────────────────────────────────────────────────
+# ── LLM NLU with keyword fast path ────────────────────────────────────
 
-class _KeywordNLU:
-    """Simple keyword-based NLU for DM intent classification."""
+_FAST_KEYWORDS: dict[str, str] = {
+    "ping": "ping",
+    "help": "help",
+    "aide": "help",
+    "go": "run_cycle",
+}
+
+_NLU_SYSTEM_PROMPT = """\
+You are an intent classifier for a chat bot called swarm-po (an AI Product Owner).
+Given a user message, classify it into exactly one action from the list below.
+
+Actions:
+- create_stories: User wants to build a feature, add something, or describes a requirement
+- run_cycle: User wants to start/launch/run a development cycle
+- show_status: User asks about current status, what's running
+- show_plan: User asks about the plan, today's plan
+- show_report: User asks for a report, summary, results
+- list_stories: User wants to see backlog, issues, stories, tasks
+- list_repos: User wants to see available repos, projects, what can be worked on
+- ping: User says ping
+- help: User asks for help, what can you do, how does this work
+- unknown: Message doesn't match any action above
+
+Respond with ONLY a JSON object: {"action": "<action>", "confidence": <0.0-1.0>}
+No explanation, no markdown, just the JSON."""
+
+
+class _LlmNLU:
+    """Haiku-powered intent classifier with keyword fast path."""
 
     async def parse_intent(self, message: str, bot_name: str, known_actions: list[str]):
         from theswarm_common.chat import Intent
         msg = message.lower().strip()
 
-        # Exact/phrase matches first (order matters: longer phrases before substrings)
-        phrase_keywords = {
-            "plan du jour": "show_plan",
-            "list stories": "list_stories",
-            "list repos": "list_repos",
-            "list projects": "list_repos",
-            "list repo": "list_repos",
-            "list project": "list_repos",
-        }
-        for phrase, action in phrase_keywords.items():
-            if phrase in msg:
-                return Intent(action=action, confidence=0.95, params={}, raw_text=message)
+        # Fast path: exact short messages
+        if msg in _FAST_KEYWORDS:
+            return Intent(
+                action=_FAST_KEYWORDS[msg],
+                confidence=1.0, params={}, raw_text=message,
+            )
 
-        # Single-word keywords
-        keywords = {
-            "ping": "ping",
-            "help": "help",
-            "aide": "help",
-            "status": "show_status",
-            "plan": "show_plan",
-            "rapport": "show_report",
-            "report": "show_report",
-            "backlog": "list_stories",
-            "issues": "list_stories",
-            "go": "run_cycle",
-            "start": "run_cycle",
-            "lance": "run_cycle",
-            "repos": "list_repos",
-            "projects": "list_repos",
-            "projet": "list_repos",
-        }
+        # LLM classification via Haiku
+        try:
+            return await self._classify_with_llm(message)
+        except Exception as e:
+            log.warning("LLM NLU failed, using fallback: %s", e)
+            return Intent(action="unknown", confidence=0.1, params={}, raw_text=message)
 
-        for keyword, action in keywords.items():
-            if keyword in msg:
-                return Intent(action=action, confidence=0.9, params={}, raw_text=message)
+    async def _classify_with_llm(self, message: str):
+        import json as _json
+        from theswarm_common.chat import Intent
 
-        # Only treat as story creation if it looks like a feature request
-        # (contains verbs like "want", "add", "build", "create", "make", "implement")
-        story_signals = ["want", "add", "build", "create", "make", "implement",
-                         "veux", "ajoute", "besoin", "fais", "développe"]
-        if len(msg) > 10 and any(s in msg for s in story_signals):
-            return Intent(action="create_stories", confidence=0.6, params={}, raw_text=message)
+        client = anthropic.AsyncAnthropic()
+        response = await asyncio.wait_for(
+            client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=64,
+                system=_NLU_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": message}],
+            ),
+            timeout=10,
+        )
 
-        if len(msg) > 10:
-            return Intent(action="unknown", confidence=0.3, params={}, raw_text=message)
+        text = response.content[0].text if response.content else "{}"
+        # Strip markdown fences if present
+        text = text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
 
-        return Intent(action="unknown", confidence=0.1, params={}, raw_text=message)
+        data = _json.loads(text)
+        action = data.get("action", "unknown")
+        confidence = float(data.get("confidence", 0.5))
+
+        cost = _estimate_cost(
+            "claude-haiku-4-5-20251001",
+            response.usage.input_tokens,
+            response.usage.output_tokens,
+        )
+        log.info(
+            "NLU: '%s' → %s (%.0f%%) cost=$%.4f",
+            message[:50], action, confidence * 100, cost,
+        )
+
+        return Intent(action=action, confidence=confidence, params={}, raw_text=message)
 
 
 # ── Mattermost connection ────────────────────────────────────────────
@@ -261,7 +293,7 @@ class GatewayBridge:
         self._swarm_po_cycle_running = False
         self._swarm_po_current_phase = ""
 
-        self._nlu = _KeywordNLU()
+        self._nlu = _LlmNLU()
         self.settings = None
 
     def register(self, event_type: str, handler) -> None:

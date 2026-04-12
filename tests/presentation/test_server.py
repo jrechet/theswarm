@@ -65,37 +65,50 @@ class TestGatewayBridge:
         await bridge.route_dm_event("other_bot", "hello", "user1")
 
 
-# ── KeywordNLU ────────────────────────────────────────────────────────
+# ── LlmNLU ───────────────────────────────────────────────────────────
 
 
-class TestKeywordNLU:
+class TestLlmNLU:
     def _make_nlu(self):
-        from theswarm.presentation.web.server import _KeywordNLU
-        return _KeywordNLU()
+        from theswarm.presentation.web.server import _LlmNLU
+        return _LlmNLU()
 
-    async def test_ping(self):
+    async def test_ping_fast_path(self):
+        """Exact 'ping' uses keyword fast path, no LLM call."""
         nlu = self._make_nlu()
         intent = await nlu.parse_intent("ping", "bot", [])
         assert intent.action == "ping"
+        assert intent.confidence == 1.0
 
-    async def test_help(self):
+    async def test_help_fast_path(self):
         nlu = self._make_nlu()
         intent = await nlu.parse_intent("help", "bot", [])
         assert intent.action == "help"
 
-    async def test_run_cycle(self):
+    async def test_go_fast_path(self):
         nlu = self._make_nlu()
         intent = await nlu.parse_intent("go", "bot", [])
         assert intent.action == "run_cycle"
 
-    async def test_feature_description(self):
+    async def test_llm_classifies_feature_request(self):
+        """LLM path: mock Haiku to return create_stories."""
         nlu = self._make_nlu()
-        intent = await nlu.parse_intent("I want a dashboard with charts", "bot", [])
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text='{"action": "create_stories", "confidence": 0.95}')]
+        mock_response.usage = MagicMock(input_tokens=50, output_tokens=10)
+
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+        with patch("theswarm.presentation.web.server.anthropic.AsyncAnthropic", return_value=mock_client):
+            intent = await nlu.parse_intent("I want a dashboard with charts", "bot", [])
         assert intent.action == "create_stories"
 
-    async def test_unknown_short(self):
+    async def test_llm_failure_returns_unknown(self):
+        """When LLM call fails, fallback to unknown."""
         nlu = self._make_nlu()
-        intent = await nlu.parse_intent("xyz", "bot", [])
+        with patch("theswarm.presentation.web.server.anthropic.AsyncAnthropic", side_effect=Exception("no key")):
+            intent = await nlu.parse_intent("something complex", "bot", [])
         assert intent.action == "unknown"
 
 
