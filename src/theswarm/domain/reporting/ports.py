@@ -1,0 +1,29 @@
+"""Ports for the Reporting bounded context."""
+
+from __future__ import annotations
+
+from typing import Protocol
+
+from theswarm.domain.cycles.value_objects import CycleId
+from theswarm.domain.reporting.entities import DemoReport
+from theswarm.domain.reporting.value_objects import Artifact
+
+
+class ReportRepository(Protocol):
+    async def save(self, report: DemoReport) -> None: ...
+    async def get(self, report_id: str) -> DemoReport | None: ...
+    async def list_by_project(self, project_id: str, limit: int = 30) -> list[DemoReport]: ...
+
+
+class ArtifactStore(Protocol):
+    async def save(self, cycle_id: CycleId, artifact: Artifact, data: bytes) -> str: ...
+    async def get_url(self, path: str) -> str: ...
+    async def list_by_cycle(self, cycle_id: CycleId) -> list[Artifact]: ...
+
+
+class Recorder(Protocol):
+    """Captures visual artifacts during QA."""
+
+    async def screenshot(self, url: str, label: str) -> tuple[Artifact, bytes]: ...
+    async def start_recording(self, url: str) -> None: ...
+    async def stop_recording(self) -> tuple[Artifact, bytes]: ...
