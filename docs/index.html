@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TheSwarm — Autonomous AI Dev Team</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --bg-card: #161b22;
+  --bg-code: #1c2129;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-dim: #8b949e;
+  --text-muted: #484f58;
+  --accent: #58a6ff;
+  --accent-bg: #1f6feb22;
+  --green: #3fb950;
+  --orange: #d29922;
+  --red: #f85149;
+  --purple: #bc8cff;
+  --pink: #f778ba;
+  --radius: 10px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── NAV ─────────────────────────── */
+
+nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  z-index: 100;
+  background: rgba(13,17,23,0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0.6rem 1.5rem;
+  display: flex; align-items: center; gap: 2rem;
+}
+
+nav .logo {
+  font-weight: 800; font-size: 1.15rem;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+
+nav .links { display: flex; gap: 1.2rem; font-size: 0.85rem; }
+nav .links a { color: var(--text-dim); }
+nav .links a:hover { color: var(--text); text-decoration: none; }
+
+nav .badge {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--green);
+  border: 1px solid rgba(63,185,80,0.3);
+  padding: 0.15rem 0.6rem;
+  border-radius: 20px;
+  font-family: var(--mono);
+}
+
+/* ── LAYOUT ──────────────────────── */
+
+.container { max-width: 960px; margin: 0 auto; padding: 0 1.5rem; }
+
+section { padding: 5rem 0 3rem; }
+section:first-of-type { padding-top: 7rem; }
+
+h1 {
+  font-size: clamp(2.2rem, 5vw, 3.5rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  margin-bottom: 1rem;
+}
+
+h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--accent);
+}
+
+p { margin-bottom: 1rem; color: var(--text-dim); }
+p.lead { font-size: 1.15rem; color: var(--text); }
+
+/* ── HERO ────────────────────────── */
+
+.hero {
+  padding: 8rem 0 4rem;
+  text-align: center;
+  position: relative;
+}
+
+.hero::before {
+  content: '';
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, var(--accent-bg) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.hero .subtitle {
+  font-size: 1.2rem;
+  color: var(--text-dim);
+  max-width: 640px;
+  margin: 0 auto 2rem;
+}
+
+.hero-badges {
+  display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;
+  margin-bottom: 2.5rem;
+}
+
+.hero-badges span {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  font-family: var(--mono);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.hero-badges span.highlight { border-color: var(--accent); color: var(--accent); }
+
+.hero-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+
+.btn {
+  display: inline-block;
+  padding: 0.65rem 1.5rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:hover { opacity: 0.9; text-decoration: none; }
+
+.btn-outline {
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+
+/* ── CARDS ───────────────────────── */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+
+.card h3 { margin-bottom: 0.4rem; }
+.card p { font-size: 0.9rem; margin: 0; }
+
+.card .icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+/* ── CODE ────────────────────────── */
+
+code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  background: var(--bg-code);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+pre {
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  overflow-x: auto;
+  margin: 1rem 0 1.5rem;
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+pre code { background: none; padding: 0; }
+
+/* ── TABLE ───────────────────────── */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0 1.5rem;
+  font-size: 0.9rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+th { color: var(--text-dim); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+td { color: var(--text); }
+td code { font-size: 0.8rem; }
+
+/* ── PIPELINE ────────────────────── */
+
+.pipeline {
+  display: flex;
+  gap: 0;
+  margin: 2rem 0;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.pipeline-step {
+  flex: 1;
+  min-width: 140px;
+  padding: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  text-align: center;
+  position: relative;
+}
+
+.pipeline-step:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.pipeline-step:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.pipeline-step + .pipeline-step { border-left: none; }
+
+.pipeline-step .step-num {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.pipeline-step .step-agent {
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.pipeline-step .step-desc {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.pipeline-step.po .step-agent { color: var(--accent); }
+.pipeline-step.tl .step-agent { color: var(--purple); }
+.pipeline-step.dev .step-agent { color: var(--green); }
+.pipeline-step.qa .step-agent { color: var(--orange); }
+
+/* ── ARCH DIAGRAM ────────────────── */
+
+.arch-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 1.5rem 0;
+}
+
+.arch-layer {
+  padding: 0.8rem 1.2rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.arch-layer .layer-name {
+  font-weight: 700;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  min-width: 140px;
+}
+
+.arch-layer .layer-desc {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.arch-layer.l-domain { background: rgba(63,185,80,0.08); border-color: rgba(63,185,80,0.2); }
+.arch-layer.l-domain .layer-name { color: var(--green); }
+.arch-layer.l-app { background: rgba(88,166,255,0.08); border-color: rgba(88,166,255,0.2); }
+.arch-layer.l-app .layer-name { color: var(--accent); }
+.arch-layer.l-infra { background: rgba(210,153,34,0.08); border-color: rgba(210,153,34,0.2); }
+.arch-layer.l-infra .layer-name { color: var(--orange); }
+.arch-layer.l-present { background: rgba(188,140,255,0.08); border-color: rgba(188,140,255,0.2); }
+.arch-layer.l-present .layer-name { color: var(--purple); }
+
+/* ── STEP LIST ───────────────────── */
+
+.steps {
+  counter-reset: step;
+  list-style: none;
+  margin: 1rem 0 1.5rem;
+}
+
+.steps li {
+  counter-increment: step;
+  padding: 0.75rem 0 0.75rem 3rem;
+  position: relative;
+  border-left: 2px solid var(--border);
+  margin-left: 1rem;
+}
+
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: -0.85rem;
+  width: 1.5rem; height: 1.5rem;
+  background: var(--bg-card);
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.5rem;
+  color: var(--accent);
+}
+
+.steps li:last-child { border-left-color: transparent; }
+
+/* ── RESPONSIVE ──────────────────── */
+
+@media (max-width: 640px) {
+  nav { gap: 1rem; }
+  nav .links { gap: 0.6rem; }
+  .pipeline { flex-direction: column; }
+  .pipeline-step { border-radius: 0 !important; border-left: 1px solid var(--border) !important; }
+  .pipeline-step:first-child { border-radius: var(--radius) var(--radius) 0 0 !important; }
+  .pipeline-step:last-child { border-radius: 0 0 var(--radius) var(--radius) !important; }
+  .pipeline-step + .pipeline-step { border-top: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <span class="logo">TheSwarm</span>
+  <div class="links">
+    <a href="#quickstart">Quickstart</a>
+    <a href="#agents">Agents</a>
+    <a href="#cli">CLI</a>
+    <a href="#dashboard">Dashboard</a>
+    <a href="#chat">Chat</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#config">Config</a>
+    <a href="#deploy">Deploy</a>
+  </div>
+  <span class="badge">859 tests passing</span>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="container">
+    <h1>Your AI dev team,<br>running autonomously.</h1>
+    <p class="subtitle">
+      TheSwarm is four specialized AI agents (PO, TechLead, Dev, QA) that take a
+      feature request and ship it: planning, implementation, code review, testing,
+      and demo reports. Self-hosted. Multi-repo. Zero human intervention required.
+    </p>
+    <div class="hero-badges">
+      <span class="highlight">4 agents</span>
+      <span>LangGraph</span>
+      <span>Claude API</span>
+      <span>GitHub</span>
+      <span>Mattermost</span>
+      <span>FastAPI</span>
+      <span>SQLite</span>
+      <span class="highlight">Self-hosted</span>
+    </div>
+    <div class="hero-actions">
+      <a href="#quickstart" class="btn btn-primary">Get Started</a>
+      <a href="#architecture" class="btn btn-outline">How It Works</a>
+    </div>
+  </div>
+</section>
+
+<!-- WHAT IT DOES -->
+<section>
+  <div class="container">
+    <h2>What TheSwarm Does</h2>
+    <p class="lead">Point TheSwarm at a GitHub repo. It reads the backlog, plans work, writes code, opens PRs, runs tests, does code review, and produces a demo report. Every day. Automatically.</p>
+
+    <div class="pipeline">
+      <div class="pipeline-step po">
+        <div class="step-num">Morning</div>
+        <div class="step-agent">PO</div>
+        <div class="step-desc">Reads backlog, selects issues, writes daily plan</div>
+      </div>
+      <div class="pipeline-step tl">
+        <div class="step-num">Breakdown</div>
+        <div class="step-agent">TechLead</div>
+        <div class="step-desc">Splits stories into dev tasks, sets labels</div>
+      </div>
+      <div class="pipeline-step dev">
+        <div class="step-num">Dev Loop</div>
+        <div class="step-agent">Dev</div>
+        <div class="step-desc">Implements, tests, opens PRs (up to 5 iterations)</div>
+      </div>
+      <div class="pipeline-step tl">
+        <div class="step-num">Review</div>
+        <div class="step-agent">TechLead</div>
+        <div class="step-desc">Reviews PRs, requests changes or approves</div>
+      </div>
+      <div class="pipeline-step qa">
+        <div class="step-num">QA</div>
+        <div class="step-agent">QA</div>
+        <div class="step-desc">E2E tests, security scan, demo report</div>
+      </div>
+      <div class="pipeline-step po">
+        <div class="step-num">Evening</div>
+        <div class="step-agent">PO</div>
+        <div class="step-desc">Validates results, writes daily report</div>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <span class="icon">&#x1f4cb;</span>
+        <h3>Multi-Project</h3>
+        <p>Register multiple repos. Each gets its own cycles, schedules, reports, and agent memory.</p>
+      </div>
+      <div class="card">
+        <span class="icon">&#x1f9e0;</span>
+        <h3>Agent Memory</h3>
+        <p>Agents learn from each cycle. Stack patterns, coding conventions, errors to avoid, architectural decisions.</p>
+      </div>
+      <div class="card">
+        <span class="icon">&#x1f4ca;</span>
+        <h3>Demo Reports</h3>
+        <p>Rich reports with story breakdowns, diff highlights, quality gates, coverage, cost tracking.</p>
+      </div>
+      <div class="card">
+        <span class="icon">&#x23f0;</span>
+        <h3>Scheduled Cycles</h3>
+        <p>Cron-based scheduling. Run cycles weekdays at 8am, or trigger via GitHub webhooks.</p>
+      </div>
+      <div class="card">
+        <span class="icon">&#x1f4ac;</span>
+        <h3>Chat Interface</h3>
+        <p>DM <code>@swarm-po</code> on Mattermost. Natural language: "add a login page" creates stories.</p>
+      </div>
+      <div class="card">
+        <span class="icon">&#x1f50d;</span>
+        <h3>Self-Improvement</h3>
+        <p>After each cycle, the improvement engine analyzes quality gates, coverage, cost, and suggests fixes.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- QUICKSTART -->
+<section id="quickstart">
+  <div class="container">
+    <h2>Quickstart</h2>
+    <p>TheSwarm requires Python 3.12+, <a href="https://docs.astral.sh/uv/">uv</a>, and API keys for Claude and GitHub.</p>
+
+    <h3>1. Clone and install</h3>
+    <pre><code>git clone https://github.com/jrechet/theswarm.git
+cd theswarm
+uv sync --dev</code></pre>
+
+    <h3>2. Set environment variables</h3>
+    <pre><code># Required for real mode (agents actually call APIs)
+export ANTHROPIC_API_KEY="sk-ant-..."
+export GITHUB_TOKEN="ghp_..."
+
+# Target repository (owner/repo format)
+export SWARM_GITHUB_REPO="yourorg/yourapp"
+
+# Optional: Mattermost chat integration
+export SWARM_PO_MATTERMOST_TOKEN="your-bot-token"
+export EXTERNAL_URL="https://your-server.com"</code></pre>
+
+    <h3>3. Validate configuration</h3>
+    <pre><code>uv run python -m theswarm.presentation.cli.main validate</code></pre>
+    <p>This checks all env vars before you start. Fix any errors before proceeding.</p>
+
+    <h3>4. Register a project</h3>
+    <pre><code># Register your repo
+uv run python -m theswarm.presentation.cli.main projects add my-app yourorg/yourapp
+
+# Verify
+uv run python -m theswarm.presentation.cli.main projects list</code></pre>
+
+    <h3>5. Run your first cycle</h3>
+    <pre><code># Full cycle (PO → TechLead → Dev → QA → Report)
+uv run python -m theswarm.presentation.cli.main cycle --project my-app
+
+# Or run in the original mode (requires SWARM_GITHUB_REPO)
+uv run python -m theswarm --cycle</code></pre>
+
+    <h3>6. Open the dashboard</h3>
+    <pre><code># Web dashboard (browser)
+uv run python -m theswarm.presentation.cli.main serve
+# Open http://localhost:8091
+
+# Terminal dashboard (TUI)
+uv run python -m theswarm.presentation.cli.main dashboard</code></pre>
+  </div>
+</section>
+
+<!-- AGENTS -->
+<section id="agents">
+  <div class="container">
+    <h2>The Four Agents</h2>
+    <p>Each agent is a LangGraph StateGraph. They share state and run sequentially within a cycle.</p>
+
+    <div class="card-grid" style="grid-template-columns: repeat(2, 1fr);">
+      <div class="card">
+        <h3 style="color: var(--accent);">PO (Product Owner)</h3>
+        <p><strong>Morning:</strong> Reads <code>status:backlog</code> issues from GitHub, selects the most impactful ones, labels them <code>status:ready</code>, writes a daily plan.</p>
+        <p><strong>Evening:</strong> Validates the demo report, writes a daily summary, posts to Mattermost.</p>
+        <p><strong>Chat:</strong> Handles DMs via <code>@swarm-po</code>. Natural language intent parsing for creating stories, running cycles, checking status.</p>
+      </div>
+      <div class="card">
+        <h3 style="color: var(--purple);">TechLead</h3>
+        <p><strong>Breakdown:</strong> Takes <code>status:ready</code> user stories and splits them into dev-sized tasks with <code>role:dev</code> labels.</p>
+        <p><strong>Review:</strong> Reviews all open PRs from the Dev agent. Uses Claude to analyze code quality, correctness, and conventions. Approves or requests changes. Merges approved PRs.</p>
+      </div>
+      <div class="card">
+        <h3 style="color: var(--green);">Dev</h3>
+        <p><strong>Implements:</strong> Picks a <code>status:ready</code> task, clones the repo, creates a branch, calls Claude API to write code, runs the test suite, opens a PR.</p>
+        <p><strong>Iterates:</strong> Up to 5 iterations per cycle. If tests fail, the Dev agent reads errors and tries again. Budget-capped by token limits.</p>
+      </div>
+      <div class="card">
+        <h3 style="color: var(--orange);">QA</h3>
+        <p><strong>Tests:</strong> Writes Playwright E2E tests for new features. Runs the full test suite (unit + E2E). Runs semgrep for security scanning.</p>
+        <p><strong>Reports:</strong> Generates a demo report with story breakdowns, quality gate results, coverage, and cost tracking.</p>
+      </div>
+    </div>
+
+    <h3>Issue Label State Machine</h3>
+    <p>Issues move through labels as agents process them:</p>
+    <pre><code>status:backlog → status:ready → status:in-progress → status:review → merged/closed
+                  (PO)          (TechLead)        (Dev)           (TechLead)</code></pre>
+  </div>
+</section>
+
+<!-- CLI -->
+<section id="cli">
+  <div class="container">
+    <h2>CLI Reference</h2>
+    <p>TheSwarm has two entry points. The original <code>python -m theswarm</code> for the full gateway, and the v2 CLI for project management and the Clean Architecture layer.</p>
+
+    <h3>Original Entry Point</h3>
+    <pre><code># Start the full gateway (Mattermost + HTTP + agents)
+uv run python -m theswarm
+
+# Run a full daily cycle
+uv run python -m theswarm --cycle
+
+# Run only the dev agent
+uv run python -m theswarm --dev-only
+
+# Run only the techlead review
+uv run python -m theswarm --techlead-only</code></pre>
+
+    <h3>v2 CLI (Project Management)</h3>
+    <table>
+      <thead>
+        <tr><th>Command</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>projects list</code></td><td>List all registered projects</td></tr>
+        <tr><td><code>projects add &lt;id&gt; &lt;owner/repo&gt;</code></td><td>Register a new project</td></tr>
+        <tr><td><code>projects add &lt;id&gt; &lt;repo&gt; --framework fastapi</code></td><td>Register with explicit framework</td></tr>
+        <tr><td><code>projects remove &lt;id&gt;</code></td><td>Unregister a project</td></tr>
+        <tr><td><code>cycle --project &lt;id&gt;</code></td><td>Trigger a dev cycle for a project</td></tr>
+        <tr><td><code>schedule set &lt;id&gt; "0 8 * * 1-5"</code></td><td>Schedule weekday cycles at 8am UTC</td></tr>
+        <tr><td><code>schedule list</code></td><td>Show all enabled schedules</td></tr>
+        <tr><td><code>schedule disable &lt;id&gt;</code></td><td>Pause a project's schedule</td></tr>
+        <tr><td><code>schedule delete &lt;id&gt;</code></td><td>Remove a project's schedule</td></tr>
+        <tr><td><code>serve</code></td><td>Start the web dashboard on :8091</td></tr>
+        <tr><td><code>serve --port 9000</code></td><td>Custom port</td></tr>
+        <tr><td><code>dashboard</code></td><td>Open the terminal TUI dashboard</td></tr>
+        <tr><td><code>status</code></td><td>Show project count, active cycles, cost</td></tr>
+        <tr><td><code>validate</code></td><td>Check env vars and exit 1 on errors</td></tr>
+      </tbody>
+    </table>
+
+    <p>All v2 commands are run as:</p>
+    <pre><code>uv run python -m theswarm.presentation.cli.main &lt;command&gt;</code></pre>
+  </div>
+</section>
+
+<!-- DASHBOARD -->
+<section id="dashboard">
+  <div class="container">
+    <h2>Dashboards</h2>
+
+    <h3>Web Dashboard</h3>
+    <p>FastAPI + HTMX + Jinja2. Server-rendered, no JavaScript framework. Real-time updates via SSE (Server-Sent Events).</p>
+    <div class="card-grid">
+      <div class="card">
+        <h3>/ (Dashboard)</h3>
+        <p>Project stats, active cycles, live activity feed with SSE auto-updates, cost tracking.</p>
+      </div>
+      <div class="card">
+        <h3>/projects/</h3>
+        <p>List, create, view, delete projects. Framework detection on add.</p>
+      </div>
+      <div class="card">
+        <h3>/cycles/</h3>
+        <p>Cycle history with phase timeline. Trigger new cycles from the UI.</p>
+      </div>
+      <div class="card">
+        <h3>/reports/</h3>
+        <p>Demo reports with story breakdowns, quality gates, diff highlights, learnings.</p>
+      </div>
+      <div class="card">
+        <h3>/health</h3>
+        <p>Health endpoint with DB check, SSE check, uptime. Used by Docker healthcheck.</p>
+      </div>
+      <div class="card">
+        <h3>/api/*</h3>
+        <p>JSON API: projects, dashboard data, cycle details, SSE event stream at <code>/api/events</code>.</p>
+      </div>
+    </div>
+
+    <pre><code># Start the web dashboard
+uv run python -m theswarm.presentation.cli.main serve
+# Open http://localhost:8091</code></pre>
+
+    <h3>Terminal Dashboard (TUI)</h3>
+    <p>Built with Textual. Shows four agent panels, budget bars, activity log, project cards. Keyboard-driven: <code>p</code> for projects, <code>q</code> to quit, <code>r</code> to refresh.</p>
+    <pre><code>uv run python -m theswarm.presentation.cli.main dashboard</code></pre>
+  </div>
+</section>
+
+<!-- CHAT -->
+<section id="chat">
+  <div class="container">
+    <h2>Chat Interface (Mattermost)</h2>
+    <p>DM <code>@swarm-po</code> on Mattermost to interact with the PO agent.</p>
+
+    <table>
+      <thead><tr><th>Message</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td><code>go</code> / <code>start</code> / <code>lance</code></td><td>Triggers a full dev cycle</td></tr>
+        <tr><td><code>status</code></td><td>Shows current cycle status</td></tr>
+        <tr><td><code>plan</code></td><td>Shows the daily plan</td></tr>
+        <tr><td><code>report</code> / <code>rapport</code></td><td>Shows the latest demo report</td></tr>
+        <tr><td><code>backlog</code> / <code>issues</code></td><td>Lists current backlog stories</td></tr>
+        <tr><td><code>repos</code></td><td>Lists configured repositories</td></tr>
+        <tr><td><code>help</code> / <code>aide</code></td><td>Shows available commands</td></tr>
+        <tr><td><code>ping</code></td><td>Health check with interactive buttons</td></tr>
+        <tr><td>Any text &gt; 10 chars</td><td>Treated as a feature request, creates user stories</td></tr>
+      </tbody>
+    </table>
+
+    <p>The PO responds with interactive Mattermost buttons for approvals, cycle confirmations, and story reviews.</p>
+
+    <h3>Webhook Triggers</h3>
+    <p>Configure a GitHub webhook pointing to <code>POST /webhooks/github</code> to auto-trigger cycles on:</p>
+    <ul style="margin: 0.5rem 0 1.5rem 1.5rem; color: var(--text-dim);">
+      <li>Push to the default branch</li>
+      <li>New issue opened</li>
+      <li>Pull request review requested</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section id="architecture">
+  <div class="container">
+    <h2>Architecture</h2>
+    <p>TheSwarm combines the original LangGraph agent pipeline with a Clean Architecture / DDD layer for multi-project management.</p>
+
+    <h3>Clean Architecture Layers</h3>
+    <div class="arch-layers">
+      <div class="arch-layer l-present">
+        <span class="layer-name">Presentation</span>
+        <span class="layer-desc">CLI (argparse), Web (FastAPI+HTMX+SSE), TUI (Textual). User-facing interfaces.</span>
+      </div>
+      <div class="arch-layer l-app">
+        <span class="layer-name">Application</span>
+        <span class="layer-desc">CQRS commands/queries, EventBus, DTOs. ReportGenerator, ImprovementEngine, StartupValidator.</span>
+      </div>
+      <div class="arch-layer l-infra">
+        <span class="layer-name">Infrastructure</span>
+        <span class="layer-desc">SQLite repos, LocalArtifactStore, CronScheduler, WebhookHandler, GitHubTicketSource.</span>
+      </div>
+      <div class="arch-layer l-domain">
+        <span class="layer-name">Domain</span>
+        <span class="layer-desc">Frozen dataclasses, Protocol ports. 8 bounded contexts: Projects, Cycles, Agents, Tickets, Memory, Reporting, Scheduling, Chat.</span>
+      </div>
+    </div>
+
+    <h3>Domain Bounded Contexts</h3>
+    <table>
+      <thead><tr><th>Context</th><th>Key Entities</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>Projects</td><td>Project, ProjectConfig</td><td>Multi-repo registration, framework detection</td></tr>
+        <tr><td>Cycles</td><td>Cycle, PhaseExecution, Budget</td><td>Orchestration state, cost tracking</td></tr>
+        <tr><td>Agents</td><td>AgentRole, AgentCapability</td><td>Role definitions and capabilities</td></tr>
+        <tr><td>Tickets</td><td>Ticket, TicketStatus</td><td>Issue state machine across sources</td></tr>
+        <tr><td>Memory</td><td>MemoryEntry, Retrospective</td><td>Agent learning persistence</td></tr>
+        <tr><td>Reporting</td><td>DemoReport, StoryReport, Artifact</td><td>Rich demo reports with media</td></tr>
+        <tr><td>Scheduling</td><td>Schedule, CronExpression</td><td>Automated cycle triggers</td></tr>
+        <tr><td>Chat</td><td>ChatMessage, Intent</td><td>Chat interaction modeling</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Original Agent Pipeline</h3>
+    <p>The LangGraph-based agents live in <code>src/theswarm/agents/</code>. They use a shared <code>AgentState</code> TypedDict and are orchestrated by <code>cycle.py</code>. Each agent calls the Claude API via <code>tools/claude.py</code> and interacts with GitHub via <code>tools/github.py</code>.</p>
+  </div>
+</section>
+
+<!-- CONFIG -->
+<section id="config">
+  <div class="container">
+    <h2>Configuration</h2>
+
+    <h3>Environment Variables</h3>
+    <table>
+      <thead><tr><th>Variable</th><th>Required</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Yes*</td><td>Claude API access for all agents</td></tr>
+        <tr><td><code>GITHUB_TOKEN</code></td><td>Yes*</td><td>GitHub API (issues, PRs, repos)</td></tr>
+        <tr><td><code>SWARM_GITHUB_REPO</code></td><td>No</td><td>Default target repo (<code>owner/repo</code>). Without it, agents run in stub mode.</td></tr>
+        <tr><td><code>SWARM_PO_GITHUB_REPOS</code></td><td>No</td><td>Comma-separated repo allowlist for multi-repo</td></tr>
+        <tr><td><code>SWARM_PO_MATTERMOST_TOKEN</code></td><td>No</td><td>Mattermost bot token for @swarm-po</td></tr>
+        <tr><td><code>MATTERMOST_BOT_TOKEN</code></td><td>No</td><td>Shared Mattermost token</td></tr>
+        <tr><td><code>EXTERNAL_URL</code></td><td>No</td><td>Public URL for Mattermost callbacks (e.g. <code>https://bots.example.com</code>)</td></tr>
+        <tr><td><code>SEQ_URL</code></td><td>No</td><td>Seq log aggregation URL for structured logging</td></tr>
+        <tr><td><code>SEQ_API_KEY</code></td><td>No</td><td>Seq API key</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size: 0.85rem;">* Required for real mode. Without these, agents run in stub mode (log actions but make no API calls).</p>
+
+    <h3>theswarm.yaml</h3>
+    <p>YAML config file for defaults. Env vars override YAML values.</p>
+    <pre><code>mattermost:
+  base_url: "https://chat.example.com"
+  channel_name: "swarm-bots-logs"
+
+server:
+  host: "0.0.0.0"
+  port: 8091
+  external_url: "https://bots.example.com"
+
+agents:
+  swarm_po:
+    enabled: true
+    llm_backend: "claude-code"
+    github_repos:
+      - "yourorg/webapp"
+      - "yourorg/api"
+    default_repo: "yourorg/webapp"
+    team_channel: "swarm-team"
+    channel: "swarm-bots-logs"</code></pre>
+
+    <h3>Stub Mode</h3>
+    <p>When <code>SWARM_GITHUB_REPO</code> is not set, all agents run in stub mode. They log what they would do but make no API calls. This is how the test suite works (859 tests, all passing in stub mode).</p>
+
+    <h3>Data Storage</h3>
+    <p>All data is stored locally in <code>~/.swarm-data/</code>:</p>
+    <table>
+      <thead><tr><th>Path</th><th>Contents</th></tr></thead>
+      <tbody>
+        <tr><td><code>~/.swarm-data/theswarm.db</code></td><td>SQLite database (projects, cycles, schedules, memory, reports)</td></tr>
+        <tr><td><code>~/.swarm-data/artifacts/</code></td><td>Screenshots, videos, diffs, logs organized by cycle</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- DEPLOY -->
+<section id="deploy">
+  <div class="container">
+    <h2>Deployment</h2>
+
+    <h3>Docker Compose</h3>
+    <pre><code># Build and run
+docker compose up
+
+# Or use the pre-built image
+docker compose pull && docker compose up -d</code></pre>
+    <p>The container listens on port 8091, runs healthchecks against <code>/health</code>, and mounts the host's <code>.claude</code> config for Claude Code access.</p>
+
+    <h3>Docker Swarm (Production)</h3>
+    <p>TheSwarm deploys on Docker Swarm with Traefik reverse proxy. CI runs tests on push/PR, then CD builds a container image to GHCR and deploys via <code>docker stack up</code>.</p>
+    <pre><code># Deploy to swarm
+docker stack deploy -c docker-compose.yml theswarm</code></pre>
+    <p>Traefik routes <code>/swarm</code> path prefix to the container. Mattermost callbacks hit <code>/swarm/mattermost/callback</code>.</p>
+
+    <h3>Cron Schedule (Headless)</h3>
+    <p>For running cycles without the web dashboard:</p>
+    <pre><code># Register project and set schedule
+uv run python -m theswarm.presentation.cli.main projects add api yourorg/api
+uv run python -m theswarm.presentation.cli.main schedule set api "0 8 * * 1-5"
+
+# Start the server (scheduler runs in-process)
+uv run python -m theswarm.presentation.cli.main serve</code></pre>
+
+    <h3>Resource Requirements</h3>
+    <table>
+      <thead><tr><th>Resource</th><th>Minimum</th><th>Recommended</th></tr></thead>
+      <tbody>
+        <tr><td>RAM</td><td>256 MB</td><td>1 GB</td></tr>
+        <tr><td>CPU</td><td>1 core</td><td>2 cores</td></tr>
+        <tr><td>Disk</td><td>100 MB + artifacts</td><td>1 GB</td></tr>
+        <tr><td>Python</td><td>3.12+</td><td>3.12+</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- TESTING -->
+<section id="testing">
+  <div class="container">
+    <h2>Testing</h2>
+    <pre><code># Run all tests
+uv run pytest tests/ -v --tb=short
+
+# Run a specific test file
+uv run pytest tests/integration/test_full_stack.py -v
+
+# Run with coverage
+uv run pytest tests/ --cov=src --cov-report=term-missing
+
+# Run only domain tests
+uv run pytest tests/domain/ -v
+
+# Run only infrastructure tests
+uv run pytest tests/infrastructure/ -v</code></pre>
+
+    <p>Test organization:</p>
+    <table>
+      <thead><tr><th>Directory</th><th>Tests</th><th>Coverage Target</th></tr></thead>
+      <tbody>
+        <tr><td><code>tests/domain/</code></td><td>Entity, value object, domain logic</td><td>100%</td></tr>
+        <tr><td><code>tests/application/</code></td><td>Command handlers, queries, services</td><td>&gt; 70%</td></tr>
+        <tr><td><code>tests/infrastructure/</code></td><td>SQLite repos, artifact store, scheduler, webhooks</td><td>&gt; 70%</td></tr>
+        <tr><td><code>tests/presentation/</code></td><td>CLI, web (httpx), TUI (Textual pilot)</td><td>&gt; 70%</td></tr>
+        <tr><td><code>tests/integration/</code></td><td>Cross-layer end-to-end flows</td><td>Key paths</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<section style="padding: 3rem 0; border-top: 1px solid var(--border); margin-top: 2rem;">
+  <div class="container" style="text-align: center;">
+    <p style="color: var(--text-muted); font-size: 0.85rem;">
+      TheSwarm v1.0 &middot; 859 tests &middot; Clean Architecture / DDD &middot; Self-hosted
+    </p>
+  </div>
+</section>
+
+</body>
+</html>
