@@ -4,13 +4,13 @@
 {% block content %}
 <div class="page-header">
   <h1>Projects</h1>
-  <a href="/projects/new" class="btn btn-primary">+ Add Project</a>
+  <a href="{{ base }}/projects/new" class="btn btn-primary">+ Add Project</a>
 </div>
 
 {% if projects %}
 <div class="project-grid">
   {% for p in projects %}
-  <a href="/projects/{{ p.id }}" class="project-card">
+  <a href="{{ base }}/projects/{{ p.id }}" class="project-card">
     <h3>{{ p.id }}</h3>
     <div class="project-meta">
       <span class="badge">{{ p.framework }}</span>
@@ -24,7 +24,7 @@
 {% else %}
 <div class="empty-state-large">
   <p>No projects registered yet.</p>
-  <a href="/projects/new" class="btn btn-primary">Add your first project</a>
+  <a href="{{ base }}/projects/new" class="btn btn-primary">Add your first project</a>
 </div>
 {% endif %}
 {% endblock %}

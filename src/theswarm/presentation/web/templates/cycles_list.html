@@ -22,7 +22,7 @@
   <tbody>
     {% for c in cycles %}
     <tr>
-      <td><a href="/cycles/{{ c.id }}">{{ c.id[:8] }}...</a></td>
+      <td><a href="{{ base }}/cycles/{{ c.id }}">{{ c.id[:8] }}...</a></td>
       <td>{{ c.project_id }}</td>
       <td><span class="badge badge-{{ c.status }}">{{ c.status }}</span></td>
       <td>{{ c.triggered_by }}</td>

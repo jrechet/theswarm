@@ -58,7 +58,8 @@ async def create_project(
             team_channel=team_channel,
         )
     )
-    return RedirectResponse(url="/projects/", status_code=303)
+    base = request.app.state.base_path
+    return RedirectResponse(url=f"{base}/projects/", status_code=303)
 
 
 @router.get("/{project_id}", response_class=HTMLResponse)
@@ -78,4 +79,5 @@ async def project_detail(request: Request, project_id: str) -> HTMLResponse:
 async def delete_project(request: Request, project_id: str) -> RedirectResponse:
     handler: DeleteProjectHandler = request.app.state.delete_project_handler
     await handler.handle(DeleteProjectCommand(project_id=project_id))
-    return RedirectResponse(url="/projects/", status_code=303)
+    base = request.app.state.base_path
+    return RedirectResponse(url=f"{base}/projects/", status_code=303)

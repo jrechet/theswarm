@@ -6,7 +6,8 @@
   let es = null;
 
   function connect() {
-    es = new EventSource('/api/events');
+    var base = document.documentElement.dataset.base || '';
+    es = new EventSource(base + '/api/events');
 
     es.onopen = function() {
       if (statusEl) statusEl.textContent = 'Connected';

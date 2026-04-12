@@ -45,4 +45,5 @@ async def trigger_cycle(
     cycle_id = await handler.handle(
         RunCycleCommand(project_id=project_id, triggered_by="web"),
     )
-    return RedirectResponse(url=f"/cycles/{cycle_id}", status_code=303)
+    base = request.app.state.base_path
+    return RedirectResponse(url=f"{base}/cycles/{cycle_id}", status_code=303)

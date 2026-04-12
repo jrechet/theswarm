@@ -331,7 +331,8 @@ async def start_server(host: str = "0.0.0.0", port: int = 8091, db_path: str = "
     bus = EventBus()
 
     # Create v2 web app
-    app = create_web_app(project_repo, cycle_repo, bus)
+    base_path = os.getenv("BASE_PATH", "")
+    app = create_web_app(project_repo, cycle_repo, bus, base_path=base_path)
 
     # Create gateway bridge for Mattermost/persona integration
     bridge = GatewayBridge()

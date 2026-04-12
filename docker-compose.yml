@@ -5,6 +5,8 @@ services:
       - "8091:8091"
     env_file:
       - .env
+    environment:
+      - BASE_PATH=/swarm
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

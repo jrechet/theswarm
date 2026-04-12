@@ -5,11 +5,11 @@
 <div class="page-header">
   <h1>{{ project.id }}</h1>
   <div class="header-actions">
-    <form method="POST" action="/cycles/trigger" style="display:inline">
+    <form method="POST" action="{{ base }}/cycles/trigger" style="display:inline">
       <input type="hidden" name="project_id" value="{{ project.id }}">
       <button type="submit" class="btn btn-primary">Run Cycle</button>
     </form>
-    <form method="POST" action="/projects/{{ project.id }}/delete"
+    <form method="POST" action="{{ base }}/projects/{{ project.id }}/delete"
           style="display:inline"
           onsubmit="return confirm('Delete {{ project.id }}?')">
       <button type="submit" class="btn btn-danger">Delete</button>
@@ -42,7 +42,7 @@
 
   <div class="card">
     <h2>Recent Cycles</h2>
-    <div hx-get="/cycles/?project_id={{ project.id }}"
+    <div hx-get="{{ base }}/cycles/?project_id={{ project.id }}"
          hx-trigger="load"
          hx-swap="innerHTML">
       <p class="empty-state">Loading...</p>

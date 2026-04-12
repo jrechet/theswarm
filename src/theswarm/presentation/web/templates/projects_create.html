@@ -6,7 +6,7 @@
   <h1>Add Project</h1>
 </div>
 
-<form method="POST" action="/projects/" class="form-card">
+<form method="POST" action="{{ base }}/projects/" class="form-card">
   <div class="form-group">
     <label for="project_id">Project ID (slug)</label>
     <input type="text" id="project_id" name="project_id" placeholder="my-app" required>
@@ -48,7 +48,7 @@
   </div>
 
   <div class="form-actions">
-    <a href="/projects/" class="btn btn-subtle">Cancel</a>
+    <a href="{{ base }}/projects/" class="btn btn-subtle">Cancel</a>
     <button type="submit" class="btn btn-primary">Add Project</button>
   </div>
 </form>

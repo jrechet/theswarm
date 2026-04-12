@@ -30,16 +30,18 @@ _STATIC_DIR = _HERE / "static"
 class _TemplateEngine:
     """Thin wrapper matching Starlette's Jinja2Templates interface."""
 
-    def __init__(self, directory: str | Path) -> None:
+    def __init__(self, directory: str | Path, base_path: str = "") -> None:
         self._env = Environment(
             loader=FileSystemLoader(str(directory)),
             autoescape=True,
         )
+        self._base_path = base_path.rstrip("/")
 
     def TemplateResponse(
         self, name: str, context: dict, status_code: int = 200,
     ) -> "HTMLResponse":
         from fastapi.responses import HTMLResponse
+        context.setdefault("base", self._base_path)
         template = self._env.get_template(name)
         html = template.render(**context)
         return HTMLResponse(content=html, status_code=status_code)
@@ -50,16 +52,18 @@ def create_web_app(
     cycle_repo: CycleRepository,
     event_bus: EventBus,
     sse_hub: SSEHub | None = None,
+    base_path: str = "",
 ) -> FastAPI:
     """Wire the web dashboard with dependency injection."""
     app = FastAPI(title="TheSwarm Dashboard", docs_url=None, redoc_url=None)
+    app.state.base_path = base_path.rstrip("/")
 
     # SSE hub
     hub = sse_hub or SSEHub()
     event_bus.subscribe_all(hub.broadcast)
 
     # Templates
-    templates = _TemplateEngine(_TEMPLATE_DIR)
+    templates = _TemplateEngine(_TEMPLATE_DIR, base_path=base_path)
 
     # Inject dependencies into app.state
     app.state.templates = templates

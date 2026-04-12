@@ -38,7 +38,7 @@
       <tbody>
         {% for c in dashboard.active_cycles %}
         <tr>
-          <td><a href="/cycles/{{ c.id }}">{{ c.project_id }}</a></td>
+          <td><a href="{{ base }}/cycles/{{ c.id }}">{{ c.project_id }}</a></td>
           <td><span class="badge badge-{{ c.status }}">{{ c.status }}</span></td>
           <td>{{ c.triggered_by }}</td>
           <td>${{ "%.2f" | format(c.total_cost_usd) }}</td>
@@ -48,7 +48,7 @@
       </tbody>
     </table>
     {% else %}
-    <p class="empty-state">No active cycles. <a href="/projects/">Start one from a project.</a></p>
+    <p class="empty-state">No active cycles. <a href="{{ base }}/projects/">Start one from a project.</a></p>
     {% endif %}
   </section>
 
@@ -56,7 +56,7 @@
     <h2>Live Activity</h2>
     <div id="activity-feed"
          hx-ext="sse"
-         sse-connect="/api/events"
+         sse-connect="{{ base }}/api/events"
          sse-swap="message"
          hx-swap="afterbegin">
       <p class="empty-state">Waiting for events...</p>
@@ -68,7 +68,7 @@
     {% if dashboard.projects %}
     <div class="project-grid">
       {% for p in dashboard.projects %}
-      <a href="/projects/{{ p.id }}" class="project-card">
+      <a href="{{ base }}/projects/{{ p.id }}" class="project-card">
         <h3>{{ p.id }}</h3>
         <span class="badge">{{ p.framework }}</span>
         <span class="repo-url">{{ p.repo }}</span>
@@ -76,7 +76,7 @@
       {% endfor %}
     </div>
     {% else %}
-    <p class="empty-state"><a href="/projects/new">Add your first project</a></p>
+    <p class="empty-state"><a href="{{ base }}/projects/new">Add your first project</a></p>
     {% endif %}
   </section>
 
