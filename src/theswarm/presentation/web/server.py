@@ -383,7 +383,7 @@ async def start_server(host: str = "0.0.0.0", port: int = 8091, db_path: str = "
     from theswarm_common.models import AgentEvent
     import starlette.requests
 
-    @app.post("/swarm/mattermost/callback")
+    @app.post("/mattermost/callback")
     async def mattermost_callback(request: starlette.requests.Request):
         body = await request.json()
         context = body.get("context", {})

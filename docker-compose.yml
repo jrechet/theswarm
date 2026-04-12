@@ -33,6 +33,8 @@ services:
         - "traefik.http.routers.theswarm.entrypoints=websecure"
         - "traefik.http.routers.theswarm.tls=true"
         - "traefik.http.routers.theswarm.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.theswarm.middlewares=theswarm-strip"
+        - "traefik.http.middlewares.theswarm-strip.stripprefix.prefixes=/swarm"
         - "traefik.http.services.theswarm.loadbalancer.server.port=8091"
 
 networks:

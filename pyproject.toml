@@ -30,6 +30,8 @@ dev = [
     "respx>=0.22",
     "pytest-mock>=3.14",
     "pytest-cov>=7.1.0",
+    "playwright>=1.58.0",
+    "pytest-playwright>=0.7.2",
 ]
 
 [build-system]
@@ -42,3 +44,4 @@ packages = ["src/theswarm", "src/theswarm_common"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["e2e: end-to-end browser tests (require Playwright)"]
