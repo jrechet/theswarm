@@ -1,0 +1,24 @@
+{% if cycles %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Status</th>
+      <th>Started</th>
+      <th>Cost</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in cycles %}
+    <tr>
+      <td><a href="{{ base }}/cycles/{{ c.id }}">{{ c.id[:8] }}...</a></td>
+      <td><span class="badge badge-{{ c.status }}">{{ c.status }}</span></td>
+      <td>{{ c.started_at or "—" }}</td>
+      <td>${{ "%.2f" | format(c.total_cost_usd) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-state">No cycles yet.</p>
+{% endif %}

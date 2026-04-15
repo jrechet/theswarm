@@ -33,8 +33,11 @@ async def list_cycles(request: Request, project_id: str = "") -> HTMLResponse:
                 cycles.append(_tracker_record_to_dto(record))
 
     templates = request.app.state.templates
+    # Return fragment for HTMX requests (e.g. project detail page)
+    is_htmx = request.headers.get("hx-request") == "true"
+    template = "cycles_fragment.html" if is_htmx else "cycles_list.html"
     return templates.TemplateResponse(
-        "cycles_list.html",
+        template,
         {"request": request, "cycles": cycles, "project_id": project_id},
     )
 
