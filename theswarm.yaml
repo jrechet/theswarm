@@ -13,6 +13,7 @@ agents:
     llm_backend: "claude-code"
     github_repos:
       - "jrechet/swarm-todo-app"
-    default_repo: "jrechet/swarm-todo-app"
+      - "jrechet/concert-tour-app"
+    default_repo: "jrechet/concert-tour-app"
     team_channel: "swarm-team"
     channel: "swarm-bots-logs"

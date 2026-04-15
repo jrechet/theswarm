@@ -90,7 +90,8 @@ async def select_daily_issues(state: AgentState) -> dict:
         # Try unlabelled open issues as fallback
         backlog = await github.get_issues(state="open")
         backlog = [i for i in backlog if not any(
-            l["name"].startswith("status:") for l in i.get("labels", [])
+            (l if isinstance(l, str) else l.get("name", "")).startswith("status:")
+            for l in i.get("labels", [])
         )]
 
     if not backlog:
@@ -113,7 +114,7 @@ async def select_daily_issues(state: AgentState) -> dict:
         max_stories=MAX_DAILY_STORIES,
     )
 
-    result = await claude.run(prompt, workdir=state.get("workspace"), timeout=60)
+    result = await claude.run(prompt, workdir=state.get("workspace"), timeout=120)
 
     # Parse Claude's response
     selected = []
@@ -201,7 +202,7 @@ async def validate_demo(state: AgentState) -> dict:
         demo_report=report_text,
     )
 
-    result = await claude.run(prompt, workdir=state.get("workspace"), timeout=60)
+    result = await claude.run(prompt, workdir=state.get("workspace"), timeout=120)
 
     return {
         "daily_report": result.text,

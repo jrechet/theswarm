@@ -130,6 +130,42 @@ class TestPOSelectDailyIssues:
         github.add_labels.assert_not_awaited()
 
 
+    async def test_select_daily_issues_string_labels(self):
+        """Labels returned as strings (from _issue_to_dict) should not crash."""
+        from theswarm.agents.po import select_daily_issues
+
+        # Simulate fallback path: get_issues(labels=["status:backlog"]) returns empty,
+        # then get_issues(state="open") returns issues with string labels
+        open_issues = [
+            {"number": 10, "title": "US-010: Feature", "body": "A feature",
+             "labels": ["status:in-progress"], "state": "open",
+             "assignees": [], "url": "https://github.com/o/r/issues/10"},
+            {"number": 11, "title": "US-011: New thing", "body": "Something new",
+             "labels": [], "state": "open",
+             "assignees": [], "url": "https://github.com/o/r/issues/11"},
+        ]
+
+        async def fake_get_issues(*, labels=None, state=None, **kw):
+            if labels:
+                return []  # no backlog issues
+            return open_issues
+
+        selected_json = json.dumps({
+            "selected": [
+                {"number": 11, "title": "US-011: New thing", "reason": "No status yet"},
+            ],
+            "daily_plan": "Pick up unlabelled issues.",
+        })
+        claude = _make_claude(run=AsyncMock(return_value=_mock_claude_result(selected_json)))
+        github = _make_github(get_issues=AsyncMock(side_effect=fake_get_issues))
+
+        result = await select_daily_issues(_base_state(github=github, claude=claude))
+
+        # Issue 10 has status:in-progress so it should be filtered out,
+        # only issue 11 (no status label) should be in the prompt
+        assert result["daily_plan"] == "Pick up unlabelled issues."
+
+
 class TestPOWriteDailyPlan:
 
     async def test_write_daily_plan_real_mode(self):
@@ -256,6 +292,62 @@ class TestDevImplementTask:
         assert result["diff_stat"] == "1 file changed, 10 insertions(+)"
 
 
+class TestExtractFilesFromResponse:
+
+    def test_extracts_single_file(self, tmp_path):
+        from theswarm.agents.dev import _extract_files_from_response
+
+        text = (
+            "Here is the implementation:\n\n"
+            "--- FILE: src/main.py ---\n"
+            "```python\n"
+            "print('hello')\n"
+            "```\n"
+        )
+        count = _extract_files_from_response(text, str(tmp_path))
+        assert count == 1
+        assert (tmp_path / "src" / "main.py").read_text().strip() == "print('hello')"
+
+    def test_extracts_multiple_files(self, tmp_path):
+        from theswarm.agents.dev import _extract_files_from_response
+
+        text = (
+            "--- FILE: app.py ---\n"
+            "```python\n"
+            "from flask import Flask\n"
+            "app = Flask(__name__)\n"
+            "```\n\n"
+            "--- FILE: tests/test_app.py ---\n"
+            "```python\n"
+            "def test_app():\n"
+            "    assert True\n"
+            "```\n"
+        )
+        count = _extract_files_from_response(text, str(tmp_path))
+        assert count == 2
+        assert (tmp_path / "app.py").exists()
+        assert (tmp_path / "tests" / "test_app.py").exists()
+
+    def test_blocks_path_traversal(self, tmp_path):
+        from theswarm.agents.dev import _extract_files_from_response
+
+        text = (
+            "--- FILE: ../../../etc/passwd ---\n"
+            "```\n"
+            "bad content\n"
+            "```\n"
+        )
+        count = _extract_files_from_response(text, str(tmp_path))
+        assert count == 0
+
+    def test_no_files_returns_zero(self, tmp_path):
+        from theswarm.agents.dev import _extract_files_from_response
+
+        text = "Here is my analysis of the codebase. No files to write."
+        count = _extract_files_from_response(text, str(tmp_path))
+        assert count == 0
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # TechLead Agent
 # ═══════════════════════════════════════════════════════════════════════════
@@ -283,6 +375,41 @@ class TestTechLeadBreakdownStories:
         # Parent issue should be updated
         github.remove_label.assert_awaited_with(3, "status:ready")
         github.add_labels.assert_awaited_with(3, ["status:in-progress"])
+
+    async def test_breakdown_stories_string_labels(self):
+        """Issues with string labels (from _issue_to_dict) should not crash."""
+        from theswarm.agents.techlead import breakdown_stories
+
+        ready_issue = {
+            "number": 7, "title": "US-007: Dashboard", "body": "Build dashboard",
+            "labels": ["status:ready"], "state": "open",
+        }
+        tasks_json = json.dumps([
+            {"title": "Create layout", "body": "Main layout", "labels": ["role:dev", "status:ready"]},
+        ])
+        claude = _make_claude(run=AsyncMock(return_value=_mock_claude_result(tasks_json)))
+        github = _make_github(get_issues=AsyncMock(return_value=[ready_issue]))
+
+        result = await breakdown_stories(_base_state(github=github, claude=claude))
+
+        assert "1 tasks" in result["result"]
+        github.create_issue.assert_awaited_once()
+
+    async def test_breakdown_stories_filters_role_dev_string_labels(self):
+        """Issues already having role:dev string label should be filtered out."""
+        from theswarm.agents.techlead import breakdown_stories
+
+        already_broken_down = {
+            "number": 8, "title": "Task: Add endpoint", "body": "Endpoint",
+            "labels": ["role:dev", "status:ready"], "state": "open",
+        }
+        github = _make_github(get_issues=AsyncMock(return_value=[already_broken_down]))
+        claude = _make_claude()
+
+        result = await breakdown_stories(_base_state(github=github, claude=claude))
+
+        assert "No issues to break down" in result["result"]
+        claude.run.assert_not_awaited()
 
     async def test_breakdown_stories_no_ready(self):
         from theswarm.agents.techlead import breakdown_stories

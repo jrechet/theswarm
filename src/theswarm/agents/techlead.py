@@ -133,7 +133,8 @@ async def breakdown_stories(state: AgentState) -> dict:
     ready_issues = await github.get_issues(labels=["status:ready"])
     # Filter out issues that already have sub-tasks (role:dev label)
     ready_issues = [i for i in ready_issues if not any(
-        l["name"] == "role:dev" for l in i.get("labels", [])
+        (l if isinstance(l, str) else l.get("name", "")) == "role:dev"
+        for l in i.get("labels", [])
     )]
 
     if not ready_issues:
@@ -155,7 +156,7 @@ async def breakdown_stories(state: AgentState) -> dict:
             issue_body=issue.get("body", "(no description)"),
         )
 
-        result = await claude.run(prompt, timeout=60)
+        result = await claude.run(prompt, timeout=120)
         total_tokens += result.total_tokens
         total_cost += result.cost_usd
 

@@ -276,7 +276,10 @@ async def _handle_list_stories(user_id: str, chat, gateway, repo: str = "") -> N
 
     lines = [f"📋 **Open Issues** (`{repo}`):\n"]
     for issue in issues[:15]:
-        labels = ", ".join(l["name"] for l in issue.get("labels", []))
+        labels = ", ".join(
+            (l if isinstance(l, str) else l.get("name", ""))
+            for l in issue.get("labels", [])
+        )
         label_str = f" `{labels}`" if labels else ""
         lines.append(f"• **#{issue['number']}** {issue['title']}{label_str}")
 

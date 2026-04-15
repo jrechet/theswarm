@@ -174,6 +174,26 @@ async def test_handle_dm_list_stories(chat, nlu, gw):
     assert "Add login page" in body
 
 
+# ── list_stories (string labels) ──────────────────────────────────────
+
+
+async def test_handle_dm_list_stories_string_labels(chat, nlu, gw):
+    """Labels returned as plain strings should not crash."""
+    nlu.parse_intent = AsyncMock(
+        return_value=Intent(action="list_stories", confidence=0.9, params={}, raw_text="backlog")
+    )
+    gw.swarm_po_list_issues = AsyncMock(
+        return_value=[
+            {"number": 7, "title": "Build dashboard", "labels": ["status:ready", "role:dev"]},
+        ]
+    )
+    await handle_dm("backlog", "u1", chat, nlu, gw)
+    chat.post_dm.assert_called_once()
+    body = chat.post_dm.call_args[0][1]
+    assert "#7" in body
+    assert "status:ready" in body
+
+
 # ── list_stories (none) ────────────────────────────────────────────────
 
 

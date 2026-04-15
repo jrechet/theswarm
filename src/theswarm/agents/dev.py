@@ -55,12 +55,23 @@ DEV_TASK_PROMPT = """\
 
 ## Instructions
 
-1. Read the existing code to understand the project structure
-2. Implement the task described above
-3. Write unit tests in tests/unit/ for the new code
-4. Make sure the code follows existing conventions (see AGENT_MEMORY.md)
-5. Do NOT modify GOLDEN_RULES.md, DOD.md, or AGENT_MEMORY.md
-6. After implementation, verify your code compiles/runs correctly
+Implement the task described above.
+
+You MUST output every file you create or modify using this exact format for EACH file:
+
+--- FILE: path/to/file.py ---
+```python
+<full file content here>
+```
+
+Rules:
+- Use relative paths from the project root (e.g., `src/models.py`, `tests/test_models.py`)
+- Include the COMPLETE file content (not just snippets or diffs)
+- Write unit tests in `tests/` for any new code
+- Follow existing project conventions
+- Do NOT output GOLDEN_RULES.md, DOD.md, or AGENT_MEMORY.md
+- Keep it simple — prefer the most straightforward solution
+- Include a requirements.txt if new dependencies are needed
 
 Focus on correctness and simplicity. Ship working code.
 """
@@ -124,6 +135,10 @@ async def implement_task(state: AgentState) -> dict:
     result = await claude.run(prompt, workdir=workspace)
     log.info("Claude implementation done: %d tokens, $%.4f",
              result.total_tokens, result.cost_usd)
+
+    # Extract files from Claude's response and write them to workspace
+    files_written = _extract_files_from_response(result.text, workspace)
+    log.info("Extracted %d files from Claude's response", files_written)
 
     # Commit all changes
     committed = await git_ops.commit_all(
@@ -240,8 +255,8 @@ def _should_skip(state: AgentState) -> str:
 
 
 def _should_open_pr(state: AgentState) -> str:
-    """Skip PR if no branch was created (no changes)."""
-    if state.get("branch") is None:
+    """Skip PR if no branch was created or no changes were committed."""
+    if state.get("branch") is None or not state.get("diff_stat"):
         return "end"
     return "open_pr"
 
@@ -275,6 +290,50 @@ def build_dev_graph() -> StateGraph:
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
+
+
+def _extract_files_from_response(text: str, workspace: str) -> int:
+    """Extract files from Claude's response and write them to workspace.
+
+    Looks for patterns like:
+        --- FILE: path/to/file.py ---
+        ```python
+        <content>
+        ```
+
+    Returns the number of files written.
+    """
+    # Match --- FILE: path --- followed by a code block
+    pattern = re.compile(
+        r"---\s*FILE:\s*(.+?)\s*---\s*\n"
+        r"```[^\n]*\n"
+        r"(.*?)"
+        r"\n```",
+        re.DOTALL,
+    )
+
+    files_written = 0
+    for match in pattern.finditer(text):
+        filepath = match.group(1).strip()
+        content = match.group(2)
+
+        # Security: prevent path traversal
+        if ".." in filepath or filepath.startswith("/"):
+            log.warning("Skipping suspicious path: %s", filepath)
+            continue
+
+        full_path = os.path.join(workspace, filepath)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+        with open(full_path, "w") as f:
+            f.write(content)
+            if not content.endswith("\n"):
+                f.write("\n")
+
+        files_written += 1
+        log.info("Wrote file: %s", filepath)
+
+    return files_written
 
 
 def _make_branch_name(task: dict) -> str:

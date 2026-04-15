@@ -93,8 +93,13 @@ def test_should_open_pr_when_branch_is_none():
 
 
 def test_should_open_pr_when_branch_exists():
-    state = {"branch": "feat/us-001-thing"}
+    state = {"branch": "feat/us-001-thing", "diff_stat": "1 file changed"}
     assert _should_open_pr(state) == "open_pr"
+
+
+def test_should_open_pr_skips_when_no_diff():
+    state = {"branch": "feat/us-001-thing"}
+    assert _should_open_pr(state) == "end"
 
 
 # ── pick_task (stub) ──────────────────────────────────────────────────
