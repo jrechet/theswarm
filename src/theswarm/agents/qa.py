@@ -225,7 +225,10 @@ async def run_e2e_tests(state: AgentState) -> dict:
             server_proc.send_signal(signal.SIGTERM)
             await asyncio.wait_for(server_proc.wait(), timeout=5)
         except (ProcessLookupError, asyncio.TimeoutError):
-            server_proc.kill()
+            try:
+                server_proc.kill()
+            except ProcessLookupError:
+                pass  # already exited
 
     e2e_counts = _parse_pytest_summary(e2e_output)
 
