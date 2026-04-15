@@ -104,6 +104,20 @@ class TestLlmNLU:
             intent = await nlu.parse_intent("I want a dashboard with charts", "bot", [])
         assert intent.action == "create_stories"
 
+    async def test_llm_classifies_add_repo(self):
+        """LLM path: mock Haiku to return add_repo for GitHub URL."""
+        nlu = self._make_nlu()
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text='{"action": "add_repo", "confidence": 0.95}')]
+        mock_response.usage = MagicMock(input_tokens=50, output_tokens=10)
+
+        mock_client = AsyncMock()
+        mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+        with patch("theswarm.presentation.web.server.anthropic.AsyncAnthropic", return_value=mock_client):
+            intent = await nlu.parse_intent("add https://github.com/jrechet/theswarm", "bot", [])
+        assert intent.action == "add_repo"
+
     async def test_llm_failure_returns_unknown(self):
         """When LLM call fails, fallback to unknown."""
         nlu = self._make_nlu()

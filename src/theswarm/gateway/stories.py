@@ -57,19 +57,24 @@ Rules:
     return []
 
 
-async def store_pending_stories(gw: SwarmGateway, user_id: str, stories: list[dict]) -> str:
+async def store_pending_stories(gw: SwarmGateway, user_id: str, stories: list[dict], repo: str = "") -> str:
     """Store stories pending approval, return a unique ID."""
     pending_id = uuid.uuid4().hex[:8]
     gw._swarm_po_pending_stories[pending_id] = {
         "user_id": user_id,
         "stories": stories,
+        "repo": repo,
     }
     return pending_id
 
 
-async def create_issues(gw: SwarmGateway, user_id: str, stories: list[dict]) -> None:
-    """Create GitHub issues from approved stories."""
-    vcs = gw._swarm_po_github
+async def create_issues(gw: SwarmGateway, user_id: str, stories: list[dict], repo: str = "") -> None:
+    """Create GitHub issues from approved stories on the specified repo."""
+    # Use the target repo's VCS object, falling back to default
+    vcs_map = getattr(gw, "_swarm_po_vcs_map", {})
+    vcs = vcs_map.get(repo) if repo else None
+    if not vcs:
+        vcs = gw._swarm_po_github
     chat = gw._swarm_po_chat
 
     if not vcs:
@@ -93,11 +98,12 @@ async def create_issues(gw: SwarmGateway, user_id: str, stories: list[dict]) -> 
         except Exception as e:
             log.error("SwarmPO: failed to create issue: %s", e)
 
+    repo_label = f" on `{repo}`" if repo else ""
     if chat:
         if created:
             await chat.post_dm(
                 user_id,
-                f"✅ Created **{len(created)}** issues: {', '.join(created)}\n\nSay `go` to launch the dev cycle!",
+                f"✅ Created **{len(created)}** issues{repo_label}: {', '.join(created)}\n\nSay `go` to launch the dev cycle!",
             )
         else:
-            await chat.post_dm(user_id, "❌ Failed to create issues.")
+            await chat.post_dm(user_id, f"❌ Failed to create issues{repo_label}.")

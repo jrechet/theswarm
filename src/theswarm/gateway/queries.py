@@ -12,9 +12,19 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-async def get_plan(gw: SwarmGateway) -> str | None:
+def _get_vcs(gw: SwarmGateway, repo: str = ""):
+    """Get the VCS object for a specific repo, or fall back to default."""
+    if repo:
+        vcs_map = getattr(gw, "_swarm_po_vcs_map", {})
+        vcs = vcs_map.get(repo)
+        if vcs:
+            return vcs
+    return gw._swarm_po_github
+
+
+async def get_plan(gw: SwarmGateway, repo: str = "") -> str | None:
     """Fetch today's daily plan from the target repo."""
-    vcs = gw._swarm_po_github
+    vcs = _get_vcs(gw, repo)
     if not vcs:
         return None
     try:
@@ -26,9 +36,9 @@ async def get_plan(gw: SwarmGateway) -> str | None:
         return None
 
 
-async def get_report(gw: SwarmGateway) -> str | None:
+async def get_report(gw: SwarmGateway, repo: str = "") -> str | None:
     """Fetch the latest daily report from the target repo."""
-    vcs = gw._swarm_po_github
+    vcs = _get_vcs(gw, repo)
     if not vcs:
         return None
     try:
@@ -40,9 +50,9 @@ async def get_report(gw: SwarmGateway) -> str | None:
         return None
 
 
-async def list_issues(gw: SwarmGateway) -> list[dict]:
-    """List open issues for the SWARM target repo."""
-    vcs = gw._swarm_po_github
+async def list_issues(gw: SwarmGateway, repo: str = "") -> list[dict]:
+    """List open issues for the specified repo."""
+    vcs = _get_vcs(gw, repo)
     if not vcs:
         return []
     try:

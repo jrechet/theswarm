@@ -179,16 +179,21 @@ You are an intent classifier for a chat bot called swarm-po (an AI Product Owner
 Given a user message, classify it into exactly one action from the list below.
 
 Actions:
-- create_stories: User wants to build a feature, add something, or describes a requirement
-- run_cycle: User wants to start/launch/run a development cycle
+- create_stories: User describes a feature they want built (e.g. "I want a dashboard", "add Google auth")
+- run_cycle: User wants to start/launch/run a development cycle (e.g. "go", "start", "launch")
 - show_status: User asks about current status, what's running
 - show_plan: User asks about the plan, today's plan
 - show_report: User asks for a report, summary, results
 - list_stories: User wants to see backlog, issues, stories, tasks
 - list_repos: User wants to see available repos, projects, what can be worked on
+- add_repo: User wants to add/register/connect a new repository (e.g. "add owner/repo", "add https://github.com/owner/repo")
+- remove_repo: User wants to remove/disconnect/unregister a repository
+- set_default: User wants to switch/change the default/active repository (e.g. "use owner/repo", "switch to owner/repo")
 - ping: User says ping
 - help: User asks for help, what can you do, how does this work
 - unknown: Message doesn't match any action above
+
+IMPORTANT: If the message contains a GitHub URL or repo name AND a verb like "add", "register", "connect", classify as add_repo, NOT create_stories. "add_repo" is about repository management. "create_stories" is about describing product features to build.
 
 Respond with ONLY a JSON object: {"action": "<action>", "confidence": <0.0-1.0>}
 No explanation, no markdown, just the JSON."""
@@ -335,9 +340,9 @@ class GatewayBridge:
         from theswarm.gateway.stories import generate_stories
         return await generate_stories(self, description)
 
-    async def swarm_po_store_pending_stories(self, user_id: str, stories: list[dict]) -> str:
+    async def swarm_po_store_pending_stories(self, user_id: str, stories: list[dict], repo: str = "") -> str:
         from theswarm.gateway.stories import store_pending_stories
-        return await store_pending_stories(self, user_id, stories)
+        return await store_pending_stories(self, user_id, stories, repo=repo)
 
     async def run_swarm_cycle(self, user_id: str, repo_name: str = "") -> None:
         from theswarm.gateway.cycle_runner import run_swarm_cycle
@@ -351,9 +356,69 @@ class GatewayBridge:
         from theswarm.gateway.queries import get_report
         return await get_report(self)
 
-    async def swarm_po_list_issues(self) -> list[dict]:
+    async def swarm_po_list_issues(self, repo: str = "") -> list[dict]:
         from theswarm.gateway.queries import list_issues
-        return await list_issues(self)
+        return await list_issues(self, repo=repo)
+
+    async def swarm_po_get_plan_for_repo(self, repo: str = "") -> str | None:
+        from theswarm.gateway.queries import get_plan
+        return await get_plan(self, repo=repo)
+
+    async def swarm_po_get_report_for_repo(self, repo: str = "") -> str | None:
+        from theswarm.gateway.queries import get_report
+        return await get_report(self, repo=repo)
+
+    async def add_repo(self, repo_name: str) -> tuple[bool, str]:
+        """Add a repo to the runtime vcs_map. Returns (success, message)."""
+        if repo_name in self._swarm_po_vcs_map:
+            return False, f"`{repo_name}` is already registered."
+
+        github_token = os.getenv("GITHUB_TOKEN", "")
+        if not github_token:
+            return False, "GITHUB_TOKEN not configured. Cannot connect to GitHub."
+
+        try:
+            from github import Github
+            gh = Github(github_token)
+            repo_obj = gh.get_repo(repo_name)
+            self._swarm_po_vcs_map[repo_name] = repo_obj
+            if not self._swarm_po_default_repo:
+                self._swarm_po_default_repo = repo_name
+                self._swarm_po_github = repo_obj
+            log.info("Added repo: %s", repo_name)
+            return True, f"Connected to `{repo_name}`."
+        except Exception as e:
+            log.error("Failed to add repo %s: %s", repo_name, e)
+            return False, f"Could not access `{repo_name}`: {e}"
+
+    def remove_repo(self, repo_name: str) -> tuple[bool, str]:
+        """Remove a repo from the runtime vcs_map. Returns (success, message)."""
+        if repo_name not in self._swarm_po_vcs_map:
+            return False, f"`{repo_name}` is not registered."
+
+        del self._swarm_po_vcs_map[repo_name]
+
+        if self._swarm_po_default_repo == repo_name:
+            remaining = list(self._swarm_po_vcs_map.keys())
+            if remaining:
+                self._swarm_po_default_repo = remaining[0]
+                self._swarm_po_github = self._swarm_po_vcs_map[remaining[0]]
+            else:
+                self._swarm_po_default_repo = ""
+                self._swarm_po_github = None
+
+        log.info("Removed repo: %s", repo_name)
+        return True, f"Removed `{repo_name}`."
+
+    def set_default_repo(self, repo_name: str) -> tuple[bool, str]:
+        """Set a repo as the default. Returns (success, message)."""
+        if repo_name not in self._swarm_po_vcs_map:
+            return False, f"`{repo_name}` is not registered. Add it first."
+
+        self._swarm_po_default_repo = repo_name
+        self._swarm_po_github = self._swarm_po_vcs_map[repo_name]
+        log.info("Default repo set to: %s", repo_name)
+        return True, f"Default repo set to `{repo_name}`."
 
 
 # ── Main startup ─────────────────────────────────────────────────────

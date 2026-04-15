@@ -12,11 +12,14 @@ TheSwarm is an autonomous AI dev team that receives feature requests via Matterm
 # Install dependencies (uses uv, not pip)
 uv sync --dev
 
-# Run tests
-uv run pytest tests/ -v --tb=short
+# Run tests (excludes E2E — see below)
+uv run pytest tests/ -v --tb=short --ignore=tests/e2e -p no:playwright
 
 # Run a single test
 uv run pytest tests/test_cycle.py::test_stub_cycle_runs -v
+
+# Run E2E tests separately (requires running server)
+uv run pytest tests/e2e/ -v --headed
 
 # Start the unified server (web dashboard + Mattermost + GitHub, listens on :8091)
 uv run python -m theswarm
@@ -100,7 +103,8 @@ Each agent is a `StateGraph` compiled graph in `src/theswarm/agents/`. They shar
 
 ### Key components (original, bridged into v2)
 
-- **`presentation/web/server.py`** — Unified server startup: creates v2 web app, connects Mattermost/GitHub, wires persona via `GatewayBridge`
+- **`presentation/web/server.py`** — Unified server startup: creates v2 web app, connects Mattermost/GitHub, wires persona via `GatewayBridge`. Contains `_LlmNLU` (Haiku-powered intent classifier with keyword fast path)
+- **`api.py`** — Headless cycle API: `CycleTracker` (in-memory), `run_api_cycle()` (executes real agent pipeline). Dashboard and cycle routes merge both SQLite and tracker data
 - **`gateway/wiring.py`** — Event handlers for Mattermost button callbacks (story approval, ping/pong)
 - **`persona.py`** — NLU-driven DM handler for `@swarm-po` (intent -> action dispatch)
 - **`cycle.py`** — Orchestrates full daily cycle (PO -> TechLead -> Dev -> QA)
@@ -139,6 +143,13 @@ When `SWARM_GITHUB_REPO` is not set, all agents run in stub mode — they log wh
 | `SWARM_PO_MATTERMOST_TOKEN` | Mattermost bot token for @swarm-po |
 | `MATTERMOST_BOT_TOKEN` | Shared Mattermost token |
 | `EXTERNAL_URL` | Public URL for Mattermost callbacks |
+| `BASE_PATH` | URL prefix for reverse proxy (e.g. `/swarm`). All templates use `{{ base }}` |
+| `SEQ_URL` | Seq log aggregation endpoint (optional, CLEF format) |
+| `SEQ_API_KEY` | Seq API key (optional) |
+
+## Reverse proxy (BASE_PATH)
+
+In production, Traefik routes `/swarm/*` to the app and strips the prefix. The app uses `BASE_PATH=/swarm` so templates render correct URLs. All template links, form actions, static assets, and SSE connections use `{{ base }}` prefix. JS reads it from `document.documentElement.dataset.base`.
 
 ## Config
 
@@ -152,12 +163,14 @@ Docker Swarm + Traefik on a self-hosted runner. CI runs tests on push/PR, then t
 
 - pytest with `asyncio_mode = "auto"` — async test functions work without decorators
 - `respx` for HTTP mocking, `pytest-mock` for general mocking
+- **E2E tests must run separately** — pytest-playwright's sync fixtures conflict with pytest-asyncio's event loop. CI uses `--ignore=tests/e2e -p no:playwright`
 - Tests in `tests/` directory, organized by layer:
   - `tests/domain/` — domain entity and value object tests (100% coverage target)
   - `tests/application/` — command handler, query, and service tests
   - `tests/infrastructure/` — SQLite repo, artifact store, scheduler, webhook tests
   - `tests/presentation/` — CLI, web app (httpx ASGI), TUI (Textual pilot) tests
   - `tests/integration/` — cross-layer end-to-end tests
+  - `tests/e2e/` — Playwright browser tests (run separately, need running server)
   - `tests/test_*.py` — original agent and tool tests (flat structure)
 - 890+ tests, all passing
 

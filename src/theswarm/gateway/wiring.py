@@ -66,10 +66,11 @@ def wire_swarm_po(gw: SwarmGateway, vcs_map: dict, default_repo: str, chat, team
 
         user_id = pending["user_id"]
         stories = pending["stories"]
+        target_repo = pending.get("repo", "")
 
         if action_type == "swarm_po_approve":
             from theswarm.gateway.stories import create_issues
-            await create_issues(gw, user_id, stories)
+            await create_issues(gw, user_id, stories, repo=target_repo)
         else:
             if chat:
                 await chat.post_dm(user_id, "🗑️ Stories cancelled.")
