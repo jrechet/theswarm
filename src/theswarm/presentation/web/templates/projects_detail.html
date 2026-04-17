@@ -5,6 +5,9 @@
 <div class="page-header">
   <h1>{{ project.id }}</h1>
   <div class="header-actions">
+    <a href="{{ base }}/demos/?project={{ project.id }}"
+       class="btn btn-secondary"
+       data-testid="project-demos-link">View demos</a>
     <form method="POST" action="{{ base }}/cycles/trigger" style="display:inline">
       <input type="hidden" name="project_id" value="{{ project.id }}">
       <button type="submit" class="btn btn-primary">Run Cycle</button>

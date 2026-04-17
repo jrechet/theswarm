@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 from theswarm.application.events.bus import EventBus
 from theswarm.application.services.startup_validator import StartupValidator
 from theswarm.infrastructure.persistence.sqlite_repos import (
+    SQLiteActivityRepository,
     SQLiteCycleRepository,
     SQLiteProjectRepository,
     init_db,
@@ -195,7 +196,13 @@ Actions:
 
 IMPORTANT: If the message contains a GitHub URL or repo name AND a verb like "add", "register", "connect", classify as add_repo, NOT create_stories. "add_repo" is about repository management. "create_stories" is about describing product features to build.
 
-Respond with ONLY a JSON object: {"action": "<action>", "confidence": <0.0-1.0>}
+Extract relevant parameters from the message when possible:
+- For add_repo/remove_repo/set_default: extract "repo" (owner/repo format)
+- For create_stories: extract "description" (the feature description)
+- For run_cycle: extract "repo" if a specific repo is mentioned
+- For list_stories: extract "repo" if specified
+
+Respond with ONLY a JSON object: {"action": "<action>", "confidence": <0.0-1.0>, "params": {<extracted params or empty>}}
 No explanation, no markdown, just the JSON."""
 
 
@@ -244,6 +251,9 @@ class _LlmNLU:
         data = _json.loads(text)
         action = data.get("action", "unknown")
         confidence = float(data.get("confidence", 0.5))
+        params = data.get("params", {})
+        if not isinstance(params, dict):
+            params = {}
 
         cost = _estimate_cost(
             "claude-haiku-4-5-20251001",
@@ -251,11 +261,11 @@ class _LlmNLU:
             response.usage.output_tokens,
         )
         log.info(
-            "NLU: '%s' → %s (%.0f%%) cost=$%.4f",
-            message[:50], action, confidence * 100, cost,
+            "NLU: '%s' → %s (%.0f%%) params=%s cost=$%.4f",
+            message[:50], action, confidence * 100, params, cost,
         )
 
-        return Intent(action=action, confidence=confidence, params={}, raw_text=message)
+        return Intent(action=action, confidence=confidence, params=params, raw_text=message)
 
 
 # ── Mattermost connection ────────────────────────────────────────────
@@ -423,7 +433,12 @@ class GatewayBridge:
 
 # ── Main startup ─────────────────────────────────────────────────────
 
-async def start_server(host: str = "0.0.0.0", port: int = 8091, db_path: str = "") -> None:
+async def start_server(
+    host: str = "0.0.0.0",
+    port: int = 8091,
+    db_path: str = "",
+    artifact_dir: str = "",
+) -> None:
     """Start the full TheSwarm server."""
     logging.basicConfig(
         level=logging.INFO,
@@ -447,11 +462,23 @@ async def start_server(host: str = "0.0.0.0", port: int = 8091, db_path: str = "
     conn = await init_db(db_path)
     project_repo = SQLiteProjectRepository(conn)
     cycle_repo = SQLiteCycleRepository(conn)
+    activity_repo = SQLiteActivityRepository(conn)
     bus = EventBus()
+
+    # Report storage
+    from theswarm.infrastructure.recording.report_repo import SQLiteReportRepository
+    from theswarm.infrastructure.recording.artifact_store import LocalArtifactStore
+
+    report_repo = SQLiteReportRepository(conn)
+    artifact_store = LocalArtifactStore(base_dir=artifact_dir) if artifact_dir else LocalArtifactStore()
 
     # Create v2 web app
     base_path = os.getenv("BASE_PATH", "")
-    app = create_web_app(project_repo, cycle_repo, bus, base_path=base_path)
+    app = create_web_app(
+        project_repo, cycle_repo, bus,
+        base_path=base_path, activity_repo=activity_repo,
+        report_repo=report_repo, artifact_store=artifact_store,
+    )
 
     # Create gateway bridge for Mattermost/persona integration
     bridge = GatewayBridge()

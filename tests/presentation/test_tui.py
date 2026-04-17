@@ -85,7 +85,8 @@ class TestSwarmApp:
 
     def test_app_with_dashboard(self):
         dashboard = DashboardDTO(
-            active_cycles=[], recent_activities=[],
+            active_cycles=[], recent_cycles=[],
+            recent_activities=[],
             projects=[], total_cost_today=0.0,
         )
         app = SwarmApp(dashboard=dashboard)

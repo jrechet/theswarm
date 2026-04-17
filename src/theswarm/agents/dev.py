@@ -178,6 +178,15 @@ async def run_quality_gates(state: AgentState) -> dict:
         return stub_result(Role.DEV, "run_quality_gates",
                            "run pytest on workspace")
 
+    # Install dependencies if requirements.txt exists
+    req_file = os.path.join(workspace, "requirements.txt")
+    if os.path.isfile(req_file):
+        install_result = await claude.run_tests(
+            workspace, ["pip", "install", "-q", "-r", "requirements.txt"], timeout=120,
+        )
+        if not install_result["passed"]:
+            log.warning("pip install failed:\n%s", install_result["output"][-1000:])
+
     # Run pytest if available
     test_result = await claude.run_tests(
         workspace, ["python", "-m", "pytest", "tests/", "-v", "--tb=short"], timeout=120,
@@ -261,6 +270,64 @@ def _should_open_pr(state: AgentState) -> str:
     return "open_pr"
 
 
+def _should_retry(state: AgentState) -> str:
+    """Ralph Loop: retry implementation if quality gates failed and retries remain."""
+    if state.get("tests_passed", False):
+        return "check_pr"
+    retry_count = state.get("retry_count", 0)
+    max_retries = state.get("max_dev_retries", 2)
+    if retry_count < max_retries:
+        log.info("Ralph Loop: tests failed, retrying (%d/%d)", retry_count + 1, max_retries)
+        return "retry"
+    log.warning("Ralph Loop: max retries (%d) reached, proceeding", max_retries)
+    return "check_pr"
+
+
+async def retry_implement(state: AgentState) -> dict:
+    """Re-implement with test failure context (Ralph Loop retry)."""
+    retry_count = state.get("retry_count", 0) + 1
+    test_output = state.get("test_output", "")
+
+    task = state.get("task")
+    claude = state.get("claude")
+    workspace = state.get("workspace")
+
+    if task is None or claude is None or workspace is None:
+        return {"retry_count": retry_count, "tokens_used": 0}
+
+    prompt = (
+        f"## Retry — tests failed (attempt {retry_count + 1})\n\n"
+        f"The previous implementation for '{task['title']}' failed quality gates.\n\n"
+        f"## Test output\n\n```\n{test_output[-3000:]}\n```\n\n"
+        f"## Instructions\n\n"
+        f"Fix the implementation to make all tests pass. "
+        f"Output the corrected files using the --- FILE: path --- format.\n"
+    )
+
+    result = await claude.run(prompt, workdir=workspace)
+
+    from theswarm.tools import git as git_ops
+    files_written = _extract_files_from_response(result.text, workspace)
+    log.info("Ralph Loop retry: wrote %d files", files_written)
+
+    if files_written:
+        await git_ops.commit_all(
+            workspace,
+            f"fix: address test failures for #{task['number']} (retry {retry_count})\n\n"
+            f"Co-Authored-By: swarm-dev-agent <agent@swarm-bots.local>",
+        )
+        diff_stat = await git_ops.get_diff_stat(workspace)
+    else:
+        diff_stat = state.get("diff_stat", "")
+
+    return {
+        "retry_count": retry_count,
+        "tokens_used": result.total_tokens,
+        "cost_usd": result.cost_usd,
+        "diff_stat": diff_stat,
+    }
+
+
 # ── Graph ───────────────────────────────────────────────────────────────
 
 
@@ -271,6 +338,7 @@ def build_dev_graph() -> StateGraph:
     graph.add_node("pick_task", pick_task)
     graph.add_node("implement", implement_task)
     graph.add_node("quality_gates", run_quality_gates)
+    graph.add_node("retry_implement", retry_implement)
     graph.add_node("open_pr", open_pull_request)
 
     graph.set_entry_point("load_context")
@@ -280,10 +348,12 @@ def build_dev_graph() -> StateGraph:
         "end": END,
     })
     graph.add_edge("implement", "quality_gates")
-    graph.add_conditional_edges("quality_gates", _should_open_pr, {
-        "open_pr": "open_pr",
-        "end": END,
+    # Ralph Loop: retry if tests fail, otherwise proceed to PR
+    graph.add_conditional_edges("quality_gates", _should_retry, {
+        "retry": "retry_implement",
+        "check_pr": "open_pr",
     })
+    graph.add_edge("retry_implement", "quality_gates")  # re-run tests after retry
     graph.add_edge("open_pr", END)
 
     return graph.compile()

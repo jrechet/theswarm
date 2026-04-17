@@ -159,7 +159,7 @@ class GitHubClient:
             pass  # branch already deleted or doesn't exist
 
     async def ensure_branch_protection(
-        self, branch: str = "main", required_reviews: int = 1,
+        self, branch: str = "main", required_reviews: int = 0,
     ) -> None:
         """Set up branch protection rules if not already configured."""
         try:

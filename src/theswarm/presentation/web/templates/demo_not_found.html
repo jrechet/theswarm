@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Demo Not Found{% endblock %}
+
+{% block content %}
+<div class="empty-state-large">
+    <h2>Demo not found</h2>
+    <p>No demo report with ID <code>{{ report_id }}</code> exists.</p>
+    <p><a href="{{ base }}/demos/" class="btn btn-primary">Browse Demos</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Demos — TheSwarm{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Demos</h1>
+    <span class="text-muted">{{ total_demos }} demo{{ "s" if total_demos != 1 else "" }} across {{ demos_by_project | length }} project{{ "s" if demos_by_project | length != 1 else "" }}</span>
+</div>
+
+<form class="demos-filter" method="get" action="{{ base }}/demos/">
+    <label>
+        Project
+        <select name="project">
+            <option value="">All projects</option>
+            {% for p in projects %}
+            <option value="{{ p.id }}" {% if active_project == p.id %}selected{% endif %}>{{ p.id }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
+        Since
+        <input type="date" name="since" value="{{ active_since }}">
+    </label>
+    <button type="submit">Filter</button>
+    {% if active_project or active_since %}
+    <a href="{{ base }}/demos/" class="filter-clear">Clear</a>
+    {% endif %}
+</form>
+
+{% if not demos_by_project %}
+<div class="empty-state-large">
+    <p>No demos yet.</p>
+    <p class="text-muted">Demos are generated after completed cycles with QA reports.</p>
+</div>
+{% else %}
+    {% for project_id, reports in demos_by_project.items() %}
+    <section class="demo-project-section">
+        <div class="demo-project-header">
+            <h2>{{ project_id }}</h2>
+            <span class="badge badge-subtle">{{ reports | length }} demo{{ "s" if reports | length != 1 else "" }}</span>
+        </div>
+
+        <div class="demo-grid">
+            {% for r in reports %}
+            <a href="{{ base }}/demos/{{ r.id }}/play" class="demo-card">
+                <div class="demo-card-top">
+                    {% if r.thumbnail_path %}
+                    <img class="demo-card-thumb"
+                         src="{{ base }}/artifacts/{{ r.thumbnail_path }}"
+                         alt="{{ r.cycle_id }} preview"
+                         loading="lazy"
+                         width="320" height="180"
+                         data-testid="demo-thumbnail">
+                    {% endif %}
+                    <div class="demo-card-play">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                    </div>
+                    <div class="demo-card-meta">
+                        {% if r.screenshot_count %}
+                        <span class="demo-meta-item">{{ r.screenshot_count }} screenshot{{ "s" if r.screenshot_count != 1 else "" }}</span>
+                        {% endif %}
+                        {% if r.video_count %}
+                        <span class="demo-meta-item">{{ r.video_count }} video{{ "s" if r.video_count != 1 else "" }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="demo-card-body">
+                    <div class="demo-card-title">
+                        Cycle {{ r.cycle_id }}
+                    </div>
+                    <div class="demo-card-stats">
+                        <span class="demo-stat">
+                            <strong>{{ r.summary.stories_completed }}</strong>/{{ r.summary.stories_total }} stories
+                        </span>
+                        <span class="demo-stat">
+                            <strong>{{ r.summary.prs_merged }}</strong> PRs
+                        </span>
+                        {% if r.summary.coverage_percent > 0 %}
+                        <span class="demo-stat">
+                            {{ "%.0f"|format(r.summary.coverage_percent) }}% cov
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="demo-card-footer">
+                        <span class="demo-date">{{ r.created_at.strftime('%b %d, %Y %H:%M') }}</span>
+                        {% if r.all_gates_pass %}
+                        <span class="badge badge-completed badge-sm">All gates pass</span>
+                        {% elif r.quality_gates %}
+                        <span class="badge badge-failed badge-sm">Gates failed</span>
+                        {% endif %}
+                        {% if r.summary.cost_usd > 0 %}
+                        <span class="demo-cost">${{ "%.2f"|format(r.summary.cost_usd) }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+{% endif %}
+{% endblock %}

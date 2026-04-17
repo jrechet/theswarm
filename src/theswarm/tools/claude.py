@@ -58,6 +58,17 @@ class ClaudeCLI:
     def _resolve_model(self) -> str:
         return _MODEL_MAP.get(self.model, self.model)
 
+    def for_task(self, task_category: str, routing: dict[str, str] | None = None) -> ClaudeCLI:
+        """Return a new ClaudeCLI configured for a specific task category.
+
+        Uses the routing table to select the right model. Falls back to
+        the current model if the category isn't in the table.
+        """
+        if routing is None:
+            return ClaudeCLI(model=self.model, timeout=self.timeout, max_tokens=self.max_tokens)
+        model = routing.get(task_category, self.model)
+        return ClaudeCLI(model=model, timeout=self.timeout, max_tokens=self.max_tokens)
+
     async def run(
         self,
         prompt: str,

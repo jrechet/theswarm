@@ -27,6 +27,19 @@ class PhaseExecution:
     cost_usd: float = 0.0
     summary: str = ""
 
+    @property
+    def duration_seconds(self) -> float | None:
+        """Wall-clock runtime of the phase, or None if not yet started."""
+        if self.started_at is None:
+            return None
+        end = self.completed_at or datetime.now(timezone.utc)
+        return max(0.0, (end - self.started_at).total_seconds())
+
+    @property
+    def start_time_display(self) -> str:
+        """HH:MM:SS label for the start timestamp."""
+        return self.started_at.strftime("%H:%M:%S") if self.started_at else ""
+
     def complete(self, summary: str, tokens: int = 0, cost: float = 0.0) -> PhaseExecution:
         return PhaseExecution(
             phase=self.phase,

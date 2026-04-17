@@ -347,6 +347,160 @@ async def collect_issue_status(state: AgentState) -> dict:
     }
 
 
+async def capture_demo_screenshots(state: AgentState) -> dict:
+    """Start the app and capture screenshots of key pages as demo proof."""
+    workspace = state.get("workspace")
+    claude = state.get("claude")
+
+    if workspace is None or claude is None:
+        return stub_result(Role.QA, "capture_demo_screenshots",
+                           "capture Playwright screenshots of the running app")
+
+    import asyncio
+    import os
+    import signal
+
+    from theswarm.infrastructure.recording.playwright_recorder import PlaywrightRecorder
+
+    python = _find_system_python()
+    port = E2E_PORT + 1  # avoid conflict with E2E test server
+    artifacts: list[tuple] = []
+
+    # Start the FastAPI app
+    server_proc = await asyncio.create_subprocess_exec(
+        python, "-m", "uvicorn", "src.main:app",
+        "--host", "127.0.0.1", "--port", str(port),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        cwd=workspace,
+    )
+
+    await asyncio.sleep(3)  # wait for server startup
+
+    recorder = PlaywrightRecorder()
+    base_url = f"http://127.0.0.1:{port}"
+
+    try:
+        # Discover routes from the app's source files
+        pages_to_capture = [("", "homepage")]
+        routers_dir = os.path.join(workspace, "src", "routers")
+        if os.path.isdir(routers_dir):
+            for fname in sorted(os.listdir(routers_dir)):
+                if fname.endswith(".py") and not fname.startswith("_"):
+                    name = fname.replace(".py", "")
+                    pages_to_capture.append((f"/api/v1/{name}/", f"api_{name}"))
+
+        # Also check for common web endpoints
+        for path, label in [("/docs", "openapi_docs"), ("/health", "health_check")]:
+            pages_to_capture.append((path, label))
+
+        for path, label in pages_to_capture:
+            url = f"{base_url}{path}"
+            try:
+                result = await recorder.screenshot(url, label)
+                artifacts.append(result)
+                log.info("QA: captured screenshot '%s' from %s", label, url)
+            except Exception as e:
+                log.warning("QA: failed to screenshot %s: %s", url, e)
+
+    finally:
+        await recorder.close()
+        try:
+            server_proc.send_signal(signal.SIGTERM)
+            await asyncio.wait_for(server_proc.wait(), timeout=5)
+        except (ProcessLookupError, asyncio.TimeoutError):
+            try:
+                server_proc.kill()
+            except ProcessLookupError:
+                pass
+
+    log.info("QA: captured %d demo screenshots", len(artifacts))
+    return {
+        "demo_artifacts": artifacts,
+        "tokens_used": 0,
+    }
+
+
+async def record_demo_video(state: AgentState) -> dict:
+    """Record a video walkthrough of the running app for the demo report."""
+    workspace = state.get("workspace")
+    claude = state.get("claude")
+
+    if workspace is None or claude is None:
+        return stub_result(Role.QA, "record_demo_video",
+                           "record Playwright video walkthrough of the running app")
+
+    import asyncio
+    import os
+    import signal
+
+    from theswarm.infrastructure.recording.playwright_recorder import PlaywrightRecorder
+
+    python = _find_system_python()
+    port = E2E_PORT + 2  # avoid conflict with E2E and screenshot servers
+    video_artifacts: list[tuple] = []
+
+    # Start the FastAPI app
+    server_proc = await asyncio.create_subprocess_exec(
+        python, "-m", "uvicorn", "src.main:app",
+        "--host", "127.0.0.1", "--port", str(port),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        cwd=workspace,
+    )
+
+    await asyncio.sleep(3)  # wait for server startup
+
+    recorder = PlaywrightRecorder()
+    base_url = f"http://127.0.0.1:{port}"
+
+    try:
+        # Record a walkthrough: navigate through key pages
+        await recorder.start_recording(base_url)
+        page = recorder._recording_page
+
+        # Walk through the app pages
+        pages_to_visit = [("", "homepage")]
+        routers_dir = os.path.join(workspace, "src", "routers")
+        if os.path.isdir(routers_dir):
+            for fname in sorted(os.listdir(routers_dir)):
+                if fname.endswith(".py") and not fname.startswith("_"):
+                    name = fname.replace(".py", "")
+                    pages_to_visit.append((f"/api/v1/{name}/", f"api_{name}"))
+
+        for path, label in [("/docs", "openapi_docs"), ("/health", "health_check")]:
+            pages_to_visit.append((path, label))
+
+        for path, _label in pages_to_visit:
+            try:
+                await page.goto(f"{base_url}{path}", wait_until="networkidle", timeout=10000)
+                await page.wait_for_timeout(1500)  # pause on each page for the video
+            except Exception as e:
+                log.warning("QA video: failed to navigate to %s: %s", path, e)
+
+        artifact, data = await recorder.stop_recording()
+        video_artifacts.append((artifact, data))
+        log.info("QA: recorded demo video (%d bytes)", len(data))
+
+    except Exception as e:
+        log.warning("QA: video recording failed: %s", e)
+        await recorder.close()
+    finally:
+        try:
+            server_proc.send_signal(signal.SIGTERM)
+            await asyncio.wait_for(server_proc.wait(), timeout=5)
+        except (ProcessLookupError, asyncio.TimeoutError):
+            try:
+                server_proc.kill()
+            except ProcessLookupError:
+                pass
+
+    return {
+        "video_artifacts": video_artifacts,
+        "tokens_used": 0,
+    }
+
+
 async def generate_demo_report(state: AgentState) -> dict:
     """Build the structured demo report from test results and issue stats."""
     today = datetime.now().strftime("%Y-%m-%d")
@@ -417,14 +571,47 @@ async def generate_demo_report(state: AgentState) -> dict:
                           "yellow" if (unit_all_pass and tests_passed) else "red",
     }
 
-    log.info("QA report: unit=%d(%s) e2e=%d(%s) — status: %s",
+    # Attach demo artifact paths to the report
+    demo_artifacts = state.get("demo_artifacts", [])
+    video_artifacts = state.get("video_artifacts", [])
+    all_artifacts = demo_artifacts + video_artifacts
+
+    artifact_paths: list[dict] = []
+    if all_artifacts:
+        from theswarm.infrastructure.recording.artifact_store import LocalArtifactStore
+        from theswarm.domain.cycles.value_objects import CycleId
+
+        store = LocalArtifactStore()
+        cycle_id = CycleId(today.replace("-", ""))
+        for artifact, data in all_artifacts:
+            try:
+                rel_path = await store.save(cycle_id, artifact, data)
+                artifact_paths.append({
+                    "type": artifact.type.value,
+                    "label": artifact.label,
+                    "path": rel_path,
+                    "size_bytes": len(data),
+                })
+            except Exception as e:
+                log.warning("QA: failed to save artifact '%s': %s", artifact.label, e)
+
+    screenshot_paths = [a for a in artifact_paths if a["type"] == "screenshot"]
+    video_paths = [a for a in artifact_paths if a["type"] == "video"]
+
+    demo_report["screenshots"] = screenshot_paths
+    demo_report["screenshot_count"] = len(screenshot_paths)
+    demo_report["videos"] = video_paths
+    demo_report["video_count"] = len(video_paths)
+
+    log.info("QA report: unit=%d(%s) e2e=%d(%s) screenshots=%d videos=%d — status: %s",
              unit_total, "pass" if unit_all_pass else "fail",
              e2e_total, "pass" if e2e_all_pass else "fail",
+             len(screenshot_paths), len(video_paths),
              demo_report["overall_status"])
 
     return {
         "demo_report": demo_report,
-        "result": f"Demo: {unit_total} unit + {e2e_total} E2E tests, status={demo_report['overall_status']}",
+        "result": f"Demo: {unit_total} unit + {e2e_total} E2E tests, {len(screenshot_paths)} screenshots, {len(video_paths)} videos, status={demo_report['overall_status']}",
         "tokens_used": 0,
     }
 
@@ -441,6 +628,8 @@ def build_qa_graph() -> StateGraph:
     graph.add_node("run_e2e", run_e2e_tests)
     graph.add_node("run_security", run_security_scan)
     graph.add_node("collect_issues", collect_issue_status)
+    graph.add_node("capture_screenshots", capture_demo_screenshots)
+    graph.add_node("record_video", record_demo_video)
     graph.add_node("generate_report", generate_demo_report)
 
     graph.set_entry_point("load_context")
@@ -449,7 +638,9 @@ def build_qa_graph() -> StateGraph:
     graph.add_edge("run_unit", "run_e2e")
     graph.add_edge("run_e2e", "run_security")
     graph.add_edge("run_security", "collect_issues")
-    graph.add_edge("collect_issues", "generate_report")
+    graph.add_edge("collect_issues", "capture_screenshots")
+    graph.add_edge("capture_screenshots", "record_video")
+    graph.add_edge("record_video", "generate_report")
     graph.add_edge("generate_report", END)
 
     return graph.compile()

@@ -15,6 +15,8 @@ from theswarm.token_counter import TokenTracker
 log = logging.getLogger(__name__)
 
 MAX_DEV_ITERATIONS = 5  # safety cap per cycle
+MAX_AUTONOMOUS_CYCLES = 10  # safety cap for autonomous mode
+MAX_DAILY_STORIES = 3  # imported by PO but defined here for reference
 
 
 class BudgetExceeded(Exception):
@@ -152,13 +154,22 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
         config: Cycle configuration.
         on_progress: Optional async callback ``(role, message) -> None`` for live updates.
     """
+    from theswarm.application.services.watchdog import AgentWatchdog
+
     today = datetime.now().strftime("%Y-%m-%d")
     tracker = TokenTracker()
     total_cost = 0.0
     all_prs: list[dict] = []
     all_reviews: list[dict] = []
 
+    watchdog = AgentWatchdog(
+        idle_threshold=config.watchdog_idle_threshold,
+        max_warnings=config.watchdog_max_warnings,
+    )
+    await watchdog.start()
+
     async def _progress(role: str, message: str) -> None:
+        watchdog.heartbeat(role, message)
         log.info("[%s] %s", role, message)
         print(f"[{role}] {message}")
         if on_progress:
@@ -305,6 +316,7 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
 
         return result
     finally:
+        await watchdog.stop()
         # Cleanup workspace even on failure
         if config.is_real_mode:
             from theswarm.tools.git import cleanup_workspace
@@ -378,4 +390,123 @@ async def run_techlead_only(config: CycleConfig) -> dict:
         "tokens": tl_tokens,
         "cost_usd": tl_cost,
         "reviews": reviews,
+    }
+
+
+async def _check_project_done(config: CycleConfig) -> tuple[bool, str]:
+    """Check if a project has no remaining work (all stories resolved).
+
+    Returns (is_done, reason_string).
+    """
+    if not config.is_real_mode:
+        return True, "Stub mode — nothing to do"
+
+    from theswarm.tools.github import GitHubClient
+
+    github = GitHubClient(config.github_repo)
+
+    # Check for open issues with work-related labels
+    open_issues = await github.get_issues(state="open")
+    work_issues = [
+        i for i in open_issues
+        if not any(lbl in ("wontfix", "duplicate", "invalid")
+                   for lbl in (i.get("labels") or []))
+    ]
+
+    # Check for open PRs
+    open_prs = await github.get_open_prs()
+
+    if not work_issues and not open_prs:
+        return True, "All issues closed, no open PRs"
+
+    backlog = [i for i in work_issues
+               if any(lbl in ("status:backlog",) for lbl in (i.get("labels") or []))]
+    ready = [i for i in work_issues
+             if any(lbl in ("status:ready",) for lbl in (i.get("labels") or []))]
+    in_progress = [i for i in work_issues
+                   if any(lbl in ("status:in-progress",) for lbl in (i.get("labels") or []))]
+    unlabeled = [i for i in work_issues
+                 if not any(lbl.startswith("status:") for lbl in (i.get("labels") or []))]
+
+    summary = (
+        f"backlog={len(backlog)} ready={len(ready)} "
+        f"in_progress={len(in_progress)} unlabeled={len(unlabeled)} "
+        f"open_prs={len(open_prs)}"
+    )
+
+    return False, summary
+
+
+async def run_autonomous(
+    config: CycleConfig,
+    max_cycles: int = MAX_AUTONOMOUS_CYCLES,
+    on_progress=None,
+) -> dict:
+    """Run cycles in a loop until all user stories are resolved or max_cycles hit.
+
+    Returns a summary dict with all cycle results.
+    """
+    total_cost = 0.0
+    total_tokens = 0
+    cycle_results: list[dict] = []
+
+    print(f"\n{'=' * 60}")
+    print(f"AUTONOMOUS MODE — repo: {config.github_repo}")
+    print(f"Max cycles: {max_cycles}")
+    print(f"{'=' * 60}\n")
+
+    for cycle_num in range(1, max_cycles + 1):
+        print(f"\n{'─' * 60}")
+        print(f"AUTONOMOUS CYCLE {cycle_num}/{max_cycles}")
+        print(f"{'─' * 60}\n")
+
+        # Check if we're done before starting a new cycle
+        if cycle_num > 1:
+            is_done, status = await _check_project_done(config)
+            if is_done:
+                print(f"\nPROJECT COMPLETE: {status}")
+                break
+            print(f"Remaining work: {status}")
+
+        try:
+            result = await run_daily_cycle(config, on_progress=on_progress)
+            cycle_results.append(result)
+            total_cost += result.get("cost_usd", 0.0)
+            total_tokens += result.get("tokens", 0)
+
+            demo = result.get("demo_report", {})
+            status = demo.get("overall_status", "unknown") if demo else "unknown"
+            screenshots = demo.get("screenshot_count", 0) if demo else 0
+            print(f"\nCycle {cycle_num} result: status={status}, "
+                  f"cost=${result.get('cost_usd', 0):.2f}, "
+                  f"screenshots={screenshots}")
+
+        except BudgetExceeded as e:
+            print(f"\nBudget exceeded in cycle {cycle_num}: {e}")
+            break
+        except Exception as e:
+            log.exception("Cycle %d failed", cycle_num)
+            print(f"\nCycle {cycle_num} failed: {e}")
+            # Continue to next cycle — transient errors shouldn't stop us
+            continue
+
+    # Final completion check
+    is_done, final_status = await _check_project_done(config)
+
+    print(f"\n{'=' * 60}")
+    print("AUTONOMOUS RUN COMPLETE")
+    print(f"{'=' * 60}")
+    print(f"Cycles run:    {len(cycle_results)}")
+    print(f"Total cost:    ${total_cost:.2f}")
+    print(f"Total tokens:  {total_tokens:,}")
+    print(f"Project done:  {'YES' if is_done else 'NO'}")
+    print(f"Final status:  {final_status}")
+
+    return {
+        "cycles_run": len(cycle_results),
+        "total_cost_usd": total_cost,
+        "total_tokens": total_tokens,
+        "project_done": is_done,
+        "final_status": final_status,
+        "cycle_results": cycle_results,
     }

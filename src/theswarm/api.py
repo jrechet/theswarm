@@ -128,6 +128,7 @@ async def run_api_cycle(
     description: str,
     callback_url: str,
     allowed_repos: list[str],
+    event_bus: object | None = None,
 ) -> None:
     """Execute a cycle initiated via the API."""
     from theswarm.cycle import run_daily_cycle
@@ -154,12 +155,33 @@ async def run_api_cycle(
     dash = get_dashboard_state()
     dash.start_cycle(repo)
 
+    # Build progress callback — use ProgressBridge if EventBus is available
+    on_progress = None
+    if event_bus is not None:
+        from theswarm.application.services.progress_bridge import ProgressBridge
+        on_progress = ProgressBridge(
+            event_bus=event_bus,
+            cycle_id=cycle_id,
+            project_id=repo,
+            dashboard_state=dash,
+        )
+    else:
+        async def on_progress(role: str, message: str) -> None:  # type: ignore[no-redef]
+            dash.current_phase = f"{role}: {message[:50]}"
+            dash.push_event(role, message)
+
     try:
         cycle_config = CycleConfig(github_repo=repo)
 
-        async def on_progress(role: str, message: str) -> None:
-            dash.current_phase = f"{role}: {message[:50]}"
-            dash.push_event(role, message)
+        # Publish CycleStarted event
+        if event_bus is not None:
+            from theswarm.domain.cycles.events import CycleStarted
+            from theswarm.domain.cycles.value_objects import CycleId
+            await event_bus.publish(CycleStarted(
+                cycle_id=CycleId(cycle_id),
+                project_id=repo,
+                triggered_by="web",
+            ))
 
         result = await run_daily_cycle(cycle_config, on_progress=on_progress)
 
@@ -173,6 +195,21 @@ async def run_api_cycle(
             result=result,
             completed_at=datetime.now().isoformat(timespec="seconds"),
         )
+
+        # Publish CycleCompleted event
+        if event_bus is not None:
+            from theswarm.domain.cycles.events import CycleCompleted
+            from theswarm.domain.cycles.value_objects import CycleId
+            await event_bus.publish(CycleCompleted(
+                cycle_id=CycleId(cycle_id),
+                project_id=repo,
+                total_cost_usd=result.get("cost_usd", 0.0),
+                prs_opened=len(result.get("prs", [])),
+                prs_merged=sum(
+                    1 for r in result.get("reviews", [])
+                    if r.get("decision") == "APPROVE"
+                ),
+            ))
 
         if callback_url:
             await send_callback(callback_url, {
@@ -194,6 +231,15 @@ async def run_api_cycle(
             error=error_msg,
             completed_at=datetime.now().isoformat(timespec="seconds"),
         )
+        # Publish CycleFailed event
+        if event_bus is not None:
+            from theswarm.domain.cycles.events import CycleFailed
+            from theswarm.domain.cycles.value_objects import CycleId
+            await event_bus.publish(CycleFailed(
+                cycle_id=CycleId(cycle_id),
+                project_id=repo,
+                error=error_msg,
+            ))
         if callback_url:
             await send_callback(callback_url, {
                 "cycle_id": cycle_id,

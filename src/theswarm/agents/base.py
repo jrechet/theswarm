@@ -48,7 +48,18 @@ async def load_context(state: AgentState) -> dict[str, Any]:
         except Exception:
             log.debug("Could not load agent memory")
 
-    return {"context": "\n\n---\n\n".join(parts) if parts else "(empty context)"}
+    context = "\n\n---\n\n".join(parts) if parts else "(empty context)"
+
+    # Condense if context exceeds threshold
+    try:
+        from theswarm.tools.condenser import ContextCondenser
+        condenser = ContextCondenser()
+        result = await condenser.condense(context)
+        context = result.condensed_text
+    except Exception:
+        log.debug("Context condensation skipped (not available or failed)")
+
+    return {"context": context}
 
 
 def _infer_role(phase: str) -> str | None:

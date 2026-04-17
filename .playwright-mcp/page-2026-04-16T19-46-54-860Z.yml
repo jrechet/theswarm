@@ -1,0 +1,135 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - link "TheSwarm" [ref=e3] [cursor=pointer]:
+      - /url: /
+    - generic [ref=e4]:
+      - link "Dashboard" [ref=e5] [cursor=pointer]:
+        - /url: /
+      - link "Projects" [ref=e6] [cursor=pointer]:
+        - /url: /projects/
+      - link "Cycles" [ref=e7] [cursor=pointer]:
+        - /url: /cycles/
+      - link "Reports" [ref=e8] [cursor=pointer]:
+        - /url: /reports/
+      - link "Demos" [ref=e9] [cursor=pointer]:
+        - /url: /demos/
+      - link "Features" [ref=e10] [cursor=pointer]:
+        - /url: /features/
+      - link "Health" [ref=e11] [cursor=pointer]:
+        - /url: /health
+    - generic [ref=e12]: Live
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - heading "Platform Features" [level=1] [ref=e16]
+      - generic [ref=e17]: 10 features · 0 videos recorded
+    - generic [ref=e18]:
+      - paragraph [ref=e19]: No demo videos recorded yet.
+      - paragraph [ref=e20]:
+        - text: Run
+        - code [ref=e21]: theswarm record-demos
+        - text: to generate Playwright demo videos for all features.
+    - generic [ref=e22]:
+      - generic [ref=e23]:
+        - heading "Phase 1" [level=2] [ref=e24]
+        - generic [ref=e25]: 3 features
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - generic [ref=e28]:
+            - generic [ref=e29]: P1
+            - heading "Hashline Edit Tool" [level=3] [ref=e30]
+          - paragraph [ref=e31]: Hash-anchored file editing that prevents stale-line errors
+          - generic [ref=e32]:
+            - img [ref=e33]
+            - generic [ref=e36]: No video yet
+          - code [ref=e38]: hashline
+        - generic [ref=e39]:
+          - generic [ref=e40]:
+            - generic [ref=e41]: P1
+            - heading "Ralph Loop" [level=3] [ref=e42]
+          - paragraph [ref=e43]: Persistent retry loop when quality gates fail
+          - generic [ref=e44]:
+            - img [ref=e45]
+            - generic [ref=e48]: No video yet
+          - code [ref=e50]: ralph_loop
+        - generic [ref=e51]:
+          - generic [ref=e52]:
+            - generic [ref=e53]: P1
+            - heading "Todo Enforcer Watchdog" [level=3] [ref=e54]
+          - paragraph [ref=e55]: Idle agent detection with configurable threshold and escalation
+          - generic [ref=e56]:
+            - img [ref=e57]
+            - generic [ref=e60]: No video yet
+          - code [ref=e62]: watchdog
+    - generic [ref=e63]:
+      - generic [ref=e64]:
+        - heading "Phase 2" [level=2] [ref=e65]
+        - generic [ref=e66]: 5 features
+      - generic [ref=e67]:
+        - generic [ref=e68]:
+          - generic [ref=e69]:
+            - generic [ref=e70]: P2
+            - heading "Context Condensation" [level=3] [ref=e71]
+          - paragraph [ref=e72]: LLM-powered context summarization using Haiku
+          - generic [ref=e73]:
+            - img [ref=e74]
+            - generic [ref=e77]: No video yet
+          - code [ref=e79]: condenser
+        - generic [ref=e80]:
+          - generic [ref=e81]:
+            - generic [ref=e82]: P2
+            - heading "AGENTS.md Generator" [level=3] [ref=e83]
+          - paragraph [ref=e84]: Auto-generates documentation by introspecting agent graphs
+          - generic [ref=e85]:
+            - img [ref=e86]
+            - generic [ref=e89]: No video yet
+          - code [ref=e91]: agents_md
+        - generic [ref=e92]:
+          - generic [ref=e93]:
+            - generic [ref=e94]: P2
+            - heading "Skill-Embedded MCPs" [level=3] [ref=e95]
+          - paragraph [ref=e96]: Mount/unmount skill manifests per task category
+          - generic [ref=e97]:
+            - img [ref=e98]
+            - generic [ref=e101]: No video yet
+          - code [ref=e103]: mcp_skills
+        - generic [ref=e104]:
+          - generic [ref=e105]:
+            - generic [ref=e106]: P2
+            - heading "Model Routing Table" [level=3] [ref=e107]
+          - paragraph [ref=e108]: Task category to model mapping (Haiku for cheap, Sonnet for code)
+          - generic [ref=e109]:
+            - img [ref=e110]
+            - generic [ref=e113]: No video yet
+          - code [ref=e115]: model_routing
+        - generic [ref=e116]:
+          - generic [ref=e117]:
+            - generic [ref=e118]: P2
+            - heading "IntentGate Enhancement" [level=3] [ref=e119]
+          - paragraph [ref=e120]: Haiku-powered NLU with param extraction and keyword fast path
+          - generic [ref=e121]:
+            - img [ref=e122]
+            - generic [ref=e125]: No video yet
+          - code [ref=e127]: intent_gate
+    - generic [ref=e128]:
+      - generic [ref=e129]:
+        - heading "Phase 3" [level=2] [ref=e130]
+        - generic [ref=e131]: 2 features
+      - generic [ref=e132]:
+        - generic [ref=e133]:
+          - generic [ref=e134]:
+            - generic [ref=e135]: P3
+            - heading "Sandbox Protocol" [level=3] [ref=e136]
+          - paragraph [ref=e137]: Pluggable execution backend (local, Docker, OpenHands)
+          - generic [ref=e138]:
+            - img [ref=e139]
+            - generic [ref=e142]: No video yet
+          - code [ref=e144]: sandbox
+        - generic [ref=e145]:
+          - generic [ref=e146]:
+            - generic [ref=e147]: P3
+            - heading "AST-Grep Tool" [level=3] [ref=e148]
+          - paragraph [ref=e149]: Structural code search via ast-grep CLI wrapper
+          - generic [ref=e150]:
+            - img [ref=e151]
+            - generic [ref=e154]: No video yet
+          - code [ref=e156]: ast_grep

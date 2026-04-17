@@ -29,6 +29,16 @@ def main() -> None:
         cli_main(["run-cycle", "--techlead-only"])
         return
 
+    if "--autonomous" in args or "-a" in args:
+        from theswarm.presentation.cli.main import main as cli_main
+        cli_args = ["run-cycle", "--autonomous"]
+        # Pass through --max-cycles if present
+        for i, arg in enumerate(args):
+            if arg == "--max-cycles" and i + 1 < len(args):
+                cli_args.extend(["--max-cycles", args[i + 1]])
+        cli_main(cli_args)
+        return
+
     # All other commands (including no args → serve) go through v2 CLI
     from theswarm.presentation.cli.main import main as cli_main
 

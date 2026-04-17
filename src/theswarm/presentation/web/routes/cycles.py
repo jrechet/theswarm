@@ -135,8 +135,9 @@ async def trigger_cycle(
     record = tracker.create(req)
 
     allowed_repos = getattr(request.app.state, "allowed_repos", [])
+    event_bus = getattr(request.app.state, "event_bus", None)
     task = asyncio.create_task(
-        run_api_cycle(record.id, repo, req.description, "", allowed_repos)
+        run_api_cycle(record.id, repo, req.description, "", allowed_repos, event_bus=event_bus)
     )
     tracker.set_task(record.id, task)
     log.info("Cycle %s triggered for project %s (repo=%s)", record.id, project_id, repo)

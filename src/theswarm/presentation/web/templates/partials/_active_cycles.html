@@ -1,0 +1,32 @@
+{% if dashboard.active_cycles %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Project</th>
+      <th>Status</th>
+      <th>Current Phase</th>
+      <th>Elapsed</th>
+      <th>Cost</th>
+      <th>Progress</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in dashboard.active_cycles %}
+    <tr>
+      <td><a href="{{ base }}/cycles/{{ c.id }}">{{ c.project_id }}</a></td>
+      <td><span class="badge badge-{{ c.status }}">{{ c.status }}</span></td>
+      <td class="phase-cell">{{ c.current_phase_name or "Starting..." }}</td>
+      <td class="elapsed-cell" data-started="{{ c.started_at or '' }}">{{ c.duration_display }}</td>
+      <td>${{ "%.2f" | format(c.total_cost_usd) }}</td>
+      <td>
+        <div class="progress-bar">
+          <div class="progress-bar-fill" style="width: {{ c.progress_percent }}%"></div>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-state">No active cycles. <a href="{{ base }}/projects/">Start one from a project.</a></p>
+{% endif %}

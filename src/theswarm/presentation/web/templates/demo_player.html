@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-base="{{ base }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo — {{ report.project_id }} — TheSwarm</title>
+  <link rel="stylesheet" href="{{ base }}/static/css/dashboard.css">
+  <link rel="stylesheet" href="{{ base }}/static/css/demo-player.css">
+</head>
+<body class="player-body">
+
+  <!-- Player chrome -->
+  <div class="player-topbar">
+    <a href="{{ base }}/demos/" class="player-back" title="Back to demos">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+    </a>
+    <div class="player-title">
+      <strong>{{ report.project_id }}</strong>
+      <span class="player-title-sep">/</span>
+      <span>Cycle {{ report.cycle_id }}</span>
+      <span class="player-title-sep">/</span>
+      <span class="text-muted">{{ report.created_at.strftime('%b %d, %Y') }}</span>
+    </div>
+    <div class="player-controls-top">
+      {% if prev_demo %}
+      <a href="{{ base }}/demos/{{ prev_demo.id }}/play" class="player-nav-btn" title="Previous demo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </a>
+      {% endif %}
+      {% if next_demo %}
+      <a href="{{ base }}/demos/{{ next_demo.id }}/play" class="player-nav-btn" title="Next demo">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </a>
+      {% endif %}
+      <button class="player-nav-btn" id="btn-fullscreen" title="Toggle fullscreen">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="player-progress">
+    <div class="player-progress-fill" id="progress-fill"></div>
+    <div class="player-progress-segments" id="progress-segments">
+      {% for s in slides %}
+      <button class="progress-segment" data-slide="{{ loop.index0 }}" title="Slide {{ loop.index }}"></button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Slides container -->
+  <div class="player-stage" id="player-stage">
+
+    {% for slide in slides %}
+    <div class="player-slide {% if loop.first %}active{% endif %}" data-slide-index="{{ loop.index0 }}">
+
+      {% if slide.type == "title" %}
+      <!-- ─── Title slide ─── -->
+      <div class="slide-title">
+        <div class="slide-title-badge">Demo Report</div>
+        <h1>{{ slide.project }}</h1>
+        <p class="slide-date">{{ slide.date }}</p>
+
+        <div class="slide-summary-grid">
+          <div class="slide-summary-item">
+            <span class="slide-summary-value">{{ slide.summary.stories_completed }}/{{ slide.summary.stories_total }}</span>
+            <span class="slide-summary-label">Stories</span>
+          </div>
+          <div class="slide-summary-item">
+            <span class="slide-summary-value">{{ slide.summary.prs_merged }}</span>
+            <span class="slide-summary-label">PRs Merged</span>
+          </div>
+          <div class="slide-summary-item">
+            <span class="slide-summary-value">{{ slide.summary.tests_passing }}/{{ slide.summary.tests_total }}</span>
+            <span class="slide-summary-label">Tests</span>
+          </div>
+          <div class="slide-summary-item">
+            <span class="slide-summary-value">{{ "%.1f"|format(slide.summary.coverage_percent) }}%</span>
+            <span class="slide-summary-label">Coverage</span>
+          </div>
+          {% if slide.summary.cost_usd > 0 %}
+          <div class="slide-summary-item">
+            <span class="slide-summary-value">${{ "%.2f"|format(slide.summary.cost_usd) }}</span>
+            <span class="slide-summary-label">Cost</span>
+          </div>
+          {% endif %}
+        </div>
+
+        {% if slide.gates_pass %}
+        <div class="slide-gate-badge pass">All Quality Gates Pass</div>
+        {% else %}
+        <div class="slide-gate-badge fail">Quality Gates Failed</div>
+        {% endif %}
+      </div>
+
+      {% elif slide.type == "story" %}
+      <!-- ─── Story slide ─── -->
+      <div class="slide-story">
+        <div class="slide-section-label">Story {{ slide.index + 1 }}/{{ report.stories | length }}</div>
+        <h2>{{ slide.story.title }}</h2>
+        <div class="slide-story-meta">
+          <span class="badge badge-{{ 'completed' if slide.story.status == 'completed' else 'running' }}">{{ slide.story.status }}</span>
+          <span>{{ slide.story.ticket_id }}</span>
+          {% if slide.story.pr_number %}
+          <span>PR #{{ slide.story.pr_number }}</span>
+          {% endif %}
+        </div>
+
+        {% if slide.story.files_changed %}
+        <div class="slide-diff-stats">
+          <span>{{ slide.story.files_changed }} files changed</span>
+          <span class="additions">+{{ slide.story.lines_added }}</span>
+          <span class="deletions">-{{ slide.story.lines_removed }}</span>
+        </div>
+        {% endif %}
+
+        {% if slide.story.diff_highlights %}
+        <div class="slide-diffs">
+          {% for dh in slide.story.diff_highlights %}
+          <div class="slide-diff-block">
+            <div class="slide-diff-file">{{ dh.file_path }}</div>
+            {% if dh.annotation %}<p class="slide-diff-annotation">{{ dh.annotation }}</p>{% endif %}
+            <pre class="slide-diff-hunk">{{ dh.hunk }}</pre>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+
+      {% elif slide.type == "screenshots" %}
+      <!-- ─── Before/After comparison slide ─── -->
+      <div class="slide-compare">
+        <div class="slide-section-label">Story {{ slide.index + 1 }} — Screenshots</div>
+        <h2>{{ slide.story.title }}</h2>
+        <div class="slide-compare-grid">
+          {% for a in slide.story.screenshots_before %}
+          <div class="slide-compare-panel">
+            <div class="slide-compare-label before">Before</div>
+            {% if a.path %}<img src="{{ base }}/artifacts/{{ a.path }}" alt="{{ a.label }}" loading="lazy">{% endif %}
+            <span class="slide-compare-caption">{{ a.label }}</span>
+          </div>
+          {% endfor %}
+          {% for a in slide.story.screenshots_after %}
+          <div class="slide-compare-panel">
+            <div class="slide-compare-label after">After</div>
+            {% if a.path %}<img src="{{ base }}/artifacts/{{ a.path }}" alt="{{ a.label }}" loading="lazy">{% endif %}
+            <span class="slide-compare-caption">{{ a.label }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% elif slide.type == "video" %}
+      <!-- ─── Video slide ─── -->
+      <div class="slide-video">
+        <div class="slide-section-label">Story {{ slide.index + 1 }} — Video</div>
+        <h2>{{ slide.story.title }}</h2>
+        {% if slide.story.video and slide.story.video.path %}
+        <video src="{{ base }}/artifacts/{{ slide.story.video.path }}" controls preload="metadata" class="slide-video-player"></video>
+        <span class="slide-video-label">{{ slide.story.video.label }}</span>
+        {% endif %}
+      </div>
+
+      {% elif slide.type == "quality_gates" %}
+      <!-- ─── Quality Gates slide ─── -->
+      <div class="slide-gates">
+        <div class="slide-section-label">Quality Assurance</div>
+        <h2>Quality Gates</h2>
+        <div class="slide-gates-list">
+          {% for g in slide.gates %}
+          <div class="slide-gate-item gate-{{ g.status.value }}">
+            <div class="slide-gate-icon">
+              {% if g.status.value == "pass" %}
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+              {% elif g.status.value == "fail" %}
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              {% elif g.status.value == "warn" %}
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+              {% else %}
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M5 12h14"/></svg>
+              {% endif %}
+            </div>
+            <div class="slide-gate-content">
+              <div class="slide-gate-name">{{ g.name }}</div>
+              {% if g.detail %}<div class="slide-gate-detail">{{ g.detail }}</div>{% endif %}
+            </div>
+            <span class="badge badge-{{ g.status.value }}">{{ g.status.value }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% elif slide.type == "gallery" %}
+      <!-- ─── Screenshot gallery slide ─── -->
+      <div class="slide-gallery">
+        <div class="slide-section-label">Demo Screenshots</div>
+        <h2>Application Screenshots</h2>
+        <div class="slide-gallery-grid">
+          {% for a in slide.artifacts %}
+          <div class="slide-gallery-item">
+            <img src="{{ base }}/artifacts/{{ a.path }}" alt="{{ a.label }}" loading="lazy">
+            <span class="slide-gallery-label">{{ a.label }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% elif slide.type == "artifact_video" %}
+      <!-- ─── Artifact video slide ─── -->
+      <div class="slide-video">
+        <div class="slide-section-label">Demo Video</div>
+        <h2>{{ slide.artifact.label }}</h2>
+        <video src="{{ base }}/artifacts/{{ slide.artifact.path }}" controls preload="metadata" class="slide-video-player"></video>
+      </div>
+
+      {% elif slide.type == "learnings" %}
+      <!-- ─── Learnings slide ─── -->
+      <div class="slide-learnings">
+        <div class="slide-section-label">Retrospective</div>
+        <h2>Agent Learnings</h2>
+        <ul class="slide-learnings-list">
+          {% for l in slide.learnings %}
+          <li>{{ l }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      {% endif %}
+    </div>
+    {% endfor %}
+
+  </div>
+
+  <!-- Bottom controls -->
+  <div class="player-bottombar">
+    <button class="player-btn" id="btn-prev" title="Previous (Left arrow)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="player-slide-counter">
+      <span id="slide-current">1</span> / <span id="slide-total">{{ slide_count }}</span>
+    </div>
+    <button class="player-btn" id="btn-next" title="Next (Right arrow)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    </button>
+    <div class="player-spacer"></div>
+    <button class="player-btn" id="btn-autoplay" title="Auto-advance (A)">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+    <div class="player-shortcuts-hint">
+      <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate &middot; <kbd>F</kbd> fullscreen &middot; <kbd>A</kbd> autoplay &middot; <kbd>Esc</kbd> exit
+    </div>
+  </div>
+
+  <script src="{{ base }}/static/js/demo-player.js" defer></script>
+</body>
+</html>

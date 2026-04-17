@@ -138,6 +138,14 @@ class SQLiteCycleRepository:
         rows = await cursor.fetchall()
         return [self._row_to_cycle(r) for r in rows]
 
+    async def list_recent(self, limit: int = 50) -> list[Cycle]:
+        cursor = await self._db.execute(
+            "SELECT * FROM cycles ORDER BY started_at DESC LIMIT ?",
+            (limit,),
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_cycle(r) for r in rows]
+
     async def save(self, cycle: Cycle) -> None:
         phases_json = json.dumps([
             {
@@ -205,6 +213,65 @@ class SQLiteCycleRepository:
             prs_opened=tuple(json.loads(row["prs_opened_json"])),
             prs_merged=tuple(json.loads(row["prs_merged_json"])),
         )
+
+
+# ── Activity Repository ────────────────────────────────────────────
+
+
+class SQLiteActivityRepository:
+    """Persist agent activity events to the activities table."""
+
+    def __init__(self, db: aiosqlite.Connection) -> None:
+        self._db = db
+
+    async def save(
+        self,
+        cycle_id: str,
+        project_id: str,
+        agent: str,
+        action: str,
+        detail: str,
+        metadata: dict | None = None,
+    ) -> None:
+        await self._db.execute(
+            """INSERT INTO activities
+               (cycle_id, project_id, agent, action, detail, metadata_json, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                cycle_id, project_id, agent, action, detail,
+                json.dumps(metadata or {}), _now_iso(),
+            ),
+        )
+        await self._db.commit()
+
+    async def list_by_cycle(self, cycle_id: str, limit: int = 100) -> list[dict]:
+        cursor = await self._db.execute(
+            "SELECT * FROM activities WHERE cycle_id = ? ORDER BY created_at DESC LIMIT ?",
+            (cycle_id, limit),
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    async def list_recent(self, limit: int = 50) -> list[dict]:
+        cursor = await self._db.execute(
+            "SELECT * FROM activities ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    @staticmethod
+    def _row_to_dict(row) -> dict:
+        return {
+            "id": row["id"],
+            "cycle_id": row["cycle_id"],
+            "project_id": row["project_id"],
+            "agent": row["agent"],
+            "action": row["action"],
+            "detail": row["detail"],
+            "metadata": json.loads(row["metadata_json"]) if row["metadata_json"] else {},
+            "created_at": row["created_at"],
+        }
 
 
 # ── Memory Store ───────────────────────────────────────────────────

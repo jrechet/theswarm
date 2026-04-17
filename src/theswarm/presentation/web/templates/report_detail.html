@@ -77,11 +77,13 @@
             {% for a in s.screenshots_before %}
             <div class="screenshot before">
                 <span class="label">Before: {{ a.label }}</span>
+                {% if a.path %}<img src="{{ base }}/artifacts/{{ a.path }}" alt="{{ a.label }}" loading="lazy">{% endif %}
             </div>
             {% endfor %}
             {% for a in s.screenshots_after %}
             <div class="screenshot after">
                 <span class="label">After: {{ a.label }}</span>
+                {% if a.path %}<img src="{{ base }}/artifacts/{{ a.path }}" alt="{{ a.label }}" loading="lazy">{% endif %}
             </div>
             {% endfor %}
         </div>
@@ -99,6 +101,25 @@
         {% endif %}
     </div>
     {% endfor %}
+    {% endif %}
+
+    {% if report.artifacts %}
+    <h2>Demo Screenshots</h2>
+    <div class="screenshot-gallery">
+        {% for a in report.artifacts %}
+        {% if a.type.value == "screenshot" %}
+        <div class="screenshot-card">
+            <img src="{{ base }}/artifacts/{{ a.path }}" alt="{{ a.label }}" loading="lazy" width="640">
+            <span class="screenshot-label">{{ a.label }}</span>
+        </div>
+        {% elif a.type.value == "video" %}
+        <div class="screenshot-card">
+            <video src="{{ base }}/artifacts/{{ a.path }}" controls width="640" preload="metadata"></video>
+            <span class="screenshot-label">{{ a.label }}</span>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
     {% endif %}
 
     {% if report.agent_learnings %}

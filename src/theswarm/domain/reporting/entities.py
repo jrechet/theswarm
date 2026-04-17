@@ -79,3 +79,15 @@ class DemoReport:
             if s.video:
                 count += 1
         return count
+
+    @property
+    def thumbnail_path(self) -> str | None:
+        """Relative artifact path of the first usable screenshot, or None."""
+        for a in self.artifacts:
+            if a.type.value == "screenshot" and a.path:
+                return a.path
+        for s in self.stories:
+            for a in (*s.screenshots_after, *s.screenshots_before):
+                if a.path:
+                    return a.path
+        return None

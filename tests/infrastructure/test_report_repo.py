@@ -206,3 +206,150 @@ class TestCreatedAtParsing:
         assert loaded.created_at.year == 2026
         assert loaded.created_at.month == 4
         assert loaded.created_at.tzinfo is not None
+
+
+# Regression: the /demos/ browse page returned 500 because _row_to_report
+# raised KeyError when reports written by older pipeline versions were missing
+# fields like 'ticket_id' or 'files_changed'. The deserializer must tolerate
+# any subset of known fields.
+class TestPartialDataTolerance:
+    """Deserializer must never crash on reports written with partial data."""
+
+    async def test_loads_report_with_empty_stories(self, repo):
+        report = _make_report(stories=())
+        await repo.save(report)
+        loaded = await repo.get("rpt-1")
+        assert loaded is not None
+        assert loaded.stories == ()
+
+    async def test_loads_report_with_empty_gates(self, repo):
+        report = _make_report(quality_gates=())
+        await repo.save(report)
+        loaded = await repo.get("rpt-1")
+        assert loaded is not None
+        assert loaded.quality_gates == ()
+
+    async def test_loads_report_with_empty_artifacts(self, repo):
+        report = _make_report(artifacts=())
+        await repo.save(report)
+        loaded = await repo.get("rpt-1")
+        assert loaded is not None
+        assert loaded.artifacts == ()
+
+    async def test_loads_report_with_empty_learnings(self, repo):
+        report = _make_report(agent_learnings=())
+        await repo.save(report)
+        loaded = await repo.get("rpt-1")
+        assert loaded is not None
+        assert loaded.agent_learnings == ()
+
+    async def test_loads_row_with_missing_story_fields(self, tmp_path):
+        """Stories written without ticket_id, pr_url, file stats must still load."""
+        import json as _json
+
+        db_path = str(tmp_path / "partial.db")
+        from theswarm.infrastructure.persistence.sqlite_repos import init_db
+        conn = await init_db(db_path)
+        partial_repo = SQLiteReportRepository(conn)
+
+        partial_story = {
+            "title": "Legacy story with bare fields",
+            "screenshots_before": [],
+            "screenshots_after": [],
+            "diff_highlights": [{}],
+        }
+
+        await conn.execute(
+            """INSERT INTO reports (id, cycle_id, project_id, summary_json,
+                stories_json, quality_json, learnings_json, artifacts_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                "partial-1",
+                "cyc-x",
+                "proj-x",
+                "{}",
+                _json.dumps([partial_story]),
+                "[]",
+                "[]",
+                "[]",
+                "2026-04-17T00:00:00+00:00",
+            ),
+        )
+        await conn.commit()
+
+        loaded = await partial_repo.get("partial-1")
+        assert loaded is not None
+        assert len(loaded.stories) == 1
+        s = loaded.stories[0]
+        assert s.title == "Legacy story with bare fields"
+        assert s.ticket_id == ""
+        assert s.pr_url == ""
+        assert s.files_changed == 0
+        assert len(s.diff_highlights) == 1
+        assert s.diff_highlights[0].file_path == ""
+        assert s.diff_highlights[0].hunk == ""
+        await conn.close()
+
+    async def test_loads_row_with_empty_json_fields(self, tmp_path):
+        """Rows with empty-string *_json columns must load as empty collections.
+
+        Schema has NOT NULL DEFAULT '{}'|'[]' so true NULLs are impossible,
+        but legacy rows can still carry empty strings which the deserializer
+        must treat as falsy.
+        """
+        db_path = str(tmp_path / "empty.db")
+        from theswarm.infrastructure.persistence.sqlite_repos import init_db
+        conn = await init_db(db_path)
+        partial_repo = SQLiteReportRepository(conn)
+
+        await conn.execute(
+            """INSERT INTO reports (id, cycle_id, project_id, summary_json,
+                stories_json, quality_json, learnings_json, artifacts_json, created_at)
+                VALUES (?, ?, ?, '', '', '', '', '', ?)""",
+            ("empty-1", "cyc-y", "proj-y", "2026-04-17T00:00:00+00:00"),
+        )
+        await conn.commit()
+
+        loaded = await partial_repo.get("empty-1")
+        assert loaded is not None
+        assert loaded.stories == ()
+        assert loaded.quality_gates == ()
+        assert loaded.agent_learnings == ()
+        assert loaded.artifacts == ()
+        assert loaded.summary.stories_completed == 0
+        assert loaded.summary.coverage_percent == 0.0
+        await conn.close()
+
+    async def test_loads_row_with_missing_gate_detail(self, tmp_path):
+        """Quality gates written without 'detail' field must load with default."""
+        import json as _json
+        db_path = str(tmp_path / "gate.db")
+        from theswarm.infrastructure.persistence.sqlite_repos import init_db
+        conn = await init_db(db_path)
+        partial_repo = SQLiteReportRepository(conn)
+
+        gates = [{"name": "tests", "status": "pass"}]
+        await conn.execute(
+            """INSERT INTO reports (id, cycle_id, project_id, summary_json,
+                stories_json, quality_json, learnings_json, artifacts_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                "gate-1",
+                "cyc-z",
+                "proj-z",
+                "{}",
+                "[]",
+                _json.dumps(gates),
+                "[]",
+                "[]",
+                "2026-04-17T00:00:00+00:00",
+            ),
+        )
+        await conn.commit()
+
+        loaded = await partial_repo.get("gate-1")
+        assert loaded is not None
+        assert len(loaded.quality_gates) == 1
+        assert loaded.quality_gates[0].name == "tests"
+        assert loaded.quality_gates[0].detail == ""
+        await conn.close()

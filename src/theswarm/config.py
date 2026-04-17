@@ -55,6 +55,7 @@ class AgentState(TypedDict, total=False):
     security_scan: dict
     issue_stats: dict
     demo_report: dict | None
+    demo_artifacts: list  # list of (Artifact, bytes) tuples from screenshot capture
     # PO-specific
     daily_plan: str
     daily_report: str
@@ -68,6 +69,18 @@ class CycleConfig:
     claude_model: str = "sonnet"
     workspace_dir: str = ""  # auto-set if empty
 
+    # Model routing: task category → model short name
+    model_routing: dict[str, str] = field(default_factory=lambda: {
+        "nlu": "haiku",
+        "condensation": "haiku",
+        "implementation": "sonnet",
+        "review": "sonnet",
+        "planning": "sonnet",
+        "breakdown": "sonnet",
+        "retrospective": "haiku",
+        "doc_generation": "haiku",
+    })
+
     # Token budgets (per-agent daily max)
     token_budget: dict[Role, int] = field(default_factory=lambda: {
         Role.PO: 300_000,
@@ -75,6 +88,16 @@ class CycleConfig:
         Role.DEV: 1_000_000,
         Role.QA: 300_000,
     })
+
+    # Ralph Loop: max retries when quality gates fail
+    max_dev_retries: int = 2
+
+    # Watchdog: idle threshold in seconds (> Claude's 600s timeout)
+    watchdog_idle_threshold: float = 720.0
+    watchdog_max_warnings: int = 3
+
+    # Context condensation: char threshold before triggering condensation
+    condenser_threshold: int = 6000
 
     def __post_init__(self) -> None:
         if not self.workspace_dir and self.github_repo:

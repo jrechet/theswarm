@@ -64,6 +64,100 @@ async def sse_stream(request: Request) -> StreamingResponse:
     )
 
 
+# ── Feature inventory ──────────────────────────────────────────────
+
+
+_FEATURES = [
+    {
+        "id": "hashline",
+        "name": "Hashline Edit Tool",
+        "phase": 1,
+        "module": "theswarm.tools.hashline",
+        "description": "Hash-anchored file editing that prevents stale-line errors",
+    },
+    {
+        "id": "ralph_loop",
+        "name": "Ralph Loop",
+        "phase": 1,
+        "module": "theswarm.agents.dev",
+        "description": "Persistent retry loop when quality gates fail (conditional graph edge)",
+    },
+    {
+        "id": "watchdog",
+        "name": "Todo Enforcer Watchdog",
+        "phase": 1,
+        "module": "theswarm.application.services.watchdog",
+        "description": "Idle agent detection with configurable threshold and escalation",
+    },
+    {
+        "id": "condenser",
+        "name": "Context Condensation",
+        "phase": 2,
+        "module": "theswarm.tools.condenser",
+        "description": "LLM-powered context summarization using Haiku to stay within token budgets",
+    },
+    {
+        "id": "agents_md",
+        "name": "AGENTS.md Generator",
+        "phase": 2,
+        "module": "theswarm.tools.agents_md",
+        "description": "Auto-generates documentation by introspecting agent graph modules",
+    },
+    {
+        "id": "mcp_skills",
+        "name": "Skill-Embedded MCPs",
+        "phase": 2,
+        "module": "theswarm.infrastructure.mcp",
+        "description": "Mount/unmount skill manifests per task category",
+    },
+    {
+        "id": "model_routing",
+        "name": "Model Routing Table",
+        "phase": 2,
+        "module": "theswarm.config",
+        "description": "Task category to model mapping (Haiku for cheap, Sonnet for code)",
+    },
+    {
+        "id": "intent_gate",
+        "name": "IntentGate Enhancement",
+        "phase": 2,
+        "module": "theswarm.presentation.web.server",
+        "description": "Haiku-powered NLU with param extraction and keyword fast path",
+    },
+    {
+        "id": "sandbox",
+        "name": "Sandbox Protocol",
+        "phase": 3,
+        "module": "theswarm.infrastructure.sandbox",
+        "description": "Pluggable execution backend (local, Docker, OpenHands)",
+    },
+    {
+        "id": "ast_grep",
+        "name": "AST-Grep Tool",
+        "phase": 3,
+        "module": "theswarm.tools.ast_grep",
+        "description": "Structural code search via ast-grep CLI wrapper",
+    },
+]
+
+
+@router.get("/features")
+async def api_features() -> JSONResponse:
+    """List all platform features with availability status."""
+    import importlib
+
+    results = []
+    for feat in _FEATURES:
+        available = False
+        try:
+            importlib.import_module(feat["module"])
+            available = True
+        except ImportError:
+            pass
+        results.append({**feat, "available": available})
+    return JSONResponse(results)
+
+
 # ── Live cycle state (migrated from legacy dashboard) ───────────────
 
 
@@ -163,17 +257,30 @@ async def api_list_cycles(limit: int = 20) -> JSONResponse:
 @router.post("/cycle")
 async def start_cycle(request: Request) -> JSONResponse:
     """Start a new cycle via the headless API."""
+    from pydantic import ValidationError
+
     from theswarm.api import CycleRequest, get_cycle_tracker, run_api_cycle
 
-    body = await request.json()
-    req = CycleRequest(**body)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Request body must be a JSON object")
+    try:
+        req = CycleRequest(**body)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+    except TypeError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     tracker = get_cycle_tracker()
     record = tracker.create(req)
 
     allowed_repos = getattr(request.app.state, "allowed_repos", [])
+    event_bus = getattr(request.app.state, "event_bus", None)
     task = asyncio.create_task(
-        run_api_cycle(record.id, req.repo, req.description, req.callback_url, allowed_repos)
+        run_api_cycle(record.id, req.repo, req.description, req.callback_url, allowed_repos, event_bus=event_bus)
     )
     tracker.set_task(record.id, task)
 

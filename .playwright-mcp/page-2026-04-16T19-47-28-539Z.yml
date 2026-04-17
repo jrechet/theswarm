@@ -1,0 +1,1 @@
+- generic [ref=e2]: "{\"status\":\"degraded\",\"service\":\"theswarm\",\"uptime_seconds\":85.5,\"checks\":{\"database\":\"connected\",\"sse\":\"ok\",\"github\":\"connected\",\"chat\":\"missing\"},\"repos\":[\"jrechet/swarm-todo-app\",\"jrechet/concert-tour-app\"]}"

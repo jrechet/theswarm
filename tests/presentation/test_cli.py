@@ -105,6 +105,34 @@ class TestParser:
         args = parser.parse_args(["validate"])
         assert args.command == "validate"
 
+    def test_dev_seed_defaults(self):
+        parser = create_parser()
+        args = parser.parse_args(["dev-seed"])
+        assert args.command == "dev-seed"
+        assert args.count == 3
+        assert args.reset is False
+
+    def test_dev_seed_flags(self):
+        parser = create_parser()
+        args = parser.parse_args(["dev-seed", "--count", "5", "--reset"])
+        assert args.count == 5
+        assert args.reset is True
+
+    def test_artifact_gc_defaults_dry_run(self):
+        parser = create_parser()
+        args = parser.parse_args(["artifact-gc"])
+        assert args.command == "artifact-gc"
+        assert args.apply is False
+        assert args.artifact_dir == ""
+
+    def test_artifact_gc_apply(self):
+        parser = create_parser()
+        args = parser.parse_args([
+            "artifact-gc", "--apply", "--artifact-dir", "/tmp/art",
+        ])
+        assert args.apply is True
+        assert args.artifact_dir == "/tmp/art"
+
 
 class TestMain:
     def test_no_command_exits_0(self):

@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Features — TheSwarm{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Platform Features</h1>
+    <span class="text-muted">{{ total_features }} features · {{ total_videos }} video{{ "s" if total_videos != 1 else "" }} recorded</span>
+</div>
+
+{% if total_videos == 0 %}
+<div class="empty-state-large" style="margin-bottom: 2rem;">
+    <p>No demo videos recorded yet.</p>
+    <p class="text-muted">Run <code>theswarm record-demos</code> to generate Playwright demo videos for all features.</p>
+</div>
+{% endif %}
+
+{% for phase_num in [1, 2, 3] %}
+<section class="demo-project-section">
+    <div class="demo-project-header">
+        <h2>Phase {{ phase_num }}</h2>
+        <span class="badge badge-subtle">{{ phases[phase_num] | length }} feature{{ "s" if phases[phase_num] | length != 1 else "" }}</span>
+    </div>
+
+    <div class="features-grid">
+        {% for feat in phases[phase_num] %}
+        <div class="feature-card {% if feat.has_video %}has-video{% endif %}">
+            <div class="feature-card-header">
+                <span class="feature-phase-badge">P{{ phase_num }}</span>
+                <h3 class="feature-card-title">{{ feat.name }}</h3>
+            </div>
+            <p class="feature-card-desc">{{ feat.description }}</p>
+
+            {% if feat.has_video %}
+            <div class="feature-video-wrap">
+                <video
+                    controls
+                    preload="metadata"
+                    class="feature-video"
+                >
+                    <source src="{{ base }}/artifacts/{{ feat.video_path }}" type="video/webm">
+                    Your browser does not support WebM video.
+                </video>
+            </div>
+            {% else %}
+            <div class="feature-no-video">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                </svg>
+                <span>No video yet</span>
+            </div>
+            {% endif %}
+
+            <div class="feature-card-footer">
+                <code class="feature-id">{{ feat.id }}</code>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endfor %}
+
+<style>
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 2rem;
+}
+
+.feature-card {
+    background: var(--card-bg, #1a1a2e);
+    border: 1px solid var(--border, #2a2a4a);
+    border-radius: 10px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    transition: border-color 0.2s;
+}
+
+.feature-card.has-video {
+    border-color: var(--accent, #6c5ce7);
+}
+
+.feature-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.feature-phase-badge {
+    background: var(--accent, #6c5ce7);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+}
+
+.feature-card-title {
+    font-size: 1.05rem;
+    margin: 0;
+    font-weight: 600;
+}
+
+.feature-card-desc {
+    color: var(--text-muted, #8888aa);
+    font-size: 0.875rem;
+    line-height: 1.4;
+    margin: 0;
+}
+
+.feature-video-wrap {
+    border-radius: 6px;
+    overflow: hidden;
+    background: #000;
+}
+
+.feature-video {
+    width: 100%;
+    display: block;
+    max-height: 240px;
+    object-fit: contain;
+}
+
+.feature-no-video {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 2rem 1rem;
+    color: var(--text-muted, #8888aa);
+    font-size: 0.85rem;
+    background: var(--bg-subtle, #12122a);
+    border-radius: 6px;
+    border: 1px dashed var(--border, #2a2a4a);
+}
+
+.feature-card-footer {
+    margin-top: auto;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border, #2a2a4a);
+}
+
+.feature-id {
+    font-size: 0.75rem;
+    color: var(--text-muted, #8888aa);
+    background: var(--bg-subtle, #12122a);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+}
+</style>
+{% endblock %}

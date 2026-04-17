@@ -19,7 +19,18 @@ from theswarm.application.queries.list_cycles import ListCyclesQuery
 from theswarm.application.queries.list_projects import ListProjectsQuery
 from theswarm.domain.cycles.ports import CycleRepository
 from theswarm.domain.projects.ports import ProjectRepository
-from theswarm.presentation.web.routes import api, cycles, dashboard, health, projects, reports, webhooks
+from theswarm.application.events.persistence_handlers import (
+    ActivityPersistenceHandler,
+    CyclePersistenceHandler,
+)
+from theswarm.domain.cycles.events import (
+    AgentActivity,
+    CycleCompleted,
+    CycleFailed,
+    CycleStarted,
+    PhaseChanged,
+)
+from theswarm.presentation.web.routes import api, artifacts, cycles, dashboard, demos, features, fragments, health, metrics, projects, reports, webhooks
 from theswarm.presentation.web.sse import SSEHub
 
 _HERE = Path(__file__).parent
@@ -53,6 +64,9 @@ def create_web_app(
     event_bus: EventBus,
     sse_hub: SSEHub | None = None,
     base_path: str = "",
+    activity_repo: object | None = None,
+    report_repo: object | None = None,
+    artifact_store: object | None = None,
 ) -> FastAPI:
     """Wire the web dashboard with dependency injection."""
     app = FastAPI(title="TheSwarm Dashboard", docs_url=None, redoc_url=None)
@@ -68,14 +82,31 @@ def create_web_app(
     # Inject dependencies into app.state
     app.state.templates = templates
     app.state.sse_hub = hub
+    app.state.event_bus = event_bus
     app.state.project_repo = project_repo
+    app.state.cycle_repo = cycle_repo
 
     # Queries
     app.state.list_projects_query = ListProjectsQuery(project_repo)
     app.state.get_project_query = GetProjectQuery(project_repo)
     app.state.get_cycle_status_query = GetCycleStatusQuery(cycle_repo)
     app.state.list_cycles_query = ListCyclesQuery(cycle_repo)
-    app.state.get_dashboard_query = GetDashboardQuery(project_repo, cycle_repo)
+    app.state.get_dashboard_query = GetDashboardQuery(project_repo, cycle_repo, activity_repo)
+
+    # Activity repository
+    app.state.activity_repo = activity_repo
+
+    # Report repository and artifact store
+    app.state.report_repo = report_repo
+    app.state.artifact_store = artifact_store
+
+    # Persistence event handlers — store cycles and activities in SQLite
+    cycle_persistence = CyclePersistenceHandler(cycle_repo)
+    for evt_type in (CycleStarted, PhaseChanged, CycleCompleted, CycleFailed):
+        event_bus.subscribe(evt_type, cycle_persistence.handle)
+    if activity_repo is not None:
+        activity_persistence = ActivityPersistenceHandler(activity_repo)
+        event_bus.subscribe(AgentActivity, activity_persistence.handle)
 
     # Command handlers
     app.state.create_project_handler = CreateProjectHandler(project_repo)
@@ -89,6 +120,11 @@ def create_web_app(
     app.include_router(health.router)
     app.include_router(reports.router)
     app.include_router(webhooks.router)
+    app.include_router(artifacts.router)
+    app.include_router(demos.router)
+    app.include_router(metrics.router)
+    app.include_router(features.router)
+    app.include_router(fragments.router)
     app.include_router(api.router)
 
     # Static files

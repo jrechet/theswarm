@@ -1,0 +1,27 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - link "TheSwarm" [ref=e3] [cursor=pointer]:
+      - /url: /
+    - generic [ref=e4]:
+      - link "Dashboard" [ref=e5] [cursor=pointer]:
+        - /url: /
+      - link "Projects" [ref=e6] [cursor=pointer]:
+        - /url: /projects/
+      - link "Cycles" [ref=e7] [cursor=pointer]:
+        - /url: /cycles/
+      - link "Reports" [ref=e8] [cursor=pointer]:
+        - /url: /reports/
+      - link "Demos" [ref=e9] [cursor=pointer]:
+        - /url: /demos/
+      - link "Features" [ref=e10] [cursor=pointer]:
+        - /url: /features/
+      - link "Health" [ref=e11] [cursor=pointer]:
+        - /url: /health
+    - generic [ref=e12]: Live
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - heading "Demos" [level=1] [ref=e16]
+      - generic [ref=e17]: 0 demos across 0 projects
+    - generic [ref=e18]:
+      - paragraph [ref=e19]: No demos yet.
+      - paragraph [ref=e20]: Demos are generated after completed cycles with QA reports.

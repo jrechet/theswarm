@@ -2,56 +2,29 @@
 {% block title %}Cycle {{ cycle.id[:8] }} — TheSwarm{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1>Cycle {{ cycle.id[:8] }}...</h1>
-  <span class="badge badge-{{ cycle.status }} badge-lg">{{ cycle.status }}</span>
-</div>
-
-<div class="detail-grid">
-  <div class="card">
-    <h2>Overview</h2>
-    <dl class="detail-list">
-      <dt>Project</dt>
-      <dd><a href="{{ base }}/projects/{{ cycle.project_id }}">{{ cycle.project_id }}</a></dd>
-      <dt>Triggered By</dt>
-      <dd>{{ cycle.triggered_by }}</dd>
-      <dt>Started</dt>
-      <dd>{{ cycle.started_at or "—" }}</dd>
-      <dt>Completed</dt>
-      <dd>{{ cycle.completed_at or "—" }}</dd>
-      <dt>Total Tokens</dt>
-      <dd>{{ "{:,}".format(cycle.total_tokens) }}</dd>
-      <dt>Total Cost</dt>
-      <dd>${{ "%.2f" | format(cycle.total_cost_usd) }}</dd>
-      <dt>PRs Opened</dt>
-      <dd>{{ cycle.prs_opened | length }}</dd>
-      <dt>PRs Merged</dt>
-      <dd>{{ cycle.prs_merged | length }}</dd>
-    </dl>
+<div id="cycle-detail" data-cycle-id="{{ cycle.id }}">
+  <div class="page-header">
+    <h1>Cycle {{ cycle.id[:8] }}...</h1>
+    <span class="badge badge-{{ cycle.status }} badge-lg">
+      {% if cycle.status == 'running' %}<span class="pulse-dot"></span>{% endif %}
+      {{ cycle.status }}
+    </span>
   </div>
 
-  <div class="card">
-    <h2>Phases</h2>
-    {% if cycle.phases %}
-    <div class="timeline">
-      {% for p in cycle.phases %}
-      <div class="timeline-item timeline-{{ p.status }}">
-        <div class="timeline-header">
-          <span class="timeline-agent">{{ p.agent }}</span>
-          <span class="badge badge-{{ p.status }} badge-sm">{{ p.status }}</span>
-        </div>
-        <div class="timeline-phase">{{ p.phase }}</div>
-        <div class="timeline-summary">{{ p.summary }}</div>
-        <div class="timeline-meta">
-          {{ "{:,}".format(p.tokens_used) }} tokens,
-          ${{ "%.3f" | format(p.cost_usd) }}
-        </div>
+  <div class="detail-grid">
+    <div class="card">
+      <h2>Overview</h2>
+      <div id="cycle-overview">
+        {% include "partials/_cycle_overview.html" %}
       </div>
-      {% endfor %}
     </div>
-    {% else %}
-    <p class="empty-state">No phases recorded yet.</p>
-    {% endif %}
+
+    <div class="card">
+      <h2>Phases</h2>
+      <div id="cycle-phases">
+        {% include "partials/_cycle_phases.html" %}
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

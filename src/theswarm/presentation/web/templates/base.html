@@ -6,7 +6,6 @@
   <title>{% block title %}TheSwarm{% endblock %}</title>
   <link rel="stylesheet" href="{{ base }}/static/css/dashboard.css">
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
-  <script src="https://unpkg.com/htmx-ext-sse@2.2.2" defer></script>
 </head>
 <body>
   <nav class="topnav">
@@ -16,9 +15,13 @@
       <a href="{{ base }}/projects/">Projects</a>
       <a href="{{ base }}/cycles/">Cycles</a>
       <a href="{{ base }}/reports/">Reports</a>
+      <a href="{{ base }}/demos/">Demos</a>
+      <a href="{{ base }}/features/">Features</a>
       <a href="{{ base }}/health">Health</a>
     </div>
-    <div class="nav-status" id="sse-status">Connecting...</div>
+    <div class="nav-status" id="sse-status">
+      <span class="status-dot connecting"></span> Connecting...
+    </div>
   </nav>
 
   <main class="container">

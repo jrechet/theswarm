@@ -82,6 +82,16 @@ class SQLiteReportRepository:
         rows = await cursor.fetchall()
         return [_row_to_report(r) for r in rows]
 
+    async def list_recent(self, limit: int = 50) -> list[DemoReport]:
+        cursor = await self._conn.execute(
+            """SELECT id, cycle_id, project_id, summary_json, stories_json,
+                      quality_json, learnings_json, artifacts_json, created_at
+               FROM reports ORDER BY created_at DESC LIMIT ?""",
+            (limit,),
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_report(r) for r in rows]
+
 
 # ── Serialization ─────────────────────────────────────────────────
 
@@ -180,11 +190,11 @@ def _row_to_report(row: aiosqlite.Row) -> DemoReport:
         ),
         stories=tuple(
             StoryReport(
-                title=s["title"],
-                ticket_id=s["ticket_id"],
+                title=s.get("title", ""),
+                ticket_id=s.get("ticket_id", ""),
                 pr_number=s.get("pr_number"),
                 pr_url=s.get("pr_url", ""),
-                status=s["status"],
+                status=s.get("status", "completed"),
                 files_changed=s.get("files_changed", 0),
                 lines_added=s.get("lines_added", 0),
                 lines_removed=s.get("lines_removed", 0),
@@ -197,8 +207,8 @@ def _row_to_report(row: aiosqlite.Row) -> DemoReport:
                 video=_deser_artifact(s["video"]) if s.get("video") else None,
                 diff_highlights=tuple(
                     DiffHighlight(
-                        file_path=dh["file_path"],
-                        hunk=dh["hunk"],
+                        file_path=dh.get("file_path", ""),
+                        hunk=dh.get("hunk", ""),
                         annotation=dh.get("annotation", ""),
                     )
                     for dh in s.get("diff_highlights", [])

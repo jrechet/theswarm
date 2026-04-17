@@ -20,9 +20,10 @@ async def dashboard(request: Request) -> HTMLResponse:
     from theswarm.application.dto import CycleDTO
     tracker = get_cycle_tracker()
     existing_ids = {c.id for c in dto.active_cycles}
+    new_active = list(dto.active_cycles)
     for record in tracker.list_recent(limit=10):
         if record.status.value in ("queued", "running") and record.id not in existing_ids:
-            dto.active_cycles.append(CycleDTO(
+            new_active.append(CycleDTO(
                 id=record.id,
                 project_id=record.repo,
                 status=record.status.value,
@@ -35,6 +36,20 @@ async def dashboard(request: Request) -> HTMLResponse:
                 prs_merged=[],
                 phases=[],
             ))
+
+    # Reconstruct DTO with merged active cycles
+    from theswarm.application.dto import DashboardDTO
+    dto = DashboardDTO(
+        active_cycles=new_active,
+        recent_cycles=dto.recent_cycles,
+        recent_activities=dto.recent_activities,
+        projects=dto.projects,
+        total_cost_today=dto.total_cost_today,
+        total_cost_week=dto.total_cost_week,
+        success_rate_7d=dto.success_rate_7d,
+        cycles_completed_7d=dto.cycles_completed_7d,
+        cycles_failed_7d=dto.cycles_failed_7d,
+    )
 
     templates = request.app.state.templates
     return templates.TemplateResponse(

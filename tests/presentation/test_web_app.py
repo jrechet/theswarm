@@ -66,6 +66,27 @@ class TestDashboardRoutes:
         assert r.status_code == 200
         assert "p1" in r.text
 
+    async def test_dashboard_renders_sparklines(self, repos, client):
+        from theswarm.domain.cycles.entities import Cycle
+
+        project_repo, cycle_repo = repos
+        await project_repo.save(Project(id="p1", repo=RepoUrl("o/p1")))
+        now = datetime.now(timezone.utc)
+        await cycle_repo.save(
+            Cycle(
+                id=CycleId("sparkline-1"),
+                project_id="p1",
+                status=CycleStatus.COMPLETED,
+                started_at=now,
+                completed_at=now,
+                total_cost_usd=0.42,
+            ),
+        )
+
+        r = await client.get("/")
+        assert r.status_code == 200
+        assert r.text.count('class="sparkline"') >= 1 or 'class="sparkline sparkline-empty"' in r.text
+
 
 # ── Projects ─────────────────────────────────────────────────────
 
@@ -118,6 +139,15 @@ class TestProjectRoutes:
         assert r.status_code == 200
         assert "del-me" not in r.text
 
+    async def test_project_detail_has_demos_link(self, repos, client):
+        project_repo, _ = repos
+        await project_repo.save(Project(id="with-demos", repo=RepoUrl("o/with-demos")))
+
+        r = await client.get("/projects/with-demos")
+        assert r.status_code == 200
+        assert "/demos/?project=with-demos" in r.text
+        assert 'data-testid="project-demos-link"' in r.text
+
 
 # ── Cycles ───────────────────────────────────────────────────────
 
@@ -161,6 +191,40 @@ class TestCycleRoutes:
         assert r.status_code == 200
         assert "running" in r.text.lower() or "pending" in r.text.lower()
 
+    async def test_cycle_timeline_shows_duration(self, repos, client):
+        from datetime import timedelta
+        from theswarm.domain.cycles.entities import Cycle, PhaseExecution
+        from theswarm.domain.cycles.value_objects import PhaseStatus
+
+        _, cycle_repo = repos
+        started = datetime(2026, 4, 17, 10, 0, 0, tzinfo=timezone.utc)
+        phase = PhaseExecution(
+            phase="morning",
+            agent="po",
+            started_at=started,
+            completed_at=started + timedelta(seconds=90),
+            status=PhaseStatus.COMPLETED,
+            tokens_used=1234,
+            cost_usd=0.05,
+            summary="Selected 3 stories",
+        )
+        cycle = Cycle(
+            id=CycleId("timeline-abc"),
+            project_id="p1",
+            status=CycleStatus.COMPLETED,
+            started_at=started,
+            completed_at=started + timedelta(seconds=120),
+            phases=(phase,),
+        )
+        await cycle_repo.save(cycle)
+
+        r = await client.get("/cycles/timeline-abc")
+        assert r.status_code == 200
+        assert 'data-testid="cycle-timeline"' in r.text
+        assert "timeline-bar-fill" in r.text
+        assert "1.5" in r.text  # 90 seconds → 1.5 min
+        assert "10:00:00" in r.text  # phase start time
+
 
 # ── Health ───────────────────────────────────────────────────────
 
@@ -173,6 +237,93 @@ class TestHealthRoutes:
         assert data["status"] == "ok"
         assert "uptime_seconds" in data
         assert data["checks"]["database"] == "connected"
+
+    async def test_health_warn_when_bridge_missing_integrations(self, app, client):
+        class _Bridge:
+            _swarm_po_github = None
+            _swarm_po_chat = None
+            _swarm_po_vcs_map: dict = {}
+
+        app.state.gateway_bridge = _Bridge()
+        try:
+            r = await client.get("/health")
+            assert r.status_code == 200
+            data = r.json()
+            assert data["status"] == "warn"
+            assert data["checks"]["github"] == "missing"
+            assert data["checks"]["chat"] == "missing"
+        finally:
+            del app.state.gateway_bridge
+
+    async def test_health_error_when_db_fails(self, app, client):
+        class _BrokenRepo:
+            async def list_all(self):
+                raise RuntimeError("db down")
+
+        original = app.state.project_repo
+        app.state.project_repo = _BrokenRepo()
+        try:
+            r = await client.get("/health")
+            assert r.status_code == 503
+            data = r.json()
+            assert data["status"] == "error"
+            assert data["checks"]["database"] == "error"
+        finally:
+            app.state.project_repo = original
+
+    async def test_health_derive_status_tri_state(self):
+        from theswarm.presentation.web.routes.health import _derive_status
+
+        assert _derive_status({"db": "connected", "sse": "ok"}) == "ok"
+        assert _derive_status({"db": "connected", "github": "missing"}) == "warn"
+        assert _derive_status({"db": "error", "github": "missing"}) == "error"
+
+
+class TestMetricsRoute:
+    async def test_metrics_exposes_prometheus_format(self, client):
+        r = await client.get("/metrics")
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("text/plain")
+        body = r.text
+        assert "# TYPE theswarm_uptime_seconds gauge" in body
+        assert "theswarm_projects_total" in body
+        assert 'theswarm_cycles{status="running"}' in body
+        assert "theswarm_cycle_cost_usd_sum" in body
+        assert "theswarm_cycle_tokens_sum" in body
+
+    async def test_metrics_counts_projects_and_cycles(self, repos, client):
+        project_repo, cycle_repo = repos
+        await project_repo.save(Project(id="m1", repo=RepoUrl("o/m1")))
+        await project_repo.save(Project(id="m2", repo=RepoUrl("o/m2")))
+
+        now = datetime.now(timezone.utc)
+        from theswarm.domain.cycles.entities import Cycle
+        await cycle_repo.save(
+            Cycle(
+                id=CycleId("running-1"),
+                project_id="m1",
+                status=CycleStatus.RUNNING,
+                started_at=now,
+                total_cost_usd=1.25,
+            ),
+        )
+        await cycle_repo.save(
+            Cycle(
+                id=CycleId("done-1"),
+                project_id="m1",
+                status=CycleStatus.COMPLETED,
+                started_at=now,
+                completed_at=now,
+                total_cost_usd=0.75,
+            ),
+        )
+
+        r = await client.get("/metrics")
+        body = r.text
+        assert "theswarm_projects_total 2" in body
+        assert 'theswarm_cycles{status="running"} 1' in body
+        assert 'theswarm_cycles{status="completed"} 1' in body
+        assert "theswarm_cycle_cost_usd_sum 2.0000" in body
 
 
 # ── API ──────────────────────────────────────────────────────────

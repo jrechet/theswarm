@@ -29,6 +29,10 @@ def create_parser() -> argparse.ArgumentParser:
     rc_p = sub.add_parser("run-cycle", help="Run an agent cycle from CLI")
     rc_p.add_argument("--dev-only", action="store_true", help="Run only the Dev agent")
     rc_p.add_argument("--techlead-only", action="store_true", help="Run only the TechLead agent")
+    rc_p.add_argument("--autonomous", "-a", action="store_true",
+                       help="Run cycles in a loop until all stories are resolved")
+    rc_p.add_argument("--max-cycles", type=int, default=10,
+                       help="Max cycles in autonomous mode (default: 10)")
 
     # dashboard (TUI)
     sub.add_parser("dashboard", help="Open the terminal dashboard")
@@ -37,6 +41,10 @@ def create_parser() -> argparse.ArgumentParser:
     cycle_p = sub.add_parser("cycle", help="Run a development cycle for a registered project")
     cycle_p.add_argument("--project", required=True, help="Project ID")
     cycle_p.add_argument("--triggered-by", default="cli", help="Trigger source")
+    cycle_p.add_argument("--autonomous", "-a", action="store_true",
+                          help="Run cycles until all stories are resolved")
+    cycle_p.add_argument("--max-cycles", type=int, default=10,
+                          help="Max cycles in autonomous mode (default: 10)")
 
     # projects
     proj_p = sub.add_parser("projects", help="Manage projects")
@@ -69,6 +77,39 @@ def create_parser() -> argparse.ArgumentParser:
 
     sched_sub.add_parser("list", help="List enabled schedules")
 
+    # agents-doc
+    agents_doc_p = sub.add_parser("agents-doc", help="Generate AGENTS.md from agent introspection")
+    agents_doc_p.add_argument("-o", "--output", default="", help="Write to file instead of stdout")
+
+    # record-demos
+    rd_p = sub.add_parser("record-demos", help="Record Playwright demo videos for all features")
+    rd_p.add_argument("--output-dir", default="",
+                       help="Output directory (default: ~/.swarm-data/artifacts/feature-demos)")
+    rd_p.add_argument("--headed", action="store_true", help="Run browser in headed mode")
+
+    # dev-seed
+    seed_p = sub.add_parser(
+        "dev-seed", help="Populate the local DB with synthetic demo data (for dashboard dev)"
+    )
+    seed_p.add_argument("--count", type=int, default=3, help="Number of demo reports to insert")
+    seed_p.add_argument("--reset", action="store_true", help="Delete existing seed rows first")
+    seed_p.add_argument("--db", default="", help="SQLite database path")
+
+    # artifact-gc
+    gc_p = sub.add_parser(
+        "artifact-gc",
+        help="Delete on-disk artifact directories with no matching report row",
+    )
+    gc_p.add_argument(
+        "--artifact-dir", default="",
+        help="Artifact base dir (default: ~/.swarm-data/artifacts)",
+    )
+    gc_p.add_argument("--db", default="", help="SQLite database path")
+    gc_p.add_argument(
+        "--apply", action="store_true",
+        help="Actually delete (default: dry-run)",
+    )
+
     # status
     sub.add_parser("status", help="Show system status")
 
@@ -97,9 +138,9 @@ async def cmd_serve(args: argparse.Namespace) -> None:
 
 
 async def cmd_run_cycle(args: argparse.Namespace) -> None:
-    """Run a legacy agent cycle (full, dev-only, or techlead-only)."""
+    """Run a legacy agent cycle (full, dev-only, techlead-only, or autonomous)."""
     from theswarm.config import CycleConfig
-    from theswarm.cycle import run_daily_cycle, run_dev_only, run_techlead_only
+    from theswarm.cycle import run_autonomous, run_daily_cycle, run_dev_only, run_techlead_only
 
     logging.basicConfig(
         level=logging.INFO,
@@ -119,20 +160,30 @@ async def cmd_run_cycle(args: argparse.Namespace) -> None:
             sys.exit(1)
         print(f"Mode: DEV ONLY — repo: {config.github_repo}")
         result = await run_dev_only(config)
+        print(f"\nDone. Total cost: ${result['cost_usd']:.2f}")
     elif args.techlead_only:
         if not config.is_real_mode:
             print("ERROR: --techlead-only requires SWARM_GITHUB_REPO")
             sys.exit(1)
         print(f"Mode: TECHLEAD ONLY — repo: {config.github_repo}")
         result = await run_techlead_only(config)
+        print(f"\nDone. Total cost: ${result['cost_usd']:.2f}")
+    elif args.autonomous:
+        if not config.is_real_mode:
+            print("ERROR: --autonomous requires SWARM_GITHUB_REPO")
+            sys.exit(1)
+        print(f"Mode: AUTONOMOUS — repo: {config.github_repo}")
+        result = await run_autonomous(config, max_cycles=args.max_cycles)
+        print(f"\nDone. Cycles: {result['cycles_run']}, "
+              f"Total cost: ${result['total_cost_usd']:.2f}, "
+              f"Project done: {result['project_done']}")
     else:
         if not config.is_real_mode:
             print("ERROR: run-cycle requires SWARM_GITHUB_REPO")
             sys.exit(1)
         print(f"Mode: DAILY CYCLE — repo: {config.github_repo}")
         result = await run_daily_cycle(config)
-
-    print(f"\nDone. Total cost: ${result['cost_usd']:.2f}")
+        print(f"\nDone. Total cost: ${result['cost_usd']:.2f}")
 
 
 async def cmd_dashboard(args: argparse.Namespace) -> None:
@@ -307,6 +358,123 @@ async def cmd_validate(args: argparse.Namespace) -> None:
         print("Validation passed.")
 
 
+async def cmd_agents_doc(args: argparse.Namespace) -> None:
+    """Generate AGENTS.md from agent module introspection."""
+    from theswarm.tools.agents_md import generate_agents_md
+
+    content = generate_agents_md()
+    if args.output:
+        with open(args.output, "w") as f:
+            f.write(content)
+        print(f"Wrote AGENTS.md to {args.output}")
+    else:
+        print(content)
+
+
+async def cmd_record_demos(args: argparse.Namespace) -> None:
+    """Record Playwright demo videos for all platform features."""
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+
+    output_dir = args.output_dir
+    if not output_dir:
+        output_dir = os.path.join(os.path.expanduser("~"), ".swarm-data", "artifacts", "feature-demos")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Run E2E tests with video recording into a temp dir
+    with tempfile.TemporaryDirectory() as tmp:
+        video_dir = os.path.join(tmp, "videos")
+        cmd = [
+            sys.executable, "-m", "pytest",
+            "tests/e2e/test_features_e2e.py",
+            "-v", "--video=on",
+            f"--video-dir={video_dir}",
+        ]
+        if args.headed:
+            cmd.append("--headed")
+
+        print(f"Recording demos → {output_dir}")
+        print(f"Running: {' '.join(cmd)}\n")
+
+        result = subprocess.run(cmd, cwd=os.getcwd())
+
+        if result.returncode != 0:
+            print(f"\nTests exited with code {result.returncode} (videos may still be usable)")
+
+        # Copy .webm files to output dir
+        if os.path.isdir(video_dir):
+            videos = [f for f in os.listdir(video_dir) if f.endswith(".webm")]
+            for v in sorted(videos):
+                src = os.path.join(video_dir, v)
+                dst = os.path.join(output_dir, v)
+                shutil.copy2(src, dst)
+                print(f"  Saved: {dst}")
+            print(f"\n{len(videos)} video(s) saved to {output_dir}")
+        else:
+            # Playwright may nest videos under test-results/
+            found = 0
+            for root, _dirs, files in os.walk(tmp):
+                for f in files:
+                    if f.endswith(".webm"):
+                        src = os.path.join(root, f)
+                        dst = os.path.join(output_dir, f)
+                        shutil.copy2(src, dst)
+                        print(f"  Saved: {dst}")
+                        found += 1
+            if found:
+                print(f"\n{found} video(s) saved to {output_dir}")
+            else:
+                print("\nNo video files found. Ensure playwright is installed: uv run playwright install")
+
+    print(f"\nView demos at: http://localhost:8091/features/")
+
+
+async def cmd_dev_seed(args: argparse.Namespace) -> None:
+    """Populate the local DB with synthetic demo reports."""
+    from theswarm.application.services.dev_seed import seed_dev_data
+    from theswarm.infrastructure.persistence.sqlite_repos import SQLiteProjectRepository
+
+    conn = await _init_db(args.db)
+    project_repo = SQLiteProjectRepository(conn)
+
+    result = await seed_dev_data(
+        conn, project_repo, count=args.count, reset=args.reset,
+    )
+    if result.project_created:
+        print("Created seed project: dev-seed-demo")
+    if result.reports_deleted:
+        print(f"Deleted {result.reports_deleted} existing seed rows")
+    print(f"Inserted {result.reports_inserted} demo reports")
+    print("Open http://localhost:8091/demos/ after `theswarm serve`")
+
+
+async def cmd_artifact_gc(args: argparse.Namespace) -> None:
+    """Remove on-disk artifact dirs that no longer match any report row."""
+    import os
+
+    from theswarm.application.services.artifact_gc import gc_artifacts
+
+    artifact_dir = args.artifact_dir or os.path.join(
+        os.path.expanduser("~"), ".swarm-data", "artifacts",
+    )
+    conn = await _init_db(args.db)
+
+    result = await gc_artifacts(conn, artifact_dir, dry_run=not args.apply)
+
+    mode = "DELETED" if result.deleted else "DRY-RUN"
+    print(f"[{mode}] Artifact GC — base: {artifact_dir}")
+    print(f"  Scanned dirs:      {result.scanned_dirs}")
+    print(f"  Live cycle IDs:    {result.live_cycle_ids}")
+    print(f"  Orphaned dirs:     {len(result.orphaned_dirs)}")
+    print(f"  Bytes reclaimed:   {result.bytes_reclaimed:,}")
+    for name in result.orphaned_dirs:
+        print(f"    - {name}")
+    if not result.deleted and result.orphaned_dirs:
+        print("\nRun again with --apply to actually delete.")
+
+
 async def cmd_status(args: argparse.Namespace) -> None:
     from theswarm.application.queries.get_dashboard import GetDashboardQuery
     from theswarm.infrastructure.persistence.sqlite_repos import (
@@ -339,8 +507,12 @@ def main(argv: list[str] | None = None) -> None:
         "cycle": cmd_cycle,
         "projects": cmd_projects,
         "schedule": cmd_schedule,
+        "agents-doc": cmd_agents_doc,
+        "record-demos": cmd_record_demos,
         "validate": cmd_validate,
         "status": cmd_status,
+        "dev-seed": cmd_dev_seed,
+        "artifact-gc": cmd_artifact_gc,
     }
 
     handler = cmd_map.get(args.command)

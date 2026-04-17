@@ -1,0 +1,32 @@
+<div class="stat-row">
+  <div class="stat">
+    <span class="stat-value">{{ dashboard.projects | length }}</span>
+    <span class="stat-label">Projects</span>
+  </div>
+  <div class="stat">
+    <span class="stat-value">{{ dashboard.active_cycles | length }}</span>
+    <span class="stat-label">Active Cycles</span>
+  </div>
+  <div class="stat">
+    <span class="stat-value">${{ "%.2f" | format(dashboard.total_cost_today) }}</span>
+    <span class="stat-label">Cost Today</span>
+  </div>
+  <div class="stat">
+    <span class="stat-value">${{ "%.2f" | format(dashboard.total_cost_week) }}</span>
+    <span class="stat-label">Cost 7d</span>
+    {% with values=dashboard.cost_per_day_7d, stroke="#58a6ff", fill="rgba(88,166,255,0.18)" %}
+      {% include "partials/_sparkline.html" %}
+    {% endwith %}
+  </div>
+  <div class="stat">
+    <span class="stat-value {{ 'stat-success' if dashboard.success_rate_7d >= 80 else ('stat-warning' if dashboard.success_rate_7d >= 50 else 'stat-danger') }}">{{ "%.0f" | format(dashboard.success_rate_7d) }}%</span>
+    <span class="stat-label">Success Rate 7d</span>
+  </div>
+  <div class="stat">
+    <span class="stat-value">{{ dashboard.cycles_completed_7d + dashboard.cycles_failed_7d }}</span>
+    <span class="stat-label">Cycles 7d</span>
+    {% with values=dashboard.cycles_per_day_7d, stroke="#9f7aea", fill="rgba(159,122,234,0.18)" %}
+      {% include "partials/_sparkline.html" %}
+    {% endwith %}
+  </div>
+</div>

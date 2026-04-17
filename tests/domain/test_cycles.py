@@ -121,6 +121,23 @@ class TestPhaseExecution:
         assert p2.status == PhaseStatus.FAILED
         assert p2.summary == "Claude API timeout"
 
+    def test_duration_seconds_completed(self):
+        from datetime import timedelta
+        start = datetime(2026, 4, 17, 10, 0, 0, tzinfo=timezone.utc)
+        end = start + timedelta(seconds=42.5)
+        p = PhaseExecution(
+            phase="dev", agent="dev",
+            started_at=start, completed_at=end,
+        )
+        assert p.duration_seconds == 42.5
+
+    def test_duration_seconds_still_running_is_nonnegative(self):
+        now = datetime.now(timezone.utc)
+        p = PhaseExecution(phase="dev", agent="dev", started_at=now)
+        d = p.duration_seconds
+        assert d is not None
+        assert d >= 0
+
 
 # ── Cycle ────────────────────────────────────────────────────────
 

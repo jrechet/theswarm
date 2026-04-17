@@ -200,6 +200,38 @@ class TestGetDashboardQuery:
         assert dto.active_cycles[0].status == "running"
         assert dto.total_cost_today == pytest.approx(1.50)
 
+    async def test_cost_and_cycles_per_day_7d(self, project_repo, cycle_repo):
+        from datetime import timedelta
+        await project_repo.save(Project(id="p1", repo=RepoUrl("o/p1")))
+
+        now = datetime.now(timezone.utc)
+        two_days_ago = now - timedelta(days=2)
+        await cycle_repo.save(
+            Cycle(
+                id=CycleId("c-today"), project_id="p1",
+                status=CycleStatus.COMPLETED, started_at=now,
+                total_cost_usd=0.50,
+            ),
+        )
+        await cycle_repo.save(
+            Cycle(
+                id=CycleId("c-twodays"), project_id="p1",
+                status=CycleStatus.COMPLETED, started_at=two_days_ago,
+                total_cost_usd=1.00,
+            ),
+        )
+
+        q = GetDashboardQuery(project_repo, cycle_repo)
+        dto = await q.execute()
+
+        assert len(dto.cost_per_day_7d) == 7
+        assert len(dto.cycles_per_day_7d) == 7
+        # index 6 = today, index 4 = 2 days ago
+        assert dto.cost_per_day_7d[6] == pytest.approx(0.50)
+        assert dto.cost_per_day_7d[4] == pytest.approx(1.00)
+        assert dto.cycles_per_day_7d[6] == 1
+        assert dto.cycles_per_day_7d[4] == 1
+
 
 # ── GetSchedule ──────────────────────────────────────────────────
 

@@ -1,0 +1,42 @@
+{% if cycle.phases %}
+{% set cycle_duration = cycle.duration_seconds or 0 %}
+<div class="timeline" data-testid="cycle-timeline">
+  {% for p in cycle.phases %}
+  {% set phase_duration = p.duration_seconds or 0 %}
+  {% set ratio = (phase_duration / cycle_duration * 100) if cycle_duration > 0 else 0 %}
+  <div class="timeline-item timeline-{{ p.status }}" data-phase="{{ p.phase }}">
+    <div class="timeline-header">
+      <span class="timeline-agent">{{ p.agent }}</span>
+      <span class="badge badge-{{ p.status }} badge-sm">{{ p.status }}</span>
+      {% if p.status == 'running' %}
+      <span class="pulse-dot"></span>
+      {% endif %}
+    </div>
+    <div class="timeline-phase">{{ p.phase }}</div>
+    {% if p.summary %}
+    <div class="timeline-summary">{{ p.summary }}</div>
+    {% endif %}
+    <div class="timeline-bar" aria-hidden="true">
+      <span class="timeline-bar-fill" style="width: {{ '%.1f' | format(ratio) }}%"></span>
+    </div>
+    <div class="timeline-meta">
+      <span class="timeline-time">
+        {{ p.start_time_display }}
+        &middot;
+        {% if phase_duration >= 60 %}
+          {{ "%.1f" | format(phase_duration / 60) }}&thinsp;min
+        {% else %}
+          {{ "%.1f" | format(phase_duration) }}&thinsp;s
+        {% endif %}
+      </span>
+      <span class="timeline-tokens">
+        {{ "{:,}".format(p.tokens_used) }} tokens,
+        ${{ "%.3f" | format(p.cost_usd) }}
+      </span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">No phases recorded yet.</p>
+{% endif %}

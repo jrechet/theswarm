@@ -1,61 +1,171 @@
-// SSE client with reconnect and activity feed rendering
+// SSE client with reconnect, activity feed rendering, and HTMX-driven dashboard updates
 (function() {
-  const statusEl = document.getElementById('sse-status');
-  const feedEl = document.getElementById('activity-feed');
-  let reconnectDelay = 1000;
-  let es = null;
+  var statusEl = document.getElementById('sse-status');
+  var feedEl = document.getElementById('activity-feed');
+  var base = document.documentElement.dataset.base || '';
+  var reconnectDelay = 1000;
+  var es = null;
+
+  // Throttle HTMX refreshes to avoid hammering the server
+  var _refreshTimers = {};
+  function throttledRefresh(target, url, delay) {
+    if (_refreshTimers[target]) return;
+    _refreshTimers[target] = setTimeout(function() {
+      delete _refreshTimers[target];
+      var el = document.getElementById(target);
+      if (el && typeof htmx !== 'undefined') {
+        htmx.ajax('GET', url, {target: '#' + target, swap: 'innerHTML'});
+      }
+    }, delay || 500);
+  }
+
+  // Refresh dashboard sections based on event type
+  function onDomainEvent(data) {
+    var type = data.type || '';
+
+    switch (type) {
+      case 'CycleStarted':
+      case 'CycleCompleted':
+      case 'CycleFailed':
+        // Full refresh: stats + both cycle tables
+        throttledRefresh('stats-container', base + '/fragments/stats', 300);
+        throttledRefresh('active-cycles-container', base + '/fragments/active-cycles', 300);
+        throttledRefresh('recent-cycles-container', base + '/fragments/recent-cycles', 300);
+        break;
+
+      case 'PhaseChanged':
+        // Phase change: update active cycles + stats
+        throttledRefresh('stats-container', base + '/fragments/stats', 800);
+        throttledRefresh('active-cycles-container', base + '/fragments/active-cycles', 500);
+        break;
+
+      case 'AgentActivity':
+        // Activity: update active cycles (cost may have changed)
+        throttledRefresh('active-cycles-container', base + '/fragments/active-cycles', 1000);
+        break;
+    }
+
+    // If on a cycle detail page, refresh that too
+    var detailEl = document.getElementById('cycle-detail');
+    if (detailEl) {
+      var cycleId = detailEl.dataset.cycleId;
+      var eventCycleId = String(data.cycle_id || '');
+      if (cycleId && eventCycleId === cycleId) {
+        throttledRefresh('cycle-overview', base + '/fragments/cycle/' + cycleId + '/overview', 500);
+        throttledRefresh('cycle-phases', base + '/fragments/cycle/' + cycleId + '/phases', 500);
+      }
+    }
+  }
+
+  // Render activity feed item
+  function renderActivityItem(data) {
+    if (!feedEl) return;
+
+    var item = document.createElement('div');
+    item.className = 'activity-item';
+
+    var time = data.occurred_at ? new Date(data.occurred_at).toLocaleTimeString() : '--:--';
+    var agent = data.agent || data.type || '?';
+    var detail = data.detail || data.action || data.phase || data.type || '';
+    var type = data.type || '';
+
+    // Add type-specific styling
+    var typeClass = '';
+    if (type === 'CycleCompleted') typeClass = ' activity-success';
+    else if (type === 'CycleFailed') typeClass = ' activity-danger';
+    else if (type === 'CycleStarted') typeClass = ' activity-accent';
+
+    item.className = 'activity-item' + typeClass;
+    item.innerHTML = [
+      '<span class="activity-time">' + time + '</span>',
+      '<span class="activity-agent">' + escapeHtml(agent) + '</span>',
+      '<span class="activity-detail">' + escapeHtml(detail) + '</span>'
+    ].join('');
+
+    // Remove "waiting" message
+    var empty = feedEl.querySelector('.empty-state');
+    if (empty) empty.remove();
+
+    feedEl.prepend(item);
+
+    // Keep max 100 items
+    while (feedEl.children.length > 100) {
+      feedEl.removeChild(feedEl.lastChild);
+    }
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // Elapsed time updater for running cycles
+  function updateElapsedTimers() {
+    var cells = document.querySelectorAll('.elapsed-cell[data-started]');
+    var now = Date.now();
+    cells.forEach(function(cell) {
+      var started = cell.dataset.started;
+      if (!started) return;
+      var startMs = new Date(started).getTime();
+      if (isNaN(startMs)) return;
+      var secs = Math.max(0, Math.floor((now - startMs) / 1000));
+      if (secs < 60) {
+        cell.textContent = secs + 's';
+      } else {
+        var mins = Math.floor(secs / 60);
+        var remSecs = secs % 60;
+        if (mins < 60) {
+          cell.textContent = mins + 'm ' + remSecs + 's';
+        } else {
+          var hours = Math.floor(mins / 60);
+          var remMins = mins % 60;
+          cell.textContent = hours + 'h ' + remMins + 'm';
+        }
+      }
+    });
+  }
+
+  // Update elapsed timers every second
+  setInterval(updateElapsedTimers, 1000);
 
   function connect() {
-    var base = document.documentElement.dataset.base || '';
     es = new EventSource(base + '/api/events');
 
     es.onopen = function() {
-      if (statusEl) statusEl.textContent = 'Connected';
+      if (statusEl) {
+        statusEl.innerHTML = '<span class="status-dot connected"></span> Live';
+      }
       reconnectDelay = 1000;
+
+      // On reconnect, refresh all sections to catch missed events
+      throttledRefresh('stats-container', base + '/fragments/stats', 100);
+      throttledRefresh('active-cycles-container', base + '/fragments/active-cycles', 100);
+      throttledRefresh('recent-cycles-container', base + '/fragments/recent-cycles', 100);
     };
 
     es.onmessage = function(event) {
-      if (!feedEl) return;
       try {
-        const data = JSON.parse(event.data);
-        const item = document.createElement('div');
-        item.className = 'activity-item';
-
-        const time = new Date(data.occurred_at).toLocaleTimeString();
-        const agent = data.agent || data.type;
-        const detail = data.detail || data.action || data.type;
-
-        item.innerHTML = [
-          '<span class="activity-time">' + time + '</span>',
-          '<span class="activity-agent">' + agent + '</span>',
-          '<span class="activity-detail">' + detail + '</span>'
-        ].join('');
-
-        // Remove "waiting" message
-        const empty = feedEl.querySelector('.empty-state');
-        if (empty) empty.remove();
-
-        feedEl.prepend(item);
-
-        // Keep max 100 items
-        while (feedEl.children.length > 100) {
-          feedEl.removeChild(feedEl.lastChild);
-        }
+        var data = JSON.parse(event.data);
+        renderActivityItem(data);
+        onDomainEvent(data);
       } catch(e) {
-        console.warn('SSE parse error:', e);
+        // Ignore parse errors
       }
     };
 
     es.onerror = function() {
       es.close();
-      if (statusEl) statusEl.textContent = 'Reconnecting...';
+      if (statusEl) {
+        statusEl.innerHTML = '<span class="status-dot reconnecting"></span> Reconnecting...';
+      }
       setTimeout(connect, reconnectDelay);
       reconnectDelay = Math.min(reconnectDelay * 2, 30000);
     };
   }
 
-  // Only connect if we're on a page with the feed
-  if (feedEl || statusEl) {
+  // Only connect if we're on a page that needs it
+  if (feedEl || statusEl || document.getElementById('cycle-detail')) {
     connect();
   }
 })();

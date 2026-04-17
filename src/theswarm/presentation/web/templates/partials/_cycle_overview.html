@@ -1,0 +1,34 @@
+<dl class="detail-list">
+  <dt>Project</dt>
+  <dd><a href="{{ base }}/projects/{{ cycle.project_id }}">{{ cycle.project_id }}</a></dd>
+  <dt>Triggered By</dt>
+  <dd>{{ cycle.triggered_by }}</dd>
+  <dt>Started</dt>
+  <dd>{{ cycle.started_at or "---" }}</dd>
+  <dt>Completed</dt>
+  <dd>{{ cycle.completed_at or "---" }}</dd>
+  <dt>Duration</dt>
+  <dd>
+    {% if cycle.status == 'running' %}
+    <span class="elapsed-cell" data-started="{{ cycle.started_at or '' }}">{{ cycle.duration_display }}</span>
+    {% else %}
+    {{ cycle.duration_display }}
+    {% endif %}
+  </dd>
+  <dt>Total Tokens</dt>
+  <dd>{{ "{:,}".format(cycle.total_tokens) }}</dd>
+  <dt>Total Cost</dt>
+  <dd>${{ "%.2f" | format(cycle.total_cost_usd) }}</dd>
+  <dt>PRs Opened</dt>
+  <dd>{{ cycle.prs_opened | length }}</dd>
+  <dt>PRs Merged</dt>
+  <dd>{{ cycle.prs_merged | length }}</dd>
+</dl>
+{% if cycle.status == 'running' %}
+<div class="progress-section">
+  <div class="progress-bar progress-bar-lg">
+    <div class="progress-bar-fill" style="width: {{ cycle.progress_percent }}%"></div>
+  </div>
+  <span class="progress-label">{{ cycle.current_phase_name or "Starting..." }}</span>
+</div>
+{% endif %}

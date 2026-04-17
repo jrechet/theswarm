@@ -1,4 +1,4 @@
-"""Query: list cycles for a project."""
+"""Query: list cycles for a project (or all recent cycles)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,11 @@ class ListCyclesQuery:
     def __init__(self, cycle_repo: CycleRepository) -> None:
         self._cycle_repo = cycle_repo
 
-    async def execute(self, project_id: str, limit: int = 30) -> list[CycleDTO]:
-        cycles = await self._cycle_repo.list_by_project(project_id, limit=limit)
+    async def execute(self, project_id: str = "", limit: int = 30) -> list[CycleDTO]:
+        if project_id:
+            cycles = await self._cycle_repo.list_by_project(project_id, limit=limit)
+        else:
+            cycles = await self._cycle_repo.list_recent(limit=limit)
         return [
             CycleDTO(
                 id=str(c.id),

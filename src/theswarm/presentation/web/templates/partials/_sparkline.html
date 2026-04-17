@@ -1,0 +1,35 @@
+{# SVG sparkline.
+   Args: values (list[float|int]), width=120, height=32, stroke="#58a6ff"
+#}
+{%- set vs = values or [] -%}
+{%- set w = width | default(120) -%}
+{%- set h = height | default(32) -%}
+{%- set stroke = stroke | default("#58a6ff") -%}
+{%- set fill = fill | default("rgba(88,166,255,0.18)") -%}
+{%- if vs | length > 1 -%}
+{%- set vmax = vs | max -%}
+{%- set vmin = vs | min -%}
+{%- set vrange = (vmax - vmin) if (vmax - vmin) > 0 else 1 -%}
+{%- set step = w / (vs | length - 1) -%}
+<svg class="sparkline" width="{{ w }}" height="{{ h }}" viewBox="0 0 {{ w }} {{ h }}"
+     xmlns="http://www.w3.org/2000/svg" role="img" aria-label="7-day trend"
+     data-testid="sparkline">
+  {%- set pts = [] -%}
+  {%- for v in vs -%}
+    {%- set x = loop.index0 * step -%}
+    {%- set y = h - ((v - vmin) / vrange) * (h - 2) - 1 -%}
+    {%- set _ = pts.append('%.2f,%.2f' | format(x, y)) -%}
+  {%- endfor -%}
+  <polyline fill="none" stroke="{{ stroke }}" stroke-width="1.5"
+            points="{{ pts | join(' ') }}"/>
+  <polygon fill="{{ fill }}" stroke="none"
+           points="0,{{ h }} {{ pts | join(' ') }} {{ w }},{{ h }}"/>
+</svg>
+{%- else -%}
+<svg class="sparkline sparkline-empty" width="{{ w }}" height="{{ h }}"
+     viewBox="0 0 {{ w }} {{ h }}" xmlns="http://www.w3.org/2000/svg"
+     role="img" aria-label="no data" data-testid="sparkline-empty">
+  <line x1="0" y1="{{ h / 2 }}" x2="{{ w }}" y2="{{ h / 2 }}"
+        stroke="var(--text-muted, #8b949e)" stroke-width="1" stroke-dasharray="2,3"/>
+</svg>
+{%- endif -%}

@@ -16,6 +16,27 @@ router = APIRouter()
 _start_time = time.time()
 
 
+# Status values per check:
+#   "connected" / "ok" — healthy
+#   "not_configured"   — expected absence (standalone server, missing optional bot)
+#   "missing"          — optional integration unavailable → warn
+#   "error"            — critical failure → error
+_OK_VALUES = frozenset({"ok", "connected", "not_configured"})
+_WARN_VALUES = frozenset({"missing"})
+_ERROR_VALUES = frozenset({"error"})
+
+
+def _derive_status(checks: dict[str, str]) -> str:
+    values = set(checks.values())
+    if values & _ERROR_VALUES:
+        return "error"
+    if values & _WARN_VALUES:
+        return "warn"
+    if values <= _OK_VALUES:
+        return "ok"
+    return "error"
+
+
 @router.get("/health")
 async def health(request: Request) -> JSONResponse:
     sse_hub = getattr(request.app.state, "sse_hub", None)
@@ -24,7 +45,7 @@ async def health(request: Request) -> JSONResponse:
 
     checks: dict[str, str] = {}
 
-    # DB check
+    # DB check (critical)
     if project_repo is not None:
         try:
             await project_repo.list_all()
@@ -35,10 +56,7 @@ async def health(request: Request) -> JSONResponse:
         checks["database"] = "not_configured"
 
     # SSE check
-    if sse_hub is not None:
-        checks["sse"] = "ok"
-    else:
-        checks["sse"] = "not_configured"
+    checks["sse"] = "ok" if sse_hub is not None else "not_configured"
 
     # GitHub + Chat checks (only when running unified server)
     if bridge is not None:
@@ -47,9 +65,7 @@ async def health(request: Request) -> JSONResponse:
         checks["github"] = "connected" if has_github else "missing"
         checks["chat"] = "connected" if has_chat else "missing"
 
-    all_ok = all(v in ("ok", "connected", "not_configured")
-                 for k, v in checks.items())
-    status = "ok" if all_ok else "degraded"
+    status = _derive_status(checks)
 
     result = {
         "status": status,
@@ -62,4 +78,5 @@ async def health(request: Request) -> JSONResponse:
         vcs_map = getattr(bridge, "_swarm_po_vcs_map", {})
         result["repos"] = list(vcs_map.keys())
 
-    return JSONResponse(result)
+    http_status = 503 if status == "error" else 200
+    return JSONResponse(result, status_code=http_status)

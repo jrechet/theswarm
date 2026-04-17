@@ -31,6 +31,8 @@ uv run python -m theswarm projects list                        # list registered
 uv run python -m theswarm projects add my-app owner/my-app     # register a project
 uv run python -m theswarm projects remove my-app               # remove a project
 uv run python -m theswarm cycle --project my-app               # run cycle for registered project
+uv run python -m theswarm cycle --project my-app --autonomous  # run until all stories done
+uv run python -m theswarm cycle --project my-app -a --max-cycles 5  # autonomous with cap
 uv run python -m theswarm schedule set my-app "0 8 * * 1-5"   # set cron schedule
 uv run python -m theswarm schedule list                        # list schedules
 uv run python -m theswarm validate                             # check env vars
@@ -39,6 +41,7 @@ uv run python -m theswarm dashboard                            # TUI dashboard
 
 # Legacy cycle modes (require SWARM_GITHUB_REPO env var)
 uv run python -m theswarm --cycle           # full daily cycle
+uv run python -m theswarm --autonomous      # run cycles until all stories resolved
 uv run python -m theswarm --dev-only        # dev agent only
 uv run python -m theswarm --techlead-only   # techlead review only
 
@@ -98,8 +101,14 @@ Each agent is a `StateGraph` compiled graph in `src/theswarm/agents/`. They shar
 2. **TechLead** (breakdown) — splits user stories into `role:dev` + `status:ready` sub-tasks
 3. **Dev loop** (up to 5 iterations) — picks a `status:ready` task, calls Anthropic API to implement, runs tests, opens PR
 4. **TechLead** (review_loop) — reviews PRs via Claude, approves/requests changes, merges approved PRs
-5. **QA** — writes Playwright E2E tests, runs unit + E2E + semgrep security scan, generates demo report
+5. **QA** — writes Playwright E2E tests, runs unit + E2E + semgrep security scan, captures demo screenshots via Playwright, generates demo report with artifacts
 6. **PO** (evening) — validates demo report, writes daily report
+
+**Autonomous mode** (`cycle.py:run_autonomous()`):
+- Loops `run_daily_cycle()` until all user stories are resolved or max_cycles hit
+- After each cycle, checks GitHub for remaining backlog/open PRs
+- Continues past transient failures (rate limits, timeouts)
+- CLI: `--autonomous` / `-a` flag
 
 ### Key components (original, bridged into v2)
 
@@ -107,7 +116,7 @@ Each agent is a `StateGraph` compiled graph in `src/theswarm/agents/`. They shar
 - **`api.py`** — Headless cycle API: `CycleTracker` (in-memory), `run_api_cycle()` (executes real agent pipeline). Dashboard and cycle routes merge both SQLite and tracker data
 - **`gateway/wiring.py`** — Event handlers for Mattermost button callbacks (story approval, ping/pong)
 - **`persona.py`** — NLU-driven DM handler for `@swarm-po` (intent -> action dispatch)
-- **`cycle.py`** — Orchestrates full daily cycle (PO -> TechLead -> Dev -> QA)
+- **`cycle.py`** — Orchestrates full daily cycle (PO -> TechLead -> Dev -> QA) and autonomous multi-cycle loop
 - **`tools/claude.py`** — Anthropic Messages API wrapper (`ClaudeCLI`)
 - **`tools/github.py`** — Async PyGithub wrapper (runs blocking calls in executor)
 - **`tools/git.py`** — Local git CLI operations (clone, branch, commit, push)
@@ -121,6 +130,9 @@ Each agent is a `StateGraph` compiled graph in `src/theswarm/agents/`. They shar
 - **WebhookHandler** — GitHub webhook with HMAC-SHA256 verification
 - **ImprovementEngine** — analyzes cycle reports, generates improvement suggestions
 - **ReportGenerator** — builds DemoReport from Cycle with quality gates
+- **PlaywrightRecorder** — captures screenshots and videos of the running app during QA phase
+- **LocalArtifactStore** — stores demo artifacts on disk at `~/.swarm-data/artifacts/{cycle_id}/`
+- **Artifacts route** — serves stored screenshots/videos at `/artifacts/{path}`
 - **StartupValidator** — fail-fast env var validation (runs at server boot)
 - **GatewayBridge** — thin adapter connecting persona.py and wiring.py to the v2 web app
 
@@ -133,6 +145,11 @@ Issues flow through labels: `status:backlog` → `status:ready` → `status:in-p
 When `SWARM_GITHUB_REPO` is not set, all agents run in stub mode — they log what they would do but make no API calls. Tests use this mode.
 
 ## Environment Variables
+
+Secrets live in `.env` at the project root. Source before running:
+```bash
+set -a && source .env && set +a
+```
 
 | Variable | Purpose |
 |----------|---------|
@@ -172,24 +189,4 @@ Docker Swarm + Traefik on a self-hosted runner. CI runs tests on push/PR, then t
   - `tests/integration/` — cross-layer end-to-end tests
   - `tests/e2e/` — Playwright browser tests (run separately, need running server)
   - `tests/test_*.py` — original agent and tool tests (flat structure)
-- 890+ tests, all passing
-
-## Skill routing
-
-When the user's request matches an available skill, ALWAYS invoke it using the Skill
-tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
-The skill has specialized workflows that produce better results than ad-hoc answers.
-
-Key routing rules:
-- Product ideas, "is this worth building", brainstorming → invoke office-hours
-- Bugs, errors, "why is this broken", 500 errors → invoke investigate
-- Ship, deploy, push, create PR → invoke ship
-- QA, test the site, find bugs → invoke qa
-- Code review, check my diff → invoke review
-- Update docs after shipping → invoke document-release
-- Weekly retro → invoke retro
-- Design system, brand → invoke design-consultation
-- Visual audit, design polish → invoke design-review
-- Architecture review → invoke plan-eng-review
-- Save progress, checkpoint, resume → invoke checkpoint
-- Code quality, health check → invoke health
+- 930+ tests, all passing
