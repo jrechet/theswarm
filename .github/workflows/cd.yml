@@ -112,7 +112,7 @@ jobs:
             echo "Attempt $i/30 - replicas: $REPLICAS"
             if [ "$REPLICAS" = "1/1" ]; then
               HTTP=$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 5 \
-                http://localhost:8091/swarm/health || echo "000")
+                http://localhost:8091/health || echo "000")
               echo "  health: $HTTP"
               if [ "$HTTP" = "200" ]; then
                 echo "TheSwarm is healthy"
