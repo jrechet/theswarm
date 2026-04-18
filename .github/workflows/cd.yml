@@ -109,16 +109,16 @@ jobs:
           OK=0
           for i in $(seq 1 30); do
             REPLICAS=$(docker service ls --filter name=theswarm_theswarm --format '{{.Replicas}}' | head -1)
-            echo "Attempt $i/30 - replicas: $REPLICAS"
-            if [ "$REPLICAS" = "1/1" ]; then
-              HTTP=$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 5 \
-                http://localhost:8091/health || echo "000")
-              echo "  health: $HTTP"
-              if [ "$HTTP" = "200" ]; then
-                echo "TheSwarm is healthy"
-                OK=1
-                break
-              fi
+            CID=$(docker ps -q --filter "label=com.docker.swarm.service.name=theswarm_theswarm" | head -1)
+            HEALTH="unknown"
+            if [ -n "$CID" ]; then
+              HEALTH=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$CID" 2>/dev/null || echo "inspect-failed")
+            fi
+            echo "Attempt $i/30 - replicas: $REPLICAS  health: $HEALTH"
+            if [ "$REPLICAS" = "1/1" ] && [ "$HEALTH" = "healthy" ]; then
+              echo "TheSwarm is healthy"
+              OK=1
+              break
             fi
             sleep 10
           done
