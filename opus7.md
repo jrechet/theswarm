@@ -54,18 +54,20 @@
 
 ## Media inventory
 
-### Committed screenshots (repo root)
+### Current screenshots (refreshed for this session's work)
 
-- [`demo-dashboard.png`](./demo-dashboard.png) — Main dashboard
+- [`demo-dashboard.png`](./demo-dashboard.png) — Dashboard with SVG sparklines under "Cost 7d" and "Cycles 7d" (P3.15)
+- [`demo-demos.png`](./demo-demos.png) — Demos browse with project/since filter form (P2.10) and card thumbnails (P2.12)
+- [`demo-health.png`](./demo-health.png) — `/health` returning `status: "warn"` tri-state when chat integration is missing (P1.9)
+- [`demo-metrics.png`](./demo-metrics.png) — `/metrics` Prometheus text output: uptime, projects, cycles by status, cost/tokens (P3.14)
+
+### Other screenshots (still current, unchanged this session)
+
 - [`dashboard-with-data.png`](./dashboard-with-data.png) — Dashboard populated via `dev-seed`
 - [`demo-projects.png`](./demo-projects.png) — Projects list
 - [`demo-cycles.png`](./demo-cycles.png) — Cycles list
-- [`demo-demos.png`](./demo-demos.png) — Demos browse page (pre-filter)
 - [`demo-features.png`](./demo-features.png) — `/features/` landing
-- [`demo-api-features.png`](./demo-api-features.png) — API docs
-- [`demo-health.png`](./demo-health.png) — `/health` JSON (pre-tristate)
-
-> **Note:** These screenshots were captured before P1.9 (tri-state health), P2.10–2.13 (filters, thumbnails, timeline), and P3.15 (sparklines) landed. Re-capture after running the regenerate steps below.
+- [`demo-api-features.png`](./demo-api-features.png) — API docs surface
 
 ### Regenerate demo videos
 

@@ -301,7 +301,7 @@ class TestHealth:
         response = page.request.get(f"{BASE_URL}/health")
         assert response.ok
         data = response.json()
-        assert data["status"] in ("ok", "degraded")
+        assert data["status"] in ("ok", "warn", "error", "degraded")
         assert data["service"] == "theswarm"
 
     def test_health_uptime(self, server, page: Page):
