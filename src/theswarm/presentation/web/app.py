@@ -10,15 +10,25 @@ from jinja2 import Environment, FileSystemLoader
 
 from theswarm.application.commands.create_project import CreateProjectHandler
 from theswarm.application.commands.delete_project import DeleteProjectHandler
+from theswarm.application.commands.manage_schedule import (
+    DeleteScheduleHandler,
+    DisableScheduleHandler,
+    SetScheduleHandler,
+)
 from theswarm.application.commands.run_cycle import RunCycleHandler
 from theswarm.application.events.bus import EventBus
 from theswarm.application.queries.get_cycle_status import GetCycleStatusQuery
 from theswarm.application.queries.get_dashboard import GetDashboardQuery
 from theswarm.application.queries.get_project import GetProjectQuery
+from theswarm.application.queries.get_schedule import (
+    GetScheduleQuery,
+    ListEnabledSchedulesQuery,
+)
 from theswarm.application.queries.list_cycles import ListCyclesQuery
 from theswarm.application.queries.list_projects import ListProjectsQuery
 from theswarm.domain.cycles.ports import CycleRepository
 from theswarm.domain.projects.ports import ProjectRepository
+from theswarm.domain.scheduling.ports import ScheduleRepository
 from theswarm.application.events.persistence_handlers import (
     ActivityPersistenceHandler,
     CyclePersistenceHandler,
@@ -67,6 +77,7 @@ def create_web_app(
     activity_repo: object | None = None,
     report_repo: object | None = None,
     artifact_store: object | None = None,
+    schedule_repo: ScheduleRepository | None = None,
 ) -> FastAPI:
     """Wire the web dashboard with dependency injection."""
     app = FastAPI(title="TheSwarm Dashboard", docs_url=None, redoc_url=None)
@@ -112,6 +123,15 @@ def create_web_app(
     app.state.create_project_handler = CreateProjectHandler(project_repo)
     app.state.delete_project_handler = DeleteProjectHandler(project_repo)
     app.state.run_cycle_handler = RunCycleHandler(project_repo, cycle_repo, event_bus)
+
+    # Schedule wiring (optional)
+    app.state.schedule_repo = schedule_repo
+    if schedule_repo is not None:
+        app.state.get_schedule_query = GetScheduleQuery(schedule_repo)
+        app.state.list_schedules_query = ListEnabledSchedulesQuery(schedule_repo)
+        app.state.set_schedule_handler = SetScheduleHandler(project_repo, schedule_repo)
+        app.state.disable_schedule_handler = DisableScheduleHandler(schedule_repo)
+        app.state.delete_schedule_handler = DeleteScheduleHandler(schedule_repo)
 
     # Routes
     app.include_router(dashboard.router)

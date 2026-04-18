@@ -106,21 +106,28 @@ jobs:
         run: |
           echo "Waiting for service to stabilise..."
           sleep 15
-          for i in $(seq 1 20); do
-            TASK_STATE=$(docker service ps theswarm_theswarm --format '{{.CurrentState}}' --filter 'desired-state=running' | head -1)
-            echo "Attempt $i/20 - state: $TASK_STATE"
-            if echo "$TASK_STATE" | grep -qi "running"; then
-              echo "TheSwarm is running"
-              break
+          OK=0
+          for i in $(seq 1 30); do
+            REPLICAS=$(docker service ls --filter name=theswarm_theswarm --format '{{.Replicas}}' | head -1)
+            echo "Attempt $i/30 - replicas: $REPLICAS"
+            if [ "$REPLICAS" = "1/1" ]; then
+              HTTP=$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 5 \
+                http://localhost:8091/swarm/health || echo "000")
+              echo "  health: $HTTP"
+              if [ "$HTTP" = "200" ]; then
+                echo "TheSwarm is healthy"
+                OK=1
+                break
+              fi
             fi
-            if [ $i -eq 20 ]; then
-              echo "ERROR: TheSwarm failed to start"
-              docker service ps theswarm_theswarm --no-trunc 2>&1 | head -20
-              docker service logs theswarm_theswarm --tail 50 --no-trunc 2>&1 || true
-              exit 1
-            fi
-            sleep 15
+            sleep 10
           done
+          if [ "$OK" != "1" ]; then
+            echo "ERROR: TheSwarm failed to become healthy"
+            docker service ps theswarm_theswarm --no-trunc 2>&1 | head -20
+            docker service logs theswarm_theswarm --tail 100 --no-trunc 2>&1 || true
+            exit 1
+          fi
 
   redeploy:
     if: inputs.action == 'redeploy'

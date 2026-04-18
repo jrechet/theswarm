@@ -349,8 +349,16 @@ class TestAPIRoutes:
         r = await client.get("/api/dashboard")
         assert r.status_code == 200
         data = r.json()
-        assert data["active_cycles"] == 0
+        assert data["active_cycles"] == []
+        assert data["recent_cycles"] == []
+        assert data["recent_activities"] == []
+        assert data["projects"] == []
         assert data["total_cost_today"] == 0.0
+        assert data["total_cost_week"] == 0.0
+        assert data["success_rate_7d"] == 0.0
+        assert data["cycles_completed_7d"] == 0
+        assert data["cycles_failed_7d"] == 0
+        assert data["counts"] == {"active_cycles": 0, "projects": 0}
 
     async def test_api_cycle_not_found(self, client):
         r = await client.get("/api/cycles/nope")

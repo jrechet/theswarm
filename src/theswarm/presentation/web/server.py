@@ -22,6 +22,7 @@ from theswarm.infrastructure.persistence.sqlite_repos import (
     SQLiteActivityRepository,
     SQLiteCycleRepository,
     SQLiteProjectRepository,
+    SQLiteScheduleRepository,
     init_db,
 )
 from theswarm.presentation.web.app import create_web_app
@@ -463,6 +464,7 @@ async def start_server(
     project_repo = SQLiteProjectRepository(conn)
     cycle_repo = SQLiteCycleRepository(conn)
     activity_repo = SQLiteActivityRepository(conn)
+    schedule_repo = SQLiteScheduleRepository(conn)
     bus = EventBus()
 
     # Report storage
@@ -478,6 +480,7 @@ async def start_server(
         project_repo, cycle_repo, bus,
         base_path=base_path, activity_repo=activity_repo,
         report_repo=report_repo, artifact_store=artifact_store,
+        schedule_repo=schedule_repo,
     )
 
     # Create gateway bridge for Mattermost/persona integration
