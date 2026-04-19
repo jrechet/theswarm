@@ -1,0 +1,47 @@
+name: Write deployment .env
+description: Write .env file from deployment secrets for docker stack deploy
+inputs:
+  mattermost_bot_token:
+    required: true
+  github_token:
+    required: true
+  swarm_po_mattermost_token:
+    required: true
+  swarm_po_github_repo:
+    required: true
+  swarm_po_github_repos:
+    required: true
+  anthropic_api_key:
+    required: true
+  external_url:
+    required: true
+  seq_url:
+    required: true
+  seq_api_key:
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        MATTERMOST_BOT_TOKEN: ${{ inputs.mattermost_bot_token }}
+        BOT_GITHUB_TOKEN: ${{ inputs.github_token }}
+        SWARM_PO_MATTERMOST_TOKEN: ${{ inputs.swarm_po_mattermost_token }}
+        SWARM_PO_GITHUB_REPO: ${{ inputs.swarm_po_github_repo }}
+        SWARM_PO_GITHUB_REPOS: ${{ inputs.swarm_po_github_repos }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        EXTERNAL_URL: ${{ inputs.external_url }}
+        SEQ_URL: ${{ inputs.seq_url }}
+        SEQ_API_KEY: ${{ inputs.seq_api_key }}
+      run: |
+        {
+          echo "MATTERMOST_BOT_TOKEN=$MATTERMOST_BOT_TOKEN"
+          echo "GITHUB_TOKEN=$BOT_GITHUB_TOKEN"
+          echo "SWARM_PO_MATTERMOST_TOKEN=$SWARM_PO_MATTERMOST_TOKEN"
+          echo "SWARM_PO_GITHUB_REPO=$SWARM_PO_GITHUB_REPO"
+          echo "SWARM_PO_GITHUB_REPOS=$SWARM_PO_GITHUB_REPOS"
+          echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"
+          echo "EXTERNAL_URL=$EXTERNAL_URL"
+          echo "SEQ_URL=$SEQ_URL"
+          echo "SEQ_API_KEY=$SEQ_API_KEY"
+        } > .env

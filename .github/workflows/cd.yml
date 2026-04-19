@@ -77,17 +77,17 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Create .env file
-        run: |
-          echo "MATTERMOST_BOT_TOKEN=${{ secrets.MATTERMOST_BOT_TOKEN }}" > .env
-          echo "GITHUB_TOKEN=${{ secrets.BOT_GITHUB_TOKEN }}" >> .env
-          echo "SWARM_PO_MATTERMOST_TOKEN=${{ secrets.SWARM_PO_MATTERMOST_TOKEN }}" >> .env
-          echo "SWARM_PO_GITHUB_REPO=${{ secrets.SWARM_PO_GITHUB_REPO }}" >> .env
-          echo "SWARM_PO_GITHUB_REPOS=${{ secrets.SWARM_PO_GITHUB_REPOS }}" >> .env
-          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> .env
-          echo "EXTERNAL_URL=${{ secrets.EXTERNAL_URL }}" >> .env
-          echo "SEQ_URL=${{ secrets.SEQ_URL }}" >> .env
-          echo "SEQ_API_KEY=${{ secrets.SEQ_API_KEY }}" >> .env
+      - uses: ./.github/actions/write-env
+        with:
+          mattermost_bot_token: ${{ secrets.MATTERMOST_BOT_TOKEN }}
+          github_token: ${{ secrets.BOT_GITHUB_TOKEN }}
+          swarm_po_mattermost_token: ${{ secrets.SWARM_PO_MATTERMOST_TOKEN }}
+          swarm_po_github_repo: ${{ secrets.SWARM_PO_GITHUB_REPO }}
+          swarm_po_github_repos: ${{ secrets.SWARM_PO_GITHUB_REPOS }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          external_url: ${{ secrets.EXTERNAL_URL }}
+          seq_url: ${{ secrets.SEQ_URL }}
+          seq_api_key: ${{ secrets.SEQ_API_KEY }}
       - name: Deploy
         run: |
           export TS_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -123,9 +123,10 @@ jobs:
             sleep 10
           done
           if [ "$OK" != "1" ]; then
-            echo "ERROR: TheSwarm failed to become healthy"
+            echo "ERROR: TheSwarm failed to become healthy — rolling back"
             docker service ps theswarm_theswarm --no-trunc 2>&1 | head -20
             docker service logs theswarm_theswarm --tail 100 --no-trunc 2>&1 || true
+            docker service rollback theswarm_theswarm || echo "rollback command failed"
             exit 1
           fi
 
@@ -141,17 +142,17 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Create .env file
-        run: |
-          echo "MATTERMOST_BOT_TOKEN=${{ secrets.MATTERMOST_BOT_TOKEN }}" > .env
-          echo "GITHUB_TOKEN=${{ secrets.BOT_GITHUB_TOKEN }}" >> .env
-          echo "SWARM_PO_MATTERMOST_TOKEN=${{ secrets.SWARM_PO_MATTERMOST_TOKEN }}" >> .env
-          echo "SWARM_PO_GITHUB_REPO=${{ secrets.SWARM_PO_GITHUB_REPO }}" >> .env
-          echo "SWARM_PO_GITHUB_REPOS=${{ secrets.SWARM_PO_GITHUB_REPOS }}" >> .env
-          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> .env
-          echo "EXTERNAL_URL=${{ secrets.EXTERNAL_URL }}" >> .env
-          echo "SEQ_URL=${{ secrets.SEQ_URL }}" >> .env
-          echo "SEQ_API_KEY=${{ secrets.SEQ_API_KEY }}" >> .env
+      - uses: ./.github/actions/write-env
+        with:
+          mattermost_bot_token: ${{ secrets.MATTERMOST_BOT_TOKEN }}
+          github_token: ${{ secrets.BOT_GITHUB_TOKEN }}
+          swarm_po_mattermost_token: ${{ secrets.SWARM_PO_MATTERMOST_TOKEN }}
+          swarm_po_github_repo: ${{ secrets.SWARM_PO_GITHUB_REPO }}
+          swarm_po_github_repos: ${{ secrets.SWARM_PO_GITHUB_REPOS }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          external_url: ${{ secrets.EXTERNAL_URL }}
+          seq_url: ${{ secrets.SEQ_URL }}
+          seq_api_key: ${{ secrets.SEQ_API_KEY }}
       - name: Redeploy (latest)
         run: |
           export TS_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
