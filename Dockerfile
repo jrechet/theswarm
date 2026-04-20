@@ -13,6 +13,7 @@ RUN uv sync --no-dev --no-install-project
 
 COPY src/ src/
 COPY theswarm.yaml* ./
+COPY docs/ docs/
 RUN uv sync --no-dev
 
 # Stage 2: Runtime image (no uv, no build deps)
@@ -30,6 +31,7 @@ RUN useradd -m -s /bin/bash botuser \
 
 COPY --from=builder --chown=botuser:botuser /app/.venv /app/.venv
 COPY --from=builder --chown=botuser:botuser /app/src /app/src
+COPY --from=builder --chown=botuser:botuser /app/docs /app/docs
 COPY --from=builder --chown=botuser:botuser /app/theswarm.yaml* /app/
 
 USER botuser

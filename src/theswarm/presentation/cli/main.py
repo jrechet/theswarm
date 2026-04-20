@@ -95,6 +95,21 @@ def create_parser() -> argparse.ArgumentParser:
     seed_p.add_argument("--reset", action="store_true", help="Delete existing seed rows first")
     seed_p.add_argument("--db", default="", help="SQLite database path")
 
+    # seed-self
+    ss_p = sub.add_parser(
+        "seed-self",
+        help="Register TheSwarm as a project and seed one demo per sprint (idempotent)",
+    )
+    ss_p.add_argument("--db", default="", help="SQLite database path")
+    ss_p.add_argument(
+        "--video-dir", default="",
+        help="Directory holding sprint-*.webm files (default: repo docs/demos)",
+    )
+    ss_p.add_argument(
+        "--artifacts-dir", default="",
+        help="Artifact base dir (default: ~/.swarm-data/artifacts)",
+    )
+
     # artifact-gc
     gc_p = sub.add_parser(
         "artifact-gc",
@@ -450,6 +465,63 @@ async def cmd_dev_seed(args: argparse.Namespace) -> None:
     print("Open http://localhost:8091/demos/ after `theswarm serve`")
 
 
+async def cmd_seed_self(args: argparse.Namespace) -> None:
+    """Register TheSwarm project and seed one DemoReport per sprint (idempotent)."""
+    import os
+    from pathlib import Path
+
+    from theswarm.application.services.self_seed import seed_self
+    from theswarm.infrastructure.persistence.sqlite_repos import (
+        SQLiteProjectRepository,
+    )
+    from theswarm.infrastructure.recording.report_repo import SQLiteReportRepository
+
+    conn = await _init_db(args.db)
+    project_repo = SQLiteProjectRepository(conn)
+    report_repo = SQLiteReportRepository(conn)
+
+    if args.video_dir:
+        video_source_dir: Path | None = Path(args.video_dir).expanduser()
+    else:
+        # In-container default: docs/ lives at /app/docs; in-repo default: ./docs/demos.
+        container_dir = Path("/app/docs/demos")
+        repo_dir = Path(__file__).resolve().parents[4] / "docs" / "demos"
+        video_source_dir = container_dir if container_dir.is_dir() else repo_dir
+
+    if args.artifacts_dir:
+        artifacts_base_dir: Path | None = Path(args.artifacts_dir).expanduser()
+    else:
+        artifacts_base_dir = Path(
+            os.path.expanduser("~/.swarm-data/artifacts"),
+        )
+    artifacts_base_dir.mkdir(parents=True, exist_ok=True)
+
+    result = await seed_self(
+        project_repo,
+        report_repo,
+        video_source_dir=video_source_dir,
+        artifacts_base_dir=artifacts_base_dir,
+    )
+
+    if result.project_created:
+        print("Created project: theswarm")
+    elif result.project_updated:
+        print("Updated project: theswarm")
+    else:
+        print("Project theswarm already up to date")
+
+    print(f"Reports saved: {len(result.reports_saved)}")
+    for rid in result.reports_saved:
+        print(f"  - {rid}")
+
+    if result.videos_attached:
+        print(f"Videos attached: {len(result.videos_attached)}")
+        for v in result.videos_attached:
+            print(f"  - {v}")
+    else:
+        print("No sprint videos found (expected sprint-*.webm in video-dir)")
+
+
 async def cmd_artifact_gc(args: argparse.Namespace) -> None:
     """Remove on-disk artifact dirs that no longer match any report row."""
     import os
@@ -512,6 +584,7 @@ def main(argv: list[str] | None = None) -> None:
         "validate": cmd_validate,
         "status": cmd_status,
         "dev-seed": cmd_dev_seed,
+        "seed-self": cmd_seed_self,
         "artifact-gc": cmd_artifact_gc,
     }
 

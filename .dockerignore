@@ -18,7 +18,8 @@ coverage.xml
 .env.*
 !.env.example
 tests
-docs
+docs/**
+!docs/demos/**
 *.md
 !README.md
 node_modules

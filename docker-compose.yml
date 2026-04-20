@@ -12,6 +12,7 @@ services:
     volumes:
       - /home/debian/.claude:/home/botuser/.claude:ro
       - /home/debian/.claude.json:/home/botuser/.claude.json:ro
+      - /home/debian/swarm-data:/home/botuser/.swarm-data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8091/health"]
