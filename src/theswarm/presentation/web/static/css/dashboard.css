@@ -35,6 +35,48 @@ body {
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
+/* Form element baseline — dark theme, applies everywhere unless overridden */
+input, select, textarea, button {
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+input[type="text"], input[type="search"], input[type="email"],
+input[type="number"], input[type="url"], input[type="password"],
+input[type="date"], input[type="datetime-local"], input[type="time"],
+select, textarea {
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+input::placeholder, textarea::placeholder { color: var(--text-muted); }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
+button {
+  padding: 0.45rem 0.9rem;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+button:hover { background: var(--border); }
+button[type="submit"], button.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+button[type="submit"]:hover, button.primary:hover { filter: brightness(1.1); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Navigation */
 .topnav {
   display: flex;
@@ -540,6 +582,27 @@ a:hover { text-decoration: underline; }
 .demo-card:hover .demo-card-thumb { opacity: 0.9; transform: scale(1.03); }
 .demo-card-play { position: relative; z-index: 1; }
 .demo-card-meta { position: relative; z-index: 1; }
+
+/* Demos A/B compare bar (F8) — same shell as .demos-filter */
+.demos-compare {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 1rem 0 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: var(--bg-secondary, #161b22);
+  flex-wrap: wrap;
+}
+.demos-compare label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-muted, #8b949e);
+  flex: 1 1 240px;
+}
+.demos-compare input[type="text"] { flex: 1; min-width: 0; }
 
 /* Demos filter bar (P2.10) */
 .demos-filter {
