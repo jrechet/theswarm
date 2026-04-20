@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Replay — Cycle {{ cycle_id[:8] }}{% endblock %}
+
+{% block content %}
+<section class="cycle-replay" data-replay-endpoint="{{ base }}/cycles/{{ cycle_id }}/replay.json">
+  <header class="replay-header">
+    <div>
+      <h1>Cycle Replay</h1>
+      <p class="text-muted">
+        Cycle <code>{{ cycle_id[:12] }}</code>
+        · {{ frame_count }} event{{ '' if frame_count == 1 else 's' }}
+      </p>
+    </div>
+    <div class="replay-actions">
+      <a href="{{ base }}/cycles/{{ cycle_id }}" class="btn btn-ghost">Back to cycle</a>
+    </div>
+  </header>
+
+  {% if frame_count == 0 %}
+  <div class="empty-state">
+    <h2>No replay data available</h2>
+    <p class="text-muted">
+      Replay recording started in Sprint D V2. Earlier cycles have no captured events.
+    </p>
+  </div>
+  {% else %}
+
+  <div class="replay-scrubber">
+    <div class="replay-controls">
+      <button type="button" class="btn btn-primary" data-replay-play>▶ Play</button>
+      <button type="button" class="btn btn-ghost" data-replay-pause hidden>⏸ Pause</button>
+      <button type="button" class="btn btn-ghost" data-replay-reset>⟲ Reset</button>
+      <label class="replay-speed">
+        Speed
+        <select data-replay-speed>
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="5">5×</option>
+          <option value="10">10×</option>
+        </select>
+      </label>
+      <span class="replay-time" data-replay-time>0.00s / {{ (total_ms / 1000) | round(2) }}s</span>
+    </div>
+    <input
+      type="range"
+      class="replay-range"
+      min="0"
+      max="{{ frame_count - 1 if frame_count > 0 else 0 }}"
+      value="0"
+      step="1"
+      data-replay-range
+      {% if frame_count <= 1 %}disabled{% endif %}
+    />
+  </div>
+
+  <div class="replay-body">
+    <aside class="replay-event-list" data-replay-event-list>
+      {% for f in frames %}
+      <div class="replay-event-item" data-replay-index="{{ f.index }}">
+        <span class="replay-event-index">{{ f.index + 1 }}</span>
+        <span class="replay-event-type">{{ f.event_type }}</span>
+        <span class="replay-event-offset">+{{ (f.offset_ms / 1000) | round(2) }}s</span>
+      </div>
+      {% endfor %}
+    </aside>
+    <div class="replay-event-detail">
+      <h3 data-replay-detail-title>Select an event</h3>
+      <pre data-replay-detail-payload class="replay-payload">—</pre>
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+<script id="replay-frames-data" type="application/json">{{ frames | tojson }}</script>
+<script src="{{ base }}/static/js/replay.js" defer></script>
+{% endblock %}

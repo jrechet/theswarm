@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ project.id }} memory — TheSwarm{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ project.id }} — memory</h1>
+  <div class="header-actions">
+    <a href="{{ base }}/projects/{{ project.id }}" class="btn btn-secondary">← Back to project</a>
+  </div>
+</div>
+
+<div class="card memory-viewer" data-testid="memory-viewer">
+  <form method="GET" class="memory-filters">
+    <label for="memory-category">Category</label>
+    <select id="memory-category" name="category" data-testid="memory-category-filter">
+      <option value="">All</option>
+      {% for c in categories %}
+      <option value="{{ c }}"{% if category == c %} selected{% endif %}>{{ c }}</option>
+      {% endfor %}
+    </select>
+    <label for="memory-agent">Agent</label>
+    <input id="memory-agent" name="agent" type="text" value="{{ agent }}"
+           placeholder="po, techlead, dev, qa, improver"
+           data-testid="memory-agent-filter">
+    <button type="submit" class="btn btn-secondary">Apply</button>
+  </form>
+
+  <div class="memory-search-row">
+    <label for="memory-search" class="sr-only">Search</label>
+    <input id="memory-search" type="search" placeholder="Search memory…"
+           data-testid="memory-search" autocomplete="off">
+    <span class="memory-count">
+      <span data-memory-visible>{{ entries|length }}</span>
+      / {{ entries|length }} entries
+    </span>
+  </div>
+
+  {% if entries %}
+  <ul class="memory-list" data-testid="memory-list" data-page-size="50">
+    {% for e in entries %}
+    <li class="memory-item" data-memory-item
+        data-category="{{ e.category }}"
+        data-agent="{{ e.agent }}"
+        data-text="{{ e.content|lower }}">
+      <header class="memory-item-head">
+        <span class="badge memory-cat memory-cat-{{ e.category }}">{{ e.category }}</span>
+        <span class="memory-agent">{{ e.agent or "—" }}</span>
+        {% if e.is_global %}
+        <span class="badge badge-subtle">global</span>
+        {% endif %}
+        <time class="memory-date" datetime="{{ e.created_at.isoformat() }}">
+          {{ e.created_at.strftime("%Y-%m-%d") }}
+        </time>
+      </header>
+      <p class="memory-content">{{ e.content }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+  <div class="memory-pagination" data-testid="memory-pagination">
+    <button type="button" class="btn btn-ghost" data-memory-prev disabled>← Prev</button>
+    <span class="memory-page-label">
+      Page <span data-memory-page>1</span> / <span data-memory-pages>1</span>
+    </span>
+    <button type="button" class="btn btn-ghost" data-memory-next>Next →</button>
+  </div>
+  {% else %}
+  <p class="empty-state">No memory entries yet. Learnings will appear here after the retrospective phase.</p>
+  {% endif %}
+</div>
+
+<script src="{{ base }}/static/js/memory-viewer.js" defer></script>
+{% endblock %}

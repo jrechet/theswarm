@@ -37,7 +37,7 @@ class LocalArtifactStore:
         if not filename:
             filename = "artifact"
 
-        ext = _extension_for_type(artifact.type)
+        ext = _extension_for_type(artifact.type, artifact.mime_type)
         filepath = dir_path / f"{filename}{ext}"
 
         # Avoid overwriting
@@ -82,7 +82,19 @@ class LocalArtifactStore:
         return artifacts
 
 
-def _extension_for_type(art_type: ArtifactType) -> str:
+def _extension_for_type(art_type: ArtifactType, mime_type: str = "") -> str:
+    # Honour an explicit mime on the artifact so we can distinguish e.g.
+    # a JPEG thumbnail or GIF preview from the default PNG/webm.
+    mime_overrides = {
+        "image/jpeg": ".jpg",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+        "image/png": ".png",
+        "video/mp4": ".mp4",
+        "video/webm": ".webm",
+    }
+    if mime_type and mime_type in mime_overrides:
+        return mime_overrides[mime_type]
     return {
         ArtifactType.SCREENSHOT: ".png",
         ArtifactType.VIDEO: ".webm",

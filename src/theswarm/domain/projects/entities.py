@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
 from theswarm.domain.projects.value_objects import (
@@ -10,6 +10,15 @@ from theswarm.domain.projects.value_objects import (
     RepoUrl,
     TicketSourceType,
 )
+
+_EFFORT_VALUES = frozenset({"low", "medium", "high"})
+
+_DEFAULT_MODELS: dict[str, str] = {
+    "po": "sonnet",
+    "techlead": "sonnet",
+    "dev": "sonnet",
+    "qa": "haiku",
+}
 
 
 @dataclass(frozen=True)
@@ -21,6 +30,27 @@ class ProjectConfig:
     token_budget_techlead: int = 600_000
     token_budget_dev: int = 1_000_000
     token_budget_qa: int = 300_000
+    # Sprint B — dashboard-driven controls
+    effort: str = "medium"  # low | medium | high
+    models: dict[str, str] = field(default_factory=lambda: dict(_DEFAULT_MODELS))
+    daily_cost_cap_usd: float = 0.0  # 0 = no cap
+    daily_tokens_cap: int = 0
+    monthly_cost_cap_usd: float = 0.0
+    paused: bool = False
+    # Sprint C — live preview iframe
+    preview_url_template: str = ""
+
+    def __post_init__(self) -> None:
+        if self.effort not in _EFFORT_VALUES:
+            raise ValueError(
+                f"effort must be one of {sorted(_EFFORT_VALUES)}, got {self.effort!r}",
+            )
+        if self.daily_cost_cap_usd < 0:
+            raise ValueError("daily_cost_cap_usd must be >= 0")
+        if self.daily_tokens_cap < 0:
+            raise ValueError("daily_tokens_cap must be >= 0")
+        if self.monthly_cost_cap_usd < 0:
+            raise ValueError("monthly_cost_cap_usd must be >= 0")
 
     @property
     def token_budgets(self) -> dict[str, int]:
@@ -69,3 +99,7 @@ class Project:
             config=self.config,
             created_at=self.created_at,
         )
+
+    def with_config(self, config: ProjectConfig) -> Project:
+        """Return a new Project with its config replaced."""
+        return replace(self, config=config)

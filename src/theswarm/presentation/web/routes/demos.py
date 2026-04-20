@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Form, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+
+from theswarm.domain.reporting.events import (
+    StoryApproved,
+    StoryCommented,
+    StoryRejected,
+)
 
 router = APIRouter(prefix="/demos", tags=["demos"])
+public_router = APIRouter(tags=["demos-public"])
 
 
 def _parse_since(since: str | None) -> datetime | None:
@@ -68,6 +75,82 @@ async def browse_demos(
     )
 
 
+async def _render_player(
+    request: Request,
+    report,
+    *,
+    is_public: bool,
+) -> HTMLResponse:
+    templates = request.app.state.templates
+    report_repo = getattr(request.app.state, "report_repo", None)
+    slides = _build_slides(report)
+
+    prev_demo = None
+    next_demo = None
+    if report_repo is not None and not is_public:
+        project_reports = await report_repo.list_by_project(
+            report.project_id, limit=50,
+        )
+        for i, r in enumerate(project_reports):
+            if r.id == report.id:
+                if i > 0:
+                    next_demo = project_reports[i - 1]
+                if i < len(project_reports) - 1:
+                    prev_demo = project_reports[i + 1]
+                break
+
+    return templates.TemplateResponse(
+        "demo_player.html",
+        {
+            "request": request,
+            "report": report,
+            "slides": slides,
+            "slide_count": len(slides),
+            "prev_demo": prev_demo,
+            "next_demo": next_demo,
+            "is_public": is_public,
+        },
+    )
+
+
+@router.get("/compare")
+async def compare_demos(
+    request: Request,
+    a: str = Query(..., description="Report ID for panel A"),
+    b: str = Query(..., description="Report ID for panel B"),
+) -> HTMLResponse:
+    """A/B comparator — two demos side-by-side with synced playback."""
+    templates = request.app.state.templates
+    report_repo = getattr(request.app.state, "report_repo", None)
+
+    if report_repo is None:
+        return templates.TemplateResponse(
+            "demo_not_found.html",
+            {"request": request, "report_id": f"{a} vs {b}"},
+            status_code=404,
+        )
+
+    report_a = await report_repo.get(a)
+    report_b = await report_repo.get(b)
+
+    if report_a is None or report_b is None:
+        missing = a if report_a is None else b
+        return templates.TemplateResponse(
+            "demo_not_found.html",
+            {"request": request, "report_id": missing},
+            status_code=404,
+        )
+
+    return templates.TemplateResponse(
+        "demos_compare.html",
+        {
+            "request": request,
+            "report_a": report_a,
+            "report_b": report_b,
+        },
+    )
+
+
 @router.get("/{report_id}/play")
 async def play_demo(request: Request, report_id: str) -> HTMLResponse:
     """Full-screen demo player for a single report."""
@@ -85,35 +168,178 @@ async def play_demo(request: Request, report_id: str) -> HTMLResponse:
             status_code=404,
         )
 
-    # Build ordered slide data for the player
-    slides = _build_slides(report)
+    return await _render_player(request, report, is_public=False)
 
-    # Get adjacent demos for prev/next navigation
-    prev_demo = None
-    next_demo = None
+
+@public_router.get("/d/{short}")
+async def play_public_demo(request: Request, short: str) -> HTMLResponse:
+    """Read-only public demo player resolved by short slug."""
+    templates = request.app.state.templates
+    report_repo = getattr(request.app.state, "report_repo", None)
+
+    match = None
     if report_repo is not None:
-        project_reports = await report_repo.list_by_project(
-            report.project_id, limit=50,
-        )
-        for i, r in enumerate(project_reports):
-            if r.id == report_id:
-                if i > 0:
-                    next_demo = project_reports[i - 1]  # newer
-                if i < len(project_reports) - 1:
-                    prev_demo = project_reports[i + 1]  # older
+        short_norm = short.lower()
+        recent = await report_repo.list_recent(limit=500)
+        for r in recent:
+            if r.public_slug == short_norm:
+                match = r
                 break
 
-    return templates.TemplateResponse(
-        "demo_player.html",
-        {
-            "request": request,
-            "report": report,
-            "slides": slides,
-            "slide_count": len(slides),
-            "prev_demo": prev_demo,
-            "next_demo": next_demo,
-        },
+    if match is None:
+        return templates.TemplateResponse(
+            "demo_not_found.html",
+            {"request": request, "report_id": short},
+            status_code=404,
+        )
+
+    return await _render_player(request, match, is_public=True)
+
+
+async def _resolve_story_pr(report_repo, report_id: str, ticket_id: str):
+    """Return (report, story) or raise HTTPException(404)."""
+    report = await report_repo.get(report_id) if report_repo is not None else None
+    if report is None:
+        raise HTTPException(status_code=404, detail="report not found")
+    story = next((s for s in report.stories if s.ticket_id == ticket_id), None)
+    if story is None:
+        raise HTTPException(status_code=404, detail="story not found")
+    return report, story
+
+
+async def _record_action(db, report_id: str, ticket_id: str, action: str, actor: str) -> None:
+    """Insert a row into story_actions; raise HTTPException(409) if already recorded."""
+    if db is None:
+        return
+    cursor = await db.execute(
+        "SELECT 1 FROM story_actions WHERE report_id = ? AND ticket_id = ? AND action = ?",
+        (report_id, ticket_id, action),
     )
+    row = await cursor.fetchone()
+    if row:
+        raise HTTPException(status_code=409, detail=f"already {action}d")
+    await db.execute(
+        "INSERT INTO story_actions (report_id, ticket_id, action, actor, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (report_id, ticket_id, action, actor, datetime.now(timezone.utc).isoformat()),
+    )
+    await db.commit()
+
+
+def _resolve_vcs(request: Request, report):
+    factory = getattr(request.app.state, "vcs_factory", None)
+    if factory is None:
+        return None
+    project_repo = getattr(request.app.state, "project_repo", None)
+    return factory, project_repo
+
+
+@router.post("/{report_id}/stories/{ticket_id}/approve")
+async def approve_story(
+    request: Request,
+    report_id: str,
+    ticket_id: str,
+    actor: str = Form(default="dashboard-user"),
+) -> JSONResponse:
+    report_repo = getattr(request.app.state, "report_repo", None)
+    db = getattr(request.app.state, "db", None)
+    event_bus = getattr(request.app.state, "event_bus", None)
+    report, story = await _resolve_story_pr(report_repo, report_id, ticket_id)
+
+    await _record_action(db, report_id, ticket_id, "approve", actor)
+
+    if story.pr_number:
+        factory = getattr(request.app.state, "vcs_factory", None)
+        project_repo = getattr(request.app.state, "project_repo", None)
+        if factory is not None and project_repo is not None:
+            project = await project_repo.get(report.project_id)
+            if project is not None:
+                vcs = factory(str(project.repo))
+                await vcs.submit_review(story.pr_number, f"Approved by {actor}", "APPROVE")
+                await vcs.merge_pr(story.pr_number)
+
+    if event_bus is not None:
+        await event_bus.publish(
+            StoryApproved(report_id=report_id, ticket_id=ticket_id, user=actor),
+        )
+
+    return JSONResponse({"ok": True, "action": "approve"})
+
+
+@router.post("/{report_id}/stories/{ticket_id}/reject")
+async def reject_story(
+    request: Request,
+    report_id: str,
+    ticket_id: str,
+    actor: str = Form(default="dashboard-user"),
+    comment: str = Form(default=""),
+) -> JSONResponse:
+    report_repo = getattr(request.app.state, "report_repo", None)
+    db = getattr(request.app.state, "db", None)
+    event_bus = getattr(request.app.state, "event_bus", None)
+    report, story = await _resolve_story_pr(report_repo, report_id, ticket_id)
+
+    await _record_action(db, report_id, ticket_id, "reject", actor)
+
+    if story.pr_number:
+        factory = getattr(request.app.state, "vcs_factory", None)
+        project_repo = getattr(request.app.state, "project_repo", None)
+        if factory is not None and project_repo is not None:
+            project = await project_repo.get(report.project_id)
+            if project is not None:
+                vcs = factory(str(project.repo))
+                body = comment or f"Rejected by {actor}"
+                await vcs.submit_review(story.pr_number, body, "REQUEST_CHANGES")
+                if hasattr(vcs, "close_pr"):
+                    await vcs.close_pr(story.pr_number)
+
+    if event_bus is not None:
+        await event_bus.publish(
+            StoryRejected(
+                report_id=report_id, ticket_id=ticket_id, user=actor, comment=comment,
+            ),
+        )
+
+    return JSONResponse({"ok": True, "action": "reject"})
+
+
+@router.post("/{report_id}/stories/{ticket_id}/comment")
+async def comment_story(
+    request: Request,
+    report_id: str,
+    ticket_id: str,
+    actor: str = Form(default="dashboard-user"),
+    comment: str = Form(default=""),
+) -> JSONResponse:
+    if not comment.strip():
+        raise HTTPException(status_code=400, detail="comment required")
+
+    report_repo = getattr(request.app.state, "report_repo", None)
+    event_bus = getattr(request.app.state, "event_bus", None)
+    report, story = await _resolve_story_pr(report_repo, report_id, ticket_id)
+
+    if story.pr_number:
+        factory = getattr(request.app.state, "vcs_factory", None)
+        project_repo = getattr(request.app.state, "project_repo", None)
+        if factory is not None and project_repo is not None:
+            project = await project_repo.get(report.project_id)
+            if project is not None:
+                vcs = factory(str(project.repo))
+                if hasattr(vcs, "create_pr_comment"):
+                    await vcs.create_pr_comment(story.pr_number, f"**{actor}:** {comment}")
+                else:
+                    await vcs.submit_review(
+                        story.pr_number, f"**{actor}:** {comment}", "COMMENT",
+                    )
+
+    if event_bus is not None:
+        await event_bus.publish(
+            StoryCommented(
+                report_id=report_id, ticket_id=ticket_id, user=actor, comment=comment,
+            ),
+        )
+
+    return JSONResponse({"ok": True, "action": "comment"})
 
 
 def _build_slides(report) -> list[dict]:

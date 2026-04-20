@@ -1,0 +1,19 @@
+{# Toast template for new-demo notifications.
+   Cloned at runtime by sse.js on a DemoReady event.
+   Placeholders (data-field attributes) are filled in by the client.
+#}
+<template id="demo-toast-tpl">
+  <div class="demo-toast" role="status" aria-live="polite">
+    <div class="demo-toast-thumb" data-field="thumbnail" hidden>
+      <img alt="" />
+    </div>
+    <div class="demo-toast-body">
+      <div class="demo-toast-kicker">🎬 New demo ready</div>
+      <div class="demo-toast-title" data-field="title"></div>
+      <div class="demo-toast-actions">
+        <a class="demo-toast-play" data-field="play" href="#">▶ Play</a>
+        <button type="button" class="demo-toast-dismiss" aria-label="Dismiss">✕</button>
+      </div>
+    </div>
+  </div>
+</template>

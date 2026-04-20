@@ -204,3 +204,57 @@ class TestCronScheduler:
         await scheduler.start()  # No-op
         assert scheduler.running
         await scheduler.stop()
+
+    async def test_paused_project_skipped(self):
+        from theswarm.domain.projects.entities import Project, ProjectConfig
+        from theswarm.domain.projects.value_objects import RepoUrl
+
+        schedule = Schedule(
+            id=1,
+            project_id="proj-paused",
+            cron=CronExpression("* * * * *"),
+            next_run=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        )
+        repo = AsyncMock()
+        repo.list_enabled.return_value = [schedule]
+        handler = AsyncMock()
+
+        project_repo = AsyncMock()
+        project_repo.get.return_value = Project(
+            id="proj-paused",
+            repo=RepoUrl("o/r"),
+            config=ProjectConfig(paused=True),
+        )
+
+        scheduler = CronScheduler(repo, handler, project_repo=project_repo)
+        await scheduler.tick_once()
+
+        handler.handle.assert_not_called()
+        repo.save.assert_not_called()
+
+    async def test_unpaused_project_triggers(self):
+        from theswarm.domain.projects.entities import Project, ProjectConfig
+        from theswarm.domain.projects.value_objects import RepoUrl
+
+        schedule = Schedule(
+            id=1,
+            project_id="proj-ok",
+            cron=CronExpression("* * * * *"),
+            next_run=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        )
+        repo = AsyncMock()
+        repo.list_enabled.return_value = [schedule]
+        handler = AsyncMock()
+        handler.handle.return_value = "cycle-xyz"
+
+        project_repo = AsyncMock()
+        project_repo.get.return_value = Project(
+            id="proj-ok",
+            repo=RepoUrl("o/r"),
+            config=ProjectConfig(paused=False),
+        )
+
+        scheduler = CronScheduler(repo, handler, project_repo=project_repo)
+        await scheduler.tick_once()
+
+        handler.handle.assert_called_once()

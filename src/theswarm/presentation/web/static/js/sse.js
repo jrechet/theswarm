@@ -43,6 +43,13 @@
         // Activity: update active cycles (cost may have changed)
         throttledRefresh('active-cycles-container', base + '/fragments/active-cycles', 1000);
         break;
+
+      case 'DemoReady':
+        showDemoToast(data);
+        if (typeof window.__swarmShowDemoNotification === 'function') {
+          try { window.__swarmShowDemoNotification(data); } catch (e) {}
+        }
+        break;
     }
 
     // If on a cycle detail page, refresh that too
@@ -53,6 +60,10 @@
       if (cycleId && eventCycleId === cycleId) {
         throttledRefresh('cycle-overview', base + '/fragments/cycle/' + cycleId + '/overview', 500);
         throttledRefresh('cycle-phases', base + '/fragments/cycle/' + cycleId + '/phases', 500);
+        throttledRefresh('cycle-timeline', base + '/fragments/cycle/' + cycleId + '/timeline', 500);
+        if (type === 'AgentThought' || type === 'AgentStep' || type === 'AgentActivity') {
+          throttledRefresh('cycle-thoughts', base + '/fragments/cycle/' + cycleId + '/thoughts', 800);
+        }
       }
     }
   }
@@ -98,6 +109,46 @@
     var div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  // Show a new-demo toast (cloned from #demo-toast-tpl)
+  var _demoToastSeen = {};
+  function showDemoToast(data) {
+    var host = document.getElementById('demo-toast-host');
+    var tpl = document.getElementById('demo-toast-tpl');
+    if (!host || !tpl) return;
+
+    var key = data.report_id || data.event_id;
+    if (key && _demoToastSeen[key]) return;
+    if (key) _demoToastSeen[key] = true;
+
+    var node = tpl.content.firstElementChild.cloneNode(true);
+
+    var titleEl = node.querySelector('[data-field="title"]');
+    if (titleEl) titleEl.textContent = data.title || 'New demo ready';
+
+    var playEl = node.querySelector('[data-field="play"]');
+    if (playEl && data.play_url) playEl.setAttribute('href', data.play_url);
+
+    var thumbWrap = node.querySelector('[data-field="thumbnail"]');
+    if (thumbWrap && data.thumbnail_url) {
+      var img = thumbWrap.querySelector('img');
+      if (img) img.setAttribute('src', data.thumbnail_url);
+      thumbWrap.hidden = false;
+    }
+
+    var dismiss = node.querySelector('.demo-toast-dismiss');
+    function remove() {
+      node.classList.add('demo-toast-leaving');
+      setTimeout(function() {
+        if (node.parentNode) node.parentNode.removeChild(node);
+      }, 250);
+    }
+    if (dismiss) dismiss.addEventListener('click', remove);
+    setTimeout(remove, 20000);
+
+    host.appendChild(node);
+    requestAnimationFrame(function() { node.classList.add('demo-toast-entered'); });
   }
 
   // Elapsed time updater for running cycles

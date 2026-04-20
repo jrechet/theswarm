@@ -98,6 +98,13 @@ class TestProjectConfig:
         assert c.max_daily_stories == 3
         assert c.token_budget_po == 300_000
         assert c.token_budget_dev == 1_000_000
+        # Sprint B additions
+        assert c.effort == "medium"
+        assert c.daily_cost_cap_usd == 0.0
+        assert c.daily_tokens_cap == 0
+        assert c.monthly_cost_cap_usd == 0.0
+        assert c.paused is False
+        assert c.models == {"po": "sonnet", "techlead": "sonnet", "dev": "sonnet", "qa": "haiku"}
 
     def test_token_budgets_dict(self):
         c = ProjectConfig(token_budget_po=100, token_budget_dev=200)
@@ -106,6 +113,18 @@ class TestProjectConfig:
         assert budgets["dev"] == 200
         assert budgets["techlead"] == 600_000
         assert budgets["qa"] == 300_000
+
+    def test_invalid_effort_rejected(self):
+        with pytest.raises(ValueError, match="effort must be one of"):
+            ProjectConfig(effort="extreme")
+
+    def test_negative_caps_rejected(self):
+        with pytest.raises(ValueError, match="daily_cost_cap_usd"):
+            ProjectConfig(daily_cost_cap_usd=-1)
+        with pytest.raises(ValueError, match="daily_tokens_cap"):
+            ProjectConfig(daily_tokens_cap=-1)
+        with pytest.raises(ValueError, match="monthly_cost_cap_usd"):
+            ProjectConfig(monthly_cost_cap_usd=-1)
 
 
 # ── Project ──────────────────────────────────────────────────────

@@ -21,6 +21,13 @@ class ProjectDTO:
     source_dir: str
     max_daily_stories: int
     created_at: str
+    # Sprint B controls
+    effort: str = "medium"
+    models: dict = field(default_factory=dict)
+    daily_cost_cap_usd: float = 0.0
+    daily_tokens_cap: int = 0
+    monthly_cost_cap_usd: float = 0.0
+    paused: bool = False
 
 
 @dataclass(frozen=True)

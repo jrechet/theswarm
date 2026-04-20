@@ -21,6 +21,7 @@ from theswarm.application.services.startup_validator import StartupValidator
 from theswarm.infrastructure.persistence.sqlite_repos import (
     SQLiteActivityRepository,
     SQLiteCycleRepository,
+    SQLiteMemoryStore,
     SQLiteProjectRepository,
     SQLiteScheduleRepository,
     init_db,
@@ -474,13 +475,32 @@ async def start_server(
     report_repo = SQLiteReportRepository(conn)
     artifact_store = LocalArtifactStore(base_dir=artifact_dir) if artifact_dir else LocalArtifactStore()
 
+    # Sprint B C3 — secret vault (lazy key load)
+    from theswarm.infrastructure.persistence.secret_vault import SqliteSecretVault
+    secret_vault = SqliteSecretVault(conn)
+
+    # Sprint D V2 — replay event store
+    from theswarm.infrastructure.persistence.cycle_event_store import SQLiteCycleEventStore
+    cycle_event_store = SQLiteCycleEventStore(conn)
+
+    # Sprint E M1 / M2 — memory store for the viewer and retrospective phase
+    memory_store = SQLiteMemoryStore(conn)
+
     # Create v2 web app
     base_path = os.getenv("BASE_PATH", "")
+    def _vcs_factory(repo: str):
+        from theswarm.tools.github import GitHubClient
+        return GitHubClient(repo_name=repo)
+
     app = create_web_app(
         project_repo, cycle_repo, bus,
         base_path=base_path, activity_repo=activity_repo,
         report_repo=report_repo, artifact_store=artifact_store,
         schedule_repo=schedule_repo,
+        secret_vault=secret_vault, db=conn,
+        vcs_factory=_vcs_factory,
+        cycle_event_store=cycle_event_store,
+        memory_store=memory_store,
     )
 
     # Create gateway bridge for Mattermost/persona integration
@@ -528,6 +548,11 @@ async def start_server(
         log.info("Swarm PO: ready (repos=%s, default=%s)", github_repos, default_repo)
     else:
         log.info("Swarm PO: disabled")
+
+    # ── Wire demo notifications (F1c) ────────────────────────────
+    from theswarm.gateway.wiring import wire_demo_notifications
+    notify_user_id = os.getenv("SWARM_DEMO_NOTIFY_USER_ID", "")
+    wire_demo_notifications(bus, swarm_po_chat, notify_user_id)
 
     # ── Mattermost callback route ────────────────────────────────
     from theswarm_common.models import AgentEvent
@@ -622,6 +647,15 @@ async def start_server(
     # ── Start WS listener ────────────────────────────────────────
     if swarm_po_chat:
         asyncio.create_task(swarm_po_chat.start_websocket())
+
+    # ── Sprint F M3: memory compaction loop ──────────────────────
+    from theswarm.application.services.memory_compaction import (
+        MemoryCompactionService,
+        run_compaction_loop,
+    )
+    compaction_service = MemoryCompactionService(memory_store, project_repo)
+    app.state.memory_compaction_service = compaction_service
+    asyncio.create_task(run_compaction_loop(compaction_service))
 
     # ── Start uvicorn ────────────────────────────────────────────
     config = uvicorn.Config(app, host=host, port=port, log_level="info")

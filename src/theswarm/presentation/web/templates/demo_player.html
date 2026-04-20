@@ -23,17 +23,25 @@
       <span class="player-title-sep">/</span>
       <span class="text-muted">{{ report.created_at.strftime('%b %d, %Y') }}</span>
     </div>
+    {% if is_public %}
+    <div class="player-public-badge" title="Read-only public share">Public</div>
+    {% endif %}
     <div class="player-controls-top">
-      {% if prev_demo %}
+      {% if not is_public and prev_demo %}
       <a href="{{ base }}/demos/{{ prev_demo.id }}/play" class="player-nav-btn" title="Previous demo">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
       </a>
       {% endif %}
-      {% if next_demo %}
+      {% if not is_public and next_demo %}
       <a href="{{ base }}/demos/{{ next_demo.id }}/play" class="player-nav-btn" title="Next demo">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       </a>
       {% endif %}
+      <div class="player-speed-group" role="group" aria-label="Playback speed">
+        <button type="button" class="player-speed-btn" data-speed="0.5" title="0.5× playback">0.5×</button>
+        <button type="button" class="player-speed-btn is-active" data-speed="1" title="1× playback">1×</button>
+        <button type="button" class="player-speed-btn" data-speed="2" title="2× playback">2×</button>
+      </div>
       <button class="player-nav-btn" id="btn-fullscreen" title="Toggle fullscreen">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
@@ -127,6 +135,32 @@
             <pre class="slide-diff-hunk">{{ dh.hunk }}</pre>
           </div>
           {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if not is_public %}
+        <div class="slide-story-actions" data-story-actions data-ticket="{{ slide.story.ticket_id }}">
+          <form class="story-action-form"
+                method="post"
+                action="{{ base }}/demos/{{ report.id }}/stories/{{ slide.story.ticket_id }}/approve"
+                data-action="approve">
+            <button type="submit" class="btn btn-success">Approve</button>
+          </form>
+          <form class="story-action-form"
+                method="post"
+                action="{{ base }}/demos/{{ report.id }}/stories/{{ slide.story.ticket_id }}/reject"
+                data-action="reject">
+            <input type="text" name="comment" placeholder="Reason (optional)" class="story-action-input">
+            <button type="submit" class="btn btn-danger">Reject</button>
+          </form>
+          <form class="story-action-form"
+                method="post"
+                action="{{ base }}/demos/{{ report.id }}/stories/{{ slide.story.ticket_id }}/comment"
+                data-action="comment">
+            <input type="text" name="comment" placeholder="Add comment" class="story-action-input" required>
+            <button type="submit" class="btn btn-ghost">Comment</button>
+          </form>
+          <span class="story-action-status" data-status-for="{{ slide.story.ticket_id }}"></span>
         </div>
         {% endif %}
       </div>

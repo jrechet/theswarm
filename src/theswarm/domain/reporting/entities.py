@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -12,6 +13,8 @@ from theswarm.domain.reporting.value_objects import (
     QualityGate,
     QualityStatus,
 )
+
+PUBLIC_SLUG_LENGTH = 8
 
 
 @dataclass(frozen=True)
@@ -64,6 +67,10 @@ class DemoReport:
     @property
     def all_gates_pass(self) -> bool:
         return all(g.status != QualityStatus.FAIL for g in self.quality_gates)
+
+    @property
+    def public_slug(self) -> str:
+        return hashlib.sha256(self.id.encode()).hexdigest()[:PUBLIC_SLUG_LENGTH]
 
     @property
     def screenshot_count(self) -> int:

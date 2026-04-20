@@ -34,6 +34,29 @@ class AgentActivity(DomainEvent):
 
 
 @dataclass(frozen=True)
+class AgentThought(DomainEvent):
+    """Sprint D V3 — an agent's reasoning step (narrative/thinking text)."""
+
+    cycle_id: CycleId = field(default_factory=CycleId.generate)
+    project_id: str = ""
+    agent: str = ""
+    thought: str = ""
+    phase: str = ""
+
+
+@dataclass(frozen=True)
+class AgentStep(DomainEvent):
+    """Sprint D V3 — a discrete action the agent is taking (tool call, stage)."""
+
+    cycle_id: CycleId = field(default_factory=CycleId.generate)
+    project_id: str = ""
+    agent: str = ""
+    step: str = ""
+    detail: str = ""
+    phase: str = ""
+
+
+@dataclass(frozen=True)
 class CycleCompleted(DomainEvent):
     cycle_id: CycleId = field(default_factory=CycleId.generate)
     project_id: str = ""
@@ -57,3 +80,11 @@ class BudgetExceeded(DomainEvent):
     role: str = ""
     used: int = 0
     limit: int = 0
+
+
+@dataclass(frozen=True)
+class CycleBlocked(DomainEvent):
+    """A cycle could not start because a cap was hit or the project is paused."""
+
+    project_id: str = ""
+    reason: str = ""

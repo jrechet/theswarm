@@ -56,6 +56,9 @@ class AgentState(TypedDict, total=False):
     issue_stats: dict
     demo_report: dict | None
     demo_artifacts: list  # list of (Artifact, bytes) tuples from screenshot capture
+    story_preview_urls: dict  # F2 — {pr_number: {"before": url_or_none, "after": url}}
+    story_artifacts: dict  # F2 — {pr_number: {"before": [...], "after": [...]}}
+    story_videos: dict  # F3 — {pr_number: (Artifact, bytes)}
     # PO-specific
     daily_plan: str
     daily_report: str

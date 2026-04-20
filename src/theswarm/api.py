@@ -105,6 +105,82 @@ def get_cycle_tracker() -> CycleTracker:
     return _tracker
 
 
+async def _emit_demo_ready(
+    *,
+    event_bus: object,
+    report_repo: object | None,
+    base_path: str,
+    cycle_id: str,
+    repo: str,
+    result: dict[str, Any],
+) -> None:
+    """Build a DemoReport from the cycle result and publish DemoReady.
+
+    Tolerates a missing report_repo (logs a warning and still publishes the
+    event so the UI toast fires, using a transient report id).
+    """
+    try:
+        from theswarm.application.services.report_generator import ReportGenerator
+        from theswarm.domain.cycles.entities import Cycle
+        from theswarm.domain.cycles.value_objects import CycleId, CycleStatus
+        from theswarm.domain.reporting.events import DemoReady
+
+        cycle = Cycle(
+            id=CycleId(cycle_id),
+            project_id=repo,
+            status=CycleStatus.COMPLETED,
+            total_cost_usd=result.get("cost_usd", 0.0),
+            prs_opened=tuple(
+                p.get("number", 0) if isinstance(p, dict) else int(p)
+                for p in result.get("prs", [])
+                if p is not None
+            ),
+            prs_merged=tuple(
+                r.get("pr_number", 0)
+                for r in result.get("reviews", [])
+                if isinstance(r, dict) and r.get("decision") == "APPROVE"
+            ),
+        )
+
+        thumb_rel_preview = ""
+        demo_dict = result.get("demo_report") or {}
+        if isinstance(demo_dict, dict):
+            thumb_rel_preview = demo_dict.get("thumbnail_path", "") or ""
+
+        report = ReportGenerator().generate(cycle, thumbnail_rel_path=thumb_rel_preview)
+
+        if report_repo is not None:
+            try:
+                await report_repo.save(report)
+            except Exception:
+                log.exception("Failed to save DemoReport for cycle %s", cycle_id)
+        else:
+            log.warning(
+                "report_repo is None; publishing DemoReady without persistence (cycle=%s)",
+                cycle_id,
+            )
+
+        prefix = base_path.rstrip("/")
+        play_url = f"{prefix}/demos/{report.id}/play"
+        title = f"{repo} — {datetime.now().strftime('%Y-%m-%d')}"
+
+        # F4 — surface the generated JPEG thumbnail (or first screenshot) so
+        # the SSE toast and Mattermost DM can show a preview image.
+        thumb_rel = thumb_rel_preview or report.thumbnail_path or ""
+        thumbnail_url = f"{prefix}/artifacts/{thumb_rel}" if thumb_rel else ""
+
+        await event_bus.publish(DemoReady(
+            cycle_id=CycleId(cycle_id),
+            project_id=repo,
+            report_id=report.id,
+            play_url=play_url,
+            title=title,
+            thumbnail_url=thumbnail_url,
+        ))
+    except Exception:
+        log.exception("Failed to emit DemoReady for cycle %s", cycle_id)
+
+
 async def send_callback(url: str, payload: dict) -> None:
     """POST cycle result to a callback URL."""
     try:
@@ -129,6 +205,11 @@ async def run_api_cycle(
     callback_url: str,
     allowed_repos: list[str],
     event_bus: object | None = None,
+    report_repo: object | None = None,
+    base_path: str = "",
+    project_repo: object | None = None,
+    cycle_repo: object | None = None,
+    project_id: str = "",
 ) -> None:
     """Execute a cycle initiated via the API."""
     from theswarm.cycle import run_daily_cycle
@@ -144,6 +225,33 @@ async def run_api_cycle(
             completed_at=datetime.now().isoformat(timespec="seconds"),
         )
         return
+
+    # Sprint B C4 — budget/pause gate.
+    if project_repo is not None and cycle_repo is not None and project_id:
+        try:
+            from theswarm.application.services.budget_guard import (
+                BudgetGuard,
+                CycleBlocked as BudgetCycleBlocked,
+            )
+            project = await project_repo.get(project_id)
+            if project is not None:
+                guard = BudgetGuard(cycle_repo)
+                try:
+                    await guard.check(project)
+                except BudgetCycleBlocked as e:
+                    tracker.update_status(
+                        cycle_id, CycleStatus.FAILED,
+                        error=f"blocked: {e.reason}",
+                        completed_at=datetime.now().isoformat(timespec="seconds"),
+                    )
+                    if event_bus is not None:
+                        from theswarm.domain.cycles.events import CycleBlocked as BlockedEvent
+                        await event_bus.publish(
+                            BlockedEvent(project_id=project_id, reason=e.reason),
+                        )
+                    return
+        except Exception:
+            log.exception("BudgetGuard check failed (letting cycle proceed)")
 
     tracker.update_status(
         cycle_id, CycleStatus.RUNNING,
@@ -172,6 +280,26 @@ async def run_api_cycle(
 
     try:
         cycle_config = CycleConfig(github_repo=repo)
+
+        # Sprint B C2 — apply project effort profile if we have a registered project
+        if project_repo is not None and project_id:
+            try:
+                from theswarm.application.services.effort_profile import EffortProfile
+                project = await project_repo.get(project_id)
+                if project is not None:
+                    resolved = EffortProfile.apply(project.config)
+                    cycle_config.max_dev_retries = resolved.max_retries
+                    phase_to_cats = {
+                        "po": ("planning", "retrospective", "doc_generation"),
+                        "techlead": ("review", "breakdown"),
+                        "dev": ("implementation",),
+                        "qa": ("doc_generation",),
+                    }
+                    for phase, model in resolved.models.items():
+                        for cat in phase_to_cats.get(phase, ()):
+                            cycle_config.model_routing[cat] = model
+            except Exception:
+                log.exception("EffortProfile.apply failed (using defaults)")
 
         # Publish CycleStarted event
         if event_bus is not None:
@@ -210,6 +338,16 @@ async def run_api_cycle(
                     if r.get("decision") == "APPROVE"
                 ),
             ))
+
+            # F1b — persist report + publish DemoReady
+            await _emit_demo_ready(
+                event_bus=event_bus,
+                report_repo=report_repo,
+                base_path=base_path,
+                cycle_id=cycle_id,
+                repo=repo,
+                result=result,
+            )
 
         if callback_url:
             await send_callback(callback_url, {

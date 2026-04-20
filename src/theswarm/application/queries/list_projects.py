@@ -25,6 +25,12 @@ class ListProjectsQuery:
                 source_dir=p.source_dir,
                 max_daily_stories=p.config.max_daily_stories,
                 created_at=p.created_at.isoformat(),
+                effort=p.config.effort,
+                models=dict(p.config.models),
+                daily_cost_cap_usd=p.config.daily_cost_cap_usd,
+                daily_tokens_cap=p.config.daily_tokens_cap,
+                monthly_cost_cap_usd=p.config.monthly_cost_cap_usd,
+                paused=p.config.paused,
             )
             for p in projects
         ]

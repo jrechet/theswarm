@@ -62,6 +62,31 @@ async def cycle_overview_fragment(request: Request, cycle_id: str) -> HTMLRespon
     )
 
 
+@router.get("/cycle/{cycle_id}/timeline", response_class=HTMLResponse)
+async def cycle_timeline_fragment(request: Request, cycle_id: str) -> HTMLResponse:
+    query = getattr(request.app.state, "get_agent_timeline_query", None)
+    rows: list = []
+    if query is not None:
+        rows = await query.execute(cycle_id)
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "partials/_agent_timeline.html", {"request": request, "rows": rows},
+    )
+
+
+@router.get("/cycle/{cycle_id}/thoughts", response_class=HTMLResponse)
+async def cycle_thoughts_fragment(request: Request, cycle_id: str) -> HTMLResponse:
+    query = getattr(request.app.state, "get_agent_thoughts_query", None)
+    entries: list = []
+    if query is not None:
+        entries = await query.execute(cycle_id)
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "partials/_agent_thoughts.html",
+        {"request": request, "entries": entries},
+    )
+
+
 @router.get("/cycle/{cycle_id}/phases", response_class=HTMLResponse)
 async def cycle_phases_fragment(request: Request, cycle_id: str) -> HTMLResponse:
     query: GetCycleStatusQuery = request.app.state.get_cycle_status_query

@@ -309,8 +309,18 @@ async def start_cycle(request: Request) -> JSONResponse:
 
     allowed_repos = getattr(request.app.state, "allowed_repos", [])
     event_bus = getattr(request.app.state, "event_bus", None)
+    report_repo = getattr(request.app.state, "report_repo", None)
+    project_repo = getattr(request.app.state, "project_repo", None)
+    cycle_repo = getattr(request.app.state, "cycle_repo", None)
+    base_path = getattr(request.app.state, "base_path", "")
+    project_id = await _resolve_project_id(project_repo, req.repo)
     task = asyncio.create_task(
-        run_api_cycle(record.id, req.repo, req.description, req.callback_url, allowed_repos, event_bus=event_bus)
+        run_api_cycle(
+            record.id, req.repo, req.description, req.callback_url, allowed_repos,
+            event_bus=event_bus, report_repo=report_repo, base_path=base_path,
+            project_repo=project_repo, cycle_repo=cycle_repo,
+            project_id=project_id,
+        )
     )
     tracker.set_task(record.id, task)
 
@@ -404,6 +414,20 @@ async def comment_on_pr(date: str, pr_number: int, request: Request) -> JSONResp
     except Exception as e:
         log.exception("Failed to comment on PR #%d", pr_number)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _resolve_project_id(project_repo: object | None, repo: str) -> str:
+    """Find a project whose repo matches `repo`, else return ''."""
+    if project_repo is None or not repo:
+        return ""
+    try:
+        projects = await project_repo.list_all()
+    except Exception:
+        return ""
+    for p in projects:
+        if str(p.repo) == repo or p.id == repo:
+            return p.id
+    return ""
 
 
 # ── JSON serializers ───────────────────────────────────────────────
@@ -657,10 +681,17 @@ async def api_trigger_cycle_for_project(request: Request, project_id: str) -> JS
 
     allowed_repos = getattr(request.app.state, "allowed_repos", [])
     event_bus = getattr(request.app.state, "event_bus", None)
+    report_repo = getattr(request.app.state, "report_repo", None)
+    project_repo = getattr(request.app.state, "project_repo", None)
+    cycle_repo = getattr(request.app.state, "cycle_repo", None)
+    base_path = getattr(request.app.state, "base_path", "")
     task = asyncio.create_task(
         run_api_cycle(
             record.id, str(project.repo), description, callback_url,
             allowed_repos, event_bus=event_bus,
+            report_repo=report_repo, base_path=base_path,
+            project_repo=project_repo, cycle_repo=cycle_repo,
+            project_id=project_id,
         ),
     )
     tracker.set_task(record.id, task)

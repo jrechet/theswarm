@@ -3,15 +3,72 @@
 
 {% block content %}
 <div class="page-header">
-  <h1>{{ project.id }}</h1>
+  <h1>{{ project.id }}{% if project.paused %} <span class="badge badge-warn" data-testid="paused-badge">paused</span>{% endif %}</h1>
   <div class="header-actions">
     <a href="{{ base }}/demos/?project={{ project.id }}"
        class="btn btn-secondary"
        data-testid="project-demos-link">View demos</a>
-    <form method="POST" action="{{ base }}/cycles/trigger" style="display:inline">
+
+    <a href="{{ base }}/projects/{{ project.id }}/memory"
+       class="btn btn-secondary"
+       data-testid="project-memory-link">Memory</a>
+
+    {% if project.paused %}
+    <button class="btn btn-primary"
+            hx-post="{{ base }}/projects/{{ project.id }}/resume"
+            hx-swap="none"
+            hx-on::after-request="window.location.reload()"
+            data-testid="resume-btn">Resume</button>
+    {% else %}
+    <button class="btn btn-warn"
+            hx-post="{{ base }}/projects/{{ project.id }}/pause"
+            hx-swap="none"
+            hx-on::after-request="window.location.reload()"
+            data-testid="pause-btn">Pause</button>
+    {% endif %}
+
+    <form method="POST" action="{{ base }}/cycles/trigger" style="display:inline"
+          id="run-cycle-form"
+          data-estimate-url="{{ base }}/projects/{{ project.id }}/cost-estimate">
       <input type="hidden" name="project_id" value="{{ project.id }}">
-      <button type="submit" class="btn btn-primary">Run Cycle</button>
+      <button type="submit"
+              class="btn btn-primary"
+              id="run-cycle-btn"
+              data-testid="run-cycle-btn"
+              {% if project.paused %}disabled{% endif %}>Run Cycle</button>
     </form>
+
+    <div id="cost-preview-modal" class="modal" hidden aria-hidden="true" role="dialog" aria-labelledby="cost-preview-title">
+      <div class="modal-backdrop" data-modal-close></div>
+      <div class="modal-card" role="document">
+        <header class="modal-header">
+          <h2 id="cost-preview-title">Estimated cost for this cycle</h2>
+          <button type="button" class="modal-close" data-modal-close aria-label="Close">×</button>
+        </header>
+        <div class="modal-body">
+          <p class="modal-lead" data-cost-basis>Calculating…</p>
+          <dl class="cost-breakdown">
+            <dt>Tokens</dt>
+            <dd data-cost-tokens>—</dd>
+            <dt>USD</dt>
+            <dd data-cost-usd>—</dd>
+          </dl>
+          <h3 class="cost-models-title">Models by phase</h3>
+          <ul class="cost-models" data-cost-models></ul>
+          <p class="cost-disclaimer">
+            Estimates are based on {{ '{' }}basis{{ '}' }}. Real cost may differ by ±30%.
+          </p>
+        </div>
+        <footer class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-modal-close>Cancel</button>
+          <button type="button" class="btn btn-primary" id="cost-preview-confirm" data-testid="cost-confirm">
+            Confirm &amp; run
+          </button>
+        </footer>
+      </div>
+    </div>
+
+    <script src="{{ base }}/static/js/cost-preview.js" defer></script>
     <form method="POST" action="{{ base }}/projects/{{ project.id }}/delete"
           style="display:inline"
           onsubmit="return confirm('Delete {{ project.id }}?')">
@@ -36,11 +93,98 @@
       <dd>{{ project.test_command or "auto" }}</dd>
       <dt>Source Dir</dt>
       <dd>{{ project.source_dir }}</dd>
-      <dt>Max Stories/Day</dt>
-      <dd>{{ project.max_daily_stories }}</dd>
       <dt>Team Channel</dt>
       <dd>{{ project.team_channel or "—" }}</dd>
     </dl>
+  </div>
+
+  <div class="card" data-testid="config-editor">
+    <h2>Controls</h2>
+    <form id="cfg-form"
+          hx-patch="{{ base }}/projects/{{ project.id }}/config"
+          hx-swap="none"
+          hx-on::after-request="document.getElementById('cfg-save-status').textContent = (event.detail.successful ? 'saved' : 'error'); setTimeout(() => document.getElementById('cfg-save-status').textContent = '', 2000)">
+
+      <div class="form-row">
+        <label>Effort</label>
+        <div class="btn-group" role="radiogroup" data-testid="effort-group">
+          {% for level in ["low", "medium", "high"] %}
+          <label class="btn-radio{% if project.effort == level %} active{% endif %}">
+            <input type="radio" name="effort" value="{{ level }}"
+                   {% if project.effort == level %}checked{% endif %}
+                   data-testid="effort-{{ level }}">
+            {{ level|capitalize }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label for="models">Models (phase=model, comma-separated)</label>
+        <input id="models" name="models" type="text"
+               placeholder="po=sonnet,dev=opus"
+               value="{% for phase, model in project.models.items() %}{{ phase }}={{ model }}{% if not loop.last %},{% endif %}{% endfor %}"
+               data-testid="models-input">
+      </div>
+
+      <div class="form-row grid-2">
+        <div>
+          <label for="max_daily_stories">Max stories/day</label>
+          <input id="max_daily_stories" name="max_daily_stories" type="number" min="0"
+                 value="{{ project.max_daily_stories }}">
+        </div>
+        <div>
+          <label for="daily_tokens_cap">Daily token cap</label>
+          <input id="daily_tokens_cap" name="daily_tokens_cap" type="number" min="0"
+                 value="{{ project.daily_tokens_cap }}">
+        </div>
+        <div>
+          <label for="daily_cost_cap_usd">Daily cost cap ($)</label>
+          <input id="daily_cost_cap_usd" name="daily_cost_cap_usd" type="number" min="0" step="0.01"
+                 value="{{ project.daily_cost_cap_usd }}"
+                 data-testid="daily-cap-input">
+        </div>
+        <div>
+          <label for="monthly_cost_cap_usd">Monthly cost cap ($)</label>
+          <input id="monthly_cost_cap_usd" name="monthly_cost_cap_usd" type="number" min="0" step="0.01"
+                 value="{{ project.monthly_cost_cap_usd }}">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <button type="submit" class="btn btn-primary" data-testid="cfg-save">Save</button>
+        <span id="cfg-save-status" class="save-status" data-testid="cfg-save-status"></span>
+      </div>
+    </form>
+  </div>
+
+  <div class="card" data-testid="secrets-panel">
+    <h2>Secrets</h2>
+    {% if secret_keys %}
+    <ul class="secret-list">
+      {% for key in secret_keys %}
+      <li>
+        <code>{{ key }}</code>
+        <button class="btn btn-sm btn-danger"
+                hx-delete="{{ base }}/projects/{{ project.id }}/secrets/{{ key }}"
+                hx-confirm="Delete secret {{ key }}?"
+                hx-swap="none"
+                hx-on::after-request="window.location.reload()">Delete</button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">No secrets stored.</p>
+    {% endif %}
+
+    <form method="POST" action="{{ base }}/projects/{{ project.id }}/secrets" class="form-row">
+      <input type="text" name="key_name" placeholder="KEY_NAME" required
+             pattern="[A-Za-z_][A-Za-z0-9_]*" data-testid="secret-key">
+      <input type="password" name="value" placeholder="secret value" required
+             data-testid="secret-value">
+      <button type="submit" class="btn btn-primary">Add secret</button>
+    </form>
+    <p class="form-hint">Values are encrypted with Fernet and never returned by the API.</p>
   </div>
 
   <div class="card">

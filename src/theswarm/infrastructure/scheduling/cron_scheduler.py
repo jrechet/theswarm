@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timezone
 
 from theswarm.application.commands.run_cycle import RunCycleCommand, RunCycleHandler
+from theswarm.domain.projects.ports import ProjectRepository
 from theswarm.domain.scheduling.entities import Schedule
 from theswarm.domain.scheduling.ports import ScheduleRepository
 from theswarm.domain.scheduling.value_objects import TriggerType
@@ -28,10 +29,12 @@ class CronScheduler:
         schedule_repo: ScheduleRepository,
         cycle_handler: RunCycleHandler,
         check_interval: float = 60.0,
+        project_repo: ProjectRepository | None = None,
     ) -> None:
         self._schedule_repo = schedule_repo
         self._cycle_handler = cycle_handler
         self._check_interval = check_interval
+        self._project_repo = project_repo
         self._task: asyncio.Task | None = None
         self._running = False
 
@@ -70,8 +73,25 @@ class CronScheduler:
         schedules = await self._schedule_repo.list_enabled()
 
         for schedule in schedules:
-            if _is_due(schedule, now):
-                await self._trigger(schedule, now)
+            if not _is_due(schedule, now):
+                continue
+            if await self._is_project_paused(schedule.project_id):
+                log.info(
+                    "Skipping scheduled cycle for paused project=%s",
+                    schedule.project_id,
+                )
+                continue
+            await self._trigger(schedule, now)
+
+    async def _is_project_paused(self, project_id: str) -> bool:
+        if self._project_repo is None:
+            return False
+        try:
+            project = await self._project_repo.get(project_id)
+        except Exception:
+            log.exception("Failed to load project %s for pause check", project_id)
+            return False
+        return bool(project is not None and project.config.paused)
 
     async def _trigger(self, schedule: Schedule, now: datetime) -> None:
         log.info("Triggering scheduled cycle for project=%s", schedule.project_id)

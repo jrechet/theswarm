@@ -150,6 +150,11 @@ class GitHubClient:
         pr = await self._run(self._repo.get_pull, pr_number)
         await self._run(pr.merge, merge_method=merge_method)
 
+    async def close_pr(self, pr_number: int) -> None:
+        """Close a PR without merging."""
+        pr = await self._run(self._repo.get_pull, pr_number)
+        await self._run(pr.edit, state="closed")
+
     async def delete_branch(self, branch_name: str) -> None:
         """Delete a remote branch after merge."""
         try:

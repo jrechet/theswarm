@@ -26,6 +26,15 @@ from theswarm.domain.scheduling.value_objects import CronExpression
 from theswarm.infrastructure.persistence.migrations.v001_initial import (
     SQL as MIGRATION_V001,
 )
+from theswarm.infrastructure.persistence.migrations.v002_controls import (
+    SQL as MIGRATION_V002,
+)
+from theswarm.infrastructure.persistence.migrations.v003_story_actions import (
+    SQL as MIGRATION_V003,
+)
+from theswarm.infrastructure.persistence.migrations.v004_cycle_events import (
+    SQL as MIGRATION_V004,
+)
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +48,9 @@ async def init_db(db_path: str = _DEFAULT_DB) -> aiosqlite.Connection:
     db = await aiosqlite.connect(str(path))
     db.row_factory = aiosqlite.Row
     await db.executescript(MIGRATION_V001)
+    await db.executescript(MIGRATION_V002)
+    await db.executescript(MIGRATION_V003)
+    await db.executescript(MIGRATION_V004)
     await db.commit()
     return db
 
@@ -75,6 +87,13 @@ class SQLiteProjectRepository:
             "token_budget_techlead": project.config.token_budget_techlead,
             "token_budget_dev": project.config.token_budget_dev,
             "token_budget_qa": project.config.token_budget_qa,
+            "effort": project.config.effort,
+            "models": project.config.models,
+            "daily_cost_cap_usd": project.config.daily_cost_cap_usd,
+            "daily_tokens_cap": project.config.daily_tokens_cap,
+            "monthly_cost_cap_usd": project.config.monthly_cost_cap_usd,
+            "paused": project.config.paused,
+            "preview_url_template": project.config.preview_url_template,
         })
         await self._db.execute(
             """INSERT OR REPLACE INTO projects
@@ -99,6 +118,14 @@ class SQLiteProjectRepository:
     @staticmethod
     def _row_to_project(row) -> Project:
         config_data = json.loads(row["config_json"]) if row["config_json"] else {}
+        # Tolerate unknown keys from future schemas
+        allowed = {
+            "max_daily_stories", "token_budget_po", "token_budget_techlead",
+            "token_budget_dev", "token_budget_qa", "effort", "models",
+            "daily_cost_cap_usd", "daily_tokens_cap", "monthly_cost_cap_usd",
+            "paused", "preview_url_template",
+        }
+        config_data = {k: v for k, v in config_data.items() if k in allowed}
         return Project(
             id=row["id"],
             repo=RepoUrl(row["repo"]),

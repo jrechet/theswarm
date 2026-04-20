@@ -106,6 +106,33 @@ class PlaywrightRecorder:
 
         return results
 
+    async def capture_before_after(
+        self,
+        before_url: str | None,
+        after_url: str,
+        label: str,
+    ) -> list[tuple[Artifact, bytes]]:
+        """Capture a before/after screenshot pair for a single story.
+
+        F2 — when ``before_url`` is ``None`` (no baseline deployed main yet),
+        only the ``after`` artifact is returned and a warning is logged so
+        the story id surfaces in ops.
+        """
+        results: list[tuple[Artifact, bytes]] = []
+
+        if before_url:
+            before = await self.screenshot(before_url, f"{label}_before")
+            results.append(before)
+        else:
+            log.warning(
+                "PlaywrightRecorder: no before_url for story '%s' — skipping before capture",
+                label,
+            )
+
+        after = await self.screenshot(after_url, f"{label}_after")
+        results.append(after)
+        return results
+
     async def start_recording(self, url: str) -> None:
         """Start a video recording of the given URL."""
         import tempfile

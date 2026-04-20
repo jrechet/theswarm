@@ -5,12 +5,41 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from theswarm.domain.reporting.events import DemoReady
 from theswarm_common.models import AgentEvent
 
 if TYPE_CHECKING:
+    from theswarm.application.events.bus import EventBus
     from theswarm.gateway.app import SwarmGateway
 
 log = logging.getLogger(__name__)
+
+
+def wire_demo_notifications(
+    event_bus: "EventBus",
+    chat: object | None,
+    notify_user_id: str = "",
+) -> None:
+    """F1c — DM the configured user when a new demo is ready.
+
+    No-op if ``chat`` or ``notify_user_id`` is missing (stub mode / local dev).
+    """
+
+    async def on_demo_ready(event: DemoReady) -> None:
+        if chat is None or not notify_user_id:
+            return
+        text = f"🎬 Demo ready — {event.title} — [▶ Play]({event.play_url})"
+        try:
+            await chat.post_dm(notify_user_id, text)
+        except Exception:
+            log.exception("Failed to DM demo notification to %s", notify_user_id)
+
+    event_bus.subscribe(DemoReady, on_demo_ready)
+    log.info(
+        "DemoReady notifications wired (chat=%s, user=%s)",
+        "configured" if chat else "stub",
+        notify_user_id or "none",
+    )
 
 
 def wire_swarm_po(gw: SwarmGateway, vcs_map: dict, default_repo: str, chat, team_chat) -> None:

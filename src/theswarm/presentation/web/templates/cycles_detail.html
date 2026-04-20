@@ -9,6 +9,7 @@
       {% if cycle.status == 'running' %}<span class="pulse-dot"></span>{% endif %}
       {{ cycle.status }}
     </span>
+    <a href="{{ base }}/cycles/{{ cycle.id }}/replay" class="btn btn-ghost" style="margin-left:auto;">⟲ Replay</a>
   </div>
 
   <div class="detail-grid">
@@ -24,6 +25,28 @@
       <div id="cycle-phases">
         {% include "partials/_cycle_phases.html" %}
       </div>
+    </div>
+
+    <div class="card">
+      <h2>Agents</h2>
+      <div id="cycle-timeline"
+           hx-get="{{ base }}/fragments/cycle/{{ cycle.id }}/timeline"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <p class="empty-state">Loading agent timeline…</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <details class="agent-thoughts-panel" open>
+        <summary><h2 style="display:inline;">Thoughts & Steps</h2></summary>
+        <div id="cycle-thoughts"
+             hx-get="{{ base }}/fragments/cycle/{{ cycle.id }}/thoughts"
+             hx-trigger="load"
+             hx-swap="innerHTML">
+          <p class="empty-state">Loading agent thoughts…</p>
+        </div>
+      </details>
     </div>
   </div>
 </div>

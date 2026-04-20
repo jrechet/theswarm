@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Live preview — Cycle {{ cycle_id }}{% endblock %}
+
+{% block content %}
+<section class="live-preview">
+  <header class="live-preview-header">
+    <div>
+      <h1>Live preview</h1>
+      <p class="text-muted">
+        Cycle <code>{{ cycle_id }}</code>
+        {% if project %} · <a href="{{ base }}/projects/{{ project.id }}">{{ project.id }}</a>{% endif %}
+      </p>
+    </div>
+    <div class="live-preview-actions">
+      <a href="{{ base }}/cycles/{{ cycle_id }}" class="btn btn-ghost">Back to cycle</a>
+      {% if preview_url %}
+      <a href="{{ preview_url }}" target="_blank" rel="noopener" class="btn btn-primary">Open in new tab</a>
+      {% endif %}
+    </div>
+  </header>
+
+  {% if preview_url %}
+  <div class="live-preview-frame">
+    <iframe
+      src="{{ preview_url }}"
+      title="Live preview"
+      sandbox="allow-scripts allow-same-origin allow-forms"
+      referrerpolicy="no-referrer"
+      loading="lazy"></iframe>
+  </div>
+  {% else %}
+  <div class="live-preview-empty">
+    {% if not template_configured %}
+    <h2>No preview URL template configured</h2>
+    <p class="text-muted">
+      Set <code>preview_url_template</code> on the project config (supports <code>{pr}</code>,
+      <code>{branch}</code>, <code>{cycle_id}</code> placeholders).
+    </p>
+    {% else %}
+    <h2>Preview unavailable</h2>
+    <p class="text-muted">
+      No open PR yet for this cycle. Once a PR is opened the preview URL will be resolved.
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

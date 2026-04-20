@@ -68,6 +68,21 @@ class TestGenerate:
         report = generator.generate(cycle)
         assert report.summary.cost_usd == 7.5
 
+    def test_thumbnail_rel_path_attaches_artifact(self, generator):
+        """F4 — thumbnail_rel_path makes `DemoReport.thumbnail_path` resolvable."""
+        cycle = _make_cycle()
+        report = generator.generate(cycle, thumbnail_rel_path="cyc/thumbnail/cover.jpg")
+        assert report.thumbnail_path == "cyc/thumbnail/cover.jpg"
+        assert len(report.artifacts) == 1
+        assert report.artifacts[0].mime_type == "image/jpeg"
+        assert report.artifacts[0].path == "cyc/thumbnail/cover.jpg"
+
+    def test_thumbnail_rel_path_empty_string_leaves_artifacts_empty(self, generator):
+        cycle = _make_cycle()
+        report = generator.generate(cycle)
+        assert report.artifacts == ()
+        assert report.thumbnail_path is None
+
     def test_completed_cycle_gate_passes(self, generator):
         cycle = _make_cycle(status=CycleStatus.COMPLETED)
         report = generator.generate(cycle)

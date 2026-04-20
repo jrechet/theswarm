@@ -8,6 +8,7 @@ import logging
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from theswarm.application.queries.get_cycle_replay import GetCycleReplayQuery
 from theswarm.application.queries.get_cycle_status import GetCycleStatusQuery
 from theswarm.application.queries.list_cycles import ListCyclesQuery
 
@@ -40,6 +41,105 @@ async def list_cycles(request: Request, project_id: str = "") -> HTMLResponse:
         template,
         {"request": request, "cycles": cycles, "project_id": project_id},
     )
+
+
+@router.get("/{cycle_id}/live", response_class=HTMLResponse)
+async def cycle_live_preview(request: Request, cycle_id: str) -> HTMLResponse:
+    """Render a live-preview iframe for a running cycle's PR branch."""
+    templates = request.app.state.templates
+    query: GetCycleStatusQuery = request.app.state.get_cycle_status_query
+    project_repo = getattr(request.app.state, "project_repo", None)
+
+    cycle = await query.execute(cycle_id)
+    project = None
+    if cycle is not None and project_repo is not None:
+        project = await project_repo.get(cycle.project_id)
+
+    template_str = ""
+    if project is not None:
+        template_str = project.config.preview_url_template or ""
+
+    pr_number = ""
+    branch = ""
+    if cycle is not None and cycle.prs_opened:
+        pr_number = str(cycle.prs_opened[0])
+        branch = f"pr-{pr_number}"
+
+    preview_url = ""
+    if template_str and pr_number:
+        preview_url = (
+            template_str
+            .replace("{pr}", pr_number)
+            .replace("{branch}", branch)
+            .replace("{cycle_id}", cycle_id)
+        )
+
+    return templates.TemplateResponse(
+        "cycle_live.html",
+        {
+            "request": request,
+            "cycle": cycle,
+            "cycle_id": cycle_id,
+            "preview_url": preview_url,
+            "template_configured": bool(template_str),
+            "project": project,
+        },
+    )
+
+
+@router.get("/{cycle_id}/replay", response_class=HTMLResponse)
+async def cycle_replay(request: Request, cycle_id: str) -> HTMLResponse:
+    """Render the cycle replay scrubber page."""
+    templates = request.app.state.templates
+    replay_query: GetCycleReplayQuery = request.app.state.get_cycle_replay_query
+    status_query: GetCycleStatusQuery = request.app.state.get_cycle_status_query
+
+    cycle = await status_query.execute(cycle_id)
+    frames = await replay_query.execute(cycle_id)
+
+    frames_json = [
+        {
+            "index": f.index,
+            "event_type": f.event_type,
+            "occurred_at": f.occurred_at.isoformat(),
+            "offset_ms": f.offset_ms,
+            "payload": f.payload,
+        }
+        for f in frames
+    ]
+    total_ms = frames_json[-1]["offset_ms"] if frames_json else 0
+
+    return templates.TemplateResponse(
+        "cycle_replay.html",
+        {
+            "request": request,
+            "cycle": cycle,
+            "cycle_id": cycle_id,
+            "frames": frames_json,
+            "frame_count": len(frames_json),
+            "total_ms": total_ms,
+        },
+    )
+
+
+@router.get("/{cycle_id}/replay.json")
+async def cycle_replay_json(request: Request, cycle_id: str) -> dict:
+    """JSON replay frames for client-side playback."""
+    replay_query: GetCycleReplayQuery = request.app.state.get_cycle_replay_query
+    frames = await replay_query.execute(cycle_id)
+    return {
+        "cycle_id": cycle_id,
+        "frames": [
+            {
+                "index": f.index,
+                "event_type": f.event_type,
+                "occurred_at": f.occurred_at.isoformat(),
+                "offset_ms": f.offset_ms,
+                "payload": f.payload,
+            }
+            for f in frames
+        ],
+    }
 
 
 @router.get("/{cycle_id}", response_class=HTMLResponse)
@@ -136,8 +236,13 @@ async def trigger_cycle(
 
     allowed_repos = getattr(request.app.state, "allowed_repos", [])
     event_bus = getattr(request.app.state, "event_bus", None)
+    report_repo = getattr(request.app.state, "report_repo", None)
+    base_path = getattr(request.app.state, "base_path", "")
     task = asyncio.create_task(
-        run_api_cycle(record.id, repo, req.description, "", allowed_repos, event_bus=event_bus)
+        run_api_cycle(
+            record.id, repo, req.description, "", allowed_repos,
+            event_bus=event_bus, report_repo=report_repo, base_path=base_path,
+        )
     )
     tracker.set_task(record.id, task)
     log.info("Cycle %s triggered for project %s (repo=%s)", record.id, project_id, repo)

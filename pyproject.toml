@@ -21,6 +21,8 @@ dependencies = [
     "jinja2>=3.1",
     "sse-starlette>=2.0",
     "textual>=1.0",
+    "imageio-ffmpeg>=0.5",
+    "cryptography>=42.0",
 ]
 
 [dependency-groups]

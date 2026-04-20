@@ -421,6 +421,69 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
     }
 
 
+async def capture_before_after_per_story(state: AgentState) -> dict:
+    """F2 — capture before/after screenshots for each merged PR.
+
+    Reads per-PR preview URLs from ``state['story_preview_urls']`` which maps
+    ``pr_number -> {"before": url_or_none, "after": url_or_none}``. Missing
+    entries are skipped with a warning so the PR id surfaces in ops. Populates
+    ``state['story_artifacts']`` as ``{pr_number: {"before": [...], "after": [...]}}``.
+
+    No-op if the QA agent is in stub mode (no workspace).
+    """
+    workspace = state.get("workspace")
+    if workspace is None:
+        return stub_result(Role.QA, "capture_before_after_per_story",
+                           "capture before/after screenshots per merged PR")
+
+    merged_prs: list[int] = list(state.get("merged_prs", []))
+    preview_urls: dict[int, dict[str, str | None]] = state.get("story_preview_urls", {}) or {}
+
+    if not merged_prs or not preview_urls:
+        log.info("QA: no merged PRs or preview URLs — skipping before/after capture")
+        return {"story_artifacts": {}, "tokens_used": 0}
+
+    from theswarm.infrastructure.recording.playwright_recorder import PlaywrightRecorder
+
+    recorder = PlaywrightRecorder()
+    story_artifacts: dict[int, dict[str, list]] = {}
+
+    try:
+        for pr_number in merged_prs:
+            urls = preview_urls.get(pr_number)
+            if not urls:
+                log.warning("QA: no preview URLs for PR #%d — skipping", pr_number)
+                continue
+
+            after_url = urls.get("after")
+            if not after_url:
+                log.warning("QA: no after_url for PR #%d — skipping", pr_number)
+                continue
+
+            label = f"pr_{pr_number}"
+            try:
+                results = await recorder.capture_before_after(
+                    before_url=urls.get("before"),
+                    after_url=after_url,
+                    label=label,
+                )
+            except Exception as e:
+                log.warning("QA: before/after capture failed for PR #%d: %s", pr_number, e)
+                continue
+
+            before_artifacts = [r for r in results if r[0].label.endswith("_before")]
+            after_artifacts = [r for r in results if r[0].label.endswith("_after")]
+            story_artifacts[pr_number] = {
+                "before": before_artifacts,
+                "after": after_artifacts,
+            }
+    finally:
+        await recorder.close()
+
+    log.info("QA: captured before/after for %d stories", len(story_artifacts))
+    return {"story_artifacts": story_artifacts, "tokens_used": 0}
+
+
 async def record_demo_video(state: AgentState) -> dict:
     """Record a video walkthrough of the running app for the demo report."""
     workspace = state.get("workspace")
@@ -499,6 +562,74 @@ async def record_demo_video(state: AgentState) -> dict:
         "video_artifacts": video_artifacts,
         "tokens_used": 0,
     }
+
+
+async def record_story_video(state: AgentState) -> dict:
+    """F3 — record a short walkthrough video per merged PR.
+
+    Reads per-PR preview URLs from ``state['story_preview_urls']``. For each
+    merged PR with an ``after`` URL, records a ~4s walkthrough (navigate +
+    settle) and stores it under label ``pr_{number}_walkthrough``.
+
+    Failures on a single PR are logged and do not abort the loop — the
+    cycle-wide ``record_demo_video`` still runs and can serve as fallback.
+    No-op if the QA agent is in stub mode (no workspace).
+    """
+    workspace = state.get("workspace")
+    if workspace is None:
+        return stub_result(Role.QA, "record_story_video",
+                           "record per-story walkthrough video")
+
+    merged_prs: list[int] = list(state.get("merged_prs", []))
+    preview_urls: dict[int, dict[str, str | None]] = state.get("story_preview_urls", {}) or {}
+
+    if not merged_prs or not preview_urls:
+        log.info("QA: no merged PRs or preview URLs — skipping per-story video")
+        return {"story_videos": {}, "tokens_used": 0}
+
+    from theswarm.infrastructure.recording.playwright_recorder import PlaywrightRecorder
+
+    recorder = PlaywrightRecorder()
+    story_videos: dict[int, tuple] = {}
+
+    try:
+        for pr_number in merged_prs:
+            urls = preview_urls.get(pr_number) or {}
+            after_url = urls.get("after")
+            if not after_url:
+                log.warning("QA: no after_url for PR #%d — skipping walkthrough video", pr_number)
+                continue
+
+            label = f"pr_{pr_number}_walkthrough"
+            try:
+                await recorder.start_recording(after_url)
+                page = recorder._recording_page
+                if page is not None:
+                    await page.wait_for_timeout(1500)
+                    try:
+                        await page.mouse.wheel(0, 400)
+                        await page.wait_for_timeout(1500)
+                        await page.mouse.wheel(0, -200)
+                        await page.wait_for_timeout(1000)
+                    except Exception:
+                        pass
+                artifact, data = await recorder.stop_recording()
+                artifact = artifact.__class__(
+                    type=artifact.type,
+                    label=label,
+                    path="",
+                    mime_type=artifact.mime_type,
+                    size_bytes=len(data),
+                    created_at=artifact.created_at,
+                )
+                story_videos[pr_number] = (artifact, data)
+            except Exception as e:
+                log.warning("QA: per-story video failed for PR #%d: %s", pr_number, e)
+    finally:
+        await recorder.close()
+
+    log.info("QA: recorded %d per-story walkthrough videos", len(story_videos))
+    return {"story_videos": story_videos, "tokens_used": 0}
 
 
 async def generate_demo_report(state: AgentState) -> dict:
@@ -603,6 +734,127 @@ async def generate_demo_report(state: AgentState) -> dict:
     demo_report["videos"] = video_paths
     demo_report["video_count"] = len(video_paths)
 
+    # F2 — persist per-story before/after screenshots and surface them per PR.
+    story_artifacts: dict = state.get("story_artifacts", {}) or {}
+    story_screenshots: dict[int, dict[str, list[dict]]] = {}
+    if story_artifacts:
+        from theswarm.infrastructure.recording.artifact_store import LocalArtifactStore
+        from theswarm.domain.cycles.value_objects import CycleId
+
+        store = LocalArtifactStore()
+        cycle_id = CycleId(today.replace("-", ""))
+
+        async def _save_group(items: list) -> list[dict]:
+            saved: list[dict] = []
+            for artifact, data in items:
+                try:
+                    rel_path = await store.save(cycle_id, artifact, data)
+                    saved.append({
+                        "type": artifact.type.value,
+                        "label": artifact.label,
+                        "path": rel_path,
+                        "size_bytes": len(data),
+                    })
+                except Exception as e:
+                    log.warning("QA: failed to save story artifact '%s': %s", artifact.label, e)
+            return saved
+
+        for pr_number, bucket in story_artifacts.items():
+            story_screenshots[pr_number] = {
+                "before": await _save_group(bucket.get("before", [])),
+                "after": await _save_group(bucket.get("after", [])),
+            }
+
+    demo_report["story_screenshots"] = story_screenshots
+
+    # F3 — persist per-story walkthrough videos and surface paths per PR.
+    story_videos: dict = state.get("story_videos", {}) or {}
+    story_videos_paths: dict[int, dict] = {}
+    if story_videos:
+        from theswarm.infrastructure.recording.artifact_store import LocalArtifactStore
+        from theswarm.domain.cycles.value_objects import CycleId
+
+        store = LocalArtifactStore()
+        cycle_id = CycleId(today.replace("-", ""))
+        for pr_number, (artifact, data) in story_videos.items():
+            try:
+                rel_path = await store.save(cycle_id, artifact, data)
+                story_videos_paths[pr_number] = {
+                    "type": artifact.type.value,
+                    "label": artifact.label,
+                    "path": rel_path,
+                    "size_bytes": len(data),
+                }
+            except Exception as e:
+                log.warning("QA: failed to save story video '%s': %s", artifact.label, e)
+
+    demo_report["story_videos"] = story_videos_paths
+
+    # F4 — generate JPEG thumbnail + GIF preview for each saved video.
+    from pathlib import Path as _Path
+
+    from theswarm.infrastructure.recording.artifact_store import LocalArtifactStore
+    from theswarm.infrastructure.recording.thumbnailer import (
+        ThumbnailError,
+        make_gif,
+        make_thumbnail,
+    )
+
+    store = LocalArtifactStore()
+    video_entries: list[dict] = []
+    video_entries.extend(video_paths)
+    for entry in story_videos_paths.values():
+        video_entries.append(entry)
+
+    thumbnails: list[dict] = []
+    previews: list[dict] = []
+    for entry in video_entries:
+        rel_path = entry.get("path", "")
+        if not rel_path:
+            continue
+        abs_video = _Path(store.base_dir) / rel_path
+        if not abs_video.exists():
+            continue
+
+        label = entry.get("label", "video")
+        # Place thumbs/previews next to the video in the cycle directory
+        thumb_rel = _Path(rel_path).with_suffix(".jpg")
+        gif_rel = _Path(rel_path).with_suffix(".gif")
+        abs_thumb = _Path(store.base_dir) / thumb_rel
+        abs_gif = _Path(store.base_dir) / gif_rel
+
+        try:
+            await make_thumbnail(abs_video, abs_thumb)
+            thumbnails.append({
+                "type": "thumbnail",
+                "label": f"{label}_thumbnail",
+                "path": str(thumb_rel),
+                "size_bytes": abs_thumb.stat().st_size,
+            })
+        except ThumbnailError as e:
+            log.warning("QA: thumbnail generation failed for %s: %s", label, e)
+
+        try:
+            await make_gif(abs_video, abs_gif)
+            previews.append({
+                "type": "preview",
+                "label": f"{label}_preview",
+                "path": str(gif_rel),
+                "size_bytes": abs_gif.stat().st_size,
+            })
+        except ThumbnailError as e:
+            log.warning("QA: preview GIF generation failed for %s: %s", label, e)
+
+    demo_report["thumbnails"] = thumbnails
+    demo_report["previews"] = previews
+    # F4 — prefer the first generated thumbnail as the demo's cover image.
+    if thumbnails:
+        demo_report["thumbnail_path"] = thumbnails[0]["path"]
+    elif screenshot_paths:
+        demo_report["thumbnail_path"] = screenshot_paths[0]["path"]
+    else:
+        demo_report["thumbnail_path"] = ""
+
     log.info("QA report: unit=%d(%s) e2e=%d(%s) screenshots=%d videos=%d — status: %s",
              unit_total, "pass" if unit_all_pass else "fail",
              e2e_total, "pass" if e2e_all_pass else "fail",
@@ -629,6 +881,8 @@ def build_qa_graph() -> StateGraph:
     graph.add_node("run_security", run_security_scan)
     graph.add_node("collect_issues", collect_issue_status)
     graph.add_node("capture_screenshots", capture_demo_screenshots)
+    graph.add_node("capture_before_after_per_story", capture_before_after_per_story)
+    graph.add_node("record_story_video", record_story_video)
     graph.add_node("record_video", record_demo_video)
     graph.add_node("generate_report", generate_demo_report)
 
@@ -639,7 +893,9 @@ def build_qa_graph() -> StateGraph:
     graph.add_edge("run_e2e", "run_security")
     graph.add_edge("run_security", "collect_issues")
     graph.add_edge("collect_issues", "capture_screenshots")
-    graph.add_edge("capture_screenshots", "record_video")
+    graph.add_edge("capture_screenshots", "capture_before_after_per_story")
+    graph.add_edge("capture_before_after_per_story", "record_story_video")
+    graph.add_edge("record_story_video", "record_video")
     graph.add_edge("record_video", "generate_report")
     graph.add_edge("generate_report", END)
 

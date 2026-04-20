@@ -1,0 +1,32 @@
+{% if rows %}
+<div class="agent-timeline" data-testid="agent-timeline">
+  {% for row in rows %}
+  <div class="agent-row {% if row.last_event_at %}agent-row-active{% endif %}" data-agent="{{ row.agent }}">
+    <div class="agent-row-label">
+      <span class="agent-row-dot agent-dot-{{ row.agent }}"></span>
+      <span class="agent-row-name">{{ row.agent }}</span>
+    </div>
+    <div class="agent-row-detail">
+      {% if row.last_event_at %}
+      <div class="agent-row-action">{{ row.last_action or '—' }}</div>
+      {% if row.last_detail %}
+      <div class="agent-row-subtext">{{ row.last_detail }}</div>
+      {% endif %}
+      {% else %}
+      <div class="agent-row-idle">idle</div>
+      {% endif %}
+    </div>
+    <div class="agent-row-meta">
+      <span class="agent-row-count">{{ row.activity_count }} evt</span>
+      {% if row.last_event_at %}
+      <span class="agent-row-elapsed elapsed-cell" data-started="{{ row.last_event_at.isoformat() }}">
+        {{ row.last_event_at.strftime('%H:%M:%S') }}
+      </span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">No agent activity yet.</p>
+{% endif %}

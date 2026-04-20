@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-base="{{ base }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Compare Demos — TheSwarm</title>
+  <link rel="stylesheet" href="{{ base }}/static/css/dashboard.css">
+  <link rel="stylesheet" href="{{ base }}/static/css/demo-player.css">
+</head>
+<body class="player-body">
+
+  <div class="player-topbar">
+    <a href="{{ base }}/demos/" class="player-back" title="Back to demos">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+    </a>
+    <div class="player-title">
+      <strong>Compare</strong>
+      <span class="player-title-sep">·</span>
+      <span>{{ report_a.project_id }}</span>
+      <span class="player-title-sep">vs</span>
+      <span>{{ report_b.project_id }}</span>
+    </div>
+  </div>
+
+  <div class="compare-shell" id="compare-shell" data-report-a="{{ report_a.id }}" data-report-b="{{ report_b.id }}">
+
+    {% for panel in [report_a, report_b] %}
+    <section class="compare-panel" data-panel="{{ 'A' if loop.first else 'B' }}">
+      <header class="compare-panel-header">
+        <span class="compare-panel-badge">{{ 'A' if loop.first else 'B' }}</span>
+        <a href="{{ base }}/demos/{{ panel.id }}/play" class="compare-panel-title">
+          <strong>{{ panel.project_id }}</strong>
+          <span class="text-muted">{{ panel.created_at.strftime('%b %d, %Y %H:%M') }}</span>
+        </a>
+        <span class="badge badge-{{ 'completed' if panel.all_gates_pass else 'failed' }}">
+          {{ "gates pass" if panel.all_gates_pass else "gates failed" }}
+        </span>
+      </header>
+
+      <dl class="compare-summary">
+        <div><dt>Stories</dt><dd>{{ panel.summary.stories_completed }}/{{ panel.summary.stories_total }}</dd></div>
+        <div><dt>PRs</dt><dd>{{ panel.summary.prs_merged }}</dd></div>
+        <div><dt>Tests</dt><dd>{{ panel.summary.tests_passing }}/{{ panel.summary.tests_total }}</dd></div>
+        <div><dt>Coverage</dt><dd>{{ "%.1f"|format(panel.summary.coverage_percent) }}%</dd></div>
+        {% if panel.summary.cost_usd > 0 %}
+        <div><dt>Cost</dt><dd>${{ "%.2f"|format(panel.summary.cost_usd) }}</dd></div>
+        {% endif %}
+      </dl>
+
+      {% set videos = panel.artifacts | selectattr('type.value', 'equalto', 'video') | list %}
+      {% if videos %}
+      <div class="compare-video-wrap">
+        <video class="compare-video"
+               src="{{ base }}/artifacts/{{ videos[0].path }}"
+               preload="metadata"
+               playsinline></video>
+        <div class="compare-video-label">{{ videos[0].label }}</div>
+      </div>
+      {% else %}
+      {% set story_video = None %}
+      {% for s in panel.stories if s.video and s.video.path %}
+        {% if not story_video %}{% set story_video = s.video %}{% endif %}
+      {% endfor %}
+      {% if story_video %}
+      <div class="compare-video-wrap">
+        <video class="compare-video"
+               src="{{ base }}/artifacts/{{ story_video.path }}"
+               preload="metadata"
+               playsinline></video>
+        <div class="compare-video-label">{{ story_video.label }}</div>
+      </div>
+      {% else %}
+      <div class="compare-video-wrap compare-video-empty">
+        <span class="text-muted">No video artifacts</span>
+      </div>
+      {% endif %}
+      {% endif %}
+
+      {% set screenshots = panel.artifacts | selectattr('type.value', 'equalto', 'screenshot') | list %}
+      {% if screenshots %}
+      <div class="compare-thumbs">
+        {% for a in screenshots[:4] %}
+        <figure class="compare-thumb">
+          <img src="{{ base }}/artifacts/{{ a.path }}" alt="{{ a.label }}" loading="lazy">
+          <figcaption>{{ a.label }}</figcaption>
+        </figure>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <ul class="compare-stories">
+        {% for s in panel.stories %}
+        <li>
+          <span class="badge badge-{{ 'completed' if s.status == 'completed' else 'running' }} badge-sm">{{ s.status }}</span>
+          <span class="compare-story-title">{{ s.title }}</span>
+          {% if s.pr_number %}<span class="text-muted">PR #{{ s.pr_number }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endfor %}
+
+  </div>
+
+  <div class="compare-controls" role="group" aria-label="Synced playback">
+    <button type="button" class="player-btn" id="compare-play" title="Play both">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+    <button type="button" class="player-btn" id="compare-pause" title="Pause both">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+    </button>
+    <input type="range" id="compare-scrub" min="0" max="1000" value="0" step="1" aria-label="Scrub both videos">
+    <span class="compare-time" id="compare-time">0.0s</span>
+  </div>
+
+  <script src="{{ base }}/static/js/demo-compare.js" defer></script>
+</body>
+</html>

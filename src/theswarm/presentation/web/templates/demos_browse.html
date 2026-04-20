@@ -8,6 +8,12 @@
     <span class="text-muted">{{ total_demos }} demo{{ "s" if total_demos != 1 else "" }} across {{ demos_by_project | length }} project{{ "s" if demos_by_project | length != 1 else "" }}</span>
 </div>
 
+<form class="demos-compare" method="get" action="{{ base }}/demos/compare" data-testid="demos-compare-form">
+    <label>A <input type="text" name="a" placeholder="report id" required></label>
+    <label>B <input type="text" name="b" placeholder="report id" required></label>
+    <button type="submit">Compare</button>
+</form>
+
 <form class="demos-filter" method="get" action="{{ base }}/demos/">
     <label>
         Project

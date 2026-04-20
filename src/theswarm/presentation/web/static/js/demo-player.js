@@ -120,6 +120,47 @@
   btnAutoplay.addEventListener('click', toggleAutoplay);
   btnFullscreen.addEventListener('click', toggleFullscreen);
 
+  // Sprint F F7 — playback-speed control (0.5× / 1× / 2×)
+  const SPEED_KEY = 'theswarm:demo-player:speed';
+  const speedButtons = document.querySelectorAll('.player-speed-btn');
+  let currentSpeed = 1;
+  try {
+    const stored = parseFloat(window.localStorage.getItem(SPEED_KEY) || '');
+    if (stored === 0.5 || stored === 1 || stored === 2) currentSpeed = stored;
+  } catch (_) { /* localStorage may be unavailable in sandboxed frames */ }
+
+  function applySpeed(speed) {
+    currentSpeed = speed;
+    const videos = stage.querySelectorAll('video');
+    for (var i = 0; i < videos.length; i++) {
+      videos[i].playbackRate = speed;
+    }
+    for (var b = 0; b < speedButtons.length; b++) {
+      var btn = speedButtons[b];
+      var match = parseFloat(btn.getAttribute('data-speed')) === speed;
+      btn.classList.toggle('is-active', match);
+      btn.setAttribute('aria-pressed', match ? 'true' : 'false');
+    }
+    try { window.localStorage.setItem(SPEED_KEY, String(speed)); } catch (_) {}
+  }
+
+  for (var sb = 0; sb < speedButtons.length; sb++) {
+    (function (btn) {
+      btn.addEventListener('click', function () {
+        const v = parseFloat(btn.getAttribute('data-speed'));
+        if (!Number.isFinite(v)) return;
+        applySpeed(v);
+      });
+    })(speedButtons[sb]);
+  }
+
+  // Re-apply whenever a new video becomes visible (per-slide)
+  stage.addEventListener('play', function (e) {
+    if (e.target && e.target.tagName === 'VIDEO') e.target.playbackRate = currentSpeed;
+  }, true);
+
+  applySpeed(currentSpeed);
+
   // Segment clicks
   for (var s = 0; s < segments.length; s++) {
     (function (idx) {
@@ -201,4 +242,53 @@
 
   // Initialize
   updateUI();
+
+  // Story action forms — AJAX submit with inline status
+  var forms = document.querySelectorAll('.story-action-form');
+  forms.forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var container = form.closest('[data-story-actions]');
+      var status = container
+        ? container.querySelector('.story-action-status')
+        : null;
+      var btn = form.querySelector('button');
+      if (btn) btn.disabled = true;
+      if (status) {
+        status.textContent = '…';
+        status.className = 'story-action-status pending';
+      }
+      fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+      })
+        .then(function (res) {
+          if (res.ok) {
+            if (status) {
+              status.textContent = form.dataset.action + ' recorded';
+              status.className = 'story-action-status ok';
+            }
+          } else if (res.status === 409) {
+            if (status) {
+              status.textContent = 'already ' + form.dataset.action + 'd';
+              status.className = 'story-action-status warn';
+            }
+          } else {
+            if (status) {
+              status.textContent = 'failed (' + res.status + ')';
+              status.className = 'story-action-status err';
+            }
+          }
+        })
+        .catch(function () {
+          if (status) {
+            status.textContent = 'network error';
+            status.className = 'story-action-status err';
+          }
+        })
+        .finally(function () {
+          if (btn) btn.disabled = false;
+        });
+    });
+  });
 })();

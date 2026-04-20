@@ -22,12 +22,25 @@
     <div class="nav-status" id="sse-status">
       <span class="status-dot connecting"></span> Connecting...
     </div>
+    <button type="button"
+            id="notifications-toggle"
+            class="nav-notifications"
+            data-state="idle"
+            title="Enable browser notifications for new demos"
+            hidden>
+      <span data-field="icon">🔔</span>
+      <span data-field="label">Notify me</span>
+    </button>
   </nav>
 
   <main class="container">
     {% block content %}{% endblock %}
   </main>
 
+  <div id="demo-toast-host" class="demo-toast-host" aria-live="polite" aria-atomic="false"></div>
+  {% include "partials/_demo_toast.html" %}
+
   <script src="{{ base }}/static/js/sse.js" defer></script>
+  <script src="{{ base }}/static/js/notifications.js" defer></script>
 </body>
 </html>

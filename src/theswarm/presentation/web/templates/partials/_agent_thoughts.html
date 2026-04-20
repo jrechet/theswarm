@@ -1,0 +1,19 @@
+{% if entries %}
+<ol class="agent-thoughts-list" data-testid="agent-thoughts">
+  {% for e in entries %}
+  <li class="agent-thought agent-thought-{{ e.kind }}" data-agent="{{ e.agent }}" data-kind="{{ e.kind }}">
+    <div class="agent-thought-meta">
+      <span class="agent-row-dot agent-dot-{{ e.agent }}"></span>
+      <span class="agent-thought-agent">{{ e.agent }}</span>
+      <span class="agent-thought-kind">{{ e.kind }}</span>
+      {% if e.phase %}<span class="agent-thought-phase">{{ e.phase }}</span>{% endif %}
+      <time class="agent-thought-time">{{ e.occurred_at.strftime('%H:%M:%S') }}</time>
+    </div>
+    <div class="agent-thought-body">{{ e.text }}</div>
+    {% if e.detail %}<div class="agent-thought-detail">{{ e.detail }}</div>{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p class="empty-state">No thoughts or steps captured yet.</p>
+{% endif %}

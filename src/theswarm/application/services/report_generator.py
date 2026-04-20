@@ -8,7 +8,12 @@ from datetime import datetime, timezone
 from theswarm.domain.cycles.entities import Cycle
 from theswarm.domain.cycles.value_objects import CycleStatus, PhaseStatus
 from theswarm.domain.reporting.entities import DemoReport, ReportSummary
-from theswarm.domain.reporting.value_objects import QualityGate, QualityStatus
+from theswarm.domain.reporting.value_objects import (
+    Artifact,
+    ArtifactType,
+    QualityGate,
+    QualityStatus,
+)
 
 
 class ReportGenerator:
@@ -22,10 +27,32 @@ class ReportGenerator:
     For now, it produces a report from what's available in the Cycle entity.
     """
 
-    def generate(self, cycle: Cycle) -> DemoReport:
-        """Create a report from a cycle."""
+    def generate(
+        self,
+        cycle: Cycle,
+        thumbnail_rel_path: str = "",
+        agent_learnings: tuple[str, ...] = (),
+    ) -> DemoReport:
+        """Create a report from a cycle.
+
+        ``thumbnail_rel_path`` (F4): optional relative artifact path for the
+        cover thumbnail. When provided, it is attached to the report as a
+        SCREENSHOT artifact so ``DemoReport.thumbnail_path`` resolves to it.
+        """
         summary = self._build_summary(cycle)
         gates = self._build_quality_gates(cycle)
+
+        artifacts: tuple[Artifact, ...] = ()
+        if thumbnail_rel_path:
+            mime = "image/jpeg" if thumbnail_rel_path.endswith((".jpg", ".jpeg")) else "image/png"
+            artifacts = (
+                Artifact(
+                    type=ArtifactType.SCREENSHOT,
+                    label="demo_thumbnail",
+                    path=thumbnail_rel_path,
+                    mime_type=mime,
+                ),
+            )
 
         return DemoReport(
             id=f"rpt-{uuid.uuid4().hex[:8]}",
@@ -34,6 +61,8 @@ class ReportGenerator:
             created_at=datetime.now(timezone.utc),
             summary=summary,
             quality_gates=gates,
+            artifacts=artifacts,
+            agent_learnings=tuple(agent_learnings),
         )
 
     def _build_summary(self, cycle: Cycle) -> ReportSummary:
