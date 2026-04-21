@@ -97,6 +97,7 @@ def create_web_app(
     vcs_factory: Callable[[str], object] | None = None,
     cycle_event_store: object | None = None,
     memory_store: object | None = None,
+    checkpoint_repo: object | None = None,
 ) -> FastAPI:
     """Wire the web dashboard with dependency injection."""
     app = FastAPI(title="TheSwarm Dashboard", docs_url=None, redoc_url=None)
@@ -170,6 +171,9 @@ def create_web_app(
     # Report repository and artifact store
     app.state.report_repo = report_repo
     app.state.artifact_store = artifact_store
+
+    # Sprint G1 — checkpoint repository for cycle resume
+    app.state.checkpoint_repo = checkpoint_repo
 
     # Persistence event handlers — store cycles and activities in SQLite
     cycle_persistence = CyclePersistenceHandler(cycle_repo)

@@ -5,11 +5,22 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from dataclasses import dataclass
+import random
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 
 import anthropic
 
 log = logging.getLogger(__name__)
+
+# Sprint G2 — errors that warrant an adaptive retry with backoff.
+_RETRYABLE_ERRORS: tuple[type[BaseException], ...] = (
+    anthropic.APITimeoutError,
+    anthropic.APIConnectionError,
+    anthropic.RateLimitError,
+    anthropic.InternalServerError,
+    asyncio.TimeoutError,
+)
 
 # Map short names to full model IDs
 _MODEL_MAP: dict[str, str] = {
@@ -54,6 +65,12 @@ class ClaudeCLI:
     model: str = "sonnet"
     timeout: int = 600  # 10 min default
     max_tokens: int = 8192
+    # Sprint G2 — adaptive retry/backoff config.
+    max_retries: int = 3
+    retry_base_ms: int = 1000
+    timeout_growth: float = 1.5
+    _sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep, repr=False)
+    _rng: random.Random = field(default_factory=random.Random, repr=False)
 
     def _resolve_model(self) -> str:
         return _MODEL_MAP.get(self.model, self.model)
@@ -65,9 +82,23 @@ class ClaudeCLI:
         the current model if the category isn't in the table.
         """
         if routing is None:
-            return ClaudeCLI(model=self.model, timeout=self.timeout, max_tokens=self.max_tokens)
+            return ClaudeCLI(
+                model=self.model, timeout=self.timeout, max_tokens=self.max_tokens,
+                max_retries=self.max_retries, retry_base_ms=self.retry_base_ms,
+                timeout_growth=self.timeout_growth,
+            )
         model = routing.get(task_category, self.model)
-        return ClaudeCLI(model=model, timeout=self.timeout, max_tokens=self.max_tokens)
+        return ClaudeCLI(
+            model=model, timeout=self.timeout, max_tokens=self.max_tokens,
+            max_retries=self.max_retries, retry_base_ms=self.retry_base_ms,
+            timeout_growth=self.timeout_growth,
+        )
+
+    def _compute_backoff_ms(self, attempt: int) -> int:
+        """Exponential backoff + jitter. attempt is 0-indexed."""
+        base = self.retry_base_ms * (2 ** attempt)
+        jitter = self._rng.randint(0, self.retry_base_ms)
+        return base + jitter
 
     async def run(
         self,
@@ -76,7 +107,12 @@ class ClaudeCLI:
         workdir: str | None = None,
         timeout: int | None = None,
     ) -> ClaudeResult:
-        """Run a prompt via Anthropic Messages API."""
+        """Run a prompt via Anthropic Messages API with adaptive retry.
+
+        On retryable errors (timeout, rate limit, connection, 5xx),
+        backs off exponentially with jitter and grows the per-attempt
+        timeout by `timeout_growth`. Non-retryable errors propagate.
+        """
         effective_timeout = timeout or self.timeout
         model_id = self._resolve_model()
 
@@ -88,15 +124,37 @@ class ClaudeCLI:
 
         log.info("Claude API: model=%s workdir=%s timeout=%ds", model_id, workdir, effective_timeout)
 
-        response = await asyncio.wait_for(
-            client.messages.create(
-                model=model_id,
-                max_tokens=self.max_tokens,
-                system="\n".join(system_parts) if system_parts else anthropic.NOT_GIVEN,
-                messages=[{"role": "user", "content": prompt}],
-            ),
-            timeout=effective_timeout,
-        )
+        attempt = 0
+        last_error: BaseException | None = None
+        while True:
+            try:
+                response = await asyncio.wait_for(
+                    client.messages.create(
+                        model=model_id,
+                        max_tokens=self.max_tokens,
+                        system="\n".join(system_parts) if system_parts else anthropic.NOT_GIVEN,
+                        messages=[{"role": "user", "content": prompt}],
+                    ),
+                    timeout=effective_timeout,
+                )
+                break
+            except _RETRYABLE_ERRORS as exc:
+                last_error = exc
+                if attempt >= self.max_retries:
+                    log.error(
+                        "Claude API exhausted retries (%d): %s: %s",
+                        self.max_retries, type(exc).__name__, exc,
+                    )
+                    raise
+                delay_ms = self._compute_backoff_ms(attempt)
+                log.warning(
+                    "Claude API retry %d/%d after %s: %s (sleep %dms, timeout→%ds)",
+                    attempt + 1, self.max_retries, type(exc).__name__, exc,
+                    delay_ms, int(effective_timeout * self.timeout_growth),
+                )
+                await self._sleep(delay_ms / 1000.0)
+                effective_timeout = int(effective_timeout * self.timeout_growth)
+                attempt += 1
 
         text = response.content[0].text if response.content else ""
         input_tokens = response.usage.input_tokens
@@ -104,8 +162,8 @@ class ClaudeCLI:
         cost_usd = _estimate_cost(model_id, input_tokens, output_tokens)
 
         log.info(
-            "Claude result: $%.4f  model=%s  in=%d out=%d",
-            cost_usd, model_id, input_tokens, output_tokens,
+            "Claude result: $%.4f  model=%s  in=%d out=%d  attempts=%d",
+            cost_usd, model_id, input_tokens, output_tokens, attempt + 1,
         )
 
         return ClaudeResult(

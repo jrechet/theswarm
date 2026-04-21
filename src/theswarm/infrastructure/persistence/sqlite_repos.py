@@ -9,6 +9,7 @@ from pathlib import Path
 
 import aiosqlite
 
+from theswarm.domain.cycles.checkpoint import PhaseCheckpoint
 from theswarm.domain.cycles.entities import Cycle, PhaseExecution
 from theswarm.domain.cycles.value_objects import (
     Budget,
@@ -35,6 +36,9 @@ from theswarm.infrastructure.persistence.migrations.v003_story_actions import (
 from theswarm.infrastructure.persistence.migrations.v004_cycle_events import (
     SQL as MIGRATION_V004,
 )
+from theswarm.infrastructure.persistence.migrations.v005_cycle_checkpoints import (
+    SQL as MIGRATION_V005,
+)
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +55,7 @@ async def init_db(db_path: str = _DEFAULT_DB) -> aiosqlite.Connection:
     await db.executescript(MIGRATION_V002)
     await db.executescript(MIGRATION_V003)
     await db.executescript(MIGRATION_V004)
+    await db.executescript(MIGRATION_V005)
     await db.commit()
     return db
 
@@ -450,4 +455,62 @@ class SQLiteScheduleRepository:
             last_run=datetime.fromisoformat(row["last_run"]) if row["last_run"] else None,
             next_run=datetime.fromisoformat(row["next_run"]) if row["next_run"] else None,
             created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+
+# ── Checkpoint Repository (Sprint G1) ──────────────────────────────
+
+
+class SQLiteCheckpointRepository:
+    """Persist PhaseCheckpoints so a failed cycle can be resumed."""
+
+    def __init__(self, db: aiosqlite.Connection) -> None:
+        self._db = db
+
+    async def save(self, checkpoint: PhaseCheckpoint) -> None:
+        await self._db.execute(
+            """INSERT OR REPLACE INTO cycle_checkpoints
+               (cycle_id, phase, state_json, ok, completed_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (
+                checkpoint.cycle_id,
+                checkpoint.phase,
+                checkpoint.state_json,
+                1 if checkpoint.ok else 0,
+                checkpoint.completed_at.isoformat(),
+            ),
+        )
+        await self._db.commit()
+
+    async def list_for_cycle(self, cycle_id: str) -> list[PhaseCheckpoint]:
+        cursor = await self._db.execute(
+            """SELECT cycle_id, phase, state_json, ok, completed_at
+               FROM cycle_checkpoints
+               WHERE cycle_id = ?
+               ORDER BY completed_at ASC""",
+            (cycle_id,),
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_checkpoint(r) for r in rows]
+
+    async def last_ok(self, cycle_id: str) -> PhaseCheckpoint | None:
+        cursor = await self._db.execute(
+            """SELECT cycle_id, phase, state_json, ok, completed_at
+               FROM cycle_checkpoints
+               WHERE cycle_id = ? AND ok = 1
+               ORDER BY completed_at DESC
+               LIMIT 1""",
+            (cycle_id,),
+        )
+        row = await cursor.fetchone()
+        return self._row_to_checkpoint(row) if row else None
+
+    @staticmethod
+    def _row_to_checkpoint(row) -> PhaseCheckpoint:
+        return PhaseCheckpoint(
+            cycle_id=row["cycle_id"],
+            phase=row["phase"],
+            state_json=row["state_json"],
+            ok=bool(row["ok"]),
+            completed_at=datetime.fromisoformat(row["completed_at"]),
         )

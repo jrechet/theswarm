@@ -148,11 +148,18 @@ async def cycle_detail(request: Request, cycle_id: str) -> HTMLResponse:
     query: GetCycleStatusQuery = request.app.state.get_cycle_status_query
     cycle = await query.execute(cycle_id)
 
+    checkpoint_repo = getattr(request.app.state, "checkpoint_repo", None)
+    resumable_from = None
+    if checkpoint_repo is not None:
+        last_ok = await checkpoint_repo.last_ok(cycle_id)
+        if last_ok is not None:
+            resumable_from = last_ok.next_phase
+
     if cycle is not None:
         templates = request.app.state.templates
         return templates.TemplateResponse(
             "cycles_detail.html",
-            {"request": request, "cycle": cycle},
+            {"request": request, "cycle": cycle, "resumable_from": resumable_from},
         )
 
     # Fall back to in-memory tracker (for web/API-triggered cycles)
@@ -167,7 +174,7 @@ async def cycle_detail(request: Request, cycle_id: str) -> HTMLResponse:
     templates = request.app.state.templates
     return templates.TemplateResponse(
         "cycles_detail.html",
-        {"request": request, "cycle": tracker_cycle},
+        {"request": request, "cycle": tracker_cycle, "resumable_from": resumable_from},
     )
 
 
@@ -238,14 +245,91 @@ async def trigger_cycle(
     event_bus = getattr(request.app.state, "event_bus", None)
     report_repo = getattr(request.app.state, "report_repo", None)
     base_path = getattr(request.app.state, "base_path", "")
+    checkpoint_repo = getattr(request.app.state, "checkpoint_repo", None)
     task = asyncio.create_task(
         run_api_cycle(
             record.id, repo, req.description, "", allowed_repos,
             event_bus=event_bus, report_repo=report_repo, base_path=base_path,
+            project_repo=getattr(request.app.state, "project_repo", None),
+            cycle_repo=getattr(request.app.state, "cycle_repo", None),
+            project_id=project_id,
+            checkpoint_repo=checkpoint_repo,
         )
     )
     tracker.set_task(record.id, task)
     log.info("Cycle %s triggered for project %s (repo=%s)", record.id, project_id, repo)
 
     base = request.app.state.base_path
+    return RedirectResponse(url=f"{base}/cycles/{record.id}", status_code=303)
+
+
+@router.get("/{cycle_id}/checkpoints")
+async def cycle_checkpoints(request: Request, cycle_id: str) -> dict:
+    """Sprint G5 — list PhaseCheckpoints for a cycle (for UI + API)."""
+    checkpoint_repo = getattr(request.app.state, "checkpoint_repo", None)
+    if checkpoint_repo is None:
+        return {"cycle_id": cycle_id, "checkpoints": [], "resumable_from": None}
+    items = await checkpoint_repo.list_for_cycle(cycle_id)
+    last_ok = await checkpoint_repo.last_ok(cycle_id)
+    resumable_from = last_ok.next_phase if last_ok else None
+    return {
+        "cycle_id": cycle_id,
+        "checkpoints": [
+            {
+                "phase": c.phase,
+                "ok": c.ok,
+                "completed_at": c.completed_at.isoformat(),
+            }
+            for c in items
+        ],
+        "resumable_from": resumable_from,
+    }
+
+
+@router.post("/{cycle_id}/resume", response_class=RedirectResponse)
+async def cycle_resume(request: Request, cycle_id: str) -> RedirectResponse:
+    """Sprint G5 — resume a failed cycle from the phase after the last ok checkpoint."""
+    from theswarm.api import CycleRequest, get_cycle_tracker, run_api_cycle
+
+    checkpoint_repo = getattr(request.app.state, "checkpoint_repo", None)
+    base = request.app.state.base_path
+    if checkpoint_repo is None:
+        return RedirectResponse(url=f"{base}/cycles/{cycle_id}", status_code=303)
+
+    last_ok = await checkpoint_repo.last_ok(cycle_id)
+    resume_from = last_ok.next_phase if last_ok else None
+    if resume_from is None:
+        # Nothing to resume from — redirect without action
+        return RedirectResponse(url=f"{base}/cycles/{cycle_id}", status_code=303)
+
+    # Find the original cycle's project/repo
+    query: GetCycleStatusQuery = request.app.state.get_cycle_status_query
+    original = await query.execute(cycle_id)
+    repo = original.project_id if original is not None else ""
+    project_id = repo
+
+    tracker = get_cycle_tracker()
+    req = CycleRequest(repo=repo, description=f"Resume of {cycle_id} from {resume_from}")
+    record = tracker.create(req)
+
+    allowed_repos = getattr(request.app.state, "allowed_repos", [])
+    event_bus = getattr(request.app.state, "event_bus", None)
+    report_repo = getattr(request.app.state, "report_repo", None)
+    base_path = getattr(request.app.state, "base_path", "")
+    task = asyncio.create_task(
+        run_api_cycle(
+            record.id, repo, req.description, "", allowed_repos,
+            event_bus=event_bus, report_repo=report_repo, base_path=base_path,
+            project_repo=getattr(request.app.state, "project_repo", None),
+            cycle_repo=getattr(request.app.state, "cycle_repo", None),
+            project_id=project_id,
+            checkpoint_repo=checkpoint_repo,
+            resume_from=resume_from,
+        )
+    )
+    tracker.set_task(record.id, task)
+    log.info(
+        "Cycle %s resumed as %s from phase %s",
+        cycle_id, record.id, resume_from,
+    )
     return RedirectResponse(url=f"{base}/cycles/{record.id}", status_code=303)

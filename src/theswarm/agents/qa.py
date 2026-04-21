@@ -205,8 +205,12 @@ async def run_e2e_tests(state: AgentState) -> dict:
         cwd=workspace,
     )
 
-    # Wait for the server to start
-    await asyncio.sleep(3)
+    # Sprint G4 — wait for the server to become ready instead of a blind sleep
+    from theswarm.infrastructure.resilience import ReadinessTimeout, wait_for_http_ready
+    try:
+        await wait_for_http_ready(f"http://127.0.0.1:{port}/", timeout=30.0, interval=0.5)
+    except ReadinessTimeout as exc:
+        log.warning("QA E2E: %s — running tests anyway", exc)
 
     e2e_output = ""
     e2e_passed = False
@@ -375,7 +379,12 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
         cwd=workspace,
     )
 
-    await asyncio.sleep(3)  # wait for server startup
+    # Sprint G4 — wait for readiness instead of blind sleep
+    from theswarm.infrastructure.resilience import ReadinessTimeout, wait_for_http_ready
+    try:
+        await wait_for_http_ready(f"http://127.0.0.1:{port}/", timeout=30.0, interval=0.5)
+    except ReadinessTimeout as exc:
+        log.warning("QA screenshots: %s — capturing anyway", exc)
 
     recorder = PlaywrightRecorder()
     base_url = f"http://127.0.0.1:{port}"
@@ -512,7 +521,12 @@ async def record_demo_video(state: AgentState) -> dict:
         cwd=workspace,
     )
 
-    await asyncio.sleep(3)  # wait for server startup
+    # Sprint G4 — wait for readiness instead of blind sleep
+    from theswarm.infrastructure.resilience import ReadinessTimeout, wait_for_http_ready
+    try:
+        await wait_for_http_ready(f"http://127.0.0.1:{port}/", timeout=30.0, interval=0.5)
+    except ReadinessTimeout as exc:
+        log.warning("QA video: %s — recording anyway", exc)
 
     recorder = PlaywrightRecorder()
     base_url = f"http://127.0.0.1:{port}"

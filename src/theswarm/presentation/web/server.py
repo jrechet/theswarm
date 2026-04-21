@@ -486,6 +486,12 @@ async def start_server(
     # Sprint E M1 / M2 — memory store for the viewer and retrospective phase
     memory_store = SQLiteMemoryStore(conn)
 
+    # Sprint G1 — cycle checkpoint repository
+    from theswarm.infrastructure.persistence.sqlite_repos import (
+        SQLiteCheckpointRepository,
+    )
+    checkpoint_repo = SQLiteCheckpointRepository(conn)
+
     # Create v2 web app
     base_path = os.getenv("BASE_PATH", "")
     def _vcs_factory(repo: str):
@@ -501,6 +507,7 @@ async def start_server(
         vcs_factory=_vcs_factory,
         cycle_event_store=cycle_event_store,
         memory_store=memory_store,
+        checkpoint_repo=checkpoint_repo,
     )
 
     # Create gateway bridge for Mattermost/persona integration

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
 
@@ -84,6 +84,7 @@ _SPRINTS: tuple[_Sprint, ...] = (
             "Fernet keys must be lazy-initialised so restarts don't block",
             "CycleBlocked → SSE toast pattern generalises beyond budget guard",
         ),
+        video_filename="sprint-B.webm",
     ),
     _Sprint(
         letter="C",
@@ -99,6 +100,7 @@ _SPRINTS: tuple[_Sprint, ...] = (
             "sha256 prefix gives stable, guessable-resistant public slugs",
             "Idempotency via a story_actions table is cleaner than in-memory guards",
         ),
+        video_filename="sprint-C.webm",
     ),
     _Sprint(
         letter="D",
@@ -116,6 +118,7 @@ _SPRINTS: tuple[_Sprint, ...] = (
             "Event sourcing for replay is cheap when stored as JSONL blobs",
             "Web Push needs an opt-in bell — silent subscription ruins trust",
         ),
+        video_filename="sprint-D.webm",
     ),
     _Sprint(
         letter="E",
@@ -131,6 +134,7 @@ _SPRINTS: tuple[_Sprint, ...] = (
             "Rule-based retrospectives ship faster than LLM summarisation",
             "Idempotent CLAUDE.md PR logic prevents a rejection storm on one story",
         ),
+        video_filename="sprint-E.webm",
     ),
     _Sprint(
         letter="F",
@@ -148,6 +152,25 @@ _SPRINTS: tuple[_Sprint, ...] = (
             "Protocol-based Linear client keeps the adapter swap-friendly",
             "Marker entries on compaction make the size drop auditable later",
         ),
+        video_filename="sprint-F.webm",
+    ),
+    _Sprint(
+        letter="G",
+        title="Sprint G — Résilience & fail-safes",
+        subtitle="Phase checkpoints, adaptive Claude retry, GitHub circuit breaker, QA readiness, resume UI",
+        stories=(
+            _Story("G1", "Cycle phase checkpoint persistence + /api/cycles/{id}/checkpoints"),
+            _Story("G2", "Adaptive Claude timeout with exponential backoff + jitter"),
+            _Story("G3", "GitHub client rate-limit circuit breaker"),
+            _Story("G4", "QA HTTP readiness watchdog replacing blind sleeps"),
+            _Story("G5", "Cycle Resume UI + POST /cycles/{id}/resume"),
+        ),
+        tests_total=1342,
+        learnings=(
+            "Injectable sleep_fn/rng makes backoff tests deterministic without monkeypatching time",
+            "Immediate-trip errors (RateLimitExceeded) belong at the breaker layer, not in each caller",
+        ),
+        video_filename="sprint-G.webm",
     ),
 )
 
@@ -179,9 +202,9 @@ def _sprint_cycle_id(letter: str) -> CycleId:
 
 
 def _sprint_created_at(index: int) -> datetime:
-    # Space sprints 10 minutes apart on 2026-04-20 so they sort chronologically
-    # and group on the same dashboard day.
-    return _DEFAULT_CREATED_AT.replace(minute=index * 10)
+    # Space sprints 10 minutes apart starting 2026-04-20 12:00 UTC so they
+    # sort chronologically on the dashboard. timedelta handles >5 sprints cleanly.
+    return _DEFAULT_CREATED_AT + timedelta(minutes=index * 10)
 
 
 def _build_quality_gates() -> tuple[QualityGate, ...]:

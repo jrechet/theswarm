@@ -12,10 +12,12 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import Any
 
-from github import Github, GithubException
+from github import Github, GithubException, RateLimitExceededException
 from github.Issue import Issue
 from github.PullRequest import PullRequest
 from github.Repository import Repository
+
+from theswarm.infrastructure.resilience import CircuitBreaker
 
 
 @dataclass
@@ -24,15 +26,24 @@ class GitHubClient:
     repo_name: str
     _gh: Github = field(init=False, repr=False)
     _repo: Repository = field(init=False, repr=False)
+    _breaker: CircuitBreaker = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         token = os.environ.get("GITHUB_TOKEN", "")
         self._gh = Github(token)
         self._repo = self._gh.get_repo(self.repo_name)
+        self._breaker = CircuitBreaker(
+            name=f"github:{self.repo_name}",
+            failure_threshold=5,
+            reset_seconds=60.0,
+            immediate_trip_errors=(RateLimitExceededException,),
+        )
 
     async def _run(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, partial(fn, *args, **kwargs))
+        async def invoke() -> Any:
+            return await loop.run_in_executor(None, partial(fn, *args, **kwargs))
+        return await self._breaker.call(invoke)
 
     # ── Issues ──────────────────────────────────────────────────────────
 

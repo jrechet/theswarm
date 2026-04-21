@@ -10,6 +10,13 @@
       {{ cycle.status }}
     </span>
     <a href="{{ base }}/cycles/{{ cycle.id }}/replay" class="btn btn-ghost" style="margin-left:auto;">⟲ Replay</a>
+    {% if cycle.status == 'failed' and resumable_from %}
+    <form method="post" action="{{ base }}/cycles/{{ cycle.id }}/resume" style="display:inline;margin-left:0.5rem;">
+      <button type="submit" class="btn btn-primary" title="Resume from phase: {{ resumable_from }}">
+        ↻ Resume from {{ resumable_from }}
+      </button>
+    </form>
+    {% endif %}
   </div>
 
   <div class="detail-grid">

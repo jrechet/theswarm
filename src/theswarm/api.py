@@ -210,6 +210,8 @@ async def run_api_cycle(
     project_repo: object | None = None,
     cycle_repo: object | None = None,
     project_id: str = "",
+    checkpoint_repo: object | None = None,
+    resume_from: str | None = None,
 ) -> None:
     """Execute a cycle initiated via the API."""
     from theswarm.cycle import run_daily_cycle
@@ -225,6 +227,13 @@ async def run_api_cycle(
             completed_at=datetime.now().isoformat(timespec="seconds"),
         )
         return
+
+    # Claim RUNNING eagerly so the redirect target shows live state even while
+    # the async BudgetGuard check below is resolving.
+    tracker.update_status(
+        cycle_id, CycleStatus.RUNNING,
+        started_at=datetime.now().isoformat(timespec="seconds"),
+    )
 
     # Sprint B C4 — budget/pause gate.
     if project_repo is not None and cycle_repo is not None and project_id:
@@ -252,11 +261,6 @@ async def run_api_cycle(
                     return
         except Exception:
             log.exception("BudgetGuard check failed (letting cycle proceed)")
-
-    tracker.update_status(
-        cycle_id, CycleStatus.RUNNING,
-        started_at=datetime.now().isoformat(timespec="seconds"),
-    )
 
     # Dashboard state
     from theswarm.dashboard import get_dashboard_state
@@ -311,7 +315,31 @@ async def run_api_cycle(
                 triggered_by="web",
             ))
 
-        result = await run_daily_cycle(cycle_config, on_progress=on_progress)
+        on_checkpoint = None
+        if checkpoint_repo is not None:
+            from datetime import datetime as _dt
+            from datetime import timezone as _tz
+            import json as _json
+            from theswarm.domain.cycles.checkpoint import PhaseCheckpoint
+
+            async def on_checkpoint(phase: str, ok: bool, snapshot: dict) -> None:  # type: ignore[no-redef]
+                try:
+                    await checkpoint_repo.save(PhaseCheckpoint(
+                        cycle_id=cycle_id,
+                        phase=phase,
+                        state_json=_json.dumps(snapshot, default=str),
+                        ok=ok,
+                        completed_at=_dt.now(_tz.utc),
+                    ))
+                except Exception:
+                    log.exception("checkpoint save failed for cycle %s phase %s", cycle_id, phase)
+
+        result = await run_daily_cycle(
+            cycle_config,
+            on_progress=on_progress,
+            on_checkpoint=on_checkpoint,
+            resume_from=resume_from,
+        )
 
         dash.cost_so_far = result.get("cost_usd", 0.0)
         cycle_date = result.get("date", "")

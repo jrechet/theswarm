@@ -147,12 +147,21 @@ async def _pull_latest(config: CycleConfig) -> None:
     await _run_git("pull", "--ff-only", cwd=config.workspace_dir, check=False)
 
 
-async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
+async def run_daily_cycle(
+    config: CycleConfig,
+    on_progress=None,
+    on_checkpoint=None,
+    resume_from: str | None = None,
+) -> dict:
     """Run one complete daily cycle and return the summary.
 
     Args:
         config: Cycle configuration.
         on_progress: Optional async callback ``(role, message) -> None`` for live updates.
+        on_checkpoint: Optional async callback ``(phase: str, ok: bool, state: dict) -> None``
+            called after each phase completes or fails. Sprint G1.
+        resume_from: Optional phase name (e.g. ``"qa"``) to skip earlier phases.
+            When set, PHASE_ORDER phases earlier than this are skipped. Sprint G5.
     """
     from theswarm.application.services.watchdog import AgentWatchdog
 
@@ -178,6 +187,23 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
             except Exception:
                 pass
 
+    async def _checkpoint(phase: str, ok: bool, snapshot: dict) -> None:
+        if on_checkpoint is None:
+            return
+        try:
+            await on_checkpoint(phase, ok, snapshot)
+        except Exception:
+            log.exception("on_checkpoint raised (continuing)")
+
+    from theswarm.domain.cycles.checkpoint import PHASE_ORDER
+
+    def _skip(phase: str) -> bool:
+        if not resume_from:
+            return False
+        if phase not in PHASE_ORDER or resume_from not in PHASE_ORDER:
+            return False
+        return PHASE_ORDER.index(phase) < PHASE_ORDER.index(resume_from)
+
     # Per-role token accumulators for budget enforcement
     role_tokens: dict[str, int] = {r.value: 0 for r in Role}
 
@@ -186,6 +212,13 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
         budget = config.token_budget.get(role, 0)
         if budget and role_tokens[role.value] > budget:
             raise BudgetExceeded(role.value, role_tokens[role.value], budget)
+
+    # Sprint G1 — tracks the phase currently executing so we can emit a
+    # failed checkpoint if it crashes before completing.
+    _current_phase = {"name": "po_morning"}
+
+    def _enter(phase: str) -> None:
+        _current_phase["name"] = phase
 
     print(f"\n{'=' * 60}")
     print(f"SWARM CYCLE — {today}")
@@ -202,26 +235,43 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
             await base_state["github"].ensure_branch_protection()
 
         # --- MORNING: PO daily planning ---
-        await _progress("PO", "Starting daily planning…")
-        po = build_po_graph()
-        po_state = await po.ainvoke({**base_state, "phase": Phase.MORNING.value})
-        po_cost = po_state.get("cost_usd", 0.0)
-        tracker.record("po_morning", po_state.get("tokens_used", 0), po_cost)
-        total_cost += po_cost
-        _check_budget(Role.PO, po_state.get("tokens_used", 0))
+        if not _skip("po_morning"):
+            _enter("po_morning")
+            await _progress("PO", "Starting daily planning…")
+            po = build_po_graph()
+            po_state = await po.ainvoke({**base_state, "phase": Phase.MORNING.value})
+            po_cost = po_state.get("cost_usd", 0.0)
+            tracker.record("po_morning", po_state.get("tokens_used", 0), po_cost)
+            total_cost += po_cost
+            _check_budget(Role.PO, po_state.get("tokens_used", 0))
+            await _checkpoint(
+                "po_morning", True,
+                {"tokens": po_state.get("tokens_used", 0), "cost": po_cost},
+            )
 
         # --- MORNING: Tech Lead story breakdown ---
-        await _progress("TechLead", "Breaking down stories into tasks…")
-        tl = build_techlead_graph()
-        tl_state = await tl.ainvoke({**base_state, "phase": "breakdown"})
-        tl_bd_cost = tl_state.get("cost_usd", 0.0)
-        tracker.record("techlead_breakdown", tl_state.get("tokens_used", 0), tl_bd_cost)
-        total_cost += tl_bd_cost
-        _check_budget(Role.TECHLEAD, tl_state.get("tokens_used", 0))
+        if not _skip("techlead_breakdown"):
+            _enter("techlead_breakdown")
+            await _progress("TechLead", "Breaking down stories into tasks…")
+            tl = build_techlead_graph()
+            tl_state = await tl.ainvoke({**base_state, "phase": "breakdown"})
+            tl_bd_cost = tl_state.get("cost_usd", 0.0)
+            tracker.record("techlead_breakdown", tl_state.get("tokens_used", 0), tl_bd_cost)
+            total_cost += tl_bd_cost
+            _check_budget(Role.TECHLEAD, tl_state.get("tokens_used", 0))
+            await _checkpoint(
+                "techlead_breakdown", True,
+                {"tokens": tl_state.get("tokens_used", 0), "cost": tl_bd_cost},
+            )
 
         # --- DEVELOPMENT: Dev implements → TechLead reviews → repeat ---
-        await _progress("Dev", "Starting development loop…")
+        _dev_loop_ran = not _skip("dev_loop")
+        if _dev_loop_ran:
+            _enter("dev_loop")
+            await _progress("Dev", "Starting development loop…")
         for iteration in range(1, MAX_DEV_ITERATIONS + 1):
+            if not _dev_loop_ran:
+                break
             await _progress("Dev", f"Iteration {iteration}/{MAX_DEV_ITERATIONS} — picking next task…")
             dev = build_dev_graph()
             dev_state = await dev.ainvoke({**base_state, "phase": Phase.DEVELOPMENT.value})
@@ -264,26 +314,49 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
             if merged:
                 await _pull_latest(config)
 
+        if _dev_loop_ran:
+            await _checkpoint(
+                "dev_loop", True,
+                {
+                    "prs_opened": [p.get("number") for p in all_prs if isinstance(p, dict)],
+                    "reviews": len(all_reviews),
+                },
+            )
+
         # --- DEMO: QA generates demo ---
-        await _progress("QA", "Running tests + security scan…")
-        qa = build_qa_graph()
-        qa_state = await qa.ainvoke({**base_state, "phase": Phase.DEMO.value})
-        qa_cost = qa_state.get("cost_usd", 0.0)
-        tracker.record("qa", qa_state.get("tokens_used", 0), qa_cost)
-        total_cost += qa_cost
-        _check_budget(Role.QA, qa_state.get("tokens_used", 0))
+        qa_state: dict = {}
+        if not _skip("qa"):
+            _enter("qa")
+            await _progress("QA", "Running tests + security scan…")
+            qa = build_qa_graph()
+            qa_state = await qa.ainvoke({**base_state, "phase": Phase.DEMO.value})
+            qa_cost = qa_state.get("cost_usd", 0.0)
+            tracker.record("qa", qa_state.get("tokens_used", 0), qa_cost)
+            total_cost += qa_cost
+            _check_budget(Role.QA, qa_state.get("tokens_used", 0))
+            await _checkpoint(
+                "qa", True,
+                {"tokens": qa_state.get("tokens_used", 0), "cost": qa_cost},
+            )
 
         # --- EVENING: PO validates + reports ---
-        await _progress("PO", "Generating daily report…")
-        po_evening = build_po_graph()
-        po_ev_state = await po_evening.ainvoke({
-            **base_state,
-            "phase": Phase.EVENING.value,
-            "demo_report": qa_state.get("demo_report"),
-        })
-        po_ev_cost = po_ev_state.get("cost_usd", 0.0)
-        tracker.record("po_evening", po_ev_state.get("tokens_used", 0), po_ev_cost)
-        total_cost += po_ev_cost
+        po_ev_state: dict = {}
+        if not _skip("po_evening"):
+            _enter("po_evening")
+            await _progress("PO", "Generating daily report…")
+            po_evening = build_po_graph()
+            po_ev_state = await po_evening.ainvoke({
+                **base_state,
+                "phase": Phase.EVENING.value,
+                "demo_report": qa_state.get("demo_report"),
+            })
+            po_ev_cost = po_ev_state.get("cost_usd", 0.0)
+            tracker.record("po_evening", po_ev_state.get("tokens_used", 0), po_ev_cost)
+            total_cost += po_ev_cost
+            await _checkpoint(
+                "po_evening", True,
+                {"tokens": po_ev_state.get("tokens_used", 0), "cost": po_ev_cost},
+            )
 
         # --- SUMMARY ---
         print(f"\n{'=' * 60}")
@@ -315,6 +388,15 @@ async def run_daily_cycle(config: CycleConfig, on_progress=None) -> dict:
         await append_cycle_log(config, result)
 
         return result
+    except Exception as exc:
+        # Sprint G1 — persist a failed checkpoint for the phase that crashed
+        # so /cycles/{id}/resume can pick up from the next one.
+        failed_phase = _current_phase["name"]
+        await _checkpoint(
+            failed_phase, False,
+            {"error": f"{type(exc).__name__}: {exc}"},
+        )
+        raise
     finally:
         await watchdog.stop()
         # Cleanup workspace even on failure
