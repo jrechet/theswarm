@@ -22,16 +22,27 @@ async def list_cycles(request: Request, project_id: str = "") -> HTMLResponse:
     query: ListCyclesQuery = request.app.state.list_cycles_query
     cycles = list(await query.execute(project_id))
 
+    # Resolve project_id → repo so we can match tracker records, which store
+    # the full repo URL (e.g. "owner/name"), not the project id.
+    filter_repo: str | None = None
+    if project_id:
+        project_repo = getattr(request.app.state, "project_repo", None)
+        if project_repo is not None:
+            proj = await project_repo.get(project_id)
+            if proj is not None:
+                filter_repo = str(proj.repo)
+
     # Merge in-memory tracker records (web/API-triggered)
     from theswarm.api import get_cycle_tracker
     tracker = get_cycle_tracker()
     tracker_records = tracker.list_recent(limit=20)
-    tracker_ids = {r.id for r in tracker_records}
     existing_ids = {c.id for c in cycles}
     for record in tracker_records:
-        if record.id not in existing_ids:
-            if not project_id or record.repo == project_id:
-                cycles.append(_tracker_record_to_dto(record))
+        if record.id in existing_ids:
+            continue
+        if project_id and record.repo != filter_repo and record.repo != project_id:
+            continue
+        cycles.append(_tracker_record_to_dto(record))
 
     templates = request.app.state.templates
     # Return fragment for HTMX requests (e.g. project detail page)
