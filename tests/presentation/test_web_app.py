@@ -179,9 +179,16 @@ class TestCycleRoutes:
         r = await client.get("/cycles/nope")
         assert r.status_code == 404
 
-    async def test_trigger_cycle(self, repos, client):
+    async def test_trigger_cycle(self, repos, client, mocker):
         project_repo, _ = repos
         await project_repo.save(Project(id="p1", repo=RepoUrl("o/p1")))
+
+        # Mock run_api_cycle so the trigger spawns a no-op task instead of a
+        # real cycle pipeline (which would hang on git clone / HTTP calls).
+        async def _noop(*_args, **_kwargs):
+            return None
+
+        mocker.patch("theswarm.api.run_api_cycle", side_effect=_noop)
 
         r = await client.post(
             "/cycles/trigger",
@@ -189,7 +196,8 @@ class TestCycleRoutes:
             follow_redirects=True,
         )
         assert r.status_code == 200
-        assert "running" in r.text.lower() or "pending" in r.text.lower()
+        body = r.text.lower()
+        assert any(s in body for s in ("running", "pending", "queued"))
 
     async def test_cycle_timeline_shows_duration(self, repos, client):
         from datetime import timedelta

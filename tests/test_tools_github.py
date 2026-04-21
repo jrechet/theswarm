@@ -113,11 +113,14 @@ def test_pr_to_dict_no_body():
 @pytest.fixture()
 def github_client():
     """Create a GitHubClient without hitting real GitHub."""
+    from theswarm.infrastructure.resilience import CircuitBreaker
+
     with patch.object(GitHubClient, "__post_init__"):
         client = GitHubClient.__new__(GitHubClient)
         client.repo_name = "owner/repo"
         client._repo = MagicMock()
         client._gh = MagicMock()
+        client._breaker = CircuitBreaker(name="test", failure_threshold=999)
     return client
 
 
