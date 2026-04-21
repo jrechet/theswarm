@@ -146,3 +146,44 @@ async def test_seed_self_idempotent_video_copy(db, tmp_path):
     )
 
     assert r1.videos_attached == r2.videos_attached
+
+
+async def test_seed_self_inserts_cycles_when_cycle_repo_provided(db):
+    """Seeding a cycle_repo should populate /cycles/ with one completed
+    cycle per sprint, matching the demo-report list."""
+    from theswarm.domain.cycles.value_objects import CycleStatus
+    from theswarm.infrastructure.persistence.sqlite_repos import (
+        SQLiteCycleRepository,
+    )
+
+    project_repo = SQLiteProjectRepository(db)
+    report_repo = SQLiteReportRepository(db)
+    cycle_repo = SQLiteCycleRepository(db)
+
+    result = await seed_self(project_repo, report_repo, cycle_repo=cycle_repo)
+
+    assert len(result.cycles_saved) == len(_SPRINTS)
+    cycles = await cycle_repo.list_by_project(_PROJECT_ID, limit=50)
+    assert len(cycles) == len(_SPRINTS)
+    # Each seeded cycle should be completed with 5 phases
+    for cycle in cycles:
+        assert cycle.status == CycleStatus.COMPLETED
+        assert len(cycle.phases) == 5
+        assert cycle.started_at is not None
+        assert cycle.completed_at is not None
+
+
+async def test_seed_self_cycle_insertion_is_idempotent(db):
+    from theswarm.infrastructure.persistence.sqlite_repos import (
+        SQLiteCycleRepository,
+    )
+
+    project_repo = SQLiteProjectRepository(db)
+    report_repo = SQLiteReportRepository(db)
+    cycle_repo = SQLiteCycleRepository(db)
+
+    await seed_self(project_repo, report_repo, cycle_repo=cycle_repo)
+    await seed_self(project_repo, report_repo, cycle_repo=cycle_repo)
+
+    cycles = await cycle_repo.list_by_project(_PROJECT_ID, limit=50)
+    assert len(cycles) == len(_SPRINTS)

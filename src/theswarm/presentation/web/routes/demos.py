@@ -343,7 +343,11 @@ async def comment_story(
 
 
 def _build_slides(report) -> list[dict]:
-    """Build an ordered list of slide descriptors from a DemoReport."""
+    """Build an ordered list of slide descriptors from a DemoReport.
+
+    Top-level walkthrough videos are surfaced right after the title slide so
+    viewers land on the demo video without having to click through stories.
+    """
     slides: list[dict] = []
 
     # Slide 0: Title
@@ -354,6 +358,14 @@ def _build_slides(report) -> list[dict]:
         "summary": report.summary,
         "gates_pass": report.all_gates_pass,
     })
+
+    # Top-level walkthrough videos come right after the title
+    videos = [a for a in report.artifacts if a.type.value == "video"]
+    for v in videos:
+        slides.append({
+            "type": "artifact_video",
+            "artifact": v,
+        })
 
     # Per-story slides
     for i, story in enumerate(report.stories):
@@ -371,7 +383,7 @@ def _build_slides(report) -> list[dict]:
                 "story": story,
             })
 
-        # Video slide
+        # Per-story video slide
         if story.video:
             slides.append({
                 "type": "video",
@@ -392,14 +404,6 @@ def _build_slides(report) -> list[dict]:
         slides.append({
             "type": "gallery",
             "artifacts": screenshots,
-        })
-
-    # Videos (top-level artifacts)
-    videos = [a for a in report.artifacts if a.type.value == "video"]
-    for v in videos:
-        slides.append({
-            "type": "artifact_video",
-            "artifact": v,
         })
 
     # Agent learnings

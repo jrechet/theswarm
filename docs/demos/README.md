@@ -17,21 +17,23 @@ Per the plan rule (§4 of [`theswarm-04.md`](../../theswarm-04.md)):
 | [`sprint-F.webm`](sprint-F.webm) | F — Pluggabilité & polish | P1 webhook, P2 Linear adapter, M3 compaction, F7 speed, F8 comparator |
 | [`sprint-G.webm`](sprint-G.webm) | G — Résilience & fail-safes | G1 checkpoints, G2 adaptive Claude, G3 GitHub breaker, G4 readiness, G5 resume UI |
 
-## Regenerating a placeholder demo
+## Recording / re-recording a walkthrough
 
-Placeholders are short colored title-card webms generated via the bundled
-`imageio-ffmpeg` binary. Example:
-
-```bash
-uv run python scripts/gen_sprint_demo.py G "Résilience & fail-safes"
-```
-
-To record a real walkthrough instead:
+Every sprint demo is a real Playwright capture of the dashboard tour, with
+the per-sprint demo play page included in the stops. To re-record:
 
 ```bash
-uv run python -m theswarm serve &
-# trigger a cycle from the dashboard, open /demos/{id}/play
-# record the screen with PlaywrightRecorder or QuickTime
+# one sprint
+uv run python scripts/record_sprint_walkthrough.py B
+
+# all of B-F in sequence
+uv run python scripts/record_sprint_walkthrough.py all
 ```
 
-Then overwrite the placeholder webm with the captured recording.
+The script boots an isolated TheSwarm server in a temp dir, runs `seed_self`
+(so the full sprint history is populated), walks the key dashboard screens
+and writes `docs/demos/sprint-<L>.webm`.
+
+On deploy, the unified server runs `seed_self` at startup and copies the
+committed webms into the artifact store, so every dashboard gets the
+current recordings automatically. Set `SWARM_SKIP_SELF_SEED=1` to opt out.

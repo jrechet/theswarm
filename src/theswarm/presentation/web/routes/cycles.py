@@ -20,7 +20,7 @@ router = APIRouter(prefix="/cycles")
 @router.get("/", response_class=HTMLResponse)
 async def list_cycles(request: Request, project_id: str = "") -> HTMLResponse:
     query: ListCyclesQuery = request.app.state.list_cycles_query
-    cycles = list(await query.execute(project_id) if project_id else [])
+    cycles = list(await query.execute(project_id))
 
     # Merge in-memory tracker records (web/API-triggered)
     from theswarm.api import get_cycle_tracker

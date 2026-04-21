@@ -16,7 +16,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
 
-from theswarm.domain.cycles.value_objects import CycleId
+from theswarm.domain.cycles.entities import Cycle, PhaseExecution
+from theswarm.domain.cycles.value_objects import (
+    Budget,
+    CycleId,
+    CycleStatus,
+    PhaseStatus,
+)
 from theswarm.domain.projects.entities import Project
 from theswarm.domain.projects.value_objects import RepoUrl
 from theswarm.domain.reporting.entities import DemoReport, ReportSummary, StoryReport
@@ -185,12 +191,18 @@ class _ReportRepoLike(Protocol):
     async def get(self, report_id: str) -> DemoReport | None: ...
 
 
+class _CycleRepoLike(Protocol):
+    async def save(self, cycle: Cycle) -> None: ...
+    async def get(self, cycle_id: CycleId) -> Cycle | None: ...
+
+
 @dataclass(frozen=True)
 class SelfSeedResult:
     project_created: bool
     project_updated: bool
     reports_saved: tuple[str, ...]
     videos_attached: tuple[str, ...]
+    cycles_saved: tuple[str, ...] = ()
 
 
 def _sprint_report_id(letter: str) -> str:
@@ -268,15 +280,62 @@ def _build_stories(sprint: _Sprint) -> tuple[StoryReport, ...]:
     )
 
 
+def _build_cycle(sprint: _Sprint, created_at: datetime) -> Cycle:
+    """Build a completed Cycle entity matching a seeded sprint demo.
+
+    Gives the dashboard real cycle rows so /cycles/, "Recent Cycles",
+    "Success Rate" and "Cost 7d" stats reflect the sprint history.
+    """
+    n = len(sprint.stories)
+    phase_defs = (
+        ("po_morning", "po", f"Selected {n} backlog stories"),
+        ("techlead_breakdown", "techlead", "Split stories into dev-ready sub-tasks"),
+        ("dev_loop", "dev", f"Implemented {n} stories, opened {n} PRs"),
+        ("qa", "qa", "Ran unit + E2E + security gates"),
+        ("po_evening", "po", "Published demo report"),
+    )
+    # Each phase spans 1 minute starting at created_at.
+    phases = tuple(
+        PhaseExecution(
+            phase=name,
+            agent=agent,
+            started_at=created_at + timedelta(minutes=idx),
+            completed_at=created_at + timedelta(minutes=idx + 1),
+            status=PhaseStatus.COMPLETED,
+            summary=summary,
+        )
+        for idx, (name, agent, summary) in enumerate(phase_defs)
+    )
+    completed_at = created_at + timedelta(minutes=len(phase_defs))
+    prs = tuple(100 + idx for idx in range(n))
+    return Cycle(
+        id=_sprint_cycle_id(sprint.letter),
+        project_id=_PROJECT_ID,
+        status=CycleStatus.COMPLETED,
+        triggered_by="self-seed",
+        started_at=created_at,
+        completed_at=completed_at,
+        phases=phases,
+        budgets=(Budget(role="claude", limit=200_000, used=9_400),),
+        total_cost_usd=0.37,
+        prs_opened=prs,
+        prs_merged=prs,
+    )
+
+
 async def seed_self(
     project_repo: _ProjectRepoLike,
     report_repo: _ReportRepoLike,
     *,
+    cycle_repo: _CycleRepoLike | None = None,
     video_source_dir: Path | None = None,
     artifacts_base_dir: Path | None = None,
 ) -> SelfSeedResult:
     """Register the TheSwarm project and one demo report per sprint.
 
+    - ``cycle_repo``: if provided, also insert a completed Cycle row per sprint so
+      the /cycles/ page and home-page stats are populated consistently with the
+      demo list.
     - ``video_source_dir``: directory holding ``sprint-*.webm`` to attach (optional).
     - ``artifacts_base_dir``: base artifact store dir; required if attaching videos.
     """
@@ -292,10 +351,12 @@ async def seed_self(
 
     saved_ids: list[str] = []
     attached_videos: list[str] = []
+    cycles_saved: list[str] = []
 
     for idx, sprint in enumerate(_SPRINTS):
         report_id = _sprint_report_id(sprint.letter)
         cycle_id = _sprint_cycle_id(sprint.letter)
+        created_at = _sprint_created_at(idx)
 
         artifacts: tuple[Artifact, ...] = ()
         video = _attach_sprint_video(
@@ -313,7 +374,7 @@ async def seed_self(
             id=report_id,
             cycle_id=cycle_id,
             project_id=_PROJECT_ID,
-            created_at=_sprint_created_at(idx),
+            created_at=created_at,
             summary=_summary_for(sprint),
             stories=_build_stories(sprint),
             quality_gates=_build_quality_gates(),
@@ -323,9 +384,15 @@ async def seed_self(
         await report_repo.save(report)
         saved_ids.append(report_id)
 
+        if cycle_repo is not None:
+            cycle = _build_cycle(sprint, created_at)
+            await cycle_repo.save(cycle)
+            cycles_saved.append(str(cycle.id))
+
     return SelfSeedResult(
         project_created=project_created,
         project_updated=project_updated,
         reports_saved=tuple(saved_ids),
         videos_attached=tuple(attached_videos),
+        cycles_saved=tuple(cycles_saved),
     )

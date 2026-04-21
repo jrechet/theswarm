@@ -664,6 +664,32 @@ async def start_server(
     app.state.memory_compaction_service = compaction_service
     asyncio.create_task(run_compaction_loop(compaction_service))
 
+    # ── Auto-seed dogfood demos (idempotent) ─────────────────────
+    # Every deploy re-runs seed_self so new sprint videos under
+    # ``docs/demos/sprint-*.webm`` are picked up without a manual CLI step.
+    # Opt out via SWARM_SKIP_SELF_SEED=1 for tests or staging.
+    if os.getenv("SWARM_SKIP_SELF_SEED", "") != "1":
+        try:
+            from pathlib import Path as _Path
+            from theswarm.application.services.self_seed import seed_self
+            video_dir = _Path("docs/demos")
+            result = await seed_self(
+                project_repo,
+                report_repo,
+                cycle_repo=cycle_repo,
+                video_source_dir=video_dir if video_dir.is_dir() else None,
+                artifacts_base_dir=_Path(artifact_store.base_dir),
+            )
+            log.info(
+                "Self-seed: project=%s reports=%d cycles=%d videos=%d",
+                "created" if result.project_created else "updated",
+                len(result.reports_saved),
+                len(result.cycles_saved),
+                len(result.videos_attached),
+            )
+        except Exception:
+            log.exception("Self-seed failed; continuing startup")
+
     # ── Start uvicorn ────────────────────────────────────────────
     config = uvicorn.Config(app, host=host, port=port, log_level="info")
     server = uvicorn.Server(config)
