@@ -1,0 +1,97 @@
+{# Semantic memory — portfolio + per-project (Phase L). #}
+{%- set scope = project_id or "portfolio" -%}
+{%- set fragment_id = "semantic-memory-fragment-" ~ scope -%}
+{%- set base_url = base ~ ("/projects/" ~ project_id ~ "/semantic-memory" if project_id else "/semantic-memory") -%}
+<section id="{{ fragment_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Semantic Memory</h3>
+    <span class="muted">opt-in index · retrieval = tag + substring match</span>
+  </header>
+
+  <form class="cos-inline-form"
+        hx-get="{{ base_url }}"
+        hx-target="#{{ fragment_id }}"
+        hx-swap="outerHTML">
+    <input type="text" name="q" value="{{ query }}"
+           placeholder="search query" data-testid="semantic-memory-q">
+    <input type="text" name="tag" value="{{ tag }}"
+           placeholder="tag" data-testid="semantic-memory-tag">
+    <button type="submit" class="btn btn-link">Search</button>
+  </form>
+
+  {% if entries %}
+    <ul class="semantic-entries">
+    {% for e in entries %}
+      <li class="semantic-entry semantic-entry--{{ 'enabled' if e.enabled else 'disabled' }}">
+        <header>
+          <strong>{{ e.title }}</strong>
+          {% if e.is_portfolio_wide %}
+            <span class="badge badge-subtle">portfolio</span>
+          {% else %}
+            <span class="badge badge-subtle">{{ e.project_id }}</span>
+          {% endif %}
+          <span class="badge badge-mem-{{ 'on' if e.enabled else 'off' }}">
+            {{ 'enabled' if e.enabled else 'disabled' }}
+          </span>
+          {% for t in e.tags %}
+            <span class="badge badge-subtle">#{{ t }}</span>
+          {% endfor %}
+        </header>
+        {% if e.content %}
+          <p class="semantic-content">{{ e.content }}</p>
+        {% endif %}
+        {% if e.source %}
+          <p class="muted"><code>{{ e.source }}</code></p>
+        {% endif %}
+
+        <form hx-post="{{ base }}/semantic-memory/{{ e.id }}/enable"
+              hx-target="#{{ fragment_id }}"
+              hx-swap="outerHTML" style="display:inline">
+          <input type="hidden" name="enabled"
+                 value="{{ '0' if e.enabled else '1' }}">
+          <button type="submit" class="btn btn-link">
+            {{ 'Disable' if e.enabled else 'Enable' }}
+          </button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No memory entries yet.</p>
+  {% endif %}
+
+  <details class="semantic-entry-new">
+    <summary>Record a new entry</summary>
+    <form class="semantic-entry-form"
+          hx-post="{{ base_url }}"
+          hx-target="#{{ fragment_id }}"
+          hx-swap="outerHTML">
+      <label>Title
+        <input type="text" name="title" required
+               data-testid="semantic-entry-title">
+      </label>
+      <label>Content
+        <textarea name="content" rows="3"></textarea>
+      </label>
+      {% if not project_id %}
+        <label>Project id (blank = portfolio)
+          <input type="text" name="project_id" placeholder="">
+        </label>
+      {% endif %}
+      <label>Tags (comma-separated)
+        <input type="text" name="tags" placeholder="e.g. auth, incident, design">
+      </label>
+      <label>Source (optional)
+        <input type="text" name="source" placeholder="/docs/x.md or URL">
+      </label>
+      <label>
+        <input type="checkbox" name="enabled" value="1" checked>
+        Enable immediately
+      </label>
+      <button type="submit" class="btn btn-primary"
+              data-testid="semantic-entry-submit">
+        Save entry
+      </button>
+    </form>
+  </details>
+</section>

@@ -1,0 +1,51 @@
+{# Inbox of proposals for a single project. HTMX-swappable. #}
+<section id="proposals-fragment-{{ project_id }}" class="po-panel">
+  <header class="po-panel-header">
+    <h3>Proposals</h3>
+    <div class="po-counts">
+      {% for status, n in counts.items() %}
+        <span class="po-count po-count-{{ status }}">{{ status }}: {{ n }}</span>
+      {% endfor %}
+    </div>
+  </header>
+
+  {% if inbox %}
+    <ul class="po-proposal-list">
+    {% for p in inbox %}
+      <li class="po-proposal po-proposal-{{ p.status.value }}">
+        <div class="po-proposal-title">{{ p.title }}</div>
+        {% if p.rationale %}<div class="po-proposal-rationale">{{ p.rationale }}</div>{% endif %}
+        {% if p.source_url %}
+          <a class="po-proposal-source" href="{{ p.source_url }}" target="_blank" rel="noopener">source</a>
+        {% endif %}
+        <form class="po-proposal-actions"
+              hx-post="{{ base }}/projects/{{ project_id }}/proposals/{{ p.id }}/decide"
+              hx-target="#proposals-fragment-{{ project_id }}"
+              hx-swap="outerHTML">
+          <input type="text" name="note" placeholder="note (optional)" />
+          <button type="submit" name="action" value="approve">Approve</button>
+          <button type="submit" name="action" value="reject">Reject</button>
+          <button type="submit" name="action" value="defer">Defer</button>
+          <button type="submit" name="action" value="ask">Ask</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="po-empty">No pending proposals.</p>
+  {% endif %}
+
+  {% if decided %}
+    <details class="po-decided">
+      <summary>Recent decisions ({{ decided|length }})</summary>
+      <ul class="po-decided-list">
+      {% for p in decided %}
+        <li class="po-decided-row po-decided-{{ p.status.value }}">
+          <strong>{{ p.status.value }}</strong> — {{ p.title }}
+          {% if p.decision_note %}<em>— {{ p.decision_note }}</em>{% endif %}
+        </li>
+      {% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+</section>

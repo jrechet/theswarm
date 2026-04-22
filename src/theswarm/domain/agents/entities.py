@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from theswarm.domain.agents.value_objects import AgentRole, Phase
 
@@ -69,3 +70,37 @@ class AgentExecution:
             cost_usd=self.cost_usd,
             error=error,
         )
+
+
+PORTFOLIO_PROJECT_ID = "__portfolio__"
+
+
+@dataclass(frozen=True)
+class RoleAssignment:
+    """A codenamed agent instance attached to a project (or the portfolio)."""
+
+    id: str
+    project_id: str   # PORTFOLIO_PROJECT_ID for portfolio-scoped roles
+    role: AgentRole
+    codename: str
+    assigned_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    retired_at: datetime | None = None
+    config: dict = field(default_factory=dict)
+
+    @property
+    def is_portfolio(self) -> bool:
+        return self.project_id == PORTFOLIO_PROJECT_ID
+
+    @property
+    def is_active(self) -> bool:
+        return self.retired_at is None
+
+    def display(self) -> str:
+        return f"{self.codename} ({self.role.value})"
+
+    def retire(self, at: datetime | None = None) -> RoleAssignment:
+        return replace(self, retired_at=at or datetime.now(timezone.utc))
+
+    @staticmethod
+    def new_id() -> str:
+        return uuid4().hex[:16]

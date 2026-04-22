@@ -1,0 +1,12 @@
+{% for m in messages %}
+<div class="chat-msg chat-msg--{{ m.author_kind.value }}" data-msg-id="{{ m.id }}">
+  <div class="chat-msg__head">
+    <span class="chat-msg__author">{{ m.author_display or m.author_id or 'system' }}</span>
+    <span class="chat-msg__time">{{ m.created_at.isoformat()[11:16] }}</span>
+    {% if m.intent_action %}
+    <span class="chat-msg__tag badge badge-subtle">{{ m.intent_action }}</span>
+    {% endif %}
+  </div>
+  <div class="chat-msg__body">{{ m.body }}</div>
+</div>
+{% endfor %}

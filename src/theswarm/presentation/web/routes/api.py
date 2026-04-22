@@ -312,6 +312,9 @@ async def start_cycle(request: Request) -> JSONResponse:
     report_repo = getattr(request.app.state, "report_repo", None)
     project_repo = getattr(request.app.state, "project_repo", None)
     cycle_repo = getattr(request.app.state, "cycle_repo", None)
+    role_assignment_service = getattr(
+        request.app.state, "role_assignment_service", None,
+    )
     base_path = getattr(request.app.state, "base_path", "")
     project_id = await _resolve_project_id(project_repo, req.repo)
     task = asyncio.create_task(
@@ -320,6 +323,7 @@ async def start_cycle(request: Request) -> JSONResponse:
             event_bus=event_bus, report_repo=report_repo, base_path=base_path,
             project_repo=project_repo, cycle_repo=cycle_repo,
             project_id=project_id,
+            role_assignment_service=role_assignment_service,
         )
     )
     tracker.set_task(record.id, task)
@@ -684,6 +688,9 @@ async def api_trigger_cycle_for_project(request: Request, project_id: str) -> JS
     report_repo = getattr(request.app.state, "report_repo", None)
     project_repo = getattr(request.app.state, "project_repo", None)
     cycle_repo = getattr(request.app.state, "cycle_repo", None)
+    role_assignment_service = getattr(
+        request.app.state, "role_assignment_service", None,
+    )
     base_path = getattr(request.app.state, "base_path", "")
     task = asyncio.create_task(
         run_api_cycle(
@@ -692,6 +699,7 @@ async def api_trigger_cycle_for_project(request: Request, project_id: str) -> JS
             report_repo=report_repo, base_path=base_path,
             project_repo=project_repo, cycle_repo=cycle_repo,
             project_id=project_id,
+            role_assignment_service=role_assignment_service,
         ),
     )
     tracker.set_task(record.id, task)

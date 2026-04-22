@@ -1,0 +1,23 @@
+{# Recent signals for a project. #}
+<section id="signals-fragment-{{ project_id }}" class="po-panel">
+  <header class="po-panel-header">
+    <h3>Signals</h3>
+  </header>
+  {% if signals %}
+    <ul class="po-signal-list">
+    {% for s in signals %}
+      <li class="po-signal po-signal-{{ s.severity.value }}">
+        <span class="po-signal-kind">{{ s.kind.value }}</span>
+        <span class="po-signal-severity">{{ s.severity.value }}</span>
+        <strong>{{ s.title }}</strong>
+        {% if s.source_url %}
+          <a href="{{ s.source_url }}" target="_blank" rel="noopener">source</a>
+        {% endif %}
+        <span class="muted">{{ s.observed_at.strftime("%Y-%m-%d %H:%M") }}</span>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="po-empty">No signals recorded yet.</p>
+  {% endif %}
+</section>

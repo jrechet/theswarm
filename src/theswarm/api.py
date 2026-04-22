@@ -212,6 +212,7 @@ async def run_api_cycle(
     project_id: str = "",
     checkpoint_repo: object | None = None,
     resume_from: str | None = None,
+    role_assignment_service: object | None = None,
 ) -> None:
     """Execute a cycle initiated via the API."""
     from theswarm.cycle import run_daily_cycle
@@ -283,7 +284,17 @@ async def run_api_cycle(
             dash.push_event(role, message)
 
     try:
-        cycle_config = CycleConfig(github_repo=repo)
+        cycle_config = CycleConfig(github_repo=repo, project_id=project_id or repo)
+
+        # Populate codenames for persona rendering. Cheap DB read; skipped
+        # cleanly if the service is unavailable.
+        if role_assignment_service is not None and project_id:
+            try:
+                cycle_config.codenames = await role_assignment_service.codename_map(
+                    project_id,
+                )
+            except Exception:
+                log.exception("codename_map lookup failed (using empty map)")
 
         # Sprint B C2 — apply project effort profile if we have a registered project
         if project_repo is not None and project_id:

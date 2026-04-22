@@ -1,0 +1,31 @@
+{# Single ADR detail view, rendered inside the ADR card slot. #}
+<section id="adrs-fragment-{{ project_id }}" class="tl-panel tl-adr-detail">
+  <header class="tl-panel-header">
+    <h3>ADR-{{ '%04d' % adr.number }} — {{ adr.title }}</h3>
+    <span class="badge badge-{{ adr.status.value }}">{{ adr.status.value }}</span>
+  </header>
+
+  <article class="tl-adr-body">
+    <section>
+      <h4>Context</h4>
+      <p>{{ adr.context or "—" }}</p>
+    </section>
+    <section>
+      <h4>Decision</h4>
+      <p>{{ adr.decision or "—" }}</p>
+    </section>
+    <section>
+      <h4>Consequences</h4>
+      <p>{{ adr.consequences or "—" }}</p>
+    </section>
+    {% if adr.supersedes %}
+      <p class="muted">Supersedes ADR {{ adr.supersedes }}</p>
+    {% endif %}
+  </article>
+
+  <a class="btn btn-ghost"
+     hx-get="{{ base }}/projects/{{ project_id }}/adrs"
+     hx-target="#adrs-fragment-{{ project_id }}"
+     hx-swap="outerHTML"
+     href="#">← Back to ADRs</a>
+</section>

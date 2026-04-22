@@ -1,0 +1,70 @@
+{# Release — feature flags (Phase J). #}
+<section id="release-flags-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Feature Flags</h3>
+    <span class="muted">owner · rollout · cleanup window</span>
+  </header>
+
+  {% if flags %}
+    <ul class="release-flags">
+    {% for f in flags %}
+      <li class="release-flag release-flag--{{ f.state.value }}">
+        <header>
+          <code class="flag-name">{{ f.name }}</code>
+          <span class="badge badge-{{ f.state.value }}">{{ f.state.value }}</span>
+          <span class="badge badge-subtle">{{ f.rollout_percent }}%</span>
+          {% if f.is_cleanup_overdue %}
+            <span class="badge badge-warn">cleanup overdue</span>
+          {% endif %}
+        </header>
+        {% if f.description %}
+          <p>{{ f.description }}</p>
+        {% endif %}
+        {% if f.owner %}
+          <p class="muted">owner: {{ f.owner }} · cleanup after {{ f.cleanup_after_days }}d</p>
+        {% endif %}
+
+        {% if f.state.value != 'archived' %}
+          <form class="release-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/release/flags/{{ f.name }}/archive"
+                hx-target="#release-flags-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <button type="submit" class="btn btn-link">Archive</button>
+          </form>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No feature flags tracked yet.</p>
+  {% endif %}
+
+  <form class="release-flag-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/release/flags"
+        hx-target="#release-flags-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Name
+      <input type="text" name="name" required placeholder="new_onboarding">
+    </label>
+    <label>Owner
+      <input type="text" name="owner" placeholder="growth team">
+    </label>
+    <label>Description
+      <input type="text" name="description" placeholder="gradual rollout of new UX">
+    </label>
+    <label>State
+      <select name="state">
+        {% for s in states %}
+          <option value="{{ s.value }}">{{ s.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Rollout (%)
+      <input type="number" name="rollout_percent" min="0" max="100" value="0">
+    </label>
+    <label>Cleanup (days)
+      <input type="number" name="cleanup_after_days" min="1" value="90">
+    </label>
+    <button type="submit" class="btn btn-primary">Set flag</button>
+  </form>
+</section>

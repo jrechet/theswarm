@@ -1,0 +1,56 @@
+{# Writer — changelog entries (Phase J). #}
+<section id="writer-changelog-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Changelog</h3>
+    <span class="muted">bullets · PR-extracted · bundled at release cut</span>
+  </header>
+
+  {% if entries %}
+    <ul class="writer-changelog">
+    {% for c in entries %}
+      <li class="writer-change writer-change--{{ c.kind.value }}">
+        <header>
+          <span class="badge badge-change-{{ c.kind.value }}">{{ c.kind.value }}</span>
+          {% if c.is_breaking %}
+            <span class="badge badge-warn">BREAKING</span>
+          {% endif %}
+          {% if c.version %}
+            <span class="badge badge-subtle">v{{ c.version }}</span>
+          {% else %}
+            <span class="badge badge-subtle">unreleased</span>
+          {% endif %}
+        </header>
+        <p>{{ c.summary }}</p>
+        {% if c.pr_url %}
+          <p class="muted"><a href="{{ c.pr_url }}" target="_blank" rel="noopener">{{ c.pr_url }}</a></p>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No changelog entries yet.</p>
+  {% endif %}
+
+  <form class="writer-change-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/writer/changelog"
+        hx-target="#writer-changelog-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Kind
+      <select name="kind">
+        {% for k in kinds %}
+          <option value="{{ k.value }}">{{ k.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Summary
+      <input type="text" name="summary" required placeholder="add autonomous cycle mode">
+    </label>
+    <label>PR URL
+      <input type="text" name="pr_url" placeholder="https://github.com/.../pull/123">
+    </label>
+    <label>Version
+      <input type="text" name="version" placeholder="(blank = unreleased)">
+    </label>
+    <button type="submit" class="btn btn-primary">Add bullet</button>
+  </form>
+</section>

@@ -1,0 +1,64 @@
+{# Refactor preflight log (Phase E). #}
+<section id="dev-preflight-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Refactor preflight</h3>
+    <span class="muted">
+      diffs deleting ≥ {{ threshold }} lines require a caller check
+    </span>
+  </header>
+
+  {% if entries %}
+    <ul class="dev-preflight-list">
+    {% for e in entries %}
+      <li class="dev-preflight dev-preflight--{{ e.decision.value }}">
+        <span class="badge badge-subtle">{{ e.decision.value }}</span>
+        <strong>-{{ e.deletion_lines }} lines</strong>
+        {% if e.files_touched %}
+          <span class="muted">in {{ e.files_touched|join(', ') }}</span>
+        {% endif %}
+        {% if e.callers_checked %}
+          <div class="muted">callers checked: {{ e.callers_checked|join(', ') }}</div>
+        {% endif %}
+        {% if e.reason %}<div class="muted">— {{ e.reason }}</div>{% endif %}
+        {% if e.pr_url %}<a href="{{ e.pr_url }}" target="_blank">PR</a>{% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No preflight checks recorded.</p>
+  {% endif %}
+
+  <details>
+    <summary>Log a preflight check</summary>
+    <form class="dev-preflight-form"
+          hx-post="{{ base }}/projects/{{ project_id }}/dev/preflight"
+          hx-target="#dev-preflight-fragment-{{ project_id }}"
+          hx-swap="outerHTML">
+      <label>Deletion lines
+        <input type="number" name="deletion_lines" min="0" required
+               data-testid="preflight-lines">
+      </label>
+      <label>Decision
+        <select name="decision" data-testid="preflight-decision">
+          <option value="proceed">Proceed</option>
+          <option value="bail">Bail</option>
+        </select>
+      </label>
+      <label>Reason
+        <input type="text" name="reason" placeholder="why">
+      </label>
+      <label>Files touched
+        <input type="text" name="files_touched" placeholder="comma-separated">
+      </label>
+      <label>Callers checked
+        <input type="text" name="callers_checked" placeholder="comma-separated">
+      </label>
+      <label>PR URL
+        <input type="text" name="pr_url" placeholder="optional">
+      </label>
+      <button type="submit" class="btn btn-primary" data-testid="preflight-submit">
+        Log preflight
+      </button>
+    </form>
+  </details>
+</section>

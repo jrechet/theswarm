@@ -187,6 +187,374 @@
     <p class="form-hint">Values are encrypted with Fernet and never returned by the API.</p>
   </div>
 
+  <div hx-get="{{ base }}/projects/{{ project.id }}/team"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="team-card-slot">
+    <div class="card"><p class="empty-state">Loading team…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/chat"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="chat-card-slot">
+    <div class="card"><p class="empty-state">Loading chat…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/proposals"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="proposals-card-slot">
+    <div class="card"><p class="empty-state">Loading proposals…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/okrs"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="okrs-card-slot">
+    <div class="card"><p class="empty-state">Loading OKRs…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/digest"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="digest-card-slot">
+    <div class="card"><p class="empty-state">Loading digest…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/signals"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="signals-card-slot">
+    <div class="card"><p class="empty-state">Loading signals…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/policy"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="policy-card-slot">
+    <div class="card"><p class="empty-state">Loading policy…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/deps"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="deps-card-slot">
+    <div class="card"><p class="empty-state">Loading deps radar…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/adrs"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="adrs-card-slot">
+    <div class="card"><p class="empty-state">Loading ADRs…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/debt"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="debt-card-slot">
+    <div class="card"><p class="empty-state">Loading debt register…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/reviews/calibration"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="calibration-card-slot">
+    <div class="card"><p class="empty-state">Loading review calibration…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/critical-paths"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="critical-paths-card-slot">
+    <div class="card"><p class="empty-state">Loading critical paths…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/dev/thoughts"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="dev-thoughts-card-slot">
+    <div class="card"><p class="empty-state">Loading dev thoughts…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/dev/tdd"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="dev-tdd-card-slot">
+    <div class="card"><p class="empty-state">Loading TDD gate…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/dev/preflight"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="dev-preflight-card-slot">
+    <div class="card"><p class="empty-state">Loading refactor preflight…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/dev/self-reviews"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="dev-selfrev-card-slot">
+    <div class="card"><p class="empty-state">Loading self-reviews…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/dev/coverage"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="dev-coverage-card-slot">
+    <div class="card"><p class="empty-state">Loading coverage deltas…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/qa/plans"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="qa-plans-card-slot">
+    <div class="card"><p class="empty-state">Loading test archetype mix…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/qa/flakes"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="qa-flakes-card-slot">
+    <div class="card"><p class="empty-state">Loading flake scoreboard…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/qa/quarantine"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="qa-quarantine-card-slot">
+    <div class="card"><p class="empty-state">Loading quarantine…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/qa/gates"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="qa-gates-card-slot">
+    <div class="card"><p class="empty-state">Loading quality gates…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/qa/outcomes"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="qa-outcomes-card-slot">
+    <div class="card"><p class="empty-state">Loading outcome cards…</p></div>
+  </div>
+
+  {# Phase G — Scout: project-scoped intel feed + sources #}
+  <div hx-get="{{ base }}/projects/{{ project.id }}/intel/feed"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="intel-feed-card-slot">
+    <div class="card"><p class="empty-state">Loading intel feed…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/intel/sources"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="intel-sources-card-slot">
+    <div class="card"><p class="empty-state">Loading intel sources…</p></div>
+  </div>
+
+  {# Phase H — Designer: tokens, components, briefs, visual regression, anti-template #}
+  <div hx-get="{{ base }}/projects/{{ project.id }}/design/tokens"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="design-tokens-card-slot">
+    <div class="card"><p class="empty-state">Loading design tokens…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/design/components"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="design-components-card-slot">
+    <div class="card"><p class="empty-state">Loading component inventory…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/design/briefs"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="design-briefs-card-slot">
+    <div class="card"><p class="empty-state">Loading design briefs…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/design/visual-regressions"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="design-vr-card-slot">
+    <div class="card"><p class="empty-state">Loading visual regressions…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/design/anti-template"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="design-anti-template-card-slot">
+    <div class="card"><p class="empty-state">Loading anti-template checks…</p></div>
+  </div>
+
+  {# Phase I — Security: threat model, data inventory, findings, SBOM, AuthZ #}
+  <div hx-get="{{ base }}/projects/{{ project.id }}/security/threat-model"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="security-threat-model-card-slot">
+    <div class="card"><p class="empty-state">Loading threat model…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/security/data-inventory"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="security-data-inventory-card-slot">
+    <div class="card"><p class="empty-state">Loading data inventory…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/security/findings"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="security-findings-card-slot">
+    <div class="card"><p class="empty-state">Loading security findings…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/security/sbom"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="security-sbom-card-slot">
+    <div class="card"><p class="empty-state">Loading SBOM…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/security/authz"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="security-authz-card-slot">
+    <div class="card"><p class="empty-state">Loading AuthZ matrix…</p></div>
+  </div>
+
+  {# Phase I — SRE: deployments, incidents, cost #}
+  <div hx-get="{{ base }}/projects/{{ project.id }}/sre/deployments"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="sre-deployments-card-slot">
+    <div class="card"><p class="empty-state">Loading deployments…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/sre/incidents"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="sre-incidents-card-slot">
+    <div class="card"><p class="empty-state">Loading incidents…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/sre/cost"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="sre-cost-card-slot">
+    <div class="card"><p class="empty-state">Loading cost rollup…</p></div>
+  </div>
+
+  {# Phase J — Analyst: metrics, instrumentation, outcomes #}
+  <div hx-get="{{ base }}/projects/{{ project.id }}/analyst/metrics"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="analyst-metrics-card-slot">
+    <div class="card"><p class="empty-state">Loading metrics…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/analyst/instrumentation"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="analyst-instrumentation-card-slot">
+    <div class="card"><p class="empty-state">Loading instrumentation…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/analyst/outcomes"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="analyst-outcomes-card-slot">
+    <div class="card"><p class="empty-state">Loading outcomes…</p></div>
+  </div>
+
+  {# Phase J — Writer: docs, quickstart, changelog #}
+  <div hx-get="{{ base }}/projects/{{ project.id }}/writer/docs"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="writer-docs-card-slot">
+    <div class="card"><p class="empty-state">Loading docs…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/writer/quickstart"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="writer-quickstart-card-slot">
+    <div class="card"><p class="empty-state">Loading quickstart checks…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/writer/changelog"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="writer-changelog-card-slot">
+    <div class="card"><p class="empty-state">Loading changelog…</p></div>
+  </div>
+
+  {# Phase J — Release: versions, flags, rollbacks #}
+  <div hx-get="{{ base }}/projects/{{ project.id }}/release/versions"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="release-versions-card-slot">
+    <div class="card"><p class="empty-state">Loading releases…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/release/flags"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="release-flags-card-slot">
+    <div class="card"><p class="empty-state">Loading feature flags…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/release/rollbacks"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="release-rollbacks-card-slot">
+    <div class="card"><p class="empty-state">Loading rollbacks…</p></div>
+  </div>
+
+  {# Phase K — Architect: project-scoped ADRs and briefs #}
+  <div hx-get="{{ base }}/projects/{{ project.id }}/architect/adrs"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="architect-adrs-card-slot">
+    <div class="card"><p class="empty-state">Loading ADRs…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/projects/{{ project.id }}/architect/briefs"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="architect-briefs-card-slot">
+    <div class="card"><p class="empty-state">Loading direction briefs…</p></div>
+  </div>
+
+  {# Phase K — Chief of Staff: project-scoped onboarding wizard #}
+  <div hx-get="{{ base }}/projects/{{ project.id }}/chief-of-staff/onboarding"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="chief-of-staff-onboarding-card-slot">
+    <div class="card"><p class="empty-state">Loading onboarding…</p></div>
+  </div>
+
+  {# Phase L — Semantic memory: project-scoped notes (includes portfolio-wide) #}
+  <div hx-get="{{ base }}/projects/{{ project.id }}/semantic-memory"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="semantic-memory-card-slot">
+    <div class="card"><p class="empty-state">Loading semantic memory…</p></div>
+  </div>
+
+  {# Phase L — Autonomy spectrum: per-(project, role) gating overrides #}
+  <div hx-get="{{ base }}/projects/{{ project.id }}/autonomy"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="autonomy-config-card-slot">
+    <div class="card"><p class="empty-state">Loading autonomy overrides…</p></div>
+  </div>
+
   <div class="card">
     <h2>Recent Cycles</h2>
     <div hx-get="{{ base }}/cycles/?project_id={{ project.id }}"

@@ -1,0 +1,54 @@
+{# Security — data inventory (Phase I). #}
+<section id="security-data-inventory-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Data inventory</h3>
+    <span class="muted">field × classification</span>
+  </header>
+
+  {% if entries %}
+    <ul class="sec-data-inventory">
+    {% for e in entries %}
+      <li class="sec-data-entry sec-data-entry--{{ e.classification.value }}">
+        <header>
+          <code>{{ e.field_name }}</code>
+          <span class="badge badge-{{ e.classification.value }}">{{ e.classification.value }}</span>
+          {% if e.is_sensitive %}
+            <span class="badge badge-warn">sensitive</span>
+          {% endif %}
+        </header>
+        {% if e.storage_notes %}
+          <p><strong>Storage:</strong> {{ e.storage_notes }}</p>
+        {% endif %}
+        {% if e.notes %}
+          <p class="muted">{{ e.notes }}</p>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No data fields inventoried yet.</p>
+  {% endif %}
+
+  <form class="sec-data-inventory-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/security/data-inventory"
+        hx-target="#security-data-inventory-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Field
+      <input type="text" name="field_name" required placeholder="user.email">
+    </label>
+    <label>Classification
+      <select name="classification">
+        {% for c in classes %}
+          <option value="{{ c.value }}">{{ c.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Storage
+      <input type="text" name="storage_notes" placeholder="Postgres; encrypted at rest">
+    </label>
+    <label>Notes
+      <input type="text" name="notes" placeholder="(optional)">
+    </label>
+    <button type="submit" class="btn btn-primary">Record field</button>
+  </form>
+</section>

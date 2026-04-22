@@ -1,0 +1,51 @@
+{# Dependency radar findings. #}
+<section id="deps-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Dependency radar</h3>
+    <div class="tl-panel-actions">
+      <form hx-post="{{ base }}/projects/{{ project_id }}/deps/scan"
+            hx-target="#deps-fragment-{{ project_id }}"
+            hx-swap="outerHTML"
+            style="display:inline">
+        <button type="submit" class="btn btn-secondary"
+                data-testid="deps-scan-btn"
+                {% if not scanners %}disabled title="No scanners registered"{% endif %}>
+          Scan now
+        </button>
+      </form>
+      <span class="muted">
+        {% if scanners %}Scanners: {{ scanners|join(", ") }}{% else %}no scanners wired{% endif %}
+      </span>
+    </div>
+  </header>
+
+  {% if findings %}
+    <ul class="tl-dep-list">
+    {% for f in findings %}
+      <li class="tl-dep tl-dep-{{ f.severity.value }}">
+        <span class="tl-dep-severity">{{ f.severity.value }}</span>
+        <strong>{{ f.package }}</strong>
+        {% if f.installed_version %}<span class="muted">@ {{ f.installed_version }}</span>{% endif %}
+        {% if f.advisory_id %}
+          <span class="tl-dep-advisory">{{ f.advisory_id }}</span>
+        {% endif %}
+        <span class="tl-dep-summary">{{ f.summary }}</span>
+        {% if f.fixed_version %}
+          <span class="tl-dep-fixed">fixed in {{ f.fixed_version }}</span>
+        {% endif %}
+        {% if f.url %}
+          <a href="{{ f.url }}" target="_blank" rel="noopener">advisory</a>
+        {% endif %}
+        <form hx-post="{{ base }}/projects/{{ project_id }}/deps/{{ f.id }}/dismiss"
+              hx-target="#deps-fragment-{{ project_id }}"
+              hx-swap="outerHTML"
+              style="display:inline">
+          <button type="submit" class="btn btn-ghost btn-sm">Dismiss</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No findings on record.</p>
+  {% endif %}
+</section>

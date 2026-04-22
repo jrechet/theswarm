@@ -1,0 +1,61 @@
+{# Analyst — metric definitions (Phase J). #}
+<section id="analyst-metrics-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Metrics</h3>
+    <span class="muted">what we measure · units · targets</span>
+  </header>
+
+  {% if metrics %}
+    <ul class="analyst-metrics">
+    {% for m in metrics %}
+      <li class="analyst-metric analyst-metric--{{ m.kind.value }}">
+        <header>
+          <code class="metric-name">{{ m.name }}</code>
+          <span class="badge badge-subtle">{{ m.kind.value }}</span>
+          {% if m.unit %}<span class="badge badge-subtle">{{ m.unit }}</span>{% endif %}
+          {% if m.target %}
+            <span class="muted">target {{ m.target }}</span>
+          {% endif %}
+        </header>
+        {% if m.definition %}
+          <p>{{ m.definition }}</p>
+        {% endif %}
+        {% if m.owner %}
+          <p class="muted">owner: {{ m.owner }}</p>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No metrics defined yet.</p>
+  {% endif %}
+
+  <form class="analyst-metric-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/analyst/metrics"
+        hx-target="#analyst-metrics-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Name
+      <input type="text" name="name" required placeholder="signup_conversion">
+    </label>
+    <label>Kind
+      <select name="kind">
+        {% for k in kinds %}
+          <option value="{{ k.value }}">{{ k.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Unit
+      <input type="text" name="unit" placeholder="%, ms, req/s, $">
+    </label>
+    <label>Definition
+      <input type="text" name="definition" placeholder="signups / visitors">
+    </label>
+    <label>Owner
+      <input type="text" name="owner" placeholder="growth team">
+    </label>
+    <label>Target
+      <input type="text" name="target" placeholder=">20%">
+    </label>
+    <button type="submit" class="btn btn-primary">Set metric</button>
+  </form>
+</section>

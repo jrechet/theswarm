@@ -1,0 +1,62 @@
+{# Quarantine list — tests pulled out of the blocking suite (Phase F). #}
+<section id="qa-quarantine-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Quarantine</h3>
+    <span class="muted">tests outside the blocking suite</span>
+  </header>
+
+  {% if active %}
+    <h4 class="qa-subheading">Active</h4>
+    <ul class="qa-quarantine-list">
+    {% for q in active %}
+      <li class="qa-quarantine qa-quarantine--active">
+        <header>
+          <code class="qa-test-id">{{ q.test_id }}</code>
+          <span class="badge badge-warn">active</span>
+        </header>
+        {% if q.reason %}<p class="muted">{{ q.reason }}</p>{% endif %}
+        <form class="qa-inline-form"
+              hx-post="{{ base }}/projects/{{ project_id }}/qa/quarantine/{{ q.id }}/release"
+              hx-target="#qa-quarantine-fragment-{{ project_id }}"
+              hx-swap="outerHTML">
+          <input type="text" name="reason" placeholder="why releasing?">
+          <button type="submit" class="btn btn-subtle">Release</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No tests currently quarantined.</p>
+  {% endif %}
+
+  {% if history %}
+    <h4 class="qa-subheading">Recently released</h4>
+    <ul class="qa-quarantine-list">
+    {% for q in history[:5] %}
+      <li class="qa-quarantine qa-quarantine--released">
+        <header>
+          <code class="qa-test-id">{{ q.test_id }}</code>
+          <span class="badge badge-subtle">released</span>
+        </header>
+        {% if q.released_reason %}
+          <p class="muted">{{ q.released_reason }}</p>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% endif %}
+
+  <form class="qa-quarantine-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/qa/quarantine"
+        hx-target="#qa-quarantine-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Test id
+      <input type="text" name="test_id" required
+             placeholder="tests/e2e/login.py::test_login">
+    </label>
+    <label>Reason
+      <input type="text" name="reason" placeholder="flake_score=0.4 over 20 runs">
+    </label>
+    <button type="submit" class="btn btn-primary">Quarantine</button>
+  </form>
+</section>

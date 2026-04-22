@@ -1,0 +1,65 @@
+{# Chief of Staff — archived projects (Phase K). #}
+<section id="chief-of-staff-archive-fragment" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Archive</h3>
+    <span class="muted">retired projects · memory frozen · append-only</span>
+  </header>
+
+  {% if archives %}
+    <ul class="cos-archive">
+    {% for a in archives %}
+      <li class="cos-archive-row cos-archive--{{ a.reason.value }}">
+        <header>
+          <strong>{{ a.project_id }}</strong>
+          <span class="badge badge-arc-{{ a.reason.value }}">{{ a.reason.value }}</span>
+          {% if a.memory_frozen %}
+            <span class="badge badge-subtle">memory frozen</span>
+          {% else %}
+            <span class="badge badge-warn">memory editable</span>
+          {% endif %}
+          <span class="muted">{{ a.archived_at.date() }}</span>
+        </header>
+        {% if a.export_path %}
+          <p class="muted"><code>export: {{ a.export_path }}</code></p>
+        {% endif %}
+        {% if a.note %}<p>{{ a.note }}</p>{% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No archived projects.</p>
+  {% endif %}
+
+  <details class="cos-archive-new">
+    <summary>Archive a project</summary>
+    <form class="cos-archive-form"
+          hx-post="{{ base }}/chief-of-staff/archive"
+          hx-target="#chief-of-staff-archive-fragment"
+          hx-swap="outerHTML">
+      <label>Project id
+        <input type="text" name="project_id" required
+               data-testid="archive-project-id">
+      </label>
+      <label>Reason
+        <select name="reason">
+          {% for r in reasons %}
+            <option value="{{ r.value }}">{{ r.value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Export path
+        <input type="text" name="export_path"
+               placeholder="~/.swarm-data/archive/proj-x.json">
+      </label>
+      <label>Freeze memory
+        <input type="checkbox" name="memory_frozen" value="1" checked>
+      </label>
+      <label>Note
+        <input type="text" name="note" placeholder="context">
+      </label>
+      <button type="submit" class="btn btn-primary" data-testid="archive-submit">
+        Archive
+      </button>
+    </form>
+  </details>
+</section>

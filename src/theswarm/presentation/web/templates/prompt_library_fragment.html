@@ -1,0 +1,92 @@
+{# Prompt library — portfolio-wide, versioned, audited (Phase L). #}
+<section id="prompt-library-fragment" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Prompt Library</h3>
+    <span class="muted">versioned prompts · deprecate + restore with audit trail</span>
+  </header>
+
+  {% if templates %}
+    <ul class="prompt-templates">
+    {% for t in templates %}
+      <li class="prompt-template prompt-template--{{ 'active' if t.is_active else 'deprecated' }}">
+        <header>
+          <strong>{{ t.name }}</strong>
+          <span class="badge badge-subtle">v{{ t.version }}</span>
+          {% if t.role %}
+            <span class="badge badge-subtle">{{ t.role }}</span>
+          {% endif %}
+          <span class="badge badge-prompt-{{ 'active' if t.is_active else 'deprecated' }}">
+            {{ 'active' if t.is_active else 'deprecated' }}
+          </span>
+          {% if t.updated_by %}
+            <span class="badge badge-subtle">by {{ t.updated_by }}</span>
+          {% endif %}
+        </header>
+        {% if t.body %}
+          <pre class="prompt-body">{{ t.body }}</pre>
+        {% endif %}
+
+        <div class="prompt-template-actions">
+          {% if t.is_active %}
+            <form hx-post="{{ base }}/prompt-library/{{ t.name }}/deprecate"
+                  hx-target="#prompt-library-fragment"
+                  hx-swap="outerHTML" style="display:inline">
+              <input type="text" name="actor" placeholder="actor" class="input-sm">
+              <input type="text" name="note" placeholder="reason" class="input-sm">
+              <button type="submit" class="btn btn-sm btn-ghost">Deprecate</button>
+            </form>
+          {% else %}
+            <form hx-post="{{ base }}/prompt-library/{{ t.name }}/restore"
+                  hx-target="#prompt-library-fragment"
+                  hx-swap="outerHTML" style="display:inline">
+              <input type="text" name="actor" placeholder="actor" class="input-sm">
+              <input type="text" name="note" placeholder="reason" class="input-sm">
+              <button type="submit" class="btn btn-sm btn-primary">Restore</button>
+            </form>
+          {% endif %}
+          <a class="btn btn-link"
+             hx-get="{{ base }}/prompt-library/audit?name={{ t.name }}"
+             hx-target="#prompt-library-audit-fragment"
+             hx-swap="outerHTML"
+             href="#prompt-library-audit-fragment">
+            History
+          </a>
+        </div>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No prompt templates yet.</p>
+  {% endif %}
+
+  <details class="prompt-template-new">
+    <summary>Save or update a prompt</summary>
+    <form class="prompt-template-form"
+          hx-post="{{ base }}/prompt-library"
+          hx-target="#prompt-library-fragment"
+          hx-swap="outerHTML">
+      <label>Name
+        <input type="text" name="name" required
+               data-testid="prompt-template-name"
+               placeholder="e.g. po.morning_plan">
+      </label>
+      <label>Role (optional)
+        <input type="text" name="role" placeholder="po | techlead | dev | qa | ...">
+      </label>
+      <label>Body
+        <textarea name="body" rows="6"
+                  placeholder="Prompt body — supports mustache {{ '{{' }}variables{{ '}}' }}"></textarea>
+      </label>
+      <label>Actor
+        <input type="text" name="actor" placeholder="@codename">
+      </label>
+      <label>Note (why this change)
+        <input type="text" name="note" placeholder="optional audit note">
+      </label>
+      <button type="submit" class="btn btn-primary"
+              data-testid="prompt-template-submit">
+        Save prompt
+      </button>
+    </form>
+  </details>
+</section>

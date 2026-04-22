@@ -1,0 +1,116 @@
+{# Refactor programs — portfolio-wide (Phase L). #}
+<section id="refactor-programs-fragment" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Refactor Programs</h3>
+    <span class="muted">cross-project coordinated refactors · opt-in per project</span>
+  </header>
+
+  {% if programs %}
+    <ul class="refactor-programs">
+    {% for p in programs %}
+      <li class="refactor-program refactor-program--{{ p.status.value }}">
+        <header>
+          <strong>{{ p.title }}</strong>
+          <span class="badge badge-refactor-{{ p.status.value }}">{{ p.status.value }}</span>
+          {% if p.owner %}
+            <span class="badge badge-subtle">owner: {{ p.owner }}</span>
+          {% endif %}
+          <span class="badge badge-subtle">{{ p.project_count }} project(s)</span>
+        </header>
+        {% if p.rationale %}
+          <p class="muted">{{ p.rationale }}</p>
+        {% endif %}
+        {% if p.target_projects %}
+          <ul class="refactor-program-targets">
+          {% for proj in p.target_projects %}
+            <li>
+              <code>{{ proj }}</code>
+              <form hx-post="{{ base }}/refactor-programs/remove-project"
+                    hx-target="#refactor-programs-fragment"
+                    hx-swap="outerHTML" style="display:inline">
+                <input type="hidden" name="title" value="{{ p.title }}">
+                <input type="hidden" name="project_id" value="{{ proj }}">
+                <button type="submit" class="btn btn-link">remove</button>
+              </form>
+            </li>
+          {% endfor %}
+          </ul>
+        {% endif %}
+
+        <div class="refactor-program-actions">
+          {% if p.status.value == "proposed" %}
+            <form hx-post="{{ base }}/refactor-programs/activate"
+                  hx-target="#refactor-programs-fragment"
+                  hx-swap="outerHTML" style="display:inline">
+              <input type="hidden" name="title" value="{{ p.title }}">
+              <button type="submit" class="btn btn-sm btn-primary">Activate</button>
+            </form>
+          {% endif %}
+          {% if p.status.value == "active" %}
+            <form hx-post="{{ base }}/refactor-programs/complete"
+                  hx-target="#refactor-programs-fragment"
+                  hx-swap="outerHTML" style="display:inline">
+              <input type="hidden" name="title" value="{{ p.title }}">
+              <button type="submit" class="btn btn-sm btn-primary">Complete</button>
+            </form>
+          {% endif %}
+          {% if not p.is_terminal %}
+            <form hx-post="{{ base }}/refactor-programs/cancel"
+                  hx-target="#refactor-programs-fragment"
+                  hx-swap="outerHTML" style="display:inline">
+              <input type="hidden" name="title" value="{{ p.title }}">
+              <button type="submit" class="btn btn-sm btn-ghost">Cancel</button>
+            </form>
+          {% endif %}
+          <form class="cos-inline-form"
+                hx-post="{{ base }}/refactor-programs/add-project"
+                hx-target="#refactor-programs-fragment"
+                hx-swap="outerHTML">
+            <input type="hidden" name="title" value="{{ p.title }}">
+            <input type="text" name="project_id" placeholder="project id" required>
+            <button type="submit" class="btn btn-link">Add project</button>
+          </form>
+        </div>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No refactor programs yet.</p>
+  {% endif %}
+
+  <details class="refactor-program-new">
+    <summary>Propose a new program</summary>
+    <form class="refactor-program-form"
+          hx-post="{{ base }}/refactor-programs"
+          hx-target="#refactor-programs-fragment"
+          hx-swap="outerHTML">
+      <label>Title
+        <input type="text" name="title" required
+               data-testid="refactor-program-title"
+               placeholder="e.g. Migrate all APIs to v2 auth">
+      </label>
+      <label>Rationale
+        <textarea name="rationale" rows="2"
+                  placeholder="Why — business driver, deadline, risk"></textarea>
+      </label>
+      <label>Target projects (one per line)
+        <textarea name="target_projects" rows="3"
+                  placeholder="proj-a&#10;proj-b"></textarea>
+      </label>
+      <label>Owner
+        <input type="text" name="owner" placeholder="@codename">
+      </label>
+      <label>Initial status
+        <select name="status">
+          {% for s in statuses %}
+            <option value="{{ s.value }}">{{ s.value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="btn btn-primary"
+              data-testid="refactor-program-submit">
+        Save program
+      </button>
+    </form>
+  </details>
+</section>

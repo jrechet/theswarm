@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}HITL audit — TheSwarm{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Human-in-the-loop audit</h1>
+  <p class="hint">
+    Every nudge, pause, skip, override, and ask-answered action is recorded here.
+    {% if scope != 'all' %}Filtered to project <code>{{ scope }}</code>.{% endif %}
+  </p>
+</div>
+
+{% if entries %}
+<div class="hitl-log">
+  {% for e in entries %}
+  <div class="hitl-row" data-testid="hitl-row">
+    <span class="action">{{ e.action }}</span>
+    <span class="actor">{{ e.actor }}</span>
+    <span class="target">{{ e.target or '—' }}</span>
+    <span class="note">{{ e.note or '' }}</span>
+    <span class="time">{{ e.created_at[:16] }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">No audit entries yet.</p>
+{% endif %}
+{% endblock %}

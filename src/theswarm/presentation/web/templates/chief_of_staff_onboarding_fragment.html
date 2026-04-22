@@ -1,0 +1,49 @@
+{# Chief of Staff — onboarding wizard (Phase K). #}
+<section id="chief-of-staff-onboarding-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Onboarding</h3>
+    <span class="muted">
+      {{ done }}/{{ total }} done
+      {% if total and done == total %}· ✓ complete{% endif %}
+    </span>
+  </header>
+
+  {% if steps %}
+    <ol class="cos-onboarding">
+    {% for s in steps %}
+      <li class="cos-step cos-step--{{ s.status.value }}">
+        <header>
+          <strong>{{ s.step_name }}</strong>
+          <span class="badge badge-subtle">#{{ s.order }}</span>
+          <span class="badge badge-onb-{{ s.status.value }}">{{ s.status.value }}</span>
+        </header>
+        {% if s.note %}<p class="muted">{{ s.note }}</p>{% endif %}
+
+        <form class="cos-inline-form"
+              hx-post="{{ base }}/projects/{{ project_id }}/chief-of-staff/onboarding/{{ s.step_name }}/status"
+              hx-target="#chief-of-staff-onboarding-fragment-{{ project_id }}"
+              hx-swap="outerHTML">
+          <select name="status">
+            {% for st in statuses %}
+              <option value="{{ st.value }}">mark {{ st.value }}</option>
+            {% endfor %}
+          </select>
+          <input type="text" name="note" placeholder="note (optional)">
+          <button type="submit" class="btn btn-link">Update</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ol>
+  {% else %}
+    <p class="empty-state">No onboarding steps yet.</p>
+  {% endif %}
+
+  <form hx-post="{{ base }}/projects/{{ project_id }}/chief-of-staff/onboarding/seed"
+        hx-target="#chief-of-staff-onboarding-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <button type="submit" class="btn btn-primary"
+            data-testid="onboarding-seed">
+      Seed default checklist
+    </button>
+  </form>
+</section>

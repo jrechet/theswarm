@@ -1,0 +1,24 @@
+{# Review calibration stats fragment. #}
+<section id="calibration-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Review calibration</h3>
+  </header>
+
+  {% if stats.signed %}
+    <dl class="tl-calib-grid">
+      <dt>Reviews on record</dt><dd>{{ stats.total }}</dd>
+      <dt>Approved</dt><dd>{{ stats.approved }}</dd>
+      <dt>Changes requested</dt><dd>{{ stats.requested_changes }}</dd>
+      <dt>Comment-only</dt><dd>{{ stats.commented }}</dd>
+      <dt>Shipped clean</dt><dd>{{ stats.clean }}</dd>
+      <dt>Patched later</dt><dd>{{ stats.patch_needed }}</dd>
+      <dt>Reverted</dt><dd>{{ stats.reverted }}</dd>
+      <dt>False-positive rate</dt>
+      <dd class="tl-calib-fp">{{ (stats.false_positive_rate * 100)|round(1) }}%</dd>
+      <dt>False-negative rate</dt>
+      <dd class="tl-calib-fn">{{ (stats.false_negative_rate * 100)|round(1) }}%</dd>
+    </dl>
+  {% else %}
+    <p class="empty-state">No reviews recorded yet.</p>
+  {% endif %}
+</section>

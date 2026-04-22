@@ -1,0 +1,65 @@
+{# Analyst — outcome observations (Phase J). #}
+<section id="analyst-outcomes-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Outcomes</h3>
+    <span class="muted">did the metric move?</span>
+  </header>
+
+  {% if outcomes %}
+    <ul class="analyst-outcomes">
+    {% for o in outcomes %}
+      <li class="analyst-outcome analyst-outcome--{{ o.direction.value }}">
+        <header>
+          <strong>{{ o.story_id }}</strong>
+          <span class="muted">→</span>
+          <code>{{ o.metric_name }}</code>
+          <span class="badge badge-{{ o.direction.value }}">{{ o.direction.value }}</span>
+          {% if o.window %}
+            <span class="muted">{{ o.window }}</span>
+          {% endif %}
+        </header>
+        {% if o.baseline or o.observed %}
+          <p>
+            <strong>baseline:</strong> {{ o.baseline or '—' }}
+            <strong>observed:</strong> {{ o.observed or '—' }}
+          </p>
+        {% endif %}
+        {% if o.note %}
+          <p class="muted">{{ o.note }}</p>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No outcome observations yet.</p>
+  {% endif %}
+
+  <form class="analyst-outcome-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/analyst/outcomes"
+        hx-target="#analyst-outcomes-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Story id
+      <input type="text" name="story_id" required placeholder="S42">
+    </label>
+    <label>Metric
+      <input type="text" name="metric_name" required placeholder="signup_conversion">
+    </label>
+    <label>Baseline
+      <input type="text" name="baseline" placeholder="18.2%">
+    </label>
+    <label>Observed
+      <input type="text" name="observed" placeholder="22.4%">
+    </label>
+    <label>Direction
+      <select name="direction">
+        {% for d in directions %}
+          <option value="{{ d.value }}">{{ d.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Window
+      <input type="text" name="window" placeholder="7d post-launch">
+    </label>
+    <button type="submit" class="btn btn-primary">Record outcome</button>
+  </form>
+</section>

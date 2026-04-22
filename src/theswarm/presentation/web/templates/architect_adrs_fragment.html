@@ -1,0 +1,98 @@
+{# Architect — Portfolio/Project ADRs (Phase K). #}
+{%- set fragment_id = "architect-adrs-fragment-" ~ (project_id or "portfolio") -%}
+{%- if project_id -%}
+  {%- set base_url = base ~ "/projects/" ~ project_id ~ "/architect/adrs" -%}
+{%- else -%}
+  {%- set base_url = base ~ "/architect/adrs" -%}
+{%- endif -%}
+<section id="{{ fragment_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Architecture Decisions</h3>
+    <span class="muted">
+      {% if scope_label == "project" %}
+        project-scoped · plus portfolio-wide
+      {% else %}
+        portfolio-wide
+      {% endif %}
+      · MADR format
+    </span>
+  </header>
+
+  {% if adrs %}
+    <ul class="architect-adrs">
+    {% for a in adrs %}
+      <li class="architect-adr architect-adr--{{ a.status.value }}">
+        <header>
+          <strong>{{ a.title }}</strong>
+          <span class="badge badge-adr-{{ a.status.value }}">{{ a.status.value }}</span>
+          {% if a.is_portfolio_wide %}
+            <span class="badge badge-subtle">portfolio</span>
+          {% else %}
+            <span class="badge badge-subtle">project</span>
+          {% endif %}
+          {% if a.supersedes %}
+            <span class="badge badge-subtle">supersedes {{ a.supersedes }}</span>
+          {% endif %}
+        </header>
+        {% if a.context %}
+          <p><strong>Context:</strong> {{ a.context }}</p>
+        {% endif %}
+        {% if a.decision %}
+          <p><strong>Decision:</strong> {{ a.decision }}</p>
+        {% endif %}
+        {% if a.consequences %}
+          <p><strong>Consequences:</strong> {{ a.consequences }}</p>
+        {% endif %}
+
+        {% if a.status.value == "proposed" %}
+          <div class="architect-adr-actions">
+            <form hx-post="{{ base }}/architect/adrs/{{ a.id }}/accept"
+                  hx-target="#{{ fragment_id }}"
+                  hx-swap="outerHTML"
+                  style="display:inline">
+              <button type="submit" class="btn btn-sm btn-primary">Accept</button>
+            </form>
+            <form hx-post="{{ base }}/architect/adrs/{{ a.id }}/reject"
+                  hx-target="#{{ fragment_id }}"
+                  hx-swap="outerHTML"
+                  style="display:inline">
+              <button type="submit" class="btn btn-sm btn-ghost">Reject</button>
+            </form>
+          </div>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No ADRs recorded yet.</p>
+  {% endif %}
+
+  <details class="architect-adr-new">
+    <summary>Propose an ADR</summary>
+    <form class="architect-adr-form"
+          hx-post="{{ base_url }}"
+          hx-target="#{{ fragment_id }}"
+          hx-swap="outerHTML">
+      <label>Title
+        <input type="text" name="title" required
+               data-testid="architect-adr-title"
+               placeholder="e.g. Adopt LangGraph for agent orchestration">
+      </label>
+      <label>Context
+        <textarea name="context" rows="3"
+                  placeholder="What problem? Which constraints?"></textarea>
+      </label>
+      <label>Decision
+        <textarea name="decision" rows="3"
+                  placeholder="What did we decide to do?"></textarea>
+      </label>
+      <label>Consequences
+        <textarea name="consequences" rows="3"
+                  placeholder="Trade-offs, follow-ups."></textarea>
+      </label>
+      <button type="submit" class="btn btn-primary" data-testid="architect-adr-submit">
+        Propose
+      </button>
+    </form>
+  </details>
+</section>

@@ -257,6 +257,9 @@ async def trigger_cycle(
     report_repo = getattr(request.app.state, "report_repo", None)
     base_path = getattr(request.app.state, "base_path", "")
     checkpoint_repo = getattr(request.app.state, "checkpoint_repo", None)
+    role_assignment_service = getattr(
+        request.app.state, "role_assignment_service", None,
+    )
     task = asyncio.create_task(
         run_api_cycle(
             record.id, repo, req.description, "", allowed_repos,
@@ -265,6 +268,7 @@ async def trigger_cycle(
             cycle_repo=getattr(request.app.state, "cycle_repo", None),
             project_id=project_id,
             checkpoint_repo=checkpoint_repo,
+            role_assignment_service=role_assignment_service,
         )
     )
     tracker.set_task(record.id, task)
@@ -327,6 +331,9 @@ async def cycle_resume(request: Request, cycle_id: str) -> RedirectResponse:
     event_bus = getattr(request.app.state, "event_bus", None)
     report_repo = getattr(request.app.state, "report_repo", None)
     base_path = getattr(request.app.state, "base_path", "")
+    role_assignment_service = getattr(
+        request.app.state, "role_assignment_service", None,
+    )
     task = asyncio.create_task(
         run_api_cycle(
             record.id, repo, req.description, "", allowed_repos,
@@ -336,6 +343,7 @@ async def cycle_resume(request: Request, cycle_id: str) -> RedirectResponse:
             project_id=project_id,
             checkpoint_repo=checkpoint_repo,
             resume_from=resume_from,
+            role_assignment_service=role_assignment_service,
         )
     )
     tracker.set_task(record.id, task)

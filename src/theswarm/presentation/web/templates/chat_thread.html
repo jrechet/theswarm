@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ thread.display_title }} — Chat{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ thread.display_title }}</h1>
+  <p class="hint">
+    Project: <a href="{{ base }}/projects/{{ thread.project_id }}">{{ thread.project_id }}</a>
+    · {{ thread.message_count }} messages
+  </p>
+</div>
+
+<div class="card">
+  <div id="chat-log" class="chat-log" data-thread-id="{{ thread.id }}">
+    {% include "chat_messages_fragment.html" %}
+  </div>
+
+  <form
+    class="chat-composer"
+    hx-post="{{ base }}/chat/{{ thread.id }}/messages"
+    hx-target="#chat-log"
+    hx-swap="beforeend"
+    hx-on::after-request="this.reset()"
+  >
+    <input
+      type="text"
+      name="body"
+      placeholder="Type a message... (use @Codename to address someone)"
+      autocomplete="off"
+      required
+    />
+    <button type="submit" class="btn btn-primary">Send</button>
+  </form>
+</div>
+
+<script>
+  (function () {
+    var threadId = document.querySelector('#chat-log').dataset.threadId;
+    var base = document.documentElement.dataset.base || '';
+    var source = new EventSource(base + '/chat/' + threadId + '/stream');
+    source.addEventListener('message', function (evt) {
+      // Live-tail handled server-side via htmx POST echo; SSE is
+      // currently informational. Kept lightweight to avoid dup-appends.
+      void evt;
+    });
+  })();
+</script>
+{% endblock %}

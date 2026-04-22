@@ -18,7 +18,7 @@ from theswarm.domain.cycles.value_objects import (
     PhaseStatus,
 )
 from theswarm.domain.memory.entities import MemoryEntry
-from theswarm.domain.memory.value_objects import MemoryCategory, ProjectScope
+from theswarm.domain.memory.value_objects import MemoryCategory, ProjectScope, ScopeLayer
 from theswarm.domain.projects.entities import Project, ProjectConfig
 from theswarm.domain.projects.value_objects import Framework, RepoUrl, TicketSourceType
 from theswarm.domain.reporting.entities import DemoReport, ReportSummary
@@ -39,6 +39,65 @@ from theswarm.infrastructure.persistence.migrations.v004_cycle_events import (
 from theswarm.infrastructure.persistence.migrations.v005_cycle_checkpoints import (
     SQL as MIGRATION_V005,
 )
+from theswarm.infrastructure.persistence.migrations.v006_role_assignments import (
+    ALTER_STATEMENTS as MIGRATION_V006_ALTERS,
+    INDEX_SQL as MIGRATION_V006_INDEXES,
+    SQL as MIGRATION_V006,
+)
+from theswarm.infrastructure.persistence.migrations.v007_chat_and_hitl import (
+    SQL as MIGRATION_V007,
+)
+from theswarm.infrastructure.persistence.migrations.v008_product_intel import (
+    SQL as MIGRATION_V008,
+)
+from theswarm.infrastructure.persistence.migrations.v009_techlead import (
+    SQL as MIGRATION_V009,
+)
+from theswarm.infrastructure.persistence.migrations.v010_dev_rigour import (
+    SQL as MIGRATION_V010,
+)
+from theswarm.infrastructure.persistence.migrations.v011_qa import (
+    SQL as MIGRATION_V011,
+)
+from theswarm.infrastructure.persistence.migrations.v012_scout import (
+    SQL as MIGRATION_V012,
+)
+from theswarm.infrastructure.persistence.migrations.v013_designer import (
+    SQL as MIGRATION_V013,
+)
+from theswarm.infrastructure.persistence.migrations.v014_security import (
+    SQL as MIGRATION_V014,
+)
+from theswarm.infrastructure.persistence.migrations.v015_sre import (
+    SQL as MIGRATION_V015,
+)
+from theswarm.infrastructure.persistence.migrations.v016_analyst import (
+    SQL as MIGRATION_V016,
+)
+from theswarm.infrastructure.persistence.migrations.v017_writer import (
+    SQL as MIGRATION_V017,
+)
+from theswarm.infrastructure.persistence.migrations.v018_release import (
+    SQL as MIGRATION_V018,
+)
+from theswarm.infrastructure.persistence.migrations.v019_architect import (
+    SQL as MIGRATION_V019,
+)
+from theswarm.infrastructure.persistence.migrations.v020_chief_of_staff import (
+    SQL as MIGRATION_V020,
+)
+from theswarm.infrastructure.persistence.migrations.v021_refactor_programs import (
+    SQL as MIGRATION_V021,
+)
+from theswarm.infrastructure.persistence.migrations.v022_semantic_memory import (
+    SQL as MIGRATION_V022,
+)
+from theswarm.infrastructure.persistence.migrations.v023_prompt_library import (
+    SQL as MIGRATION_V023,
+)
+from theswarm.infrastructure.persistence.migrations.v024_autonomy_config import (
+    SQL as MIGRATION_V024,
+)
 
 log = logging.getLogger(__name__)
 
@@ -56,8 +115,43 @@ async def init_db(db_path: str = _DEFAULT_DB) -> aiosqlite.Connection:
     await db.executescript(MIGRATION_V003)
     await db.executescript(MIGRATION_V004)
     await db.executescript(MIGRATION_V005)
+    await db.executescript(MIGRATION_V006)
+    await _ensure_memory_entries_columns(db)
+    await db.executescript(MIGRATION_V006_INDEXES)
+    await db.executescript(MIGRATION_V007)
+    await db.executescript(MIGRATION_V008)
+    await db.executescript(MIGRATION_V009)
+    await db.executescript(MIGRATION_V010)
+    await db.executescript(MIGRATION_V011)
+    await db.executescript(MIGRATION_V012)
+    await db.executescript(MIGRATION_V013)
+    await db.executescript(MIGRATION_V014)
+    await db.executescript(MIGRATION_V015)
+    await db.executescript(MIGRATION_V016)
+    await db.executescript(MIGRATION_V017)
+    await db.executescript(MIGRATION_V018)
+    await db.executescript(MIGRATION_V019)
+    await db.executescript(MIGRATION_V020)
+    await db.executescript(MIGRATION_V021)
+    await db.executescript(MIGRATION_V022)
+    await db.executescript(MIGRATION_V023)
+    await db.executescript(MIGRATION_V024)
     await db.commit()
     return db
+
+
+async def _ensure_memory_entries_columns(db: aiosqlite.Connection) -> None:
+    """Add columns introduced by v006 only if they don't already exist.
+
+    SQLite's ``ALTER TABLE ADD COLUMN`` has no ``IF NOT EXISTS`` clause, so we
+    introspect the current schema first.
+    """
+    cursor = await db.execute("PRAGMA table_info(memory_entries)")
+    rows = await cursor.fetchall()
+    existing = {row[1] for row in rows}  # row[1] is column name
+    for column_name, alter_sql in MIGRATION_V006_ALTERS:
+        if column_name not in existing:
+            await db.execute(alter_sql)
 
 
 def _now_iso() -> str:
@@ -310,6 +404,8 @@ class SQLiteActivityRepository:
 
 
 class SQLiteMemoryStore:
+    """Three-layer memory store: global / project / role × project."""
+
     def __init__(self, db: aiosqlite.Connection) -> None:
         self._db = db
 
@@ -328,11 +424,25 @@ class SQLiteMemoryStore:
 
     async def append(self, entries: list[MemoryEntry]) -> None:
         for e in entries:
+            scope_layer_value = (e.scope_layer or ScopeLayer.PROJECT).value
             await self._db.execute(
                 """INSERT INTO memory_entries
-                   (project_id, category, content, agent, cycle_date, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (e.scope.project_id, e.category.value, e.content, e.agent, e.cycle_date, e.created_at.isoformat()),
+                   (project_id, category, content, agent, cycle_date, created_at,
+                    codename, role, scope_layer, confidence, supersedes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    e.scope.project_id,
+                    e.category.value,
+                    e.content,
+                    e.agent,
+                    e.cycle_date,
+                    e.created_at.isoformat(),
+                    e.codename,
+                    e.role,
+                    scope_layer_value,
+                    e.confidence,
+                    e.supersedes,
+                ),
             )
         await self._db.commit()
 
@@ -342,8 +452,11 @@ class SQLiteMemoryStore:
         category: MemoryCategory | None = None,
         agent: str = "",
         limit: int = 50,
+        role: str = "",
+        codename: str = "",
+        scope_layer: ScopeLayer | None = None,
     ) -> list[MemoryEntry]:
-        conditions = []
+        conditions: list[str] = []
         params: list = []
         if project_id:
             conditions.append("(project_id = ? OR project_id = '')")
@@ -354,6 +467,15 @@ class SQLiteMemoryStore:
         if agent:
             conditions.append("agent = ?")
             params.append(agent)
+        if role:
+            conditions.append("role = ?")
+            params.append(role)
+        if codename:
+            conditions.append("codename = ?")
+            params.append(codename)
+        if scope_layer:
+            conditions.append("scope_layer = ?")
+            params.append(scope_layer.value)
 
         where = " AND ".join(conditions) if conditions else "1=1"
         cursor = await self._db.execute(
@@ -362,6 +484,45 @@ class SQLiteMemoryStore:
         )
         rows = await cursor.fetchall()
         return [self._row_to_entry(r) for r in rows]
+
+    async def query_layered(
+        self,
+        project_id: str,
+        role: str = "",
+        codename: str = "",
+        category: MemoryCategory | None = None,
+        limit_per_layer: int = 25,
+    ) -> dict[str, list[MemoryEntry]]:
+        """Return matches bucketed by scope layer: global, project, role_project."""
+        global_entries = await self.query(
+            project_id="",
+            category=category,
+            scope_layer=ScopeLayer.GLOBAL,
+            limit=limit_per_layer,
+        )
+        project_entries: list[MemoryEntry] = []
+        role_entries: list[MemoryEntry] = []
+        if project_id:
+            project_entries = await self.query(
+                project_id=project_id,
+                category=category,
+                scope_layer=ScopeLayer.PROJECT,
+                limit=limit_per_layer,
+            )
+            if role or codename:
+                role_entries = await self.query(
+                    project_id=project_id,
+                    category=category,
+                    role=role,
+                    codename=codename,
+                    scope_layer=ScopeLayer.ROLE_PROJECT,
+                    limit=limit_per_layer,
+                )
+        return {
+            "global": global_entries,
+            "project": project_entries,
+            "role_project": role_entries,
+        }
 
     async def count(self, project_id: str = "") -> int:
         if project_id:
@@ -382,13 +543,28 @@ class SQLiteMemoryStore:
 
     @staticmethod
     def _row_to_entry(row) -> MemoryEntry:
+        keys = row.keys() if hasattr(row, "keys") else ()
+        codename = row["codename"] if "codename" in keys else ""
+        role = row["role"] if "role" in keys else ""
+        scope_layer_raw = row["scope_layer"] if "scope_layer" in keys else ""
+        confidence_raw = row["confidence"] if "confidence" in keys else 1.0
+        supersedes = row["supersedes"] if "supersedes" in keys else ""
+        try:
+            scope_layer = ScopeLayer(scope_layer_raw) if scope_layer_raw else None
+        except ValueError:
+            scope_layer = None
         return MemoryEntry(
-            category=MemoryCategory(row["category"]),
+            category=MemoryCategory.from_str(row["category"]),
             content=row["content"],
             agent=row["agent"],
             scope=ProjectScope(project_id=row["project_id"]),
             cycle_date=row["cycle_date"],
             created_at=datetime.fromisoformat(row["created_at"]),
+            codename=codename or "",
+            role=role or "",
+            scope_layer=scope_layer,
+            confidence=float(confidence_raw) if confidence_raw is not None else 1.0,
+            supersedes=supersedes or "",
         )
 
 

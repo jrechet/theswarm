@@ -7,11 +7,71 @@ from enum import Enum
 
 
 class AgentRole(str, Enum):
+    # Core four (existing pipeline).
     PO = "po"
     TECHLEAD = "techlead"
     DEV = "dev"
     QA = "qa"
     IMPROVER = "improver"
+    # Specialist roles introduced with the roster system.
+    SCOUT = "scout"
+    DESIGNER = "designer"
+    SRE = "sre"
+    SECURITY = "security"
+    ANALYST = "analyst"
+    WRITER = "writer"
+    RELEASE = "release"
+    ARCHITECT = "architect"
+    CHIEF_OF_STAFF = "chief_of_staff"
+
+    @classmethod
+    def from_str(cls, value: str) -> AgentRole:
+        """Tolerant parse that accepts common synonyms."""
+        key = value.strip().lower().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "tech_lead": cls.TECHLEAD,
+            "product_owner": cls.PO,
+            "developer": cls.DEV,
+            "quality": cls.QA,
+            "cos": cls.CHIEF_OF_STAFF,
+            "chief": cls.CHIEF_OF_STAFF,
+        }
+        if key in aliases:
+            return aliases[key]
+        return cls(key)
+
+
+class RoleScope(str, Enum):
+    """Whether a role attaches to a single project or to the whole portfolio."""
+
+    PROJECT = "project"
+    PORTFOLIO = "portfolio"
+
+
+DEFAULT_ROLE_SCOPES: dict[AgentRole, RoleScope] = {
+    AgentRole.PO: RoleScope.PROJECT,
+    AgentRole.TECHLEAD: RoleScope.PROJECT,
+    AgentRole.DEV: RoleScope.PROJECT,
+    AgentRole.QA: RoleScope.PROJECT,
+    AgentRole.IMPROVER: RoleScope.PROJECT,
+    AgentRole.DESIGNER: RoleScope.PROJECT,
+    AgentRole.ANALYST: RoleScope.PROJECT,
+    AgentRole.WRITER: RoleScope.PROJECT,
+    AgentRole.RELEASE: RoleScope.PROJECT,
+    AgentRole.SCOUT: RoleScope.PORTFOLIO,
+    AgentRole.SRE: RoleScope.PORTFOLIO,
+    AgentRole.SECURITY: RoleScope.PORTFOLIO,
+    AgentRole.ARCHITECT: RoleScope.PORTFOLIO,
+    AgentRole.CHIEF_OF_STAFF: RoleScope.PORTFOLIO,
+}
+
+# Roles that every project gets by default at creation time.
+CORE_PROJECT_ROLES: tuple[AgentRole, ...] = (
+    AgentRole.PO,
+    AgentRole.TECHLEAD,
+    AgentRole.DEV,
+    AgentRole.QA,
+)
 
 
 class Phase(str, Enum):

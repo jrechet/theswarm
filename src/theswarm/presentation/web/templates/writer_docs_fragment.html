@@ -1,0 +1,78 @@
+{# Writer — doc artifacts (Phase J). #}
+<section id="writer-docs-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Docs</h3>
+    <span class="muted">README · quickstart · changelog · guides</span>
+  </header>
+
+  {% if docs %}
+    <ul class="writer-docs">
+    {% for d in docs %}
+      <li class="writer-doc writer-doc--{{ d.status.value }}">
+        <header>
+          <code class="doc-path">{{ d.path }}</code>
+          <span class="badge badge-subtle">{{ d.kind.value }}</span>
+          <span class="badge badge-{{ d.status.value }}">{{ d.status.value }}</span>
+          {% if d.needs_refresh %}
+            <span class="badge badge-warn">needs refresh</span>
+          {% endif %}
+        </header>
+        {% if d.title %}
+          <p><strong>{{ d.title }}</strong></p>
+        {% endif %}
+        {% if d.summary %}
+          <p>{{ d.summary }}</p>
+        {% endif %}
+        {% if d.last_reviewed_at %}
+          <p class="muted">last reviewed {{ d.last_reviewed_at.strftime('%Y-%m-%d') }}</p>
+        {% endif %}
+
+        <form class="writer-inline-form"
+              hx-post="{{ base }}/projects/{{ project_id }}/writer/docs/status"
+              hx-target="#writer-docs-fragment-{{ project_id }}"
+              hx-swap="outerHTML">
+          <input type="hidden" name="path" value="{{ d.path }}">
+          <select name="status">
+            {% for s in statuses %}
+              <option value="{{ s.value }}">mark {{ s.value }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-link">Update</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No docs tracked yet.</p>
+  {% endif %}
+
+  <form class="writer-doc-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/writer/docs"
+        hx-target="#writer-docs-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Path
+      <input type="text" name="path" required placeholder="README.md">
+    </label>
+    <label>Kind
+      <select name="kind">
+        {% for k in kinds %}
+          <option value="{{ k.value }}">{{ k.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Title
+      <input type="text" name="title" placeholder="TheSwarm — autonomous dev team">
+    </label>
+    <label>Summary
+      <input type="text" name="summary" placeholder="one-line description">
+    </label>
+    <label>Status
+      <select name="status">
+        {% for s in statuses %}
+          <option value="{{ s.value }}">{{ s.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-primary">Track doc</button>
+  </form>
+</section>

@@ -112,6 +112,8 @@ def _build_base_state(config: CycleConfig) -> dict:
     state: dict = {
         "team_id": config.team_id,
         "github_repo": config.github_repo,
+        "project_id": config.project_id or config.team_id,
+        "codenames": dict(config.codenames or {}),
         "github": None,
         "claude": None,
         "workspace": None,

@@ -1,0 +1,46 @@
+{# Dev exploration / research thoughts stream (Phase E). #}
+<section id="dev-thoughts-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Dev thoughts</h3>
+    <span class="muted">exploration, reuse, library lookups &amp; notes</span>
+  </header>
+
+  {% if thoughts %}
+    <ul class="dev-thoughts">
+    {% for t in thoughts %}
+      <li class="dev-thought dev-thought--{{ t.kind.value }}">
+        <span class="badge badge-subtle">{{ t.kind.value }}</span>
+        {% if t.codename %}<strong>{{ t.codename }}</strong>{% endif %}
+        {% if t.task_id %}<span class="muted">/ {{ t.task_id }}</span>{% endif %}
+        <span class="dev-thought-content">{{ t.content }}</span>
+        <span class="muted dev-thought-ts">{{ t.created_at.strftime('%H:%M') }}</span>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No dev thoughts logged yet.</p>
+  {% endif %}
+
+  <form class="dev-thought-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/dev/thoughts"
+        hx-target="#dev-thoughts-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Kind
+      <select name="kind">
+        <option value="explore">Explore</option>
+        <option value="reuse">Reuse</option>
+        <option value="library">Library</option>
+        <option value="plan">Plan</option>
+        <option value="note" selected>Note</option>
+      </select>
+    </label>
+    <label>Task
+      <input type="text" name="task_id" placeholder="(optional) task id">
+    </label>
+    <label>Content
+      <input type="text" name="content" required
+             placeholder="what did Dev look at or decide?">
+    </label>
+    <button type="submit" class="btn btn-primary">Log thought</button>
+  </form>
+</section>

@@ -1,0 +1,55 @@
+{# TDD gate artifacts (RED→GREEN→REFACTOR). #}
+<section id="dev-tdd-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>TDD gate</h3>
+    <span class="muted">RED test recorded → GREEN implementation</span>
+  </header>
+
+  {% if artifacts %}
+    <ul class="dev-tdd-list">
+    {% for a in artifacts %}
+      <li class="dev-tdd dev-tdd--{{ a.phase.value }}">
+        <span class="badge badge-subtle dev-tdd-phase">{{ a.phase.value }}</span>
+        <strong>{{ a.task_id }}</strong>
+        {% if a.test_files %}
+          <span class="muted">— {{ a.test_files|join(', ') }}</span>
+        {% endif %}
+        {% if a.red_commit %}<code>red {{ a.red_commit[:7] }}</code>{% endif %}
+        {% if a.green_commit %}<code>green {{ a.green_commit[:7] }}</code>{% endif %}
+        {% if not a.is_green %}
+          <form hx-post="{{ base }}/projects/{{ project_id }}/dev/tdd/{{ a.task_id }}/green"
+                hx-target="#dev-tdd-fragment-{{ project_id }}"
+                hx-swap="outerHTML"
+                style="display:inline">
+            <input type="text" name="commit" placeholder="green sha">
+            <button type="submit" class="btn btn-sm btn-primary">Mark GREEN</button>
+          </form>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No TDD artifacts recorded.</p>
+  {% endif %}
+
+  <details>
+    <summary>Record RED artifact</summary>
+    <form class="dev-tdd-form"
+          hx-post="{{ base }}/projects/{{ project_id }}/dev/tdd/red"
+          hx-target="#dev-tdd-fragment-{{ project_id }}"
+          hx-swap="outerHTML">
+      <label>Task id
+        <input type="text" name="task_id" required data-testid="tdd-red-task">
+      </label>
+      <label>Test files (comma-separated)
+        <input type="text" name="test_files" placeholder="tests/a.py, tests/b.py">
+      </label>
+      <label>RED commit sha
+        <input type="text" name="commit" placeholder="optional">
+      </label>
+      <button type="submit" class="btn btn-primary" data-testid="tdd-red-submit">
+        Record RED
+      </button>
+    </form>
+  </details>
+</section>

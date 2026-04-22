@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Team — TheSwarm{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Team roster</h1>
+</div>
+
+{% if entries %}
+<table class="data-table" data-testid="roster-table">
+  <thead>
+    <tr>
+      <th>Codename</th>
+      <th>Role</th>
+      <th>Project</th>
+      <th>Scope</th>
+      <th>Assigned</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in entries %}
+    <tr>
+      <td><strong>{{ e.codename }}</strong></td>
+      <td><span class="badge">{{ e.role|upper }}</span></td>
+      <td>
+        {% if e.is_portfolio %}—{% else %}
+        <a href="{{ base }}/projects/{{ e.project_id }}">{{ e.project_id }}</a>
+        {% endif %}
+      </td>
+      <td>
+        {% if e.is_portfolio %}
+        <span class="badge badge-warn">portfolio</span>
+        {% else %}
+        <span class="badge badge-subtle">project</span>
+        {% endif %}
+      </td>
+      <td>{{ e.assigned_at[:10] }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-state">No roles assigned yet. Codenames are minted when you create a project.</p>
+{% endif %}
+{% endblock %}

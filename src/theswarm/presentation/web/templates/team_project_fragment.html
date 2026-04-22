@@ -1,0 +1,21 @@
+<div class="card" data-testid="team-card">
+  <h2>Team</h2>
+  {% if entries %}
+  <ul class="roster-list">
+    {% for e in entries %}
+    <li class="roster-row" data-testid="roster-row-{{ e.role }}">
+      <div class="roster-name">
+        <strong>{{ e.codename }}</strong>
+        <span class="badge badge-subtle">{{ e.role|upper }}</span>
+        {% if e.is_portfolio %}
+        <span class="badge badge-warn" title="Portfolio-scoped role">portfolio</span>
+        {% endif %}
+      </div>
+      <div class="roster-meta">assigned {{ e.assigned_at[:10] }}</div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty-state">No roster assigned yet.</p>
+  {% endif %}
+</div>

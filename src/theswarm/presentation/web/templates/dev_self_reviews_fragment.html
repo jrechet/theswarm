@@ -1,0 +1,39 @@
+{# Dev self-review log (Phase E). #}
+<section id="dev-self-reviews-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Self-reviews</h3>
+    <span class="muted">Dev's own rubric before requesting review</span>
+  </header>
+
+  {% if reviews %}
+    <ul class="dev-selfrev-list">
+    {% for r in reviews %}
+      <li class="dev-selfrev">
+        {% if r.pr_url %}<a href="{{ r.pr_url }}" target="_blank"><strong>PR</strong></a>{% endif %}
+        {% if r.task_id %}<span class="muted">{{ r.task_id }}</span>{% endif %}
+        <span class="badge badge-subtle">high {{ r.high_count }}</span>
+        <span class="badge badge-subtle">waived {{ r.waived_count }}</span>
+        <span class="badge badge-subtle">total {{ r.findings|length }}</span>
+        {% if r.summary %}<span class="muted">— {{ r.summary }}</span>{% endif %}
+        {% if r.findings %}
+          <ul class="dev-selfrev-findings">
+            {% for f in r.findings %}
+              <li class="dev-selfrev-finding dev-selfrev-finding--{{ f.severity.value }}
+                        {% if f.waived %}dev-selfrev-finding--waived{% endif %}">
+                <span class="badge badge-subtle">{{ f.severity.value }}</span>
+                {% if f.category %}<strong>{{ f.category }}</strong>{% endif %}
+                <span>{{ f.message }}</span>
+                {% if f.waived %}
+                  <span class="muted">waived: {{ f.waive_reason }}</span>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No self-reviews on record.</p>
+  {% endif %}
+</section>

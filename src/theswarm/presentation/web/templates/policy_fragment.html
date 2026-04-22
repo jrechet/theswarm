@@ -1,0 +1,34 @@
+{# Per-project policy editor. #}
+<section id="policy-fragment-{{ project_id }}" class="po-panel">
+  <header class="po-panel-header">
+    <h3>Policy</h3>
+    {% if policy %}
+      <span class="muted">Updated {{ policy.updated_at.isoformat() }} by {{ policy.updated_by or "—" }}</span>
+    {% endif %}
+  </header>
+
+  <form class="po-policy-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/policy"
+        hx-target="#policy-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>
+      Title
+      <input type="text" name="title" value="{{ policy.title if policy else 'Project policy' }}">
+    </label>
+    <label>
+      Markdown body
+      <textarea name="body_markdown" rows="6"
+        placeholder="Ethical constraints, scope, never-ship list, PII handling, …"
+      >{{ policy.body_markdown if policy else "" }}</textarea>
+    </label>
+    <label>
+      Banned terms (comma or newline)
+      <textarea name="banned_terms" rows="2">{{ policy.banned_terms|join(", ") if policy else "" }}</textarea>
+    </label>
+    <label>
+      Require-review terms (comma or newline)
+      <textarea name="require_review_terms" rows="2">{{ policy.require_review_terms|join(", ") if policy else "" }}</textarea>
+    </label>
+    <button type="submit">Save policy</button>
+  </form>
+</section>

@@ -1,0 +1,55 @@
+{# Writer — quickstart checks (Phase J). #}
+<section id="writer-quickstart-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Quickstart</h3>
+    <span class="muted">does the documented path still work?</span>
+  </header>
+
+  {% if checks %}
+    <ul class="writer-checks">
+    {% for q in checks %}
+      <li class="writer-check writer-check--{{ q.outcome.value }}">
+        <header>
+          <span class="badge badge-{{ q.outcome.value }}">{{ q.outcome.value }}</span>
+          <span class="muted">{{ q.step_count }} steps · {{ '%.1f'|format(q.duration_seconds) }}s</span>
+          <span class="muted">{{ q.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        </header>
+        {% if q.is_broken and q.failure_step %}
+          <p><strong>Broke at:</strong> {{ q.failure_step }}</p>
+        {% endif %}
+        {% if q.note %}
+          <p class="muted"><em>{{ q.note }}</em></p>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No quickstart checks yet.</p>
+  {% endif %}
+
+  <form class="writer-quickstart-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/writer/quickstart"
+        hx-target="#writer-quickstart-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Steps
+      <input type="number" name="step_count" min="0" value="0">
+    </label>
+    <label>Duration (s)
+      <input type="number" step="0.1" name="duration_seconds" min="0" value="0">
+    </label>
+    <label>Outcome
+      <select name="outcome">
+        {% for o in outcomes %}
+          <option value="{{ o.value }}">{{ o.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Failure step
+      <input type="text" name="failure_step" placeholder="step 3: uv sync">
+    </label>
+    <label>Note
+      <input type="text" name="note" placeholder="missing env var">
+    </label>
+    <button type="submit" class="btn btn-primary">Record run</button>
+  </form>
+</section>

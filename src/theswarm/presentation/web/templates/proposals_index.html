@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Proposals · TheSwarm{% endblock %}
+{% block content %}
+<h1>Proposals inbox</h1>
+<p class="muted">All candidate stories awaiting PO triage, across every active project.</p>
+
+{% if not by_project %}
+  <p class="po-empty">No pending proposals across the portfolio.</p>
+{% endif %}
+
+{% for project_id, items in by_project.items() %}
+  <section class="po-project-block">
+    <h2>
+      <a href="{{ base }}/projects/{{ project_id }}">{{ project_id }}</a>
+      <span class="po-inbox-count">({{ items|length }} pending)</span>
+    </h2>
+    <ul class="po-proposal-list">
+    {% for p in items %}
+      <li class="po-proposal po-proposal-{{ p.status.value }}">
+        <div class="po-proposal-title">{{ p.title }}</div>
+        {% if p.rationale %}<div class="po-proposal-rationale">{{ p.rationale }}</div>{% endif %}
+        {% if p.source_url %}
+          <a class="po-proposal-source" href="{{ p.source_url }}" target="_blank" rel="noopener">source</a>
+        {% endif %}
+        <form class="po-proposal-actions"
+              hx-post="{{ base }}/projects/{{ project_id }}/proposals/{{ p.id }}/decide"
+              hx-target="closest li"
+              hx-swap="outerHTML">
+          <input type="text" name="note" placeholder="note (optional)" />
+          <button type="submit" name="action" value="approve">Approve</button>
+          <button type="submit" name="action" value="reject">Reject</button>
+          <button type="submit" name="action" value="defer">Defer</button>
+          <button type="submit" name="action" value="ask">Ask</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  </section>
+{% endfor %}
+{% endblock %}

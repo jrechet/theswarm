@@ -1,0 +1,62 @@
+{# Quality gate snapshot — axe / lighthouse / k6 / gitleaks / osv / sbom / license (Phase F). #}
+<section id="qa-gates-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Quality gates</h3>
+    <span class="muted">latest result per gate</span>
+  </header>
+
+  <ul class="qa-gates">
+  {% for gate, entry in gates %}
+    {% set status = entry.status.value if entry else 'unknown' %}
+    <li class="qa-gate qa-gate--{{ status }}">
+      <header>
+        <strong>{{ gate.value }}</strong>
+        <span class="badge badge-{{ status }}">{{ status }}</span>
+      </header>
+      {% if entry %}
+        {% if entry.summary %}<p class="muted">{{ entry.summary }}</p>{% endif %}
+        <p class="muted qa-gate-meta">
+          {% if entry.score is not none %}score: {{ entry.score }} · {% endif %}
+          findings: {{ entry.finding_count }}
+          · {{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}
+        </p>
+      {% else %}
+        <p class="empty-state">never run</p>
+      {% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+
+  <form class="qa-gate-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/qa/gates"
+        hx-target="#qa-gates-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Gate
+      <select name="gate">
+        {% for g in gate_names %}
+          <option value="{{ g.value }}">{{ g.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        {% for s in gate_statuses %}
+          <option value="{{ s.value }}">{{ s.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Summary
+      <input type="text" name="summary" placeholder="short summary">
+    </label>
+    <label>Findings
+      <input type="number" name="finding_count" value="0" min="0">
+    </label>
+    <label>Score
+      <input type="text" name="score" placeholder="(optional)">
+    </label>
+    <label>PR URL
+      <input type="text" name="pr_url" placeholder="(optional)">
+    </label>
+    <button type="submit" class="btn btn-primary">Record gate</button>
+  </form>
+</section>

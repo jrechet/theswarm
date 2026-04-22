@@ -1,0 +1,65 @@
+{# Anti-template ship-bar checks — designer signoff (Phase H). #}
+<section id="design-anti-template-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Anti-template ship-bar</h3>
+    <span class="muted">≥4 qualities · 0 violations to ship</span>
+  </header>
+
+  {% if entries %}
+    <ul class="design-anti-template">
+    {% for e in entries %}
+      <li class="design-atc design-atc--{{ e.status.value }}">
+        <header>
+          <strong>story {{ e.story_id or '(none)' }}</strong>
+          <span class="badge badge-{{ e.status.value }}">{{ e.status.value }}</span>
+          <span class="badge badge-subtle">{{ e.quality_count }}/4 qualities</span>
+          {% if e.pr_url %}
+            <a href="{{ e.pr_url }}" target="_blank" rel="noopener" class="muted">PR</a>
+          {% endif %}
+        </header>
+        {% if e.qualities %}
+          <p class="atc-row"><strong>Qualities:</strong>
+            {% for q in e.qualities %}
+              <span class="badge badge-pass">{{ q }}</span>
+            {% endfor %}
+          </p>
+        {% endif %}
+        {% if e.violations %}
+          <p class="atc-row"><strong>Violations:</strong>
+            {% for v in e.violations %}
+              <span class="badge badge-fail">{{ v }}</span>
+            {% endfor %}
+          </p>
+        {% endif %}
+        {% if e.summary %}<p class="muted">{{ e.summary }}</p>{% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No ship-bar checks recorded yet.</p>
+  {% endif %}
+
+  <form class="design-atc-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/design/anti-template"
+        hx-target="#design-anti-template-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Story id
+      <input type="text" name="story_id" placeholder="S42">
+    </label>
+    <label>PR URL
+      <input type="url" name="pr_url" placeholder="https://github.com/...">
+    </label>
+    <label>Qualities (comma-separated)
+      <input type="text" name="qualities"
+             placeholder="hierarchy, rhythm, depth, motion">
+    </label>
+    <label>Violations (comma-separated)
+      <input type="text" name="violations"
+             placeholder="default-card-grid, flat-gray-accent">
+    </label>
+    <label>Summary
+      <input type="text" name="summary" placeholder="(optional)">
+    </label>
+    <button type="submit" class="btn btn-primary">Record</button>
+  </form>
+</section>

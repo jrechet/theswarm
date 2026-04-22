@@ -1,0 +1,61 @@
+{# Test archetype mix — required vs. produced per task (Phase F). #}
+<section id="qa-plans-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Test archetype mix</h3>
+    <span class="muted">required vs. produced per task</span>
+  </header>
+
+  {% if plans %}
+    <ul class="qa-plans">
+    {% for p in plans %}
+      <li class="qa-plan {% if p.satisfied %}qa-plan--ok{% else %}qa-plan--miss{% endif %}">
+        <header>
+          <strong>{{ p.task_id }}</strong>
+          <span class="muted">coverage {{ (p.coverage_ratio * 100) | round(0) | int }}%</span>
+        </header>
+        <div class="qa-plan-archetypes">
+          {% for a in p.required %}
+            {% set produced = a in p.produced %}
+            <span class="qa-arch {% if produced %}qa-arch--produced{% else %}qa-arch--missing{% endif %}">
+              {{ a.value }}{% if produced %} ✓{% endif %}
+            </span>
+          {% endfor %}
+        </div>
+        {% if p.notes %}<p class="muted">{{ p.notes }}</p>{% endif %}
+        {% if not p.satisfied %}
+          <form class="qa-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/qa/plans/{{ p.task_id }}/produced"
+                hx-target="#qa-plans-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <select name="archetype">
+              {% for a in p.missing %}
+                <option value="{{ a.value }}">{{ a.value }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-subtle">Mark produced</button>
+          </form>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No test plans recorded yet.</p>
+  {% endif %}
+
+  <form class="qa-plan-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/qa/plans"
+        hx-target="#qa-plans-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Task
+      <input type="text" name="task_id" required placeholder="task id">
+    </label>
+    <label>Required archetypes
+      <input type="text" name="required" required
+             placeholder="unit,e2e,a11y">
+    </label>
+    <label>Notes
+      <input type="text" name="notes" placeholder="(optional)">
+    </label>
+    <button type="submit" class="btn btn-primary">Set required</button>
+  </form>
+</section>

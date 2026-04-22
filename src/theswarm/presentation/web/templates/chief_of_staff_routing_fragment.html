@@ -1,0 +1,71 @@
+{# Chief of Staff — routing rules (portfolio-wide, Phase K). #}
+<section id="chief-of-staff-routing-fragment" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Routing Rules</h3>
+    <span class="muted">chat → role · pattern match · priority sorted</span>
+  </header>
+
+  {% if rules %}
+    <ul class="cos-rules">
+    {% for r in rules %}
+      <li class="cos-rule cos-rule--{{ r.status.value }}">
+        <header>
+          <code class="cos-pattern">{{ r.pattern }}</code>
+          <span class="muted">→</span>
+          <strong>{{ r.target_role }}</strong>
+          {% if r.target_codename %}
+            <span class="badge badge-subtle">@{{ r.target_codename }}</span>
+          {% endif %}
+          <span class="badge badge-subtle">p{{ r.priority }}</span>
+          <span class="badge badge-rule-{{ r.status.value }}">{{ r.status.value }}</span>
+        </header>
+        {% if r.status.value == "active" %}
+          <form hx-post="{{ base }}/chief-of-staff/routing/disable"
+                hx-target="#chief-of-staff-routing-fragment"
+                hx-swap="outerHTML"
+                style="display:inline">
+            <input type="hidden" name="pattern" value="{{ r.pattern }}">
+            <button type="submit" class="btn btn-sm btn-ghost">Disable</button>
+          </form>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No routing rules yet.</p>
+  {% endif %}
+
+  <details class="cos-rule-new">
+    <summary>Add or update a rule</summary>
+    <form class="cos-rule-form"
+          hx-post="{{ base }}/chief-of-staff/routing"
+          hx-target="#chief-of-staff-routing-fragment"
+          hx-swap="outerHTML">
+      <label>Pattern (substring or <code>re:&lt;regex&gt;</code>)
+        <input type="text" name="pattern" required
+               data-testid="routing-pattern"
+               placeholder="e.g. security, bug, re:deploy.*prod">
+      </label>
+      <label>Target role
+        <input type="text" name="target_role" required
+               placeholder="po | techlead | dev | qa | scout | ...">
+      </label>
+      <label>Target codename (optional)
+        <input type="text" name="target_codename" placeholder="@Alice">
+      </label>
+      <label>Priority
+        <input type="number" name="priority" value="100" min="0">
+      </label>
+      <label>Status
+        <select name="status">
+          {% for s in statuses %}
+            <option value="{{ s.value }}">{{ s.value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="btn btn-primary" data-testid="routing-submit">
+        Save rule
+      </button>
+    </form>
+  </details>
+</section>

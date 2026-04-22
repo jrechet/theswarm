@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
-from theswarm.domain.agents.entities import AgentContext, AgentExecution
+from theswarm.domain.agents.entities import (
+    PORTFOLIO_PROJECT_ID,
+    AgentContext,
+    AgentExecution,
+    RoleAssignment,
+)
 from theswarm.domain.agents.value_objects import (
+    CORE_PROJECT_ROLES,
+    DEFAULT_ROLE_SCOPES,
     AgentRole,
     LLMResponse,
     Phase,
     ReviewDecision,
     ReviewResult,
+    RoleScope,
     TaskResult,
 )
 
@@ -114,3 +124,75 @@ class TestAgentExecution:
         assert e2.succeeded is False
         assert e2.error == "Playwright crashed"
         assert e2.completed_at is not None
+
+
+class TestAgentRoleFromStr:
+    def test_aliases(self):
+        assert AgentRole.from_str("tech-lead") == AgentRole.TECHLEAD
+        assert AgentRole.from_str("Product Owner") == AgentRole.PO
+        assert AgentRole.from_str("developer") == AgentRole.DEV
+        assert AgentRole.from_str("cos") == AgentRole.CHIEF_OF_STAFF
+
+    def test_direct_values(self):
+        assert AgentRole.from_str("scout") == AgentRole.SCOUT
+        assert AgentRole.from_str("ARCHITECT") == AgentRole.ARCHITECT
+
+    def test_invalid_raises(self):
+        with pytest.raises(ValueError):
+            AgentRole.from_str("intergalactic_janitor")
+
+
+class TestRoleScopes:
+    def test_core_roles_are_project_scoped(self):
+        for role in CORE_PROJECT_ROLES:
+            assert DEFAULT_ROLE_SCOPES[role] == RoleScope.PROJECT
+
+    def test_portfolio_roles(self):
+        assert DEFAULT_ROLE_SCOPES[AgentRole.SCOUT] == RoleScope.PORTFOLIO
+        assert DEFAULT_ROLE_SCOPES[AgentRole.SECURITY] == RoleScope.PORTFOLIO
+        assert DEFAULT_ROLE_SCOPES[AgentRole.ARCHITECT] == RoleScope.PORTFOLIO
+
+
+class TestRoleAssignment:
+    def _make(self, **overrides) -> RoleAssignment:
+        defaults = {
+            "id": RoleAssignment.new_id(),
+            "project_id": "demo",
+            "role": AgentRole.PO,
+            "codename": "Mei",
+        }
+        defaults.update(overrides)
+        return RoleAssignment(**defaults)
+
+    def test_defaults(self):
+        a = self._make()
+        assert a.is_active is True
+        assert a.is_portfolio is False
+        assert a.retired_at is None
+
+    def test_is_portfolio(self):
+        a = self._make(project_id=PORTFOLIO_PROJECT_ID, role=AgentRole.SCOUT)
+        assert a.is_portfolio is True
+
+    def test_display(self):
+        a = self._make(codename="Aarav", role=AgentRole.DEV)
+        assert a.display() == "Aarav (dev)"
+
+    def test_retire_returns_new_instance(self):
+        a = self._make()
+        retired = a.retire()
+        # Original untouched (immutability).
+        assert a.is_active is True
+        assert retired.is_active is False
+        assert retired.retired_at is not None
+
+    def test_retire_with_explicit_timestamp(self):
+        ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        a = self._make().retire(at=ts)
+        assert a.retired_at == ts
+
+    def test_new_id_is_unique_and_short(self):
+        ids = {RoleAssignment.new_id() for _ in range(10)}
+        assert len(ids) == 10
+        for i in ids:
+            assert len(i) == 16

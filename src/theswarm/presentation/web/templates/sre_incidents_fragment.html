@@ -1,0 +1,115 @@
+{# SRE — incidents with timeline (Phase I). #}
+<section id="sre-incidents-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Incidents</h3>
+    <span class="muted">lifecycle · timeline · MTTR / MTTM</span>
+  </header>
+
+  {% if incidents %}
+    <ul class="sre-incidents">
+    {% for i in incidents %}
+      <li class="sre-incident sre-incident--{{ i.severity.value }} sre-incident--{{ i.status.value }}">
+        <header>
+          <strong>{{ i.title }}</strong>
+          <span class="badge badge-{{ i.severity.value }}">{{ i.severity.value }}</span>
+          <span class="badge badge-{{ i.status.value }}">{{ i.status.value }}</span>
+          {% if i.mttm_seconds > 0 %}
+            <span class="muted">MTTM {{ '%.0f'|format(i.mttm_seconds / 60) }}m</span>
+          {% endif %}
+          {% if i.mttr_seconds > 0 %}
+            <span class="muted">MTTR {{ '%.0f'|format(i.mttr_seconds / 60) }}m</span>
+          {% endif %}
+        </header>
+        {% if i.summary %}
+          <p>{{ i.summary }}</p>
+        {% endif %}
+
+        {% if i.timeline %}
+          <details class="sre-timeline">
+            <summary>Timeline ({{ i.timeline|length }})</summary>
+            <ol>
+              {% for entry in i.timeline %}
+                <li><code>{{ entry }}</code></li>
+              {% endfor %}
+            </ol>
+          </details>
+        {% endif %}
+
+        {% if i.postmortem %}
+          <details class="sre-postmortem">
+            <summary>Postmortem</summary>
+            <p>{{ i.postmortem }}</p>
+          </details>
+        {% endif %}
+
+        <form class="sre-inline-form"
+              hx-post="{{ base }}/projects/{{ project_id }}/sre/incidents/{{ i.id }}/timeline"
+              hx-target="#sre-incidents-fragment-{{ project_id }}"
+              hx-swap="outerHTML">
+          <input type="text" name="note" required placeholder="timeline note">
+          <button type="submit" class="btn btn-link">Log</button>
+        </form>
+
+        {% if i.is_open %}
+          <form class="sre-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/sre/incidents/{{ i.id }}/triage"
+                hx-target="#sre-incidents-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <input type="text" name="note" placeholder="triage note">
+            <button type="submit" class="btn btn-link">Triage</button>
+          </form>
+          <form class="sre-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/sre/incidents/{{ i.id }}/mitigate"
+                hx-target="#sre-incidents-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <input type="text" name="note" placeholder="mitigation note">
+            <button type="submit" class="btn btn-link">Mitigate</button>
+          </form>
+        {% endif %}
+
+        {% if i.status.value in ('open', 'triaged', 'mitigated') %}
+          <form class="sre-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/sre/incidents/{{ i.id }}/resolve"
+                hx-target="#sre-incidents-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <input type="text" name="note" placeholder="resolution note">
+            <button type="submit" class="btn btn-link">Resolve</button>
+          </form>
+        {% endif %}
+
+        {% if i.status.value == 'resolved' %}
+          <form class="sre-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/sre/incidents/{{ i.id }}/postmortem"
+                hx-target="#sre-incidents-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <input type="text" name="postmortem" required placeholder="root cause + prevention">
+            <button type="submit" class="btn btn-link">Postmortem</button>
+          </form>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No incidents recorded yet.</p>
+  {% endif %}
+
+  <form class="sre-incident-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/sre/incidents"
+        hx-target="#sre-incidents-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Title
+      <input type="text" name="title" required placeholder="5xx spike on api-v2">
+    </label>
+    <label>Severity
+      <select name="severity">
+        {% for s in severities %}
+          <option value="{{ s.value }}" {% if s.value == 'sev3' %}selected{% endif %}>{{ s.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Summary
+      <input type="text" name="summary" placeholder="error rate > 5% for 10m">
+    </label>
+    <button type="submit" class="btn btn-primary">Open incident</button>
+  </form>
+</section>

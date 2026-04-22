@@ -1,0 +1,105 @@
+# Codename pool for role assignments.
+#
+# Every time a role is assigned to a project, the picker draws an unused
+# codename from this pool and binds it to (project_id, role). The codename
+# becomes the agent's identity across the dashboard, memory, logs, chat.
+#
+# Guidelines for adding names:
+#   - short (3-6 chars) and easy to pronounce across languages
+#   - human first name, no last names
+#   - culturally diverse; avoid pop-culture references that age badly
+#   - avoid names of real teammates / customers
+#
+# Order matters for the deterministic picker (hash-mod-pool); prefer
+# appending at the end rather than inserting in the middle.
+
+names:
+  - Alice
+  - Priya
+  - Hugo
+  - Marcus
+  - Leila
+  - Ivan
+  - Nora
+  - Kenji
+  - Tariq
+  - Aya
+  - Diego
+  - Shiro
+  - June
+  - Mila
+  - Ivo
+  - Otis
+  - Freya
+  - Rao
+  - Iris
+  - Gideon
+  - Luca
+  - Ravi
+  - Noa
+  - Emi
+  - Sol
+  - Vera
+  - Kai
+  - Tomas
+  - Ula
+  - Bex
+  - Nikos
+  - Wren
+  - Yara
+  - Ada
+  - Echo
+  - Pax
+  - Rune
+  - Nia
+  - Jun
+  - Omar
+  - Lior
+  - Zoya
+  - Bodhi
+  - Thea
+  - Oren
+  - Suki
+  - Cato
+  - Mira
+  - Reza
+  - Kira
+  - Milo
+  - Yuna
+  - Dara
+  - Felix
+  - Anya
+  - Jiro
+  - Hana
+  - Ezra
+  - Niko
+  - Rumi
+  - Taro
+  - Sana
+  - Vik
+  - Amal
+  - Bruno
+  - Cleo
+  - Dima
+  - Enzo
+  - Farah
+  - Gia
+  - Haru
+  - Inez
+  - Juno
+  - Kofi
+  - Lena
+  - Malo
+  - Nina
+  - Olof
+  - Pia
+  - Qi
+  - Rami
+  - Sera
+  - Theo
+  - Uma
+  - Vido
+  - Wes
+  - Xan
+  - Yael
+  - Zara

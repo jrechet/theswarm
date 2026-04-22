@@ -1,0 +1,43 @@
+{# Demo outcome cards — one-slide artifacts per story (Phase F). #}
+<section id="qa-outcomes-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Outcome cards</h3>
+    <span class="muted">per-story demo artifacts</span>
+  </header>
+
+  {% if cards %}
+    <ul class="qa-outcomes">
+    {% for c in cards %}
+      <li class="qa-outcome {% if c.all_passed %}qa-outcome--ok{% else %}qa-outcome--partial{% endif %}">
+        <header>
+          <strong>{{ c.title or c.story_id or 'Untitled' }}</strong>
+          <span class="badge badge-{% if c.all_passed %}pass{% else %}warn{% endif %}">
+            {{ c.pass_count }}/{{ c.acceptance | length }}
+          </span>
+        </header>
+        {% if c.acceptance %}
+          <ul class="qa-acceptance">
+          {% for a in c.acceptance %}
+            <li class="qa-acc {% if a.passed %}qa-acc--pass{% else %}qa-acc--fail{% endif %}">
+              {% if a.passed %}✓{% else %}✗{% endif %} {{ a.text }}
+              {% if a.evidence %}<span class="muted">({{ a.evidence }})</span>{% endif %}
+            </li>
+          {% endfor %}
+          </ul>
+        {% endif %}
+        {% if c.metric_name %}
+          <p class="muted qa-metric">
+            {{ c.metric_name }}:
+            <span class="qa-before">{{ c.metric_before }}</span>
+            →
+            <span class="qa-after">{{ c.metric_after }}</span>
+          </p>
+        {% endif %}
+        {% if c.summary %}<p class="muted">{{ c.summary }}</p>{% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No outcome cards yet.</p>
+  {% endif %}
+</section>

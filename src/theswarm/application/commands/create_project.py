@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
+from theswarm.application.services.role_assignment_service import RoleAssignmentService
 from theswarm.domain.projects.entities import Project, ProjectConfig
 from theswarm.domain.projects.ports import ProjectRepository
 from theswarm.domain.projects.value_objects import Framework, RepoUrl, TicketSourceType
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -20,8 +24,13 @@ class CreateProjectCommand:
 
 
 class CreateProjectHandler:
-    def __init__(self, project_repo: ProjectRepository) -> None:
+    def __init__(
+        self,
+        project_repo: ProjectRepository,
+        role_service: RoleAssignmentService | None = None,
+    ) -> None:
         self._project_repo = project_repo
+        self._role_service = role_service
 
     async def handle(self, cmd: CreateProjectCommand) -> Project:
         existing = await self._project_repo.get(cmd.project_id)
@@ -40,4 +49,13 @@ class CreateProjectHandler:
             config=ProjectConfig(max_daily_stories=cmd.max_daily_stories),
         )
         await self._project_repo.save(project)
+
+        if self._role_service is not None:
+            try:
+                await self._role_service.assign_core_roster(project.id)
+            except Exception:
+                log.exception(
+                    "Failed to assign core roster for project %s",
+                    project.id,
+                )
         return project

@@ -1,0 +1,49 @@
+{# Test flake scoreboard — runs vs. failures per test (Phase F). #}
+<section id="qa-flakes-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Flake scoreboard</h3>
+    <span class="muted">runs vs. failures per test</span>
+  </header>
+
+  {% if records %}
+    <ul class="qa-flakes">
+    {% for r in records %}
+      {% set quar = r.should_quarantine() %}
+      <li class="qa-flake {% if quar %}qa-flake--hot{% endif %}">
+        <header>
+          <code class="qa-test-id">{{ r.test_id }}</code>
+          <span class="badge {% if quar %}badge-warn{% else %}badge-subtle{% endif %}">
+            {{ (r.flake_score * 100) | round(0) | int }}%
+          </span>
+        </header>
+        <p class="muted">
+          runs: {{ r.runs }} · failures: {{ r.failures }}
+          {% if r.last_failure_reason %} · last fail: {{ r.last_failure_reason }}{% endif %}
+        </p>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No flake data recorded yet.</p>
+  {% endif %}
+
+  <form class="qa-flake-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/qa/flakes"
+        hx-target="#qa-flakes-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Test id
+      <input type="text" name="test_id" required
+             placeholder="tests/e2e/login.py::test_login">
+    </label>
+    <label>Failed?
+      <select name="failed">
+        <option value="false" selected>pass</option>
+        <option value="true">fail</option>
+      </select>
+    </label>
+    <label>Failure reason
+      <input type="text" name="failure_reason" placeholder="(optional)">
+    </label>
+    <button type="submit" class="btn btn-primary">Record run</button>
+  </form>
+</section>

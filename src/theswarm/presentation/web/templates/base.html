@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}TheSwarm{% endblock %}</title>
   <link rel="stylesheet" href="{{ base }}/static/css/dashboard.css">
-  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+  <script src="{{ base }}/static/vendor/htmx-2.0.4.min.js" defer></script>
 </head>
 <body>
   <nav class="topnav">
@@ -13,10 +13,19 @@
     <div class="nav-links">
       <a href="{{ base }}/">Dashboard</a>
       <a href="{{ base }}/projects/">Projects</a>
+      <a href="{{ base }}/team">Team</a>
+      <a href="{{ base }}/chat">Chat</a>
+      <a href="{{ base }}/proposals">Proposals</a>
       <a href="{{ base }}/cycles/">Cycles</a>
       <a href="{{ base }}/reports/">Reports</a>
       <a href="{{ base }}/demos/">Demos</a>
       <a href="{{ base }}/features/">Features</a>
+      <a href="{{ base }}/architect/paved-road">Architect</a>
+      <a href="{{ base }}/chief-of-staff/routing">Chief of Staff</a>
+      <a href="{{ base }}/intel/feed">Scout</a>
+      <a href="{{ base }}/refactor-programs">Programs</a>
+      <a href="{{ base }}/semantic-memory">Memory</a>
+      <a href="{{ base }}/prompt-library">Prompts</a>
       <a href="{{ base }}/health">Health</a>
     </div>
     <div class="nav-status" id="sse-status">

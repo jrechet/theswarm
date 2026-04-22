@@ -1,0 +1,47 @@
+{# Design tokens — palette, typography, spacing, motion (Phase H). #}
+<section id="design-tokens-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Design tokens</h3>
+    <span class="muted">palette · type · spacing · motion</span>
+  </header>
+
+  {% if tokens %}
+    <ul class="design-tokens">
+    {% for t in tokens %}
+      <li class="design-token design-token--{{ t.kind.value }}">
+        <header>
+          <code class="token-name">{{ t.name }}</code>
+          <span class="badge badge-subtle">{{ t.kind.value }}</span>
+        </header>
+        <p class="token-value"><code>{{ t.value }}</code></p>
+        {% if t.notes %}<p class="muted">{{ t.notes }}</p>{% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No design tokens defined yet.</p>
+  {% endif %}
+
+  <form class="design-token-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/design/tokens"
+        hx-target="#design-tokens-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Name
+      <input type="text" name="name" required placeholder="--color-accent">
+    </label>
+    <label>Kind
+      <select name="kind">
+        {% for k in kinds %}
+          <option value="{{ k.value }}">{{ k.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Value
+      <input type="text" name="value" placeholder="oklch(68% 0.21 250)">
+    </label>
+    <label>Notes
+      <input type="text" name="notes" placeholder="(optional)">
+    </label>
+    <button type="submit" class="btn btn-primary">Set</button>
+  </form>
+</section>

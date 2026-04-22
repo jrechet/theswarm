@@ -1,0 +1,65 @@
+{# Release — rollback actions (Phase J). #}
+<section id="release-rollbacks-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Rollbacks</h3>
+    <span class="muted">one-click revert references · armed per release</span>
+  </header>
+
+  {% if actions %}
+    <ul class="release-rollbacks">
+    {% for a in actions %}
+      <li class="release-rollback release-rollback--{{ a.status.value }}">
+        <header>
+          <strong>v{{ a.release_version }}</strong>
+          <span class="badge badge-{{ a.status.value }}">{{ a.status.value }}</span>
+          {% if a.is_armed %}
+            <span class="badge badge-warn">armed</span>
+          {% endif %}
+        </header>
+        {% if a.revert_ref %}
+          <p><strong>Revert to:</strong> <code>{{ a.revert_ref }}</code></p>
+        {% endif %}
+        {% if a.note %}
+          <p class="muted"><em>{{ a.note }}</em></p>
+        {% endif %}
+        {% if a.executed_at %}
+          <p class="muted">executed {{ a.executed_at.strftime('%Y-%m-%d %H:%M') }}</p>
+        {% endif %}
+
+        {% if a.status.value == 'ready' %}
+          <form class="release-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/release/rollbacks/{{ a.id }}/execute"
+                hx-target="#release-rollbacks-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <button type="submit" class="btn btn-danger">Execute rollback</button>
+          </form>
+          <form class="release-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/release/rollbacks/{{ a.id }}/obsolete"
+                hx-target="#release-rollbacks-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <button type="submit" class="btn btn-link">Mark obsolete</button>
+          </form>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No rollback actions armed yet.</p>
+  {% endif %}
+
+  <form class="release-rollback-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/release/rollbacks"
+        hx-target="#release-rollbacks-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Release version
+      <input type="text" name="release_version" required placeholder="1.2.0">
+    </label>
+    <label>Revert ref
+      <input type="text" name="revert_ref" required placeholder="abc123 or PR URL">
+    </label>
+    <label>Note
+      <input type="text" name="note" placeholder="context for on-call">
+    </label>
+    <button type="submit" class="btn btn-primary">Arm rollback</button>
+  </form>
+</section>

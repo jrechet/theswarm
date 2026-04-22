@@ -1,0 +1,31 @@
+{# Coverage delta log (Phase E). #}
+<section id="dev-coverage-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Coverage deltas</h3>
+    <span class="muted">changed-lines coverage per PR</span>
+  </header>
+
+  {% if deltas %}
+    <ul class="dev-covd-list">
+    {% for d in deltas %}
+      <li class="dev-covd dev-covd--{{ 'pass' if d.passes_threshold else 'fail' }}">
+        {% if d.pr_url %}<a href="{{ d.pr_url }}" target="_blank"><strong>PR</strong></a>{% endif %}
+        {% if d.task_id %}<span class="muted">{{ d.task_id }}</span>{% endif %}
+        <span class="badge badge-subtle">
+          changed-lines {{ d.changed_lines_pct|round(1) }}%
+        </span>
+        <span class="badge badge-subtle">
+          total {{ d.total_before_pct|round(1) }}% → {{ d.total_after_pct|round(1) }}%
+          ({{ '+' if d.delta >= 0 else '' }}{{ d.delta }})
+        </span>
+        <span class="muted">threshold {{ d.threshold_pct|round(1) }}%</span>
+        {% if not d.passes_threshold %}
+          <span class="badge badge-warn">below threshold</span>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No coverage deltas recorded.</p>
+  {% endif %}
+</section>

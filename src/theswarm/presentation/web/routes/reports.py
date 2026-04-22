@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+
+
+def _sort_key(created_at: datetime) -> datetime:
+    """Normalise naive datetimes to UTC so mixed-tz lists can sort."""
+    if created_at.tzinfo is None:
+        return created_at.replace(tzinfo=timezone.utc)
+    return created_at
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -23,7 +32,7 @@ async def list_reports(request: Request, project_id: str = "") -> HTMLResponse:
         projects = await list_projects.execute()
         for p in projects[:10]:
             reports.extend(await report_repo.list_by_project(p.id, limit=5))
-        reports.sort(key=lambda r: r.created_at, reverse=True)
+        reports.sort(key=lambda r: _sort_key(r.created_at), reverse=True)
         reports = reports[:20]
 
     return templates.TemplateResponse(

@@ -257,6 +257,12 @@ async def cmd_projects(args: argparse.Namespace) -> None:
         DeleteProjectHandler,
     )
     from theswarm.application.queries.list_projects import ListProjectsQuery
+    from theswarm.application.services.role_assignment_service import (
+        RoleAssignmentService,
+    )
+    from theswarm.infrastructure.agents.role_assignment_repo import (
+        SQLiteRoleAssignmentRepository,
+    )
     from theswarm.infrastructure.persistence.sqlite_repos import SQLiteProjectRepository
 
     conn = await _init_db()
@@ -271,7 +277,9 @@ async def cmd_projects(args: argparse.Namespace) -> None:
             print(f"  {p.id:<20} {p.repo:<30} {p.framework:<10} {p.ticket_source}")
 
     elif args.projects_command == "add":
-        handler = CreateProjectHandler(project_repo)
+        role_repo = SQLiteRoleAssignmentRepository(conn)
+        role_service = RoleAssignmentService(role_repo)
+        handler = CreateProjectHandler(project_repo, role_service=role_service)
         try:
             project = await handler.handle(
                 CreateProjectCommand(

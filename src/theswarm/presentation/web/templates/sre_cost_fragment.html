@@ -1,0 +1,70 @@
+{# SRE — unified cost rollup (Phase I). #}
+<section id="sre-cost-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Cost</h3>
+    <span class="muted">unified AI + infra spend</span>
+  </header>
+
+  <div class="sre-cost-total">
+    <strong>Total:</strong>
+    <span class="sre-cost-total-amount">${{ '%.2f'|format(total) }}</span>
+  </div>
+
+  {% if rollup %}
+    <ul class="sre-cost-rollup">
+      {% for source, amount in rollup.items() %}
+        <li class="sre-cost-source sre-cost-source--{{ source }}">
+          <span class="badge badge-subtle">{{ source }}</span>
+          <strong>${{ '%.2f'|format(amount) }}</strong>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No cost samples recorded yet.</p>
+  {% endif %}
+
+  {% if samples %}
+    <details class="sre-cost-samples">
+      <summary>Recent samples ({{ samples|length }})</summary>
+      <ul>
+        {% for s in samples %}
+          <li>
+            <span class="badge badge-subtle">{{ s.source.value }}</span>
+            <strong>${{ '%.2f'|format(s.amount_usd) }}</strong>
+            <span class="muted">{{ s.window }}</span>
+            {% if s.description %}
+              <span class="muted">— {{ s.description }}</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+
+  <form class="sre-cost-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/sre/cost"
+        hx-target="#sre-cost-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Source
+      <select name="source">
+        {% for s in sources %}
+          <option value="{{ s.value }}">{{ s.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Amount (USD)
+      <input type="number" name="amount_usd" step="0.01" min="0" value="0">
+    </label>
+    <label>Window
+      <select name="window">
+        <option value="daily">daily</option>
+        <option value="monthly">monthly</option>
+        <option value="cycle">cycle</option>
+      </select>
+    </label>
+    <label>Description
+      <input type="text" name="description" placeholder="(optional)">
+    </label>
+    <button type="submit" class="btn btn-primary">Record cost</button>
+  </form>
+</section>

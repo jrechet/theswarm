@@ -1,0 +1,68 @@
+{# Analyst — instrumentation plans (Phase J). #}
+<section id="analyst-instrumentation-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Instrumentation</h3>
+    <span class="muted">per-story measurement plans · flags MISSING</span>
+  </header>
+
+  {% if plans %}
+    <ul class="analyst-plans">
+    {% for p in plans %}
+      <li class="analyst-plan analyst-plan--{{ p.status.value }}">
+        <header>
+          <strong>{{ p.story_id }}</strong>
+          <span class="muted">→</span>
+          <code>{{ p.metric_name }}</code>
+          <span class="badge badge-{{ p.status.value }}">{{ p.status.value }}</span>
+          {% if p.is_blocking_outcome %}
+            <span class="badge badge-warn">blocks outcome</span>
+          {% endif %}
+        </header>
+        {% if p.hypothesis %}
+          <p><strong>Hypothesis:</strong> {{ p.hypothesis }}</p>
+        {% endif %}
+        {% if p.method %}
+          <p><strong>Method:</strong> {{ p.method }}</p>
+        {% endif %}
+        {% if p.note %}
+          <p class="muted"><em>{{ p.note }}</em></p>
+        {% endif %}
+
+        <form class="analyst-inline-form"
+              hx-post="{{ base }}/projects/{{ project_id }}/analyst/instrumentation/{{ p.story_id }}/{{ p.metric_name }}/status"
+              hx-target="#analyst-instrumentation-fragment-{{ project_id }}"
+              hx-swap="outerHTML">
+          <select name="status">
+            {% for s in statuses %}
+              <option value="{{ s.value }}">mark {{ s.value }}</option>
+            {% endfor %}
+          </select>
+          <input type="text" name="note" placeholder="note (optional)">
+          <button type="submit" class="btn btn-link">Update</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No instrumentation plans yet.</p>
+  {% endif %}
+
+  <form class="analyst-plan-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/analyst/instrumentation"
+        hx-target="#analyst-instrumentation-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Story id
+      <input type="text" name="story_id" required placeholder="S42">
+    </label>
+    <label>Metric
+      <input type="text" name="metric_name" required placeholder="signup_conversion">
+    </label>
+    <label>Hypothesis
+      <input type="text" name="hypothesis" placeholder="expect +5pp">
+    </label>
+    <label>Method
+      <input type="text" name="method" placeholder="posthog funnel">
+    </label>
+    <button type="submit" class="btn btn-primary">Propose plan</button>
+  </form>
+</section>

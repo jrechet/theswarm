@@ -464,4 +464,7 @@ async def test_load_context_stub_mode():
     from theswarm.agents.base import load_context
     state = {"github": None, "phase": "development"}
     result = await load_context(state)
-    assert "stub" in result["context"].lower() or "no context" in result["context"].lower()
+    ctx = result["context"].lower()
+    # Stub mode: either the no-context marker, or a persona preamble only
+    # (load_context emits a persona line when the phase resolves to a role).
+    assert any(marker in ctx for marker in ("stub", "no context", "persona"))

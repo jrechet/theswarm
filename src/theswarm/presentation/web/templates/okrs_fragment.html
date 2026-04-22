@@ -1,0 +1,60 @@
+{# OKR editor fragment. HTMX-swappable. #}
+<section id="okrs-fragment-{{ project_id }}" class="po-panel">
+  <header class="po-panel-header">
+    <h3>OKRs</h3>
+  </header>
+
+  {% if okrs %}
+    <ul class="po-okr-list">
+    {% for okr in okrs %}
+      <li class="po-okr">
+        <div class="po-okr-header">
+          <strong>{{ okr.objective }}</strong>
+          {% if okr.quarter %}<span class="po-okr-quarter">{{ okr.quarter }}</span>{% endif %}
+          {% if okr.owner_codename %}<span class="po-okr-owner">@{{ okr.owner_codename }}</span>{% endif %}
+          <form class="po-okr-retire"
+                hx-post="{{ base }}/projects/{{ project_id }}/okrs/{{ okr.id }}/retire"
+                hx-target="#okrs-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <button type="submit" class="muted-btn">Retire</button>
+          </form>
+        </div>
+        {% if okr.key_results %}
+          <ul class="po-kr-list">
+          {% for kr in okr.key_results %}
+            <li class="po-kr">
+              <div class="po-kr-desc">{{ kr.description }}</div>
+              <form class="po-kr-form"
+                    hx-post="{{ base }}/projects/{{ project_id }}/okrs/{{ okr.id }}/key_results/{{ kr.id }}"
+                    hx-target="#okrs-fragment-{{ project_id }}"
+                    hx-swap="outerHTML">
+                <input type="text" name="current" value="{{ kr.current }}" placeholder="current status">
+                <input type="number" name="progress" step="0.05" min="0" max="1" value="{{ '%.2f'|format(kr.progress) }}">
+                <button type="submit">Update</button>
+              </form>
+              <div class="po-kr-bar"><div class="po-kr-bar-fill" style="width: {{ (kr.progress * 100)|round|int }}%"></div></div>
+            </li>
+          {% endfor %}
+          </ul>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="po-empty">No active OKRs yet.</p>
+  {% endif %}
+
+  <form class="po-okr-create"
+        hx-post="{{ base }}/projects/{{ project_id }}/okrs"
+        hx-target="#okrs-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <h4>New OKR</h4>
+    <input type="text" name="objective" placeholder="Objective" required>
+    <input type="text" name="quarter" placeholder="Quarter (e.g. 2026-Q2)">
+    <input type="text" name="owner_codename" placeholder="Owner codename">
+    <input type="text" name="key_result_1" placeholder="Key result #1">
+    <input type="text" name="key_result_2" placeholder="Key result #2">
+    <input type="text" name="key_result_3" placeholder="Key result #3">
+    <button type="submit">Create OKR</button>
+  </form>
+</section>

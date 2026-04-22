@@ -115,6 +115,46 @@ class TestCreateProjectCommand:
         project = await handler.handle(cmd)
         assert project.config.max_daily_stories == 10
 
+    async def test_create_project_assigns_core_roster_when_service_provided(
+        self, project_repo, db,
+    ):
+        from theswarm.application.services.role_assignment_service import (
+            RoleAssignmentService,
+        )
+        from theswarm.domain.agents.value_objects import CORE_PROJECT_ROLES
+        from theswarm.infrastructure.agents.role_assignment_repo import (
+            SQLiteRoleAssignmentRepository,
+        )
+
+        role_repo = SQLiteRoleAssignmentRepository(db)
+        service = RoleAssignmentService(
+            role_repo,
+            pool=("Mei", "Aarav", "Kenji", "Ines", "Priya", "Oluwa"),
+        )
+        handler = CreateProjectHandler(project_repo, role_service=service)
+
+        await handler.handle(CreateProjectCommand(project_id="pp", repo="o/pp"))
+
+        roster = await role_repo.list_for_project("pp")
+        assert {a.role for a in roster} == set(CORE_PROJECT_ROLES)
+        codenames = {a.codename for a in roster}
+        assert len(codenames) == 4  # All distinct.
+
+    async def test_create_project_tolerates_roster_failure(
+        self, project_repo,
+    ):
+        class BoomService:
+            async def assign_core_roster(self, project_id: str):
+                raise RuntimeError("role service down")
+
+        handler = CreateProjectHandler(project_repo, role_service=BoomService())
+        # Project creation still succeeds; roster failure is swallowed.
+        project = await handler.handle(
+            CreateProjectCommand(project_id="r", repo="o/r"),
+        )
+        assert project.id == "r"
+        assert await project_repo.get("r") is not None
+
 
 # ── DeleteProject ────────────────────────────────────────────────
 

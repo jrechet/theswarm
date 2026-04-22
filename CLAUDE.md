@@ -136,6 +136,25 @@ Each agent is a `StateGraph` compiled graph in `src/theswarm/agents/`. They shar
 - **StartupValidator** — fail-fast env var validation (runs at server boot)
 - **GatewayBridge** — thin adapter connecting persona.py and wiring.py to the v2 web app
 
+### Dev-plan phases (see `docs/dev-role-dashboard.md`)
+
+Phases A–L are shipped (all green, ~2053 tests):
+
+- **A — Codenames + three-layer memory** (portfolio × project × role, persona prompts).
+- **B — Dashboard chat + HITL audit** (multi-role chat store, mentions, audit log).
+- **C — PO intelligence** (proposals, OKRs, policy filter, digest, signals).
+- **D — TechLead intelligence** (ADRs, debt register, dep radar, review calibration, second-opinion).
+- **E — Dev rigour** (TDD artifacts, thoughts, self-review, refactor preflight, coverage deltas).
+- **F — QA enrichments** (archetype mix, flake tracking, quarantines, quality gates, outcome cards).
+- **G — Scout** (intel sources, feed items, cluster briefs).
+- **H — Designer** (design tokens, component inventory, briefs, visual regression, anti-template audit).
+- **I — Security + SRE** (threat models, data inventory, findings, SBOM, AuthZ; deployments, incidents, cost).
+- **J — Analyst, Writer, Release** (metrics/instrumentation/observations; docs/quickstart/changelog; versions/flags/rollback).
+- **K — Architect + Chief of Staff** (paved roads, portfolio ADRs, direction briefs; routing rules, budget policies, onboarding, archive).
+- **L — Portfolio polish** (cross-project refactor programs, semantic memory, prompt library with audit, autonomy-spectrum config).
+
+See `docs/ROLES-OVERVIEW.md` for the role-by-role dashboard surface map.
+
 ### Issue label state machine
 
 Issues flow through labels: `status:backlog` → `status:ready` → `status:in-progress` → `status:review` → merged/closed
@@ -189,4 +208,4 @@ Docker Swarm + Traefik on a self-hosted runner. CI runs tests on push/PR, then t
   - `tests/integration/` — cross-layer end-to-end tests
   - `tests/e2e/` — Playwright browser tests (run separately, need running server)
   - `tests/test_*.py` — original agent and tool tests (flat structure)
-- 930+ tests, all passing
+- 2103+ tests, all passing

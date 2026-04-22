@@ -1,0 +1,44 @@
+{# Prompt library audit trail (Phase L). #}
+<section id="prompt-library-audit-fragment" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Prompt Library History</h3>
+    <span class="muted">
+      {% if name %}
+        filtering: <code>{{ name }}</code>
+      {% else %}
+        all prompts
+      {% endif %}
+    </span>
+  </header>
+
+  {% if entries %}
+    <ul class="prompt-audit-entries">
+    {% for e in entries %}
+      <li class="prompt-audit-entry prompt-audit-entry--{{ e.action.value }}">
+        <header>
+          <span class="badge badge-prompt-audit-{{ e.action.value }}">
+            {{ e.action.value }}
+          </span>
+          <strong>{{ e.prompt_name }}</strong>
+          {% if e.is_version_bump %}
+            <span class="badge badge-subtle">
+              v{{ e.before_version }} &rarr; v{{ e.after_version }}
+            </span>
+          {% else %}
+            <span class="badge badge-subtle">v{{ e.after_version }}</span>
+          {% endif %}
+          {% if e.actor %}
+            <span class="badge badge-subtle">by {{ e.actor }}</span>
+          {% endif %}
+          <span class="muted">{{ e.created_at.isoformat() }}</span>
+        </header>
+        {% if e.note %}
+          <p class="muted">{{ e.note }}</p>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No audit entries.</p>
+  {% endif %}
+</section>

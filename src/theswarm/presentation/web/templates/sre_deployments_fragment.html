@@ -1,0 +1,75 @@
+{# SRE — deployments (Phase I). #}
+<section id="sre-deployments-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Deployments</h3>
+    <span class="muted">per environment · duration · rollback</span>
+  </header>
+
+  {% if deployments %}
+    <ul class="sre-deployments">
+    {% for d in deployments %}
+      <li class="sre-deployment sre-deployment--{{ d.status.value }}">
+        <header>
+          <strong>{{ d.version or '(no version)' }}</strong>
+          <span class="badge badge-subtle">{{ d.environment }}</span>
+          <span class="badge badge-{{ d.status.value }}">{{ d.status.value }}</span>
+          {% if d.is_terminal and d.duration_seconds > 0 %}
+            <span class="muted">{{ '%.0f'|format(d.duration_seconds) }}s</span>
+          {% endif %}
+        </header>
+        {% if d.triggered_by %}
+          <p class="muted">by {{ d.triggered_by }}</p>
+        {% endif %}
+        {% if d.notes %}
+          <p>{{ d.notes }}</p>
+        {% endif %}
+
+        {% if not d.is_terminal %}
+          <form class="sre-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/sre/deployments/{{ d.id }}/succeed"
+                hx-target="#sre-deployments-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <input type="text" name="notes" placeholder="success note">
+            <button type="submit" class="btn btn-link">Succeed</button>
+          </form>
+          <form class="sre-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/sre/deployments/{{ d.id }}/fail"
+                hx-target="#sre-deployments-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <input type="text" name="notes" placeholder="failure note">
+            <button type="submit" class="btn btn-link">Fail</button>
+          </form>
+          <form class="sre-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/sre/deployments/{{ d.id }}/rollback"
+                hx-target="#sre-deployments-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <input type="text" name="notes" placeholder="rollback reason">
+            <button type="submit" class="btn btn-link">Rollback</button>
+          </form>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No deployments recorded yet.</p>
+  {% endif %}
+
+  <form class="sre-deployment-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/sre/deployments"
+        hx-target="#sre-deployments-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Version
+      <input type="text" name="version" required placeholder="1.2.3">
+    </label>
+    <label>Environment
+      <input type="text" name="environment" value="production">
+    </label>
+    <label>Triggered by
+      <input type="text" name="triggered_by" placeholder="sre-bot">
+    </label>
+    <label>Notes
+      <input type="text" name="notes" placeholder="(optional)">
+    </label>
+    <button type="submit" class="btn btn-primary">Start deploy</button>
+  </form>
+</section>

@@ -1,0 +1,67 @@
+{# ADR browser fragment. #}
+<section id="adrs-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Architecture Decision Records</h3>
+  </header>
+
+  {% if adrs %}
+    <ol class="tl-adr-list">
+    {% for a in adrs %}
+      <li class="tl-adr tl-adr-{{ a.status.value }}">
+        <span class="tl-adr-number">ADR-{{ '%04d' % a.number }}</span>
+        <a class="tl-adr-title"
+           hx-get="{{ base }}/projects/{{ project_id }}/adrs/{{ a.id }}"
+           hx-target="#adrs-fragment-{{ project_id }}"
+           hx-swap="outerHTML"
+           href="#">{{ a.title }}</a>
+        <span class="tl-adr-status badge badge-{{ a.status.value }}">{{ a.status.value }}</span>
+        {% if a.status.value == "proposed" %}
+          <form hx-post="{{ base }}/projects/{{ project_id }}/adrs/{{ a.id }}/accept"
+                hx-target="#adrs-fragment-{{ project_id }}"
+                hx-swap="outerHTML"
+                style="display:inline">
+            <button type="submit" class="btn btn-sm btn-primary">Accept</button>
+          </form>
+          <form hx-post="{{ base }}/projects/{{ project_id }}/adrs/{{ a.id }}/reject"
+                hx-target="#adrs-fragment-{{ project_id }}"
+                hx-swap="outerHTML"
+                style="display:inline">
+            <button type="submit" class="btn btn-sm btn-ghost">Reject</button>
+          </form>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ol>
+  {% else %}
+    <p class="empty-state">No ADRs recorded yet.</p>
+  {% endif %}
+
+  <details class="tl-adr-new">
+    <summary>Propose an ADR</summary>
+    <form class="tl-adr-form"
+          hx-post="{{ base }}/projects/{{ project_id }}/adrs"
+          hx-target="#adrs-fragment-{{ project_id }}"
+          hx-swap="outerHTML">
+      <label>Title
+        <input type="text" name="title" required
+               data-testid="adr-title"
+               placeholder="e.g. Adopt event-driven persistence">
+      </label>
+      <label>Context
+        <textarea name="context" rows="3"
+                  placeholder="What is the problem? What constraints apply?"></textarea>
+      </label>
+      <label>Decision
+        <textarea name="decision" rows="3"
+                  placeholder="What did we decide to do?"></textarea>
+      </label>
+      <label>Consequences
+        <textarea name="consequences" rows="3"
+                  placeholder="Trade-offs, follow-ups."></textarea>
+      </label>
+      <button type="submit" class="btn btn-primary" data-testid="adr-submit">
+        Propose
+      </button>
+    </form>
+  </details>
+</section>

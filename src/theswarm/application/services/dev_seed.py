@@ -152,7 +152,15 @@ async def seed_dev_data(
     """
     project_created = False
     if await project_repo.get(project_id) is None:
-        await CreateProjectHandler(project_repo).handle(
+        from theswarm.application.services.role_assignment_service import (
+            RoleAssignmentService,
+        )
+        from theswarm.infrastructure.agents.role_assignment_repo import (
+            SQLiteRoleAssignmentRepository,
+        )
+
+        role_service = RoleAssignmentService(SQLiteRoleAssignmentRepository(conn))
+        await CreateProjectHandler(project_repo, role_service=role_service).handle(
             CreateProjectCommand(project_id=project_id, repo=SEED_REPO, framework="auto"),
         )
         project_created = True

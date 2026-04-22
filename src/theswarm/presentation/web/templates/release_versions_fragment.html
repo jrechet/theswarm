@@ -1,0 +1,57 @@
+{# Release — versions (Phase J). #}
+<section id="release-versions-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Releases</h3>
+    <span class="muted">cut versions · semver · draft → released → rolled_back</span>
+  </header>
+
+  {% if versions %}
+    <ul class="release-versions">
+    {% for v in versions %}
+      <li class="release-version release-version--{{ v.status.value }}">
+        <header>
+          <strong class="version">v{{ v.version }}</strong>
+          <span class="badge badge-{{ v.status.value }}">{{ v.status.value }}</span>
+          {% if v.released_at %}
+            <span class="muted">released {{ v.released_at.strftime('%Y-%m-%d') }}</span>
+          {% endif %}
+        </header>
+        {% if v.summary %}
+          <p>{{ v.summary }}</p>
+        {% endif %}
+
+        {% if v.status.value == 'draft' %}
+          <form class="release-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/release/versions/{{ v.version }}/release"
+                hx-target="#release-versions-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <button type="submit" class="btn btn-primary">Mark released</button>
+          </form>
+        {% elif v.status.value == 'released' %}
+          <form class="release-inline-form"
+                hx-post="{{ base }}/projects/{{ project_id }}/release/versions/{{ v.version }}/rollback"
+                hx-target="#release-versions-fragment-{{ project_id }}"
+                hx-swap="outerHTML">
+            <button type="submit" class="btn btn-danger">Mark rolled back</button>
+          </form>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No releases cut yet.</p>
+  {% endif %}
+
+  <form class="release-version-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/release/versions"
+        hx-target="#release-versions-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Version
+      <input type="text" name="version" required placeholder="1.2.0">
+    </label>
+    <label>Summary
+      <input type="text" name="summary" placeholder="bugfix release">
+    </label>
+    <button type="submit" class="btn btn-primary">Draft release</button>
+  </form>
+</section>

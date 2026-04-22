@@ -1,0 +1,66 @@
+{# Debt register fragment. #}
+<section id="debt-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Tech debt register</h3>
+  </header>
+
+  {% if items %}
+    <ul class="tl-debt-list">
+    {% for d in items %}
+      <li class="tl-debt tl-debt-{{ d.severity.value }}">
+        <span class="tl-debt-severity">{{ d.severity.value }}</span>
+        <strong>{{ d.title }}</strong>
+        <span class="muted">{{ d.age_days }}d old</span>
+        {% if d.blast_radius %}
+          <span class="tl-debt-blast">blast: {{ d.blast_radius }}</span>
+        {% endif %}
+        {% if d.location %}
+          <code class="tl-debt-loc">{{ d.location }}</code>
+        {% endif %}
+        <form hx-post="{{ base }}/projects/{{ project_id }}/debt/{{ d.id }}/resolve"
+              hx-target="#debt-fragment-{{ project_id }}"
+              hx-swap="outerHTML"
+              style="display:inline">
+          <button type="submit" class="btn btn-sm btn-primary">Resolve</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No debt entries — rejoice.</p>
+  {% endif %}
+
+  <details class="tl-debt-new">
+    <summary>Log new debt</summary>
+    <form class="tl-debt-form"
+          hx-post="{{ base }}/projects/{{ project_id }}/debt"
+          hx-target="#debt-fragment-{{ project_id }}"
+          hx-swap="outerHTML">
+      <label>Title
+        <input type="text" name="title" required
+               data-testid="debt-title"
+               placeholder="e.g. Legacy auth middleware">
+      </label>
+      <label>Severity
+        <select name="severity" data-testid="debt-severity">
+          <option value="low">low</option>
+          <option value="medium" selected>medium</option>
+          <option value="high">high</option>
+          <option value="critical">critical</option>
+        </select>
+      </label>
+      <label>Blast radius
+        <input type="text" name="blast_radius" placeholder="auth, payments, ...">
+      </label>
+      <label>Location
+        <input type="text" name="location" placeholder="src/path/to/module.py">
+      </label>
+      <label>Description
+        <textarea name="description" rows="2"></textarea>
+      </label>
+      <button type="submit" class="btn btn-primary" data-testid="debt-submit">
+        Log debt
+      </button>
+    </form>
+  </details>
+</section>

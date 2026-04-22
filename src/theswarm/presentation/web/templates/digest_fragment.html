@@ -1,0 +1,34 @@
+{# Weekly insight digest for a project. #}
+<section id="digest-fragment-{{ project_id }}" class="po-panel">
+  <header class="po-panel-header">
+    <h3>Weekly digest</h3>
+    <form class="po-digest-generate"
+          hx-post="{{ base }}/projects/{{ project_id }}/digest/generate"
+          hx-target="#digest-fragment-{{ project_id }}"
+          hx-swap="outerHTML">
+      <button type="submit">Generate now</button>
+    </form>
+  </header>
+
+  {% if digest %}
+    <p class="po-digest-week">Week of {{ digest.week_start.strftime("%Y-%m-%d") }}</p>
+    {% if digest.narrative %}
+      <p class="po-digest-narrative">{{ digest.narrative }}</p>
+    {% endif %}
+    {% if digest.items %}
+      <ul class="po-digest-items">
+      {% for item in digest.items %}
+        <li class="po-digest-item po-digest-{{ item.kind.value }}">
+          <strong>{{ item.kind.value }}</strong>
+          — {{ item.headline }}
+          {% if item.source_url %}
+            <a href="{{ item.source_url }}" target="_blank" rel="noopener">source</a>
+          {% endif %}
+        </li>
+      {% endfor %}
+      </ul>
+    {% endif %}
+  {% else %}
+    <p class="po-empty">No digest generated yet.</p>
+  {% endif %}
+</section>

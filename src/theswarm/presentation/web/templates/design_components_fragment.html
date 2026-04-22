@@ -1,0 +1,62 @@
+{# Component inventory — promote/deprecate from design-system (Phase H). #}
+<section id="design-components-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Component inventory</h3>
+    <span class="muted">dedup source · promote shared, deprecate old</span>
+  </header>
+
+  {% if entries %}
+    <ul class="design-components">
+    {% for e in entries %}
+      <li class="design-component design-component--{{ e.status.value }}">
+        <header>
+          <strong>{{ e.name }}</strong>
+          <span class="badge badge-{{ e.status.value }}">{{ e.status.value }}</span>
+          <span class="badge badge-subtle">{{ e.usage_count }}×</span>
+        </header>
+        {% if e.path %}<p class="muted"><code>{{ e.path }}</code></p>{% endif %}
+        {% if e.notes %}<p class="muted">{{ e.notes }}</p>{% endif %}
+        <form class="design-inline-form"
+              hx-post="{{ base }}/projects/{{ project_id }}/design/components/{{ e.name }}/promote"
+              hx-target="#design-components-fragment-{{ project_id }}"
+              hx-swap="outerHTML">
+          <button type="submit" class="btn btn-link"
+                  {% if e.is_shared %}disabled{% endif %}>Promote</button>
+        </form>
+        <form class="design-inline-form"
+              hx-post="{{ base }}/projects/{{ project_id }}/design/components/{{ e.name }}/deprecate"
+              hx-target="#design-components-fragment-{{ project_id }}"
+              hx-swap="outerHTML">
+          <button type="submit" class="btn btn-link"
+                  {% if e.is_retired %}disabled{% endif %}>Deprecate</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No components registered yet.</p>
+  {% endif %}
+
+  <form class="design-component-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/design/components"
+        hx-target="#design-components-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Name
+      <input type="text" name="name" required placeholder="Button">
+    </label>
+    <label>Status
+      <select name="status">
+        {% for s in statuses %}
+          <option value="{{ s.value }}">{{ s.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Path
+      <input type="text" name="path" placeholder="src/components/Button.tsx">
+    </label>
+    <label>Notes
+      <input type="text" name="notes" placeholder="(optional)">
+    </label>
+    <button type="submit" class="btn btn-primary">Register</button>
+  </form>
+</section>

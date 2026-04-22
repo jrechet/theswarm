@@ -1,0 +1,61 @@
+{# Autonomy-spectrum config — per-project (Phase L). #}
+{%- set fragment_id = "autonomy-config-fragment-" ~ project_id -%}
+<section id="{{ fragment_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Autonomy Config</h3>
+    <span class="muted">per-role spectrum: manual &rarr; autonomous</span>
+  </header>
+
+  {% if configs %}
+    <ul class="autonomy-configs">
+    {% for c in configs %}
+      <li class="autonomy-config autonomy-config--{{ c.level.value }}">
+        <header>
+          <strong>{{ c.role }}</strong>
+          <span class="badge badge-autonomy-{{ c.level.value }}">{{ c.level.value }}</span>
+          <span class="muted">{{ c.gate_label }}</span>
+          {% if c.updated_by %}
+            <span class="badge badge-subtle">by {{ c.updated_by }}</span>
+          {% endif %}
+        </header>
+        {% if c.note %}
+          <p class="muted">{{ c.note }}</p>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No autonomy overrides for this project.</p>
+  {% endif %}
+
+  <details class="autonomy-config-new">
+    <summary>Set role autonomy</summary>
+    <form class="autonomy-config-form"
+          hx-post="{{ base }}/projects/{{ project_id }}/autonomy"
+          hx-target="#{{ fragment_id }}"
+          hx-swap="outerHTML">
+      <label>Role
+        <input type="text" name="role" required
+               data-testid="autonomy-role"
+               placeholder="po | techlead | dev | qa | architect | ...">
+      </label>
+      <label>Level
+        <select name="level" data-testid="autonomy-level">
+          {% for l in levels %}
+            <option value="{{ l.value }}">{{ l.value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Note
+        <input type="text" name="note" placeholder="why this setting">
+      </label>
+      <label>Actor
+        <input type="text" name="actor" placeholder="@codename">
+      </label>
+      <button type="submit" class="btn btn-primary"
+              data-testid="autonomy-submit">
+        Save level
+      </button>
+    </form>
+  </details>
+</section>

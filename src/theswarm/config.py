@@ -26,6 +26,8 @@ class AgentState(TypedDict, total=False):
     """State flowing through every agent graph."""
     team_id: str
     github_repo: str
+    project_id: str
+    codenames: dict[str, str]
     phase: str
     # Ports / clients
     llm: Any           # reserved for future langchain model
@@ -101,6 +103,15 @@ class CycleConfig:
 
     # Context condensation: char threshold before triggering condensation
     condenser_threshold: int = 6000
+
+    # Per-role codenames (e.g. {"po": "Mei", "dev": "Aarav"}). Populated by the
+    # caller from the RoleAssignmentService before launching a cycle. Empty in
+    # legacy / stub runs — agents fall back to their role label.
+    codenames: dict[str, str] = field(default_factory=dict)
+
+    # Project id this cycle runs for. Defaults to ``team_id`` for backwards
+    # compat; callers using the v2 project registry should pass the real id.
+    project_id: str = ""
 
     def __post_init__(self) -> None:
         if not self.workspace_dir and self.github_repo:

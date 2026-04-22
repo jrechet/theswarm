@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from theswarm.domain.memory.entities import MemoryEntry, Retrospective
-from theswarm.domain.memory.value_objects import MemoryCategory, ProjectScope
+from theswarm.domain.memory.value_objects import (
+    MemoryCategory,
+    ProjectScope,
+    ScopeLayer,
+)
 
 
 class TestMemoryCategory:
@@ -85,6 +89,61 @@ class TestMemoryEntry:
         assert g.category == MemoryCategory.CROSS_PROJECT
         assert g.scope.is_global is True
         assert g.content == "Always use type hints"
+
+
+class TestMemoryScopeLayers:
+    def test_global_scope_inferred(self):
+        e = MemoryEntry(category=MemoryCategory.STACK, content="c")
+        assert e.scope_layer == ScopeLayer.GLOBAL
+
+    def test_project_scope_inferred(self):
+        e = MemoryEntry(
+            category=MemoryCategory.STACK, content="c",
+            scope=ProjectScope("p1"),
+        )
+        assert e.scope_layer == ScopeLayer.PROJECT
+
+    def test_role_project_scope_inferred(self):
+        e = MemoryEntry(
+            category=MemoryCategory.STACK, content="c",
+            scope=ProjectScope("p1"),
+            role="dev",
+        )
+        assert e.scope_layer == ScopeLayer.ROLE_PROJECT
+
+    def test_agent_backfilled_from_codename(self):
+        e = MemoryEntry(
+            category=MemoryCategory.STACK, content="c",
+            codename="Aarav", role="dev",
+        )
+        assert e.agent == "Aarav"
+
+    def test_agent_backfilled_from_role_when_no_codename(self):
+        e = MemoryEntry(category=MemoryCategory.STACK, content="c", role="po")
+        assert e.agent == "po"
+
+    def test_to_dict_contains_new_fields(self):
+        e = MemoryEntry(
+            category=MemoryCategory.STACK, content="c",
+            scope=ProjectScope("p1"),
+            codename="Mei", role="po",
+        )
+        d = e.to_dict()
+        assert d["codename"] == "Mei"
+        assert d["role"] == "po"
+        assert d["scope_layer"] == "role_project"
+
+    def test_from_dict_roundtrip_with_new_fields(self):
+        d = {
+            "category": "stack", "content": "c",
+            "codename": "Kenji", "role": "dev",
+            "project_id": "p1", "scope_layer": "role_project",
+            "created_at": "2026-04-12T10:00:00+00:00",
+        }
+        e = MemoryEntry.from_dict(d)
+        assert e.codename == "Kenji"
+        assert e.role == "dev"
+        assert e.scope_layer == ScopeLayer.ROLE_PROJECT
 
 
 class TestRetrospective:

@@ -1,0 +1,25 @@
+<div class="card" data-testid="project-chat">
+  <div class="card-header">
+    <h2>Chat</h2>
+    <a href="{{ base }}/chat/{{ thread.id }}" class="btn-link">Open full thread →</a>
+  </div>
+  <div id="chat-log-{{ project_id }}" class="chat-log chat-log--compact">
+    {% include "chat_messages_fragment.html" %}
+  </div>
+  <form
+    class="chat-composer"
+    hx-post="{{ base }}/projects/{{ project_id }}/chat/messages"
+    hx-target="#chat-log-{{ project_id }}"
+    hx-swap="beforeend"
+    hx-on::after-request="this.reset()"
+  >
+    <input
+      type="text"
+      name="body"
+      placeholder="Ask the team, or @Codename…"
+      autocomplete="off"
+      required
+    />
+    <button type="submit" class="btn btn-primary">Send</button>
+  </form>
+</div>

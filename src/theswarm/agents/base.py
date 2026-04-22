@@ -17,11 +17,23 @@ async def load_context(state: AgentState) -> dict[str, Any]:
     to its work, formatted as structured entries rather than raw markdown.
     """
     github = state.get("github")
+
+    phase = state.get("phase", "")
+    role = _infer_role(phase)
+    codenames = state.get("codenames") or {}
+    project_id = state.get("project_id") or state.get("team_id") or ""
+    codename = codenames.get(role) if role else None
+
+    persona = _build_persona_preamble(role, codename, project_id)
+
     if github is None:
         log.warning("No GitHub client — skipping context load")
-        return {"context": "(no context — stub run)"}
+        context = persona or "(no context — stub run)"
+        return {"context": context}
 
     parts: list[str] = []
+    if persona:
+        parts.append(persona)
 
     # Load static docs
     for path in ("GOLDEN_RULES.md", "DOD.md"):
@@ -32,8 +44,6 @@ async def load_context(state: AgentState) -> dict[str, Any]:
             log.debug("Could not load %s", path)
 
     # Load structured memory (role-aware)
-    phase = state.get("phase", "")
-    role = _infer_role(phase)
     try:
         from theswarm.memory_store import load_entries, query, format_for_prompt
         entries = await load_entries(github)
@@ -60,6 +70,26 @@ async def load_context(state: AgentState) -> dict[str, Any]:
         log.debug("Context condensation skipped (not available or failed)")
 
     return {"context": context}
+
+
+def _build_persona_preamble(
+    role: str | None, codename: str | None, project_id: str,
+) -> str:
+    """Return a short persona line so the agent knows who it is."""
+    if not role:
+        return ""
+    if codename:
+        line = (
+            f"## Persona\n\n"
+            f"You are **{codename}**, the {role.upper()} on project `{project_id}`. "
+            f"Sign your outputs as {codename} and speak in the first person."
+        )
+    else:
+        line = (
+            f"## Persona\n\n"
+            f"You are the {role.upper()} on project `{project_id or 'default'}`."
+        )
+    return line
 
 
 def _infer_role(phase: str) -> str | None:

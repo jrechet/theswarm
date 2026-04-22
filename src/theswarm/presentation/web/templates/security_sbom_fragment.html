@@ -1,0 +1,53 @@
+{# Security — SBOM artifacts (Phase I). #}
+<section id="security-sbom-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>SBOM</h3>
+    <span class="muted">software bill of materials · per cycle</span>
+  </header>
+
+  {% if artifacts %}
+    <ul class="sec-sbom">
+    {% for a in artifacts %}
+      <li class="sec-sbom-artifact">
+        <header>
+          <strong>{{ a.tool }}</strong>
+          <span class="badge badge-subtle">{{ a.package_count }} pkg</span>
+          {% if a.cycle_id %}
+            <span class="badge badge-subtle">cycle {{ a.cycle_id[:8] }}</span>
+          {% endif %}
+        </header>
+        {% if a.license_summary %}
+          <p><strong>Licenses:</strong> {{ a.license_summary }}</p>
+        {% endif %}
+        {% if a.artifact_path %}
+          <p class="muted"><code>{{ a.artifact_path }}</code></p>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No SBOM artifacts recorded yet.</p>
+  {% endif %}
+
+  <form class="sec-sbom-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/security/sbom"
+        hx-target="#security-sbom-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Tool
+      <input type="text" name="tool" value="syft" placeholder="syft">
+    </label>
+    <label>Cycle
+      <input type="text" name="cycle_id" placeholder="(optional)">
+    </label>
+    <label>Packages
+      <input type="number" name="package_count" value="0" min="0">
+    </label>
+    <label>Licenses
+      <input type="text" name="license_summary" placeholder="MIT:30;Apache-2.0:12">
+    </label>
+    <label>Path
+      <input type="text" name="artifact_path" placeholder="artifacts/sbom.json">
+    </label>
+    <button type="submit" class="btn btn-primary">Record SBOM</button>
+  </form>
+</section>

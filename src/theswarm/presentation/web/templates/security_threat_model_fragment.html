@@ -1,0 +1,66 @@
+{# Security — threat model (Phase I). #}
+<section id="security-threat-model-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Threat model</h3>
+    <span class="muted">assets · actors · trust boundaries · STRIDE</span>
+  </header>
+
+  {% if threat_model %}
+    <div class="sec-threat-model {% if threat_model.is_stale %}sec-threat-model--stale{% endif %}">
+      <header>
+        <strong>{{ threat_model.title or 'Untitled' }}</strong>
+        {% if threat_model.is_stale %}
+          <span class="badge badge-warn">stale — {{ threat_model.freshness_days }}d</span>
+        {% else %}
+          <span class="badge badge-ok">fresh — {{ threat_model.freshness_days }}d</span>
+        {% endif %}
+      </header>
+      {% if threat_model.assets %}
+        <p><strong>Assets:</strong> {{ threat_model.assets }}</p>
+      {% endif %}
+      {% if threat_model.actors %}
+        <p><strong>Actors:</strong> {{ threat_model.actors }}</p>
+      {% endif %}
+      {% if threat_model.trust_boundaries %}
+        <p><strong>Trust boundaries:</strong> {{ threat_model.trust_boundaries }}</p>
+      {% endif %}
+      {% if threat_model.stride_notes %}
+        <p><strong>STRIDE:</strong> {{ threat_model.stride_notes }}</p>
+      {% endif %}
+    </div>
+  {% else %}
+    <p class="empty-state">No threat model drafted yet.</p>
+  {% endif %}
+
+  <form class="sec-threat-model-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/security/threat-model"
+        hx-target="#security-threat-model-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Title
+      <input type="text" name="title"
+             value="{{ threat_model.title if threat_model else '' }}"
+             placeholder="Baseline threat model">
+    </label>
+    <label>Assets
+      <input type="text" name="assets"
+             value="{{ threat_model.assets if threat_model else '' }}"
+             placeholder="user data, secrets, infra">
+    </label>
+    <label>Actors
+      <input type="text" name="actors"
+             value="{{ threat_model.actors if threat_model else '' }}"
+             placeholder="end-user, admin, attacker">
+    </label>
+    <label>Trust boundaries
+      <input type="text" name="trust_boundaries"
+             value="{{ threat_model.trust_boundaries if threat_model else '' }}"
+             placeholder="browser ↔ api ↔ db">
+    </label>
+    <label>STRIDE notes
+      <input type="text" name="stride_notes"
+             value="{{ threat_model.stride_notes if threat_model else '' }}"
+             placeholder="spoofing: OAuth · tampering: JWT sig · ...">
+    </label>
+    <button type="submit" class="btn btn-primary">Save threat model</button>
+  </form>
+</section>

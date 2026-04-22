@@ -1,0 +1,85 @@
+{# Chief of Staff — budget policies (Phase K). #}
+<section id="chief-of-staff-budgets-fragment" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Budget Policies</h3>
+    <span class="muted">portfolio + per-project · 0 means no cap</span>
+  </header>
+
+  {% if policies %}
+    <ul class="cos-budgets">
+    {% for p in policies %}
+      <li class="cos-budget cos-budget--{{ p.state.value }}">
+        <header>
+          {% if p.is_portfolio_wide %}
+            <strong>portfolio</strong>
+          {% else %}
+            <strong>project: {{ p.project_id }}</strong>
+          {% endif %}
+          <span class="badge badge-budget-{{ p.state.value }}">{{ p.state.value }}</span>
+          {% if p.blocks_cycles %}
+            <span class="badge badge-warn">blocks cycles</span>
+          {% endif %}
+        </header>
+        <p class="cos-budget-limits">
+          {% if p.daily_tokens_limit %}
+            <span class="badge badge-subtle">{{ p.daily_tokens_limit }} tokens/day</span>
+          {% else %}
+            <span class="muted">tokens: unlimited</span>
+          {% endif %}
+          {% if p.daily_cost_usd_limit %}
+            <span class="badge badge-subtle">${{ '%.2f'|format(p.daily_cost_usd_limit) }}/day</span>
+          {% else %}
+            <span class="muted">cost: unlimited</span>
+          {% endif %}
+        </p>
+        {% if p.note %}<p class="muted"><em>{{ p.note }}</em></p>{% endif %}
+
+        <form class="cos-inline-form"
+              hx-post="{{ base }}/chief-of-staff/budgets/state"
+              hx-target="#chief-of-staff-budgets-fragment"
+              hx-swap="outerHTML">
+          <input type="hidden" name="project_id" value="{{ p.project_id }}">
+          <select name="state">
+            {% for s in states %}
+              <option value="{{ s.value }}">set {{ s.value }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-link">Update state</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No budget policies configured.</p>
+  {% endif %}
+
+  <details class="cos-budget-new">
+    <summary>Add or update a policy</summary>
+    <form class="cos-budget-form"
+          hx-post="{{ base }}/chief-of-staff/budgets"
+          hx-target="#chief-of-staff-budgets-fragment"
+          hx-swap="outerHTML">
+      <label>Project id (blank = portfolio)
+        <input type="text" name="project_id" placeholder="">
+      </label>
+      <label>Daily tokens limit
+        <input type="number" name="daily_tokens_limit" value="0" min="0">
+      </label>
+      <label>Daily cost limit (USD)
+        <input type="number" name="daily_cost_usd_limit" value="0"
+               min="0" step="0.01">
+      </label>
+      <label>State
+        <select name="state">
+          {% for s in states %}
+            <option value="{{ s.value }}">{{ s.value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Note
+        <input type="text" name="note" placeholder="context (optional)">
+      </label>
+      <button type="submit" class="btn btn-primary">Save policy</button>
+    </form>
+  </details>
+</section>

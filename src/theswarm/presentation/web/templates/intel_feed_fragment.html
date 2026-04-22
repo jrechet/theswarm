@@ -1,0 +1,78 @@
+{# Intel feed — classified items from Scout sources (Phase G). #}
+{% set scope_id = project_id or 'portfolio' %}
+{% set feed_url = ('/projects/' ~ project_id ~ '/intel/feed') if project_id else '/intel/feed' %}
+<section id="intel-feed-fragment-{{ scope_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Intel feed</h3>
+    <span class="muted">
+      {% if project_id %}project {{ project_id }}{% else %}portfolio-wide{% endif %}
+    </span>
+  </header>
+
+  {% if items %}
+    <ul class="intel-feed">
+    {% for it in items %}
+      <li class="intel-item intel-item--{{ it.category.value }} intel-urg--{{ it.urgency.value }}">
+        <header>
+          <a href="{{ it.url }}" target="_blank" rel="noopener">{{ it.title }}</a>
+          <span class="badge badge-{{ it.category.value }}">{{ it.category.value }}</span>
+          <span class="badge badge-urg-{{ it.urgency.value }}">{{ it.urgency.value }}</span>
+          {% if it.has_action %}
+            <span class="badge badge-pass">acted</span>
+          {% endif %}
+        </header>
+        {% if it.summary %}<p class="muted">{{ it.summary }}</p>{% endif %}
+        <footer class="muted">
+          {{ it.created_at.strftime('%Y-%m-%d %H:%M') if it.created_at else '' }}
+          {% if it.source_id %} · src {{ it.source_id }}{% endif %}
+          {% if it.cluster_id %} · cluster {{ it.cluster_id }}{% endif %}
+          {% if it.action_taken %} · {{ it.action_taken }}{% endif %}
+        </footer>
+        <form class="intel-action-form"
+              hx-post="{{ base }}/intel/items/{{ it.id }}/action"
+              hx-target="#intel-feed-fragment-{{ scope_id }}"
+              hx-swap="outerHTML">
+          <input type="hidden" name="project_id" value="{{ project_id }}">
+          <input type="text" name="action_taken" placeholder="what you did"
+                 value="{{ it.action_taken }}">
+          <button type="submit" class="btn btn-link">mark action</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No intel items yet.</p>
+  {% endif %}
+
+  {% if not project_id %}
+  <form class="intel-ingest-form"
+        hx-post="{{ base }}/intel/feed"
+        hx-target="#intel-feed-fragment-{{ scope_id }}"
+        hx-swap="outerHTML">
+    <label>Title
+      <input type="text" name="title" required placeholder="CVE-2024-XXXX in libfoo">
+    </label>
+    <label>URL
+      <input type="url" name="url" required placeholder="https://...">
+    </label>
+    <label>Category
+      <select name="category">
+        {% for cat in categories %}
+          <option value="{{ cat.value }}">{{ cat.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Urgency
+      <select name="urgency">
+        {% for u in urgencies %}
+          <option value="{{ u.value }}" {% if u.value == 'normal' %}selected{% endif %}>{{ u.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Projects
+      <input type="text" name="project_ids" placeholder="(comma-separated, optional)">
+    </label>
+    <button type="submit" class="btn btn-primary">Ingest</button>
+  </form>
+  {% endif %}
+</section>

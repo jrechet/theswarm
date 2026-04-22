@@ -32,6 +32,41 @@
     </div>
   </section>
 
+  {# Portfolio surfaces — Phase K/L roles operating across all projects #}
+  <section class="card" data-testid="portfolio-surfaces-card">
+    <h2>Portfolio surfaces</h2>
+    <ul class="portfolio-surfaces">
+      <li><a href="{{ base }}/architect/paved-road">Architect</a> — paved-road rules, portfolio ADRs, direction briefs</li>
+      <li><a href="{{ base }}/chief-of-staff/routing">Chief of Staff</a> — routing rules, budget policies, onboarding, archive</li>
+      <li><a href="{{ base }}/intel/feed">Scout</a> — external intel sources, feed items, clusters</li>
+      <li><a href="{{ base }}/refactor-programs">Refactor programs</a> — cross-project refactors</li>
+      <li><a href="{{ base }}/semantic-memory">Semantic memory</a> — retrieval-friendly notes, portfolio-wide</li>
+      <li><a href="{{ base }}/prompt-library">Prompt library</a> — versioned prompts with audit trail</li>
+    </ul>
+  </section>
+
+  {# Phase G — Scout portfolio intel #}
+  <div hx-get="{{ base }}/intel/feed"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="portfolio-intel-feed-slot">
+    <div class="card"><p class="empty-state">Loading intel feed…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/intel/sources"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="portfolio-intel-sources-slot">
+    <div class="card"><p class="empty-state">Loading intel sources…</p></div>
+  </div>
+
+  <div hx-get="{{ base }}/intel/clusters"
+       hx-trigger="load"
+       hx-swap="outerHTML"
+       data-testid="portfolio-intel-clusters-slot">
+    <div class="card"><p class="empty-state">Loading intel clusters…</p></div>
+  </div>
+
   <section class="card">
     <h2>Projects</h2>
     {% if dashboard.projects %}

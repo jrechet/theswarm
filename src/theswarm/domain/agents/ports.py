@@ -4,7 +4,28 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from theswarm.domain.agents.value_objects import LLMResponse
+from theswarm.domain.agents.entities import RoleAssignment
+from theswarm.domain.agents.value_objects import AgentRole, LLMResponse
+
+
+class RoleAssignmentRepository(Protocol):
+    """Persistence port for role assignments."""
+
+    async def save(self, assignment: RoleAssignment) -> None: ...
+
+    async def get(self, assignment_id: str) -> RoleAssignment | None: ...
+
+    async def list_for_project(
+        self, project_id: str, include_retired: bool = False,
+    ) -> list[RoleAssignment]: ...
+
+    async def list_all(self, include_retired: bool = False) -> list[RoleAssignment]: ...
+
+    async def find(
+        self, project_id: str, role: AgentRole,
+    ) -> RoleAssignment | None: ...
+
+    async def codenames_in_use(self) -> set[str]: ...
 
 
 class LLMPort(Protocol):

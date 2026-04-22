@@ -1,0 +1,44 @@
+{# Critical-paths manager fragment. #}
+<section id="critical-paths-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Critical paths</h3>
+    <span class="muted">files matching these patterns trigger a 2nd-opinion review</span>
+  </header>
+
+  {% if paths %}
+    <ul class="tl-crit-list">
+    {% for p in paths %}
+      <li class="tl-crit">
+        <code>{{ p.pattern }}</code>
+        {% if p.reason %}<span class="muted">— {{ p.reason }}</span>{% endif %}
+        <form hx-post="{{ base }}/projects/{{ project_id }}/critical-paths/{{ p.id }}/delete"
+              hx-target="#critical-paths-fragment-{{ project_id }}"
+              hx-swap="outerHTML"
+              style="display:inline">
+          <button type="submit" class="btn btn-sm btn-ghost">Remove</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No critical paths registered.</p>
+  {% endif %}
+
+  <form class="tl-crit-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/critical-paths"
+        hx-target="#critical-paths-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Pattern
+      <input type="text" name="pattern" required
+             data-testid="crit-pattern"
+             placeholder="e.g. src/**/auth/* or payments">
+    </label>
+    <label>Reason
+      <input type="text" name="reason"
+             placeholder="Why this path needs a 2nd opinion">
+    </label>
+    <button type="submit" class="btn btn-primary" data-testid="crit-submit">
+      Add
+    </button>
+  </form>
+</section>

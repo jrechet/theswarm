@@ -25,6 +25,35 @@ async def test_load_context_no_github_key():
     assert result["context"] == "(no context — stub run)"
 
 
+async def test_load_context_injects_persona_when_codename_set():
+    """With a codename + phase, load_context prepends a persona line."""
+    state = {
+        "github": None,
+        "phase": "development",
+        "project_id": "demo",
+        "codenames": {"dev": "Aarav"},
+    }
+    result = await load_context(state)
+    assert "Aarav" in result["context"]
+    assert "DEV" in result["context"]
+    assert "demo" in result["context"]
+
+
+async def test_load_context_persona_prepended_with_github():
+    """Persona preamble appears before static docs when github is present."""
+    mock_gh = AsyncMock()
+    mock_gh.get_file_content = AsyncMock(side_effect=Exception("skip"))
+    state = {
+        "github": mock_gh,
+        "phase": "morning",
+        "project_id": "demo",
+        "codenames": {"po": "Mei"},
+    }
+    result = await load_context(state)
+    assert "Mei" in result["context"]
+    assert "PO" in result["context"]
+
+
 async def test_load_context_all_files():
     """Context includes static docs + structured memory."""
     mock_gh = AsyncMock()

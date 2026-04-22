@@ -1,0 +1,42 @@
+{# Intel clusters — grouped stories across sources (Phase G). #}
+<section id="intel-clusters-fragment" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Intel clusters</h3>
+    <span class="muted">grouped stories</span>
+  </header>
+
+  {% if clusters %}
+    <ul class="intel-clusters">
+    {% for c in clusters %}
+      <li class="intel-cluster">
+        <header>
+          <strong>{{ c.topic or 'Untitled' }}</strong>
+          <span class="badge badge-subtle">{{ c.size }} items</span>
+        </header>
+        {% if c.summary %}<p class="muted">{{ c.summary }}</p>{% endif %}
+        <footer class="muted">
+          {{ c.created_at.strftime('%Y-%m-%d %H:%M') if c.created_at else '' }}
+        </footer>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No clusters yet.</p>
+  {% endif %}
+
+  <form class="intel-cluster-form"
+        hx-post="{{ base }}/intel/clusters"
+        hx-target="#intel-clusters-fragment"
+        hx-swap="outerHTML">
+    <label>Topic
+      <input type="text" name="topic" required placeholder="Python 3.13 release">
+    </label>
+    <label>Summary
+      <input type="text" name="summary" placeholder="(optional)">
+    </label>
+    <label>Member item ids
+      <input type="text" name="member_ids" placeholder="(comma-separated, optional)">
+    </label>
+    <button type="submit" class="btn btn-primary">Create cluster</button>
+  </form>
+</section>

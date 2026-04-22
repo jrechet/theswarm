@@ -1,0 +1,86 @@
+{# Design briefs — gate Dev until READY/APPROVED (Phase H). #}
+<section id="design-briefs-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Design briefs</h3>
+    <span class="muted">per-story intent · hierarchy · states · motion</span>
+  </header>
+
+  {% if briefs %}
+    <ul class="design-briefs">
+    {% for b in briefs %}
+      <li class="design-brief design-brief--{{ b.status.value }}">
+        <header>
+          <strong>{{ b.title or b.story_id or 'Untitled' }}</strong>
+          <span class="badge badge-{{ b.status.value }}">{{ b.status.value }}</span>
+          {% if b.blocks_dev %}
+            <span class="badge badge-warn">blocks dev</span>
+          {% endif %}
+        </header>
+        {% if b.intent %}
+          <p class="brief-row"><strong>Intent:</strong> {{ b.intent }}</p>
+        {% endif %}
+        {% if b.hierarchy %}
+          <p class="brief-row"><strong>Hierarchy:</strong> {{ b.hierarchy }}</p>
+        {% endif %}
+        {% if b.states %}
+          <p class="brief-row"><strong>States:</strong> {{ b.states }}</p>
+        {% endif %}
+        {% if b.motion %}
+          <p class="brief-row"><strong>Motion:</strong> {{ b.motion }}</p>
+        {% endif %}
+        {% if b.reference_url %}
+          <p class="brief-row"><strong>Ref:</strong>
+            <a href="{{ b.reference_url }}" target="_blank" rel="noopener">link</a>
+          </p>
+        {% endif %}
+        {% if b.approval_note %}
+          <p class="muted"><em>{{ b.approval_note }}</em></p>
+        {% endif %}
+
+        <form class="design-inline-form"
+              hx-post="{{ base }}/projects/{{ project_id }}/design/briefs/{{ b.story_id }}/status"
+              hx-target="#design-briefs-fragment-{{ project_id }}"
+              hx-swap="outerHTML">
+          <select name="status">
+            <option value="ready">mark ready</option>
+            <option value="approved">approve</option>
+            <option value="changes_requested">request changes</option>
+          </select>
+          <input type="text" name="note" placeholder="note (optional)">
+          <button type="submit" class="btn btn-link">Update</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No design briefs drafted yet.</p>
+  {% endif %}
+
+  <form class="design-brief-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/design/briefs"
+        hx-target="#design-briefs-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Story id
+      <input type="text" name="story_id" required placeholder="S42">
+    </label>
+    <label>Title
+      <input type="text" name="title" placeholder="Add onboarding">
+    </label>
+    <label>Intent
+      <input type="text" name="intent" placeholder="welcome first-run user">
+    </label>
+    <label>Hierarchy
+      <input type="text" name="hierarchy" placeholder="primary CTA, secondary steps">
+    </label>
+    <label>States
+      <input type="text" name="states" placeholder="empty / loading / error / done">
+    </label>
+    <label>Motion
+      <input type="text" name="motion" placeholder="fade + slide, reduced-motion ok">
+    </label>
+    <label>Reference URL
+      <input type="url" name="reference_url" placeholder="https://figma.com/...">
+    </label>
+    <button type="submit" class="btn btn-primary">Draft brief</button>
+  </form>
+</section>

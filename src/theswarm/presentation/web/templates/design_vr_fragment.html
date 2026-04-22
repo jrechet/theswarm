@@ -1,0 +1,69 @@
+{# Visual regression review board — Designer + QA (Phase H). #}
+<section id="design-vr-fragment-{{ project_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Visual regression review</h3>
+    <span class="muted">designer + QA co-review</span>
+  </header>
+
+  {% if entries %}
+    <ul class="design-vr-list">
+    {% for e in entries %}
+      <li class="design-vr design-vr--{{ e.status.value }}">
+        <header>
+          <strong>story {{ e.story_id or '(none)' }}</strong>
+          <span class="badge badge-{{ e.status.value }}">{{ e.status.value }}</span>
+          {% if e.viewport %}
+            <span class="badge badge-subtle">{{ e.viewport }}</span>
+          {% endif %}
+          {% if e.is_blocking %}
+            <span class="badge badge-fail">blocks ship</span>
+          {% endif %}
+        </header>
+        <p class="muted">
+          {% if e.before_path %}before: <code>{{ e.before_path }}</code>{% endif %}
+          {% if e.after_path %} · after: <code>{{ e.after_path }}</code>{% endif %}
+        </p>
+        {% if e.mask_notes %}<p class="muted">mask: {{ e.mask_notes }}</p>{% endif %}
+        {% if e.reviewer_note %}<p class="muted"><em>{{ e.reviewer_note }}</em></p>{% endif %}
+        <form class="design-inline-form"
+              hx-post="{{ base }}/projects/{{ project_id }}/design/visual-regressions/{{ e.id }}/review"
+              hx-target="#design-vr-fragment-{{ project_id }}"
+              hx-swap="outerHTML">
+          <select name="status">
+            <option value="pass">pass</option>
+            <option value="fail">fail</option>
+            <option value="warn">warn</option>
+            <option value="skipped">skip</option>
+          </select>
+          <input type="text" name="note" placeholder="note (optional)">
+          <button type="submit" class="btn btn-link">Review</button>
+        </form>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No visual-regression captures yet.</p>
+  {% endif %}
+
+  <form class="design-vr-form"
+        hx-post="{{ base }}/projects/{{ project_id }}/design/visual-regressions"
+        hx-target="#design-vr-fragment-{{ project_id }}"
+        hx-swap="outerHTML">
+    <label>Story id
+      <input type="text" name="story_id" placeholder="(optional)">
+    </label>
+    <label>Viewport
+      <input type="text" name="viewport" placeholder="1440x900">
+    </label>
+    <label>Before path
+      <input type="text" name="before_path" placeholder="artifacts/.../before.png">
+    </label>
+    <label>After path
+      <input type="text" name="after_path" placeholder="artifacts/.../after.png">
+    </label>
+    <label>Mask notes
+      <input type="text" name="mask_notes" placeholder="(optional)">
+    </label>
+    <button type="submit" class="btn btn-primary">Capture</button>
+  </form>
+</section>

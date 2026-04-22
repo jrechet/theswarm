@@ -1,0 +1,58 @@
+{# Intel source health — Phase G. #}
+{% set scope_id = project_id or 'portfolio' %}
+<section id="intel-sources-fragment-{{ scope_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Intel sources</h3>
+    <span class="muted">signal rate per upstream feed</span>
+  </header>
+
+  {% if sources %}
+    <ul class="intel-sources">
+    {% for s in sources %}
+      <li class="intel-source {% if not s.is_healthy %}intel-source--bad{% endif %}">
+        <header>
+          <strong>{{ s.name }}</strong>
+          <span class="badge badge-subtle">{{ s.kind.value }}</span>
+          <span class="badge {% if s.is_healthy %}badge-pass{% else %}badge-fail{% endif %}">
+            {{ (s.signal_rate * 100) | round(0) | int }}%
+          </span>
+          {% if not s.enabled %}<span class="badge badge-warn">disabled</span>{% endif %}
+        </header>
+        <p class="muted">
+          ok: {{ s.success_count }} · err: {{ s.error_count }}
+          {% if s.project_id %} · project {{ s.project_id }}
+          {% else %} · portfolio{% endif %}
+          {% if s.last_error %} · last err: {{ s.last_error }}{% endif %}
+        </p>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No sources registered yet.</p>
+  {% endif %}
+
+  {% if not project_id %}
+  <form class="intel-source-form"
+        hx-post="{{ base }}/intel/sources"
+        hx-target="#intel-sources-fragment-{{ scope_id }}"
+        hx-swap="outerHTML">
+    <label>Name
+      <input type="text" name="name" required placeholder="HackerNews top">
+    </label>
+    <label>Kind
+      <select name="kind">
+        {% for k in kinds %}
+          <option value="{{ k.value }}">{{ k.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>URL
+      <input type="url" name="url" placeholder="https://...">
+    </label>
+    <label>Project
+      <input type="text" name="project_id" placeholder="(blank = portfolio)">
+    </label>
+    <button type="submit" class="btn btn-primary">Register</button>
+  </form>
+  {% endif %}
+</section>

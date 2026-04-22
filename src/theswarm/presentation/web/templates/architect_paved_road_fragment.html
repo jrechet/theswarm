@@ -1,0 +1,72 @@
+{# Architect — paved-road rules (portfolio-wide, Phase K). #}
+<section id="architect-paved-road-fragment" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Paved Road</h3>
+    <span class="muted">portfolio-wide conventions · required blocks merge</span>
+  </header>
+
+  {% if rules %}
+    <ul class="architect-rules">
+    {% for r in rules %}
+      <li class="architect-rule architect-rule--{{ r.severity.value }}">
+        <header>
+          <strong>{{ r.name }}</strong>
+          <span class="badge badge-severity-{{ r.severity.value }}">{{ r.severity.value }}</span>
+          {% if r.is_blocking %}
+            <span class="badge badge-warn">blocks merge</span>
+          {% endif %}
+        </header>
+        <p class="architect-rule-body">{{ r.rule }}</p>
+        {% if r.rationale %}
+          <p class="muted"><em>Why:</em> {{ r.rationale }}</p>
+        {% endif %}
+        {% if r.tags %}
+          <p class="muted">
+            {% for t in r.tags %}
+              <span class="badge badge-subtle">{{ t }}</span>
+            {% endfor %}
+          </p>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No paved-road rules yet.</p>
+  {% endif %}
+
+  <details class="architect-rule-new">
+    <summary>Add or update a rule</summary>
+    <form class="architect-rule-form"
+          hx-post="{{ base }}/architect/paved-road"
+          hx-target="#architect-paved-road-fragment"
+          hx-swap="outerHTML">
+      <label>Name
+        <input type="text" name="name" required
+               data-testid="rule-name"
+               placeholder="e.g. python-deps-via-uv">
+      </label>
+      <label>Rule
+        <textarea name="rule" rows="2" required
+                  placeholder="All Python projects use uv for dependency management."></textarea>
+      </label>
+      <label>Rationale
+        <textarea name="rationale" rows="2"
+                  placeholder="Faster, lockfile-safe, consistent across repos."></textarea>
+      </label>
+      <label>Severity
+        <select name="severity">
+          {% for s in severities %}
+            <option value="{{ s.value }}">{{ s.value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Tags
+        <input type="text" name="tags"
+               placeholder="python, tooling (comma separated)">
+      </label>
+      <button type="submit" class="btn btn-primary" data-testid="rule-submit">
+        Save rule
+      </button>
+    </form>
+  </details>
+</section>

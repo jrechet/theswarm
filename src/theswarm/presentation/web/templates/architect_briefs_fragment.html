@@ -1,0 +1,87 @@
+{# Architect — Direction briefs (Phase K). #}
+{%- set fragment_id = "architect-briefs-fragment-" ~ (project_id or "portfolio") -%}
+{%- if project_id -%}
+  {%- set base_url = base ~ "/projects/" ~ project_id ~ "/architect/briefs" -%}
+{%- else -%}
+  {%- set base_url = base ~ "/architect/briefs" -%}
+{%- endif -%}
+<section id="{{ fragment_id }}" class="tl-panel">
+  <header class="tl-panel-header">
+    <h3>Direction Briefs</h3>
+    <span class="muted">
+      {% if scope_label == "project" %}project-scoped{% else %}portfolio-wide{% endif %}
+      · per-period narrative · focus + risks
+    </span>
+  </header>
+
+  {% if briefs %}
+    <ul class="architect-briefs">
+    {% for b in briefs %}
+      <li class="architect-brief architect-brief--{{ b.scope.value }}">
+        <header>
+          <strong>{{ b.title }}</strong>
+          <span class="badge badge-subtle">{{ b.scope.value }}</span>
+          {% if b.period %}
+            <span class="badge badge-subtle">{{ b.period }}</span>
+          {% endif %}
+          {% if b.author %}
+            <span class="muted">by {{ b.author }}</span>
+          {% endif %}
+        </header>
+        {% if b.focus_areas %}
+          <p><strong>Focus:</strong></p>
+          <ul class="architect-brief-list">
+            {% for f in b.focus_areas %}<li>{{ f }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+        {% if b.risks %}
+          <p><strong>Risks:</strong></p>
+          <ul class="architect-brief-list architect-brief-risks">
+            {% for r in b.risks %}<li>{{ r }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+        {% if b.narrative %}
+          <p class="architect-brief-narrative">{{ b.narrative }}</p>
+        {% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">No direction briefs yet.</p>
+  {% endif %}
+
+  <details class="architect-brief-new">
+    <summary>Record a brief</summary>
+    <form class="architect-brief-form"
+          hx-post="{{ base_url }}"
+          hx-target="#{{ fragment_id }}"
+          hx-swap="outerHTML">
+      <label>Title
+        <input type="text" name="title" required
+               data-testid="architect-brief-title"
+               placeholder="e.g. 2026 Q2 direction">
+      </label>
+      <label>Period
+        <input type="text" name="period" placeholder="2026-Q2">
+      </label>
+      <label>Author
+        <input type="text" name="author" placeholder="@you">
+      </label>
+      <label>Focus areas (one per line)
+        <textarea name="focus_areas" rows="3"
+                  placeholder="Resilience & fail-safes&#10;Observability upgrades"></textarea>
+      </label>
+      <label>Risks (one per line)
+        <textarea name="risks" rows="3"
+                  placeholder="Anthropic rate-limit variability&#10;Sandbox regressions"></textarea>
+      </label>
+      <label>Narrative
+        <textarea name="narrative" rows="4"
+                  placeholder="The story behind this period..."></textarea>
+      </label>
+      <button type="submit" class="btn btn-primary" data-testid="architect-brief-submit">
+        Record
+      </button>
+    </form>
+  </details>
+</section>
