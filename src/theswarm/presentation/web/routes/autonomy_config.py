@@ -11,6 +11,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from theswarm.domain.autonomy_config.value_objects import AutonomyLevel
+from theswarm.presentation.web.fragment_response import render_fragment_or_page
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +34,8 @@ def _service(request: Request):
 async def _render(request: Request, project_id: str) -> HTMLResponse:
     svc = _service(request)
     configs = await svc.list_for_project(project_id)
-    return _templates(request).TemplateResponse(
+    return render_fragment_or_page(
+        request,
         "autonomy_config_fragment.html",
         {
             "request": request,
@@ -41,6 +43,7 @@ async def _render(request: Request, project_id: str) -> HTMLResponse:
             "configs": configs,
             "levels": list(AutonomyLevel),
         },
+        page_title=f"Autonomy — {project_id}",
     )
 
 

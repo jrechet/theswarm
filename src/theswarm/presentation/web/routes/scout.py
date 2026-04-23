@@ -26,6 +26,7 @@ from theswarm.domain.scout.value_objects import (
     IntelUrgency,
     SourceKind,
 )
+from theswarm.presentation.web.fragment_response import render_fragment_or_page
 
 log = logging.getLogger(__name__)
 
@@ -55,7 +56,11 @@ async def _render_feed(
 ) -> HTMLResponse:
     feed_svc = _service(request, "intel_feed_service", "intel-feed service")
     items = await feed_svc.list_feed(limit=50, project_id=project_id)
-    return _templates(request).TemplateResponse(
+    title = "Scout — Intel Feed"
+    if project_id:
+        title = f"Intel Feed — {project_id}"
+    return render_fragment_or_page(
+        request,
         "intel_feed_fragment.html",
         {
             "request": request,
@@ -64,6 +69,7 @@ async def _render_feed(
             "categories": list(IntelCategory),
             "urgencies": list(IntelUrgency),
         },
+        page_title=title,
     )
 
 
@@ -164,7 +170,11 @@ async def _render_sources(
         if not project_id
         else await src_svc.list_for_project(project_id)
     )
-    return _templates(request).TemplateResponse(
+    title = "Scout — Intel Sources"
+    if project_id:
+        title = f"Intel Sources — {project_id}"
+    return render_fragment_or_page(
+        request,
         "intel_sources_fragment.html",
         {
             "request": request,
@@ -172,6 +182,7 @@ async def _render_sources(
             "sources": sources,
             "kinds": list(SourceKind),
         },
+        page_title=title,
     )
 
 
@@ -220,12 +231,14 @@ async def portfolio_intel_clusters(request: Request) -> HTMLResponse:
         request, "intel_cluster_service", "intel-cluster service",
     )
     clusters = await clus_svc.list_recent(limit=30)
-    return _templates(request).TemplateResponse(
+    return render_fragment_or_page(
+        request,
         "intel_clusters_fragment.html",
         {
             "request": request,
             "clusters": clusters,
         },
+        page_title="Scout — Intel Clusters",
     )
 
 

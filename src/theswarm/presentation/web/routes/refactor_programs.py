@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse
 from theswarm.domain.refactor_programs.value_objects import (
     RefactorProgramStatus,
 )
+from theswarm.presentation.web.fragment_response import render_fragment_or_page
 
 log = logging.getLogger(__name__)
 
@@ -44,13 +45,15 @@ def _parse_lines(text: str) -> tuple[str, ...]:
 async def programs_list(request: Request) -> HTMLResponse:
     svc = _service(request)
     programs = await svc.list()
-    return _templates(request).TemplateResponse(
+    return render_fragment_or_page(
+        request,
         "refactor_programs_fragment.html",
         {
             "request": request,
             "programs": programs,
             "statuses": list(RefactorProgramStatus),
         },
+        page_title="Refactor Programs",
     )
 
 

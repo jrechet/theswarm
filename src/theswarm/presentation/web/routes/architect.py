@@ -16,6 +16,7 @@ from theswarm.domain.architect.value_objects import (
     BriefScope,
     RuleSeverity,
 )
+from theswarm.presentation.web.fragment_response import render_fragment_or_page
 
 log = logging.getLogger(__name__)
 
@@ -52,13 +53,15 @@ def _parse_lines(text: str) -> tuple[str, ...]:
 async def paved_road(request: Request) -> HTMLResponse:
     svc = _service(request, "paved_road_service", "paved road service")
     rules = await svc.list()
-    return _templates(request).TemplateResponse(
+    return render_fragment_or_page(
+        request,
         "architect_paved_road_fragment.html",
         {
             "request": request,
             "rules": rules,
             "severities": list(RuleSeverity),
         },
+        page_title="Architect — Paved Road",
     )
 
 
@@ -90,7 +93,8 @@ async def paved_road_upsert(
 async def portfolio_adrs(request: Request) -> HTMLResponse:
     svc = _service(request, "portfolio_adr_service", "ADR service")
     adrs = await svc.list()
-    return _templates(request).TemplateResponse(
+    return render_fragment_or_page(
+        request,
         "architect_adrs_fragment.html",
         {
             "request": request,
@@ -99,6 +103,7 @@ async def portfolio_adrs(request: Request) -> HTMLResponse:
             "scope_label": "portfolio",
             "project_id": "",
         },
+        page_title="Architect — Portfolio ADRs",
     )
 
 
@@ -194,7 +199,8 @@ async def portfolio_briefs(request: Request) -> HTMLResponse:
         request, "direction_brief_service", "direction brief service",
     )
     briefs = await svc.list_portfolio()
-    return _templates(request).TemplateResponse(
+    return render_fragment_or_page(
+        request,
         "architect_briefs_fragment.html",
         {
             "request": request,
@@ -202,6 +208,7 @@ async def portfolio_briefs(request: Request) -> HTMLResponse:
             "scope_label": "portfolio",
             "project_id": "",
         },
+        page_title="Architect — Direction Briefs",
     )
 
 

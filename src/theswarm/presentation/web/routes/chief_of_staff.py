@@ -17,6 +17,7 @@ from theswarm.domain.chief_of_staff.value_objects import (
     OnboardingStatus,
     RuleStatus,
 )
+from theswarm.presentation.web.fragment_response import render_fragment_or_page
 
 log = logging.getLogger(__name__)
 
@@ -41,13 +42,15 @@ def _service(request: Request, attr: str, label: str):
 async def routing_list(request: Request) -> HTMLResponse:
     svc = _service(request, "routing_service", "routing service")
     rules = await svc.list()
-    return _templates(request).TemplateResponse(
+    return render_fragment_or_page(
+        request,
         "chief_of_staff_routing_fragment.html",
         {
             "request": request,
             "rules": rules,
             "statuses": list(RuleStatus),
         },
+        page_title="Chief of Staff — Routing Rules",
     )
 
 
@@ -94,7 +97,8 @@ async def routing_disable(
 async def budgets_list(request: Request) -> HTMLResponse:
     svc = _service(request, "budget_policy_service", "budget policy service")
     policies = await svc.list()
-    return _templates(request).TemplateResponse(
+    return render_fragment_or_page(
+        request,
         "chief_of_staff_budgets_fragment.html",
         {
             "request": request,
@@ -103,6 +107,7 @@ async def budgets_list(request: Request) -> HTMLResponse:
             "scope_label": "portfolio",
             "project_id": "",
         },
+        page_title="Chief of Staff — Budgets",
     )
 
 
@@ -162,7 +167,8 @@ async def onboarding_list(
     svc = _service(request, "onboarding_service", "onboarding service")
     steps = await svc.list(project_id)
     done, total = await svc.progress(project_id)
-    return _templates(request).TemplateResponse(
+    return render_fragment_or_page(
+        request,
         "chief_of_staff_onboarding_fragment.html",
         {
             "request": request,
@@ -172,6 +178,7 @@ async def onboarding_list(
             "done": done,
             "total": total,
         },
+        page_title=f"Onboarding — {project_id}",
     )
 
 
@@ -215,13 +222,15 @@ async def onboarding_set_status(
 async def archive_list(request: Request) -> HTMLResponse:
     svc = _service(request, "archive_service", "archive service")
     archives = await svc.list()
-    return _templates(request).TemplateResponse(
+    return render_fragment_or_page(
+        request,
         "chief_of_staff_archive_fragment.html",
         {
             "request": request,
             "archives": archives,
             "reasons": list(ArchiveReason),
         },
+        page_title="Chief of Staff — Archive",
     )
 
 

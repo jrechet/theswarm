@@ -10,6 +10,8 @@ import logging
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from theswarm.presentation.web.fragment_response import render_fragment_or_page
+
 log = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -35,7 +37,11 @@ def _parse_tags(text: str) -> tuple[str, ...]:
 
 
 def _render(request, entries, *, project_id, query, tag):
-    return _templates(request).TemplateResponse(
+    title = "Semantic Memory"
+    if project_id:
+        title = f"Semantic Memory — {project_id}"
+    return render_fragment_or_page(
+        request,
         "semantic_memory_fragment.html",
         {
             "request": request,
@@ -44,6 +50,7 @@ def _render(request, entries, *, project_id, query, tag):
             "query": query,
             "tag": tag,
         },
+        page_title=title,
     )
 
 

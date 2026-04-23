@@ -7,6 +7,8 @@ import logging
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from theswarm.presentation.web.fragment_response import render_fragment_or_page
+
 log = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -28,9 +30,11 @@ def _service(request: Request):
 async def _render_list(request: Request) -> HTMLResponse:
     svc = _service(request)
     templates = await svc.list()
-    return _templates(request).TemplateResponse(
+    return render_fragment_or_page(
+        request,
         "prompt_library_fragment.html",
         {"request": request, "templates": templates},
+        page_title="Prompt Library",
     )
 
 
@@ -85,7 +89,9 @@ async def library_audit(
 ) -> HTMLResponse:
     svc = _service(request)
     entries = await svc.list_audit(name=name or None)
-    return _templates(request).TemplateResponse(
+    return render_fragment_or_page(
+        request,
         "prompt_library_audit_fragment.html",
         {"request": request, "entries": entries, "name": name},
+        page_title="Prompt Library — Audit",
     )
