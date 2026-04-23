@@ -201,360 +201,6 @@
     <div class="card"><p class="empty-state">Loading chat…</p></div>
   </div>
 
-  <div hx-get="{{ base }}/projects/{{ project.id }}/proposals"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="proposals-card-slot">
-    <div class="card"><p class="empty-state">Loading proposals…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/okrs"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="okrs-card-slot">
-    <div class="card"><p class="empty-state">Loading OKRs…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/digest"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="digest-card-slot">
-    <div class="card"><p class="empty-state">Loading digest…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/signals"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="signals-card-slot">
-    <div class="card"><p class="empty-state">Loading signals…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/policy"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="policy-card-slot">
-    <div class="card"><p class="empty-state">Loading policy…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/deps"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="deps-card-slot">
-    <div class="card"><p class="empty-state">Loading deps radar…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/adrs"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="adrs-card-slot">
-    <div class="card"><p class="empty-state">Loading ADRs…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/debt"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="debt-card-slot">
-    <div class="card"><p class="empty-state">Loading debt register…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/reviews/calibration"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="calibration-card-slot">
-    <div class="card"><p class="empty-state">Loading review calibration…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/critical-paths"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="critical-paths-card-slot">
-    <div class="card"><p class="empty-state">Loading critical paths…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/dev/thoughts"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="dev-thoughts-card-slot">
-    <div class="card"><p class="empty-state">Loading dev thoughts…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/dev/tdd"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="dev-tdd-card-slot">
-    <div class="card"><p class="empty-state">Loading TDD gate…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/dev/preflight"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="dev-preflight-card-slot">
-    <div class="card"><p class="empty-state">Loading refactor preflight…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/dev/self-reviews"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="dev-selfrev-card-slot">
-    <div class="card"><p class="empty-state">Loading self-reviews…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/dev/coverage"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="dev-coverage-card-slot">
-    <div class="card"><p class="empty-state">Loading coverage deltas…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/qa/plans"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="qa-plans-card-slot">
-    <div class="card"><p class="empty-state">Loading test archetype mix…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/qa/flakes"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="qa-flakes-card-slot">
-    <div class="card"><p class="empty-state">Loading flake scoreboard…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/qa/quarantine"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="qa-quarantine-card-slot">
-    <div class="card"><p class="empty-state">Loading quarantine…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/qa/gates"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="qa-gates-card-slot">
-    <div class="card"><p class="empty-state">Loading quality gates…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/qa/outcomes"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="qa-outcomes-card-slot">
-    <div class="card"><p class="empty-state">Loading outcome cards…</p></div>
-  </div>
-
-  {# Phase G — Scout: project-scoped intel feed + sources #}
-  <div hx-get="{{ base }}/projects/{{ project.id }}/intel/feed"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="intel-feed-card-slot">
-    <div class="card"><p class="empty-state">Loading intel feed…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/intel/sources"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="intel-sources-card-slot">
-    <div class="card"><p class="empty-state">Loading intel sources…</p></div>
-  </div>
-
-  {# Phase H — Designer: tokens, components, briefs, visual regression, anti-template #}
-  <div hx-get="{{ base }}/projects/{{ project.id }}/design/tokens"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="design-tokens-card-slot">
-    <div class="card"><p class="empty-state">Loading design tokens…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/design/components"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="design-components-card-slot">
-    <div class="card"><p class="empty-state">Loading component inventory…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/design/briefs"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="design-briefs-card-slot">
-    <div class="card"><p class="empty-state">Loading design briefs…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/design/visual-regressions"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="design-vr-card-slot">
-    <div class="card"><p class="empty-state">Loading visual regressions…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/design/anti-template"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="design-anti-template-card-slot">
-    <div class="card"><p class="empty-state">Loading anti-template checks…</p></div>
-  </div>
-
-  {# Phase I — Security: threat model, data inventory, findings, SBOM, AuthZ #}
-  <div hx-get="{{ base }}/projects/{{ project.id }}/security/threat-model"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="security-threat-model-card-slot">
-    <div class="card"><p class="empty-state">Loading threat model…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/security/data-inventory"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="security-data-inventory-card-slot">
-    <div class="card"><p class="empty-state">Loading data inventory…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/security/findings"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="security-findings-card-slot">
-    <div class="card"><p class="empty-state">Loading security findings…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/security/sbom"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="security-sbom-card-slot">
-    <div class="card"><p class="empty-state">Loading SBOM…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/security/authz"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="security-authz-card-slot">
-    <div class="card"><p class="empty-state">Loading AuthZ matrix…</p></div>
-  </div>
-
-  {# Phase I — SRE: deployments, incidents, cost #}
-  <div hx-get="{{ base }}/projects/{{ project.id }}/sre/deployments"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="sre-deployments-card-slot">
-    <div class="card"><p class="empty-state">Loading deployments…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/sre/incidents"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="sre-incidents-card-slot">
-    <div class="card"><p class="empty-state">Loading incidents…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/sre/cost"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="sre-cost-card-slot">
-    <div class="card"><p class="empty-state">Loading cost rollup…</p></div>
-  </div>
-
-  {# Phase J — Analyst: metrics, instrumentation, outcomes #}
-  <div hx-get="{{ base }}/projects/{{ project.id }}/analyst/metrics"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="analyst-metrics-card-slot">
-    <div class="card"><p class="empty-state">Loading metrics…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/analyst/instrumentation"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="analyst-instrumentation-card-slot">
-    <div class="card"><p class="empty-state">Loading instrumentation…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/analyst/outcomes"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="analyst-outcomes-card-slot">
-    <div class="card"><p class="empty-state">Loading outcomes…</p></div>
-  </div>
-
-  {# Phase J — Writer: docs, quickstart, changelog #}
-  <div hx-get="{{ base }}/projects/{{ project.id }}/writer/docs"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="writer-docs-card-slot">
-    <div class="card"><p class="empty-state">Loading docs…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/writer/quickstart"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="writer-quickstart-card-slot">
-    <div class="card"><p class="empty-state">Loading quickstart checks…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/writer/changelog"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="writer-changelog-card-slot">
-    <div class="card"><p class="empty-state">Loading changelog…</p></div>
-  </div>
-
-  {# Phase J — Release: versions, flags, rollbacks #}
-  <div hx-get="{{ base }}/projects/{{ project.id }}/release/versions"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="release-versions-card-slot">
-    <div class="card"><p class="empty-state">Loading releases…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/release/flags"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="release-flags-card-slot">
-    <div class="card"><p class="empty-state">Loading feature flags…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/release/rollbacks"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="release-rollbacks-card-slot">
-    <div class="card"><p class="empty-state">Loading rollbacks…</p></div>
-  </div>
-
-  {# Phase K — Architect: project-scoped ADRs and briefs #}
-  <div hx-get="{{ base }}/projects/{{ project.id }}/architect/adrs"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="architect-adrs-card-slot">
-    <div class="card"><p class="empty-state">Loading ADRs…</p></div>
-  </div>
-
-  <div hx-get="{{ base }}/projects/{{ project.id }}/architect/briefs"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="architect-briefs-card-slot">
-    <div class="card"><p class="empty-state">Loading direction briefs…</p></div>
-  </div>
-
-  {# Phase K — Chief of Staff: project-scoped onboarding wizard #}
-  <div hx-get="{{ base }}/projects/{{ project.id }}/chief-of-staff/onboarding"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="chief-of-staff-onboarding-card-slot">
-    <div class="card"><p class="empty-state">Loading onboarding…</p></div>
-  </div>
-
-  {# Phase L — Semantic memory: project-scoped notes (includes portfolio-wide) #}
-  <div hx-get="{{ base }}/projects/{{ project.id }}/semantic-memory"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="semantic-memory-card-slot">
-    <div class="card"><p class="empty-state">Loading semantic memory…</p></div>
-  </div>
-
-  {# Phase L — Autonomy spectrum: per-(project, role) gating overrides #}
-  <div hx-get="{{ base }}/projects/{{ project.id }}/autonomy"
-       hx-trigger="revealed"
-       hx-swap="outerHTML"
-       data-testid="autonomy-config-card-slot">
-    <div class="card"><p class="empty-state">Loading autonomy overrides…</p></div>
-  </div>
-
   <div class="card">
     <h2>Recent Cycles</h2>
     <div hx-get="{{ base }}/cycles/?project_id={{ project.id }}"
@@ -564,4 +210,245 @@
     </div>
   </div>
 </div>
+
+{#
+  Phase A–L role surfaces — collapsed by default to keep the project page
+  scannable. HTMX `revealed` fires when the slot scrolls into the viewport,
+  which happens on first <details> expansion. Each group is data-role-group
+  so the role-group CSS can style them consistently.
+#}
+<section class="role-groups" data-testid="role-groups">
+
+  <details class="role-group" data-role="product">
+    <summary><span class="role-group-title">Product</span><span class="role-group-hint">PO — proposals, OKRs, digest, signals, policy</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/proposals" hx-trigger="revealed" hx-swap="outerHTML" data-testid="proposals-card-slot">
+        <div class="card"><p class="empty-state">Loading proposals…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/okrs" hx-trigger="revealed" hx-swap="outerHTML" data-testid="okrs-card-slot">
+        <div class="card"><p class="empty-state">Loading OKRs…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/digest" hx-trigger="revealed" hx-swap="outerHTML" data-testid="digest-card-slot">
+        <div class="card"><p class="empty-state">Loading digest…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/signals" hx-trigger="revealed" hx-swap="outerHTML" data-testid="signals-card-slot">
+        <div class="card"><p class="empty-state">Loading signals…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/policy" hx-trigger="revealed" hx-swap="outerHTML" data-testid="policy-card-slot">
+        <div class="card"><p class="empty-state">Loading policy…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="techlead">
+    <summary><span class="role-group-title">Tech Lead</span><span class="role-group-hint">deps, ADRs, debt, review calibration, critical paths</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/deps" hx-trigger="revealed" hx-swap="outerHTML" data-testid="deps-card-slot">
+        <div class="card"><p class="empty-state">Loading deps radar…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/adrs" hx-trigger="revealed" hx-swap="outerHTML" data-testid="adrs-card-slot">
+        <div class="card"><p class="empty-state">Loading ADRs…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/debt" hx-trigger="revealed" hx-swap="outerHTML" data-testid="debt-card-slot">
+        <div class="card"><p class="empty-state">Loading debt register…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/reviews/calibration" hx-trigger="revealed" hx-swap="outerHTML" data-testid="calibration-card-slot">
+        <div class="card"><p class="empty-state">Loading review calibration…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/critical-paths" hx-trigger="revealed" hx-swap="outerHTML" data-testid="critical-paths-card-slot">
+        <div class="card"><p class="empty-state">Loading critical paths…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="dev">
+    <summary><span class="role-group-title">Development</span><span class="role-group-hint">thoughts, TDD gate, refactor preflight, self-reviews, coverage</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/dev/thoughts" hx-trigger="revealed" hx-swap="outerHTML" data-testid="dev-thoughts-card-slot">
+        <div class="card"><p class="empty-state">Loading dev thoughts…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/dev/tdd" hx-trigger="revealed" hx-swap="outerHTML" data-testid="dev-tdd-card-slot">
+        <div class="card"><p class="empty-state">Loading TDD gate…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/dev/preflight" hx-trigger="revealed" hx-swap="outerHTML" data-testid="dev-preflight-card-slot">
+        <div class="card"><p class="empty-state">Loading refactor preflight…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/dev/self-reviews" hx-trigger="revealed" hx-swap="outerHTML" data-testid="dev-selfrev-card-slot">
+        <div class="card"><p class="empty-state">Loading self-reviews…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/dev/coverage" hx-trigger="revealed" hx-swap="outerHTML" data-testid="dev-coverage-card-slot">
+        <div class="card"><p class="empty-state">Loading coverage deltas…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="qa">
+    <summary><span class="role-group-title">Quality Assurance</span><span class="role-group-hint">archetype mix, flake scoreboard, quarantine, gates, outcomes</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/qa/plans" hx-trigger="revealed" hx-swap="outerHTML" data-testid="qa-plans-card-slot">
+        <div class="card"><p class="empty-state">Loading test archetype mix…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/qa/flakes" hx-trigger="revealed" hx-swap="outerHTML" data-testid="qa-flakes-card-slot">
+        <div class="card"><p class="empty-state">Loading flake scoreboard…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/qa/quarantine" hx-trigger="revealed" hx-swap="outerHTML" data-testid="qa-quarantine-card-slot">
+        <div class="card"><p class="empty-state">Loading quarantine…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/qa/gates" hx-trigger="revealed" hx-swap="outerHTML" data-testid="qa-gates-card-slot">
+        <div class="card"><p class="empty-state">Loading quality gates…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/qa/outcomes" hx-trigger="revealed" hx-swap="outerHTML" data-testid="qa-outcomes-card-slot">
+        <div class="card"><p class="empty-state">Loading outcome cards…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="scout">
+    <summary><span class="role-group-title">Scout</span><span class="role-group-hint">intel feed, sources</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/intel/feed" hx-trigger="revealed" hx-swap="outerHTML" data-testid="intel-feed-card-slot">
+        <div class="card"><p class="empty-state">Loading intel feed…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/intel/sources" hx-trigger="revealed" hx-swap="outerHTML" data-testid="intel-sources-card-slot">
+        <div class="card"><p class="empty-state">Loading intel sources…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="design">
+    <summary><span class="role-group-title">Design</span><span class="role-group-hint">tokens, components, briefs, visual regression, anti-template</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/design/tokens" hx-trigger="revealed" hx-swap="outerHTML" data-testid="design-tokens-card-slot">
+        <div class="card"><p class="empty-state">Loading design tokens…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/design/components" hx-trigger="revealed" hx-swap="outerHTML" data-testid="design-components-card-slot">
+        <div class="card"><p class="empty-state">Loading component inventory…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/design/briefs" hx-trigger="revealed" hx-swap="outerHTML" data-testid="design-briefs-card-slot">
+        <div class="card"><p class="empty-state">Loading design briefs…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/design/visual-regressions" hx-trigger="revealed" hx-swap="outerHTML" data-testid="design-vr-card-slot">
+        <div class="card"><p class="empty-state">Loading visual regressions…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/design/anti-template" hx-trigger="revealed" hx-swap="outerHTML" data-testid="design-anti-template-card-slot">
+        <div class="card"><p class="empty-state">Loading anti-template checks…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="security">
+    <summary><span class="role-group-title">Security</span><span class="role-group-hint">threat model, data inventory, findings, SBOM, AuthZ</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/security/threat-model" hx-trigger="revealed" hx-swap="outerHTML" data-testid="security-threat-model-card-slot">
+        <div class="card"><p class="empty-state">Loading threat model…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/security/data-inventory" hx-trigger="revealed" hx-swap="outerHTML" data-testid="security-data-inventory-card-slot">
+        <div class="card"><p class="empty-state">Loading data inventory…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/security/findings" hx-trigger="revealed" hx-swap="outerHTML" data-testid="security-findings-card-slot">
+        <div class="card"><p class="empty-state">Loading security findings…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/security/sbom" hx-trigger="revealed" hx-swap="outerHTML" data-testid="security-sbom-card-slot">
+        <div class="card"><p class="empty-state">Loading SBOM…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/security/authz" hx-trigger="revealed" hx-swap="outerHTML" data-testid="security-authz-card-slot">
+        <div class="card"><p class="empty-state">Loading AuthZ matrix…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="sre">
+    <summary><span class="role-group-title">SRE</span><span class="role-group-hint">deployments, incidents, cost</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/sre/deployments" hx-trigger="revealed" hx-swap="outerHTML" data-testid="sre-deployments-card-slot">
+        <div class="card"><p class="empty-state">Loading deployments…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/sre/incidents" hx-trigger="revealed" hx-swap="outerHTML" data-testid="sre-incidents-card-slot">
+        <div class="card"><p class="empty-state">Loading incidents…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/sre/cost" hx-trigger="revealed" hx-swap="outerHTML" data-testid="sre-cost-card-slot">
+        <div class="card"><p class="empty-state">Loading cost rollup…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="analyst">
+    <summary><span class="role-group-title">Analyst</span><span class="role-group-hint">metrics, instrumentation, outcomes</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/analyst/metrics" hx-trigger="revealed" hx-swap="outerHTML" data-testid="analyst-metrics-card-slot">
+        <div class="card"><p class="empty-state">Loading metrics…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/analyst/instrumentation" hx-trigger="revealed" hx-swap="outerHTML" data-testid="analyst-instrumentation-card-slot">
+        <div class="card"><p class="empty-state">Loading instrumentation…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/analyst/outcomes" hx-trigger="revealed" hx-swap="outerHTML" data-testid="analyst-outcomes-card-slot">
+        <div class="card"><p class="empty-state">Loading outcomes…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="writer">
+    <summary><span class="role-group-title">Writer</span><span class="role-group-hint">docs, quickstart, changelog</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/writer/docs" hx-trigger="revealed" hx-swap="outerHTML" data-testid="writer-docs-card-slot">
+        <div class="card"><p class="empty-state">Loading docs…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/writer/quickstart" hx-trigger="revealed" hx-swap="outerHTML" data-testid="writer-quickstart-card-slot">
+        <div class="card"><p class="empty-state">Loading quickstart checks…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/writer/changelog" hx-trigger="revealed" hx-swap="outerHTML" data-testid="writer-changelog-card-slot">
+        <div class="card"><p class="empty-state">Loading changelog…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="release">
+    <summary><span class="role-group-title">Release</span><span class="role-group-hint">versions, flags, rollbacks</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/release/versions" hx-trigger="revealed" hx-swap="outerHTML" data-testid="release-versions-card-slot">
+        <div class="card"><p class="empty-state">Loading releases…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/release/flags" hx-trigger="revealed" hx-swap="outerHTML" data-testid="release-flags-card-slot">
+        <div class="card"><p class="empty-state">Loading feature flags…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/release/rollbacks" hx-trigger="revealed" hx-swap="outerHTML" data-testid="release-rollbacks-card-slot">
+        <div class="card"><p class="empty-state">Loading rollbacks…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="architect">
+    <summary><span class="role-group-title">Architect</span><span class="role-group-hint">project-scoped ADRs, direction briefs</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/architect/adrs" hx-trigger="revealed" hx-swap="outerHTML" data-testid="architect-adrs-card-slot">
+        <div class="card"><p class="empty-state">Loading ADRs…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/architect/briefs" hx-trigger="revealed" hx-swap="outerHTML" data-testid="architect-briefs-card-slot">
+        <div class="card"><p class="empty-state">Loading direction briefs…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="chief-of-staff">
+    <summary><span class="role-group-title">Chief of Staff</span><span class="role-group-hint">onboarding wizard</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/chief-of-staff/onboarding" hx-trigger="revealed" hx-swap="outerHTML" data-testid="chief-of-staff-onboarding-card-slot">
+        <div class="card"><p class="empty-state">Loading onboarding…</p></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="role-group" data-role="memory">
+    <summary><span class="role-group-title">Memory & Autonomy</span><span class="role-group-hint">semantic memory, autonomy overrides</span></summary>
+    <div class="detail-grid role-group-grid">
+      <div hx-get="{{ base }}/projects/{{ project.id }}/semantic-memory" hx-trigger="revealed" hx-swap="outerHTML" data-testid="semantic-memory-card-slot">
+        <div class="card"><p class="empty-state">Loading semantic memory…</p></div>
+      </div>
+      <div hx-get="{{ base }}/projects/{{ project.id }}/autonomy" hx-trigger="revealed" hx-swap="outerHTML" data-testid="autonomy-config-card-slot">
+        <div class="card"><p class="empty-state">Loading autonomy overrides…</p></div>
+      </div>
+    </div>
+  </details>
+
+</section>
 {% endblock %}

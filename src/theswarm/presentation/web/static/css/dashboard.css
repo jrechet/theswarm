@@ -2056,3 +2056,40 @@ body.modal-open { overflow: hidden; }
 .agent-row-meta { display: flex; align-items: center; gap: 0.75rem; color: var(--text-muted); font-family: var(--font-mono); font-size: 0.78rem; }
 .agent-row-count { padding: 0.1rem 0.4rem; border-radius: 4px; background: var(--bg-secondary); }
 .agent-row-elapsed { font-variant-numeric: tabular-nums; }
+
+/* Role-group collapsible sections on the project detail page. */
+.role-groups { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1.5rem; }
+.role-group {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 120ms ease;
+}
+.role-group:hover { border-color: var(--accent-subtle); }
+.role-group[open] { border-color: var(--accent-subtle); }
+.role-group > summary {
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  list-style: none;
+  user-select: none;
+}
+.role-group > summary::-webkit-details-marker { display: none; }
+.role-group > summary::before {
+  content: "▸";
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  transition: transform 150ms ease;
+  display: inline-block;
+  width: 1rem;
+}
+.role-group[open] > summary::before { transform: rotate(90deg); }
+.role-group-title { font-weight: 600; color: var(--text-primary); font-size: 0.95rem; }
+.role-group-hint { color: var(--text-muted); font-size: 0.82rem; margin-left: auto; }
+.role-group-grid { padding: 0.6rem 1rem 1rem; }
+@media (max-width: 720px) {
+  .role-group-hint { display: none; }
+}
