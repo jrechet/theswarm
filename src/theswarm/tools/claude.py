@@ -182,11 +182,15 @@ class ClaudeCLI:
 
         # Close stdin and set CI=1 so the CLI doesn't hang on any interactive
         # prompt (update banner, login nag, telemetry opt-in, etc.).
+        # Strip ANTHROPIC_API_KEY from the child env: when it's set, the
+        # Claude Code CLI prefers the API key over the subscription session
+        # in ~/.claude — which defeats the whole point of using the CLI as
+        # a free (subscription-backed) fallback when the key is out of credit.
         cli_env = {
-            **os.environ,
-            "CI": "1",
-            "CLAUDE_CODE_NON_INTERACTIVE": "1",
+            k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"
         }
+        cli_env["CI"] = "1"
+        cli_env["CLAUDE_CODE_NON_INTERACTIVE"] = "1"
 
         try:
             proc = await asyncio.create_subprocess_exec(

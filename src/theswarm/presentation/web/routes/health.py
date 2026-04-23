@@ -136,8 +136,11 @@ async def diagnostics_claude() -> JSONResponse:
         info["node_stderr"] = str(exc)[:200]
 
     # `claude --version` with stdin closed + CI=1 to disable any interactive
-    # prompt. Retry without env overrides so we can see if the CI flag helps.
-    env = {**os.environ, "CI": "1", "CLAUDE_CODE_NON_INTERACTIVE": "1"}
+    # prompt. ANTHROPIC_API_KEY stripped so the CLI uses the subscription
+    # session in ~/.claude instead of the (exhausted) API key.
+    env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    env["CI"] = "1"
+    env["CLAUDE_CODE_NON_INTERACTIVE"] = "1"
     try:
         proc = await asyncio.create_subprocess_exec(
             binary, "--version",
