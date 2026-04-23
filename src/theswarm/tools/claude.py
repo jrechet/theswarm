@@ -180,12 +180,22 @@ class ClaudeCLI:
 
         log.info("Claude CLI: model=%s workdir=%s timeout=%ds", model_id, workdir, effective_timeout)
 
+        # Close stdin and set CI=1 so the CLI doesn't hang on any interactive
+        # prompt (update banner, login nag, telemetry opt-in, etc.).
+        cli_env = {
+            **os.environ,
+            "CI": "1",
+            "CLAUDE_CODE_NON_INTERACTIVE": "1",
+        }
+
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.DEVNULL,
                 cwd=workdir,
+                env=cli_env,
             )
         except FileNotFoundError as exc:
             raise _CLIUnavailable(f"spawn failed: {exc}") from exc

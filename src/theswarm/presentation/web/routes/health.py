@@ -111,32 +111,63 @@ async def diagnostics_claude() -> JSONResponse:
         info["status"] = "missing"
         return JSONResponse(info, status_code=200)
 
+    # Stat the binary — might be a symlink into npm's global prefix.
+    try:
+        st = os.stat(binary)
+        info["binary_size"] = st.st_size
+        if os.path.islink(binary):
+            info["binary_target"] = os.readlink(binary)
+    except OSError as exc:
+        info["binary_stat_error"] = str(exc)
+
+    # Node itself — if it hangs too, the image has a deeper problem.
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "node", "--version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.DEVNULL,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5)
+        info["node_exit"] = proc.returncode
+        info["node_stdout"] = stdout.decode(errors="replace").strip()[:100]
+    except (asyncio.TimeoutError, FileNotFoundError) as exc:
+        info["node_exit"] = -1
+        info["node_stderr"] = str(exc)[:200]
+
+    # `claude --version` with stdin closed + CI=1 to disable any interactive
+    # prompt. Retry without env overrides so we can see if the CI flag helps.
+    env = {**os.environ, "CI": "1", "CLAUDE_CODE_NON_INTERACTIVE": "1"}
     try:
         proc = await asyncio.create_subprocess_exec(
             binary, "--version",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.DEVNULL,
+            env=env,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
         info["version_exit"] = proc.returncode
         info["version_stdout"] = stdout.decode(errors="replace").strip()[:300]
-        info["version_stderr"] = stderr.decode(errors="replace").strip()[:300]
+        info["version_stderr"] = stderr.decode(errors="replace").strip()[:500]
     except asyncio.TimeoutError:
         info["version_exit"] = -1
         info["version_stdout"] = ""
-        info["version_stderr"] = "timed out after 10s"
+        info["version_stderr"] = "timed out after 15s"
 
-    # Try a minimal -p call with a 1-word prompt to validate auth end-to-end
+    # Full probe — -p mode with stdin closed.
     try:
         proc2 = await asyncio.create_subprocess_exec(
             binary, "-p", "reply OK", "--model", "haiku", "--output-format", "json",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.DEVNULL,
+            env=env,
         )
         stdout2, stderr2 = await asyncio.wait_for(proc2.communicate(), timeout=30)
         info["probe_exit"] = proc2.returncode
         info["probe_stdout_head"] = stdout2.decode(errors="replace").strip()[:300]
-        info["probe_stderr"] = stderr2.decode(errors="replace").strip()[:300]
+        info["probe_stderr"] = stderr2.decode(errors="replace").strip()[:500]
     except asyncio.TimeoutError:
         info["probe_exit"] = -1
         info["probe_stdout_head"] = ""
