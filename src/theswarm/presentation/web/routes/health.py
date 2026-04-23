@@ -2,10 +2,14 @@
 
 When running standalone (v2 only), checks DB and SSE.
 When running via the unified server, also checks GitHub and Mattermost.
+Also exposes a /diagnostics/claude probe for debugging the CLI backend.
 """
 
 from __future__ import annotations
 
+import asyncio
+import os
+import shutil
 import time
 
 from fastapi import APIRouter, Request
@@ -80,3 +84,63 @@ async def health(request: Request) -> JSONResponse:
 
     http_status = 503 if status == "error" else 200
     return JSONResponse(result, status_code=http_status)
+
+
+@router.get("/diagnostics/claude")
+async def diagnostics_claude() -> JSONResponse:
+    """Probe the Claude Code CLI: binary, version, auth reachability.
+
+    Intentionally no secrets returned — path/version/stderr only, capped
+    output. Lets us tell from a curl whether the CLI fallback is broken.
+    """
+    home = os.environ.get("HOME", "")
+    binary = shutil.which("claude")
+    claude_dir = os.path.join(home, ".claude") if home else ""
+    claude_json = os.path.join(home, ".claude.json") if home else ""
+
+    info: dict[str, object] = {
+        "backend_mode": os.environ.get("SWARM_CLAUDE_BACKEND", "auto"),
+        "binary": binary,
+        "home": home,
+        "claude_dir_exists": os.path.isdir(claude_dir) if claude_dir else False,
+        "claude_json_exists": os.path.isfile(claude_json) if claude_json else False,
+        "path": os.environ.get("PATH", "")[:500],
+    }
+
+    if binary is None:
+        info["status"] = "missing"
+        return JSONResponse(info, status_code=200)
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            binary, "--version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
+        info["version_exit"] = proc.returncode
+        info["version_stdout"] = stdout.decode(errors="replace").strip()[:300]
+        info["version_stderr"] = stderr.decode(errors="replace").strip()[:300]
+    except asyncio.TimeoutError:
+        info["version_exit"] = -1
+        info["version_stdout"] = ""
+        info["version_stderr"] = "timed out after 10s"
+
+    # Try a minimal -p call with a 1-word prompt to validate auth end-to-end
+    try:
+        proc2 = await asyncio.create_subprocess_exec(
+            binary, "-p", "reply OK", "--model", "haiku", "--output-format", "json",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout2, stderr2 = await asyncio.wait_for(proc2.communicate(), timeout=30)
+        info["probe_exit"] = proc2.returncode
+        info["probe_stdout_head"] = stdout2.decode(errors="replace").strip()[:300]
+        info["probe_stderr"] = stderr2.decode(errors="replace").strip()[:300]
+    except asyncio.TimeoutError:
+        info["probe_exit"] = -1
+        info["probe_stdout_head"] = ""
+        info["probe_stderr"] = "timed out after 30s"
+
+    info["status"] = "ok" if info.get("probe_exit") == 0 else "failing"
+    return JSONResponse(info, status_code=200)
