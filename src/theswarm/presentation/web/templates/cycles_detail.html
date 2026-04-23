@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Cycle {{ cycle.id[:8] }} — TheSwarm{% endblock %}
+{% block title %}Cycle {% if cycle.id|length > 24 %}{{ cycle.id[:12] }}…{{ cycle.id[-6:] }}{% else %}{{ cycle.id }}{% endif %} — TheSwarm{% endblock %}
 
 {% block content %}
 <div id="cycle-detail" data-cycle-id="{{ cycle.id }}">
   <div class="page-header">
-    <h1>Cycle {{ cycle.id[:8] }}...</h1>
+    <h1>Cycle {% if cycle.id|length > 24 %}{{ cycle.id[:12] }}…{{ cycle.id[-6:] }}{% else %}{{ cycle.id }}{% endif %}</h1>
     <span class="badge badge-{{ cycle.status }} badge-lg">
       {% if cycle.status == 'running' %}<span class="pulse-dot"></span>{% endif %}
       {{ cycle.status }}

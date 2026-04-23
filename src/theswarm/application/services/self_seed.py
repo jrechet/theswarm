@@ -287,12 +287,14 @@ def _build_cycle(sprint: _Sprint, created_at: datetime) -> Cycle:
     "Success Rate" and "Cost 7d" stats reflect the sprint history.
     """
     n = len(sprint.stories)
+    # Tokens per phase roughly matching $0.37 total cost at Haiku-class rates.
+    # Distribution: dev dominates, QA second, PO/TL lighter. Sums to ~150K tokens.
     phase_defs = (
-        ("po_morning", "po", f"Selected {n} backlog stories"),
-        ("techlead_breakdown", "techlead", "Split stories into dev-ready sub-tasks"),
-        ("dev_loop", "dev", f"Implemented {n} stories, opened {n} PRs"),
-        ("qa", "qa", "Ran unit + E2E + security gates"),
-        ("po_evening", "po", "Published demo report"),
+        ("po_morning", "po", f"Selected {n} backlog stories", 12_000),
+        ("techlead_breakdown", "techlead", "Split stories into dev-ready sub-tasks", 18_000),
+        ("dev_loop", "dev", f"Implemented {n} stories, opened {n} PRs", 82_000),
+        ("qa", "qa", "Ran unit + E2E + security gates", 28_000),
+        ("po_evening", "po", "Published demo report", 10_000),
     )
     # Each phase spans 1 minute starting at created_at.
     phases = tuple(
@@ -303,8 +305,9 @@ def _build_cycle(sprint: _Sprint, created_at: datetime) -> Cycle:
             completed_at=created_at + timedelta(minutes=idx + 1),
             status=PhaseStatus.COMPLETED,
             summary=summary,
+            tokens_used=tokens,
         )
-        for idx, (name, agent, summary) in enumerate(phase_defs)
+        for idx, (name, agent, summary, tokens) in enumerate(phase_defs)
     )
     completed_at = created_at + timedelta(minutes=len(phase_defs))
     prs = tuple(100 + idx for idx in range(n))

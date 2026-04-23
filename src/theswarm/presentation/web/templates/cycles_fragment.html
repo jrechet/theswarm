@@ -11,7 +11,7 @@
   <tbody>
     {% for c in cycles %}
     <tr>
-      <td><a href="{{ base }}/cycles/{{ c.id }}">{{ c.id[:8] }}...</a></td>
+      <td><a href="{{ base }}/cycles/{{ c.id }}" title="{{ c.id }}">{% if c.id|length > 24 %}{{ c.id[:12] }}…{{ c.id[-6:] }}{% else %}{{ c.id }}{% endif %}</a></td>
       <td><span class="badge badge-{{ c.status }}">{{ c.status }}</span></td>
       <td>{{ c.started_at or "—" }}</td>
       <td>${{ "%.2f" | format(c.total_cost_usd) }}</td>
