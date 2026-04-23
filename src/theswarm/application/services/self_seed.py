@@ -237,6 +237,7 @@ def _summary_for(sprint: _Sprint) -> ReportSummary:
         tests_passing=sprint.tests_total,
         tests_total=sprint.tests_total,
         coverage_percent=85.0,
+        cost_usd=0.37,
     )
 
 
