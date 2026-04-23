@@ -21,9 +21,16 @@ FROM python:3.12-slim AS runner
 
 WORKDIR /app
 
-# git is required at runtime by tools/git.py; curl for healthcheck
-RUN apt-get update && apt-get install -y --no-install-recommends curl git \
-    && rm -rf /var/lib/apt/lists/*
+# git for tools/git.py, curl for healthcheck, Node.js for the Claude Code CLI
+# (Node ≥18 is required by @anthropic-ai/claude-code; NodeSource ships 20.x).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl git ca-certificates gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g @anthropic-ai/claude-code \
+    && apt-get purge -y gnupg \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
 
 RUN useradd -m -s /bin/bash botuser \
     && mkdir -p /app/data \

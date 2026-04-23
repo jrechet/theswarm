@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _default_claude_backend_for_tests(monkeypatch):
+    """Force API backend in tests unless the test explicitly opts into CLI.
+
+    Production defaults to CLI-first so the Claude Code subscription is used
+    instead of API credits. Tests mock the Anthropic SDK directly, so they
+    need the API path — otherwise they would spawn the real ``claude`` CLI.
+    Tests that want to exercise the CLI path can override with
+    ``monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "cli")``.
+    """
+    if "SWARM_CLAUDE_BACKEND" not in os.environ:
+        monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "api")
 
 
 @pytest.fixture()

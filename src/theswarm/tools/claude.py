@@ -1,11 +1,25 @@
-"""Claude API wrapper for SWARM MVP — runs prompts via Anthropic SDK."""
+"""Claude wrapper for SWARM — prefers Claude Code CLI, falls back to Anthropic API.
+
+Rationale: the CLI authenticates via the user's Claude Code subscription (OAuth
+session in ``~/.claude/``), so prompts run against the Pro/Max quota instead of
+the separately-metered API credit balance. The API path remains as a fallback
+for environments where the CLI is unavailable (binary missing, no session),
+and can be forced via ``SWARM_CLAUDE_BACKEND=api``.
+
+Set ``SWARM_CLAUDE_BACKEND``:
+  - ``auto`` (default): try CLI first, fall back to API on any CLI failure.
+  - ``cli``: CLI only — CLI failures propagate.
+  - ``api``: API only — skip CLI entirely.
+"""
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import random
+import shutil
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
@@ -13,7 +27,7 @@ import anthropic
 
 log = logging.getLogger(__name__)
 
-# Sprint G2 — errors that warrant an adaptive retry with backoff.
+# Retryable Anthropic API errors: back off and try again.
 _RETRYABLE_ERRORS: tuple[type[BaseException], ...] = (
     anthropic.APITimeoutError,
     anthropic.APIConnectionError,
@@ -38,9 +52,10 @@ class ClaudeResult:
     total_tokens: int = 0
     cost_usd: float = 0.0
     model: str = ""
+    backend: str = ""  # "cli" or "api"
 
 
-# Approximate pricing per 1M tokens (USD)
+# Approximate pricing per 1M tokens (USD) — used for the API path.
 _INPUT_COST: dict[str, float] = {
     "claude-sonnet-4-20250514": 3.0,
     "claude-opus-4-20250514": 15.0,
@@ -59,16 +74,36 @@ def _estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     return inp + out
 
 
+class _CLIUnavailable(Exception):
+    """Raised when the Claude Code CLI can't service a request.
+
+    Signals the fallback-to-API path in auto mode. The message describes the
+    specific failure (binary missing, non-zero exit, bad JSON, etc.).
+    """
+
+
+def _resolve_backend_mode() -> str:
+    raw = os.environ.get("SWARM_CLAUDE_BACKEND", "auto").strip().lower()
+    if raw in ("cli", "api", "auto"):
+        return raw
+    return "auto"
+
+
 @dataclass
 class ClaudeCLI:
-    """Async wrapper around the Anthropic Messages API."""
+    """Runs a prompt through Claude Code CLI first, Anthropic API as fallback.
+
+    The class name is kept for backward compatibility — callers import
+    ``ClaudeCLI`` across the codebase.
+    """
     model: str = "sonnet"
     timeout: int = 600  # 10 min default
     max_tokens: int = 8192
-    # Sprint G2 — adaptive retry/backoff config.
+    # Adaptive retry/backoff (applies to the API fallback only).
     max_retries: int = 3
     retry_base_ms: int = 1000
     timeout_growth: float = 1.5
+    # Injected so tests can stub. Not repr-ed.
     _sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep, repr=False)
     _rng: random.Random = field(default_factory=random.Random, repr=False)
 
@@ -76,11 +111,7 @@ class ClaudeCLI:
         return _MODEL_MAP.get(self.model, self.model)
 
     def for_task(self, task_category: str, routing: dict[str, str] | None = None) -> ClaudeCLI:
-        """Return a new ClaudeCLI configured for a specific task category.
-
-        Uses the routing table to select the right model. Falls back to
-        the current model if the category isn't in the table.
-        """
+        """Return a new ClaudeCLI configured for a specific task category."""
         if routing is None:
             return ClaudeCLI(
                 model=self.model, timeout=self.timeout, max_tokens=self.max_tokens,
@@ -107,12 +138,109 @@ class ClaudeCLI:
         workdir: str | None = None,
         timeout: int | None = None,
     ) -> ClaudeResult:
-        """Run a prompt via Anthropic Messages API with adaptive retry.
+        """Run a prompt. Tries CLI first, falls back to API on failure.
 
-        On retryable errors (timeout, rate limit, connection, 5xx),
-        backs off exponentially with jitter and grows the per-attempt
-        timeout by `timeout_growth`. Non-retryable errors propagate.
+        Honors ``SWARM_CLAUDE_BACKEND`` (``auto`` | ``cli`` | ``api``).
         """
+        backend = _resolve_backend_mode()
+
+        if backend != "api":
+            try:
+                return await self._run_cli(prompt, workdir=workdir, timeout=timeout)
+            except _CLIUnavailable as exc:
+                if backend == "cli":
+                    raise RuntimeError(f"Claude CLI unavailable (forced): {exc}") from exc
+                log.warning("Claude CLI unavailable (%s) — falling back to API", exc)
+
+        return await self._run_api(prompt, workdir=workdir, timeout=timeout)
+
+    async def _run_cli(
+        self,
+        prompt: str,
+        *,
+        workdir: str | None,
+        timeout: int | None,
+    ) -> ClaudeResult:
+        """Invoke ``claude -p`` and parse the JSON envelope.
+
+        Fails via ``_CLIUnavailable`` so the caller can fall back to API.
+        """
+        binary = shutil.which("claude")
+        if binary is None:
+            raise _CLIUnavailable("claude binary not on PATH")
+
+        effective_timeout = timeout or self.timeout
+        model_id = self._resolve_model()
+
+        cmd = [
+            binary, "-p", prompt,
+            "--model", model_id,
+            "--output-format", "json",
+        ]
+
+        log.info("Claude CLI: model=%s workdir=%s timeout=%ds", model_id, workdir, effective_timeout)
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=workdir,
+            )
+        except FileNotFoundError as exc:
+            raise _CLIUnavailable(f"spawn failed: {exc}") from exc
+
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=effective_timeout,
+            )
+        except asyncio.TimeoutError as exc:
+            proc.kill()
+            raise _CLIUnavailable(f"CLI timed out after {effective_timeout}s") from exc
+
+        if proc.returncode != 0:
+            err = stderr.decode(errors="replace").strip()[:500]
+            raise _CLIUnavailable(f"exit {proc.returncode}: {err}")
+
+        raw = stdout.decode(errors="replace").strip()
+        try:
+            envelope = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise _CLIUnavailable(f"JSON parse failed: {exc}") from exc
+
+        if envelope.get("is_error"):
+            msg = envelope.get("result") or envelope.get("api_error_status") or "unknown"
+            raise _CLIUnavailable(f"CLI reported error: {msg}")
+
+        usage = envelope.get("usage") or {}
+        input_tokens = int(usage.get("input_tokens", 0))
+        output_tokens = int(usage.get("output_tokens", 0))
+        cost_usd = float(envelope.get("total_cost_usd", 0.0))
+        text = envelope.get("result", "") or ""
+
+        log.info(
+            "Claude CLI result: $%.4f  model=%s  in=%d out=%d",
+            cost_usd, model_id, input_tokens, output_tokens,
+        )
+
+        return ClaudeResult(
+            text=text,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=input_tokens + output_tokens,
+            cost_usd=cost_usd,
+            model=model_id,
+            backend="cli",
+        )
+
+    async def _run_api(
+        self,
+        prompt: str,
+        *,
+        workdir: str | None,
+        timeout: int | None,
+    ) -> ClaudeResult:
+        """Anthropic Messages API path with adaptive retry/backoff."""
         effective_timeout = timeout or self.timeout
         model_id = self._resolve_model()
 
@@ -125,7 +253,6 @@ class ClaudeCLI:
         log.info("Claude API: model=%s workdir=%s timeout=%ds", model_id, workdir, effective_timeout)
 
         attempt = 0
-        last_error: BaseException | None = None
         while True:
             try:
                 response = await asyncio.wait_for(
@@ -139,7 +266,6 @@ class ClaudeCLI:
                 )
                 break
             except _RETRYABLE_ERRORS as exc:
-                last_error = exc
                 if attempt >= self.max_retries:
                     log.error(
                         "Claude API exhausted retries (%d): %s: %s",
@@ -162,7 +288,7 @@ class ClaudeCLI:
         cost_usd = _estimate_cost(model_id, input_tokens, output_tokens)
 
         log.info(
-            "Claude result: $%.4f  model=%s  in=%d out=%d  attempts=%d",
+            "Claude API result: $%.4f  model=%s  in=%d out=%d  attempts=%d",
             cost_usd, model_id, input_tokens, output_tokens, attempt + 1,
         )
 
@@ -173,6 +299,7 @@ class ClaudeCLI:
             total_tokens=input_tokens + output_tokens,
             cost_usd=cost_usd,
             model=model_id,
+            backend="api",
         )
 
     async def run_tests(
