@@ -10,8 +10,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - /home/debian/.claude:/home/botuser/.claude:ro
-      - /home/debian/.claude.json:/home/botuser/.claude.json:ro
+      # Claude Code CLI needs write access to ~/.claude for session/telemetry
+      # state on every `claude -p` invocation; :ro makes the CLI error out
+      # and falls back to the API (which fails when credits are low).
+      - /home/debian/.claude:/home/botuser/.claude
+      - /home/debian/.claude.json:/home/botuser/.claude.json
       - /home/debian/swarm-data:/home/botuser/.swarm-data
     restart: unless-stopped
     healthcheck:
