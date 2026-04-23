@@ -107,6 +107,29 @@ async def diagnostics_claude() -> JSONResponse:
         "path": os.environ.get("PATH", "")[:500],
     }
 
+    # Size-only snapshot of ~/.claude and ~/.claude.json so ops can see
+    # whether the session is a real login or an empty stub (without
+    # leaking file contents or tokens).
+    if os.path.isdir(claude_dir):
+        try:
+            entries = []
+            for name in sorted(os.listdir(claude_dir))[:30]:
+                full = os.path.join(claude_dir, name)
+                try:
+                    size = os.path.getsize(full)
+                except OSError:
+                    size = -1
+                kind = "dir" if os.path.isdir(full) else "file"
+                entries.append({"name": name, "kind": kind, "size": size})
+            info["claude_dir_entries"] = entries
+        except OSError as exc:
+            info["claude_dir_error"] = str(exc)
+    if os.path.isfile(claude_json):
+        try:
+            info["claude_json_size"] = os.path.getsize(claude_json)
+        except OSError as exc:
+            info["claude_json_error"] = str(exc)
+
     if binary is None:
         info["status"] = "missing"
         return JSONResponse(info, status_code=200)
