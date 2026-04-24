@@ -173,6 +173,11 @@ async def diagnostics_claude() -> JSONResponse:
         "oauth" if is_oauth_token
         else ("api" if api_key else "unset")
     )
+    # Non-sensitive prefix only — enough to tell the token type class
+    # (sk-ant-api03, sk-ant-oat01, sk-live-…) without leaking the secret.
+    if api_key:
+        info["api_key_prefix"] = api_key[:12]
+        info["api_key_length"] = len(api_key)
     try:
         proc = await asyncio.create_subprocess_exec(
             binary, "--version",
