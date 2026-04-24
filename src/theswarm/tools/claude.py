@@ -182,13 +182,23 @@ class ClaudeCLI:
 
         # Close stdin and set CI=1 so the CLI doesn't hang on any interactive
         # prompt (update banner, login nag, telemetry opt-in, etc.).
-        # Strip ANTHROPIC_API_KEY from the child env: when it's set, the
-        # Claude Code CLI prefers the API key over the subscription session
-        # in ~/.claude — which defeats the whole point of using the CLI as
-        # a free (subscription-backed) fallback when the key is out of credit.
-        cli_env = {
-            k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"
-        }
+        #
+        # ANTHROPIC_API_KEY handling:
+        #   - If it's a classic API key (sk-ant-api…), strip it from the child
+        #     env so the CLI uses the subscription session in ~/.claude
+        #     instead — that's the whole point of preferring the CLI when the
+        #     API key is out of credit.
+        #   - If it's a long-lived OAuth token (sk-ant-oat…), keep it. Claude
+        #     Code's `setup-token` emits exactly these, and the CLI treats
+        #     them as subscription credentials.
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        is_oauth_token = api_key.startswith("sk-ant-oat")
+        if is_oauth_token:
+            cli_env = dict(os.environ)
+        else:
+            cli_env = {
+                k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"
+            }
         cli_env["CI"] = "1"
         cli_env["CLAUDE_CODE_NON_INTERACTIVE"] = "1"
 

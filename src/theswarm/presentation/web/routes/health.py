@@ -159,11 +159,20 @@ async def diagnostics_claude() -> JSONResponse:
         info["node_stderr"] = str(exc)[:200]
 
     # `claude --version` with stdin closed + CI=1 to disable any interactive
-    # prompt. ANTHROPIC_API_KEY stripped so the CLI uses the subscription
-    # session in ~/.claude instead of the (exhausted) API key.
-    env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    # prompt. Strip API keys but keep OAuth tokens (sk-ant-oat…) — those
+    # come from `claude setup-token` and the CLI is meant to consume them.
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    is_oauth_token = api_key.startswith("sk-ant-oat")
+    if is_oauth_token:
+        env = dict(os.environ)
+    else:
+        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
     env["CI"] = "1"
     env["CLAUDE_CODE_NON_INTERACTIVE"] = "1"
+    info["api_key_type"] = (
+        "oauth" if is_oauth_token
+        else ("api" if api_key else "unset")
+    )
     try:
         proc = await asyncio.create_subprocess_exec(
             binary, "--version",
