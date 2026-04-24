@@ -183,22 +183,19 @@ class ClaudeCLI:
         # Close stdin and set CI=1 so the CLI doesn't hang on any interactive
         # prompt (update banner, login nag, telemetry opt-in, etc.).
         #
-        # ANTHROPIC_API_KEY handling:
-        #   - If it's a classic API key (sk-ant-api…), strip it from the child
-        #     env so the CLI uses the subscription session in ~/.claude
-        #     instead — that's the whole point of preferring the CLI when the
-        #     API key is out of credit.
-        #   - If it's a long-lived OAuth token (sk-ant-oat…), keep it. Claude
-        #     Code's `setup-token` emits exactly these, and the CLI treats
-        #     them as subscription credentials.
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        is_oauth_token = api_key.startswith("sk-ant-oat")
-        if is_oauth_token:
-            cli_env = dict(os.environ)
-        else:
-            cli_env = {
-                k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"
-            }
+        # ANTHROPIC_API_KEY is always stripped from the child env. Rationale:
+        #   - sk-ant-api keys defeat the purpose of the CLI backend (we want
+        #     subscription billing, not per-call API credits).
+        #   - sk-ant-oat tokens from `claude setup-token` look API-shaped but
+        #     Anthropic's server rejects them on the x-api-key header with
+        #     'Invalid API key · Fix external API key' — they are only
+        #     accepted via the Authorization: Bearer flow that the CLI uses
+        #     when reading from ~/.claude/.credentials.json.
+        # Either way, the CLI must be allowed to fall through to the session
+        # file, so the env var always gets removed for the child.
+        cli_env = {
+            k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"
+        }
         cli_env["CI"] = "1"
         cli_env["CLAUDE_CODE_NON_INTERACTIVE"] = "1"
 
