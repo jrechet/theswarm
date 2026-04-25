@@ -59,3 +59,17 @@ async def test_reap_leaves_recent_running_cycles_alone(repo):
 async def test_reap_returns_zero_when_nothing_to_do(repo):
     n = await repo.reap_orphans()
     assert n == 0
+
+
+async def test_reaped_cycle_has_orphan_summary_phase(repo):
+    long_ago = datetime.now(timezone.utc) - timedelta(hours=4)
+    await repo.save(_running_cycle("with-summary", long_ago))
+
+    await repo.reap_orphans(max_age_seconds=7200)
+
+    saved = await repo.get(CycleId("with-summary"))
+    assert saved is not None
+    assert saved.phases, "expected orphan phase to be appended"
+    last = saved.phases[-1]
+    assert last.phase == "system_orphan"
+    assert "Orphaned by container restart" in last.summary

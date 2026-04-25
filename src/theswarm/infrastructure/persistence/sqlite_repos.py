@@ -282,8 +282,9 @@ class SQLiteCycleRepository:
         A cycle stays 'running' only while its in-process task is alive.
         After a container restart the task is gone but the SQLite row still
         says running, polluting the dashboard. Flip any row whose started_at
-        is older than ``max_age_seconds`` to 'failed' with completed_at=now
-        and a summary phase explaining the orphan.
+        is older than ``max_age_seconds`` to 'failed', stamp completed_at,
+        and append a synthetic phase entry so the cycle detail page shows
+        a clear reason instead of an empty timeline.
         """
         from datetime import datetime as _dt
         from datetime import timezone as _tz
@@ -292,21 +293,36 @@ class SQLiteCycleRepository:
         cutoff = (_dt.now(_tz.utc) - _td(seconds=max_age_seconds)).isoformat()
         completed = _dt.now(_tz.utc).isoformat()
         cursor = await self._db.execute(
-            "SELECT id FROM cycles WHERE status = 'running' AND started_at < ?",
+            "SELECT id, phases_json FROM cycles WHERE status = 'running' AND started_at < ?",
             (cutoff,),
         )
         rows = await cursor.fetchall()
-        ids = [r[0] for r in rows]
-        if not ids:
+        if not rows:
             return 0
-        placeholders = ",".join("?" for _ in ids)
-        await self._db.execute(
-            f"UPDATE cycles SET status = 'failed', completed_at = ? "
-            f"WHERE id IN ({placeholders})",
-            (completed, *ids),
-        )
+
+        orphan_phase = {
+            "phase": "system_orphan",
+            "agent": "system",
+            "started_at": completed,
+            "completed_at": completed,
+            "status": "failed",
+            "tokens_used": 0,
+            "cost_usd": 0.0,
+            "summary": "Orphaned by container restart — background task did not survive.",
+        }
+        for cycle_id, phases_json_raw in rows:
+            try:
+                phases = json.loads(phases_json_raw or "[]") or []
+            except (TypeError, json.JSONDecodeError):
+                phases = []
+            phases.append(orphan_phase)
+            await self._db.execute(
+                "UPDATE cycles SET status = 'failed', completed_at = ?, phases_json = ? "
+                "WHERE id = ?",
+                (completed, json.dumps(phases), cycle_id),
+            )
         await self._db.commit()
-        return len(ids)
+        return len(rows)
 
     async def save(self, cycle: Cycle) -> None:
         phases_json = json.dumps([

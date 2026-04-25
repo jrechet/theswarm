@@ -314,15 +314,37 @@ async def run_daily_cycle(
                 break
             await _progress("Dev", f"Iteration {iteration}/{MAX_DEV_ITERATIONS} — picking next task…")
             dev = build_dev_graph()
+            # Phase 4.1 — one retry on transient errors (git, network, etc).
+            # PhaseTimeout already implies a hung Claude call; don't retry that
+            # to avoid stacking 8-min waits.
+            dev_state = None
             try:
                 dev_state = await _run_phase(
                     "dev_iter", "Dev",
                     dev.ainvoke({**base_state, "phase": Phase.DEVELOPMENT.value}),
                 )
             except PhaseTimeout:
-                # Skip to next iteration — perhaps a different task can succeed.
                 await _progress("Dev", f"Iteration {iteration} timed out — moving on")
                 continue
+            except Exception as exc:
+                msg = f"{type(exc).__name__}: {str(exc)[:160]}"
+                await _progress("Dev", f"Iteration {iteration} failed ({msg}) — retrying once")
+                log.warning("Dev iteration %d failed, retrying: %s", iteration, exc)
+                try:
+                    dev_state = await _run_phase(
+                        "dev_iter", "Dev",
+                        build_dev_graph().ainvoke(
+                            {**base_state, "phase": Phase.DEVELOPMENT.value},
+                        ),
+                    )
+                except PhaseTimeout:
+                    await _progress("Dev", f"Iteration {iteration} retry timed out — moving on")
+                    continue
+                except Exception as exc2:
+                    msg2 = f"{type(exc2).__name__}: {str(exc2)[:160]}"
+                    await _progress("Dev", f"Iteration {iteration} retry also failed ({msg2}) — skipping")
+                    log.error("Dev iteration %d retry failed: %s", iteration, exc2)
+                    continue
             dev_cost = dev_state.get("cost_usd", 0.0)
             dev_tokens = dev_state.get("tokens_used", 0)
             tracker.record(f"dev_iter{iteration}", dev_tokens, dev_cost)
