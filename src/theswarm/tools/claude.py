@@ -97,12 +97,16 @@ class ClaudeCLI:
     ``ClaudeCLI`` across the codebase.
     """
     model: str = "sonnet"
-    timeout: int = 600  # 10 min default
+    # 3 min: a typical Dev iteration prompt finishes in <90s. Anything
+    # longer is a hang; fail fast and surface it. Old default (600s × 1.5
+    # × 3 retries = 47 min) made stuck cycles indistinguishable from
+    # in-flight ones.
+    timeout: int = 180
     max_tokens: int = 8192
     # Adaptive retry/backoff (applies to the API fallback only).
-    max_retries: int = 3
+    max_retries: int = 2
     retry_base_ms: int = 1000
-    timeout_growth: float = 1.5
+    timeout_growth: float = 1.3
     # Injected so tests can stub. Not repr-ed.
     _sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep, repr=False)
     _rng: random.Random = field(default_factory=random.Random, repr=False)

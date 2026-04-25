@@ -9,14 +9,25 @@
       {% if cycle.status == 'running' %}<span class="pulse-dot"></span>{% endif %}
       {{ cycle.status }}
     </span>
-    <a href="{{ base }}/cycles/{{ cycle.id }}/replay" class="btn btn-ghost" style="margin-left:auto;">⟲ Replay</a>
-    {% if cycle.status == 'failed' and resumable_from %}
-    <form method="post" action="{{ base }}/cycles/{{ cycle.id }}/resume" style="display:inline;margin-left:0.5rem;">
-      <button type="submit" class="btn btn-primary" title="Resume from phase: {{ resumable_from }}">
-        ↻ Resume from {{ resumable_from }}
+    <div style="margin-left:auto;display:flex;gap:0.5rem;">
+      {% if cycle.status == 'running' %}
+      <button type="button"
+              class="btn btn-danger"
+              id="cancel-cycle-btn"
+              data-cancel-url="{{ base }}/api/cycle/{{ cycle.id }}/cancel"
+              title="Stop this cycle's background task">
+        ✕ Cancel
       </button>
-    </form>
-    {% endif %}
+      {% endif %}
+      <a href="{{ base }}/cycles/{{ cycle.id }}/replay" class="btn btn-ghost">⟲ Replay</a>
+      {% if cycle.status == 'failed' and resumable_from %}
+      <form method="post" action="{{ base }}/cycles/{{ cycle.id }}/resume" style="display:inline;">
+        <button type="submit" class="btn btn-primary" title="Resume from phase: {{ resumable_from }}">
+          ↻ Resume from {{ resumable_from }}
+        </button>
+      </form>
+      {% endif %}
+    </div>
   </div>
 
   <div class="detail-grid">
@@ -57,4 +68,24 @@
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  var btn = document.getElementById('cancel-cycle-btn');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    if (!confirm('Stop this cycle? In-flight Claude calls will be cancelled.')) return;
+    btn.disabled = true;
+    btn.textContent = 'Cancelling…';
+    fetch(btn.dataset.cancelUrl, { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function () { window.location.reload(); })
+      .catch(function () {
+        btn.disabled = false;
+        btn.textContent = '✕ Cancel';
+        alert('Cancel request failed.');
+      });
+  });
+})();
+</script>
 {% endblock %}
