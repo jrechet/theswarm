@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 
@@ -18,6 +19,19 @@ MAX_DEV_ITERATIONS = 5  # safety cap per cycle
 MAX_AUTONOMOUS_CYCLES = 10  # safety cap for autonomous mode
 MAX_DAILY_STORIES = 3  # imported by PO but defined here for reference
 
+# Per-phase hard timeouts (seconds). Beyond this we abort the phase rather
+# than letting it hang indefinitely. Sized for the new ClaudeCLI default
+# (180s per call) plus a safety margin.
+PHASE_TIMEOUTS = {
+    "po_morning": 5 * 60,
+    "techlead_breakdown": 5 * 60,
+    "dev_iter": 8 * 60,
+    "techlead_review": 5 * 60,
+    "qa": 15 * 60,
+    "po_evening": 5 * 60,
+    "retrospective": 5 * 60,
+}
+
 
 class BudgetExceeded(Exception):
     """Raised when a role exceeds its token budget."""
@@ -26,6 +40,14 @@ class BudgetExceeded(Exception):
         self.used = used
         self.budget = budget
         super().__init__(f"{role} exceeded token budget: {used:,} > {budget:,}")
+
+
+class PhaseTimeout(Exception):
+    """Raised when a phase exceeds its hard timeout."""
+    def __init__(self, phase: str, timeout: int) -> None:
+        self.phase = phase
+        self.timeout = timeout
+        super().__init__(f"phase {phase!r} exceeded {timeout}s hard timeout")
 
 
 async def _write_cycle_learnings(
@@ -197,6 +219,16 @@ async def run_daily_cycle(
         except Exception:
             log.exception("on_checkpoint raised (continuing)")
 
+    async def _run_phase(phase_key: str, role: str, coro):
+        """Run an awaitable with that phase's hard timeout. Surfaces PhaseTimeout."""
+        timeout = PHASE_TIMEOUTS.get(phase_key, 10 * 60)
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout)
+        except asyncio.TimeoutError as exc:
+            log.error("Phase %s exceeded %ds — aborting", phase_key, timeout)
+            await _progress(role, f"⏱  Phase {phase_key} timed out after {timeout}s — aborting")
+            raise PhaseTimeout(phase_key, timeout) from exc
+
     from theswarm.domain.cycles.checkpoint import PHASE_ORDER
 
     def _skip(phase: str) -> bool:
@@ -241,7 +273,10 @@ async def run_daily_cycle(
             _enter("po_morning")
             await _progress("PO", "Starting daily planning…")
             po = build_po_graph()
-            po_state = await po.ainvoke({**base_state, "phase": Phase.MORNING.value})
+            po_state = await _run_phase(
+                "po_morning", "PO",
+                po.ainvoke({**base_state, "phase": Phase.MORNING.value}),
+            )
             po_cost = po_state.get("cost_usd", 0.0)
             tracker.record("po_morning", po_state.get("tokens_used", 0), po_cost)
             total_cost += po_cost
@@ -256,7 +291,10 @@ async def run_daily_cycle(
             _enter("techlead_breakdown")
             await _progress("TechLead", "Breaking down stories into tasks…")
             tl = build_techlead_graph()
-            tl_state = await tl.ainvoke({**base_state, "phase": "breakdown"})
+            tl_state = await _run_phase(
+                "techlead_breakdown", "TechLead",
+                tl.ainvoke({**base_state, "phase": "breakdown"}),
+            )
             tl_bd_cost = tl_state.get("cost_usd", 0.0)
             tracker.record("techlead_breakdown", tl_state.get("tokens_used", 0), tl_bd_cost)
             total_cost += tl_bd_cost
@@ -276,7 +314,15 @@ async def run_daily_cycle(
                 break
             await _progress("Dev", f"Iteration {iteration}/{MAX_DEV_ITERATIONS} — picking next task…")
             dev = build_dev_graph()
-            dev_state = await dev.ainvoke({**base_state, "phase": Phase.DEVELOPMENT.value})
+            try:
+                dev_state = await _run_phase(
+                    "dev_iter", "Dev",
+                    dev.ainvoke({**base_state, "phase": Phase.DEVELOPMENT.value}),
+                )
+            except PhaseTimeout:
+                # Skip to next iteration — perhaps a different task can succeed.
+                await _progress("Dev", f"Iteration {iteration} timed out — moving on")
+                continue
             dev_cost = dev_state.get("cost_usd", 0.0)
             dev_tokens = dev_state.get("tokens_used", 0)
             tracker.record(f"dev_iter{iteration}", dev_tokens, dev_cost)
@@ -297,7 +343,14 @@ async def run_daily_cycle(
             # TechLead reviews and merges
             await _progress("TechLead", "Reviewing open PRs…")
             tl_review = build_techlead_graph()
-            tl_state = await tl_review.ainvoke({**base_state, "phase": "review_loop"})
+            try:
+                tl_state = await _run_phase(
+                    "techlead_review", "TechLead",
+                    tl_review.ainvoke({**base_state, "phase": "review_loop"}),
+                )
+            except PhaseTimeout:
+                await _progress("TechLead", "Review timed out — leaving PRs for next cycle")
+                continue
             tl_cost = tl_state.get("cost_usd", 0.0)
             tl_tokens = tl_state.get("tokens_used", 0)
             tracker.record(f"techlead_review_iter{iteration}", tl_tokens, tl_cost)
@@ -331,13 +384,19 @@ async def run_daily_cycle(
             _enter("qa")
             await _progress("QA", "Running tests + security scan…")
             qa = build_qa_graph()
-            qa_state = await qa.ainvoke({**base_state, "phase": Phase.DEMO.value})
+            try:
+                qa_state = await _run_phase(
+                    "qa", "QA",
+                    qa.ainvoke({**base_state, "phase": Phase.DEMO.value}),
+                )
+            except PhaseTimeout:
+                qa_state = {}
             qa_cost = qa_state.get("cost_usd", 0.0)
             tracker.record("qa", qa_state.get("tokens_used", 0), qa_cost)
             total_cost += qa_cost
             _check_budget(Role.QA, qa_state.get("tokens_used", 0))
             await _checkpoint(
-                "qa", True,
+                "qa", bool(qa_state),
                 {"tokens": qa_state.get("tokens_used", 0), "cost": qa_cost},
             )
 
@@ -347,16 +406,22 @@ async def run_daily_cycle(
             _enter("po_evening")
             await _progress("PO", "Generating daily report…")
             po_evening = build_po_graph()
-            po_ev_state = await po_evening.ainvoke({
-                **base_state,
-                "phase": Phase.EVENING.value,
-                "demo_report": qa_state.get("demo_report"),
-            })
+            try:
+                po_ev_state = await _run_phase(
+                    "po_evening", "PO",
+                    po_evening.ainvoke({
+                        **base_state,
+                        "phase": Phase.EVENING.value,
+                        "demo_report": qa_state.get("demo_report"),
+                    }),
+                )
+            except PhaseTimeout:
+                po_ev_state = {}
             po_ev_cost = po_ev_state.get("cost_usd", 0.0)
             tracker.record("po_evening", po_ev_state.get("tokens_used", 0), po_ev_cost)
             total_cost += po_ev_cost
             await _checkpoint(
-                "po_evening", True,
+                "po_evening", bool(po_ev_state),
                 {"tokens": po_ev_state.get("tokens_used", 0), "cost": po_ev_cost},
             )
 
