@@ -13,7 +13,7 @@ import shutil
 import time
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 router = APIRouter()
 
@@ -84,6 +84,137 @@ async def health(request: Request) -> JSONResponse:
 
     http_status = 503 if status == "error" else 200
     return JSONResponse(result, status_code=http_status)
+
+
+@router.get("/health/ready", response_class=JSONResponse)
+async def readiness(request: Request) -> JSONResponse:
+    """Per-component readiness for triggering a cycle.
+
+    Each component returns ok / warn / error so the dashboard can render
+    a green/red list. Independent from /health which is the liveness probe.
+    """
+    checks: dict[str, dict] = {}
+
+    # 1) DB
+    project_repo = getattr(request.app.state, "project_repo", None)
+    cycle_repo = getattr(request.app.state, "cycle_repo", None)
+    if project_repo is not None:
+        try:
+            await project_repo.list_all()
+            checks["database"] = {"status": "ok", "detail": "SQLite reachable"}
+        except Exception as exc:
+            checks["database"] = {"status": "error", "detail": str(exc)}
+    else:
+        checks["database"] = {"status": "error", "detail": "project_repo not wired"}
+
+    # 2) Allowed repos configured
+    allowed = getattr(request.app.state, "allowed_repos", []) or []
+    checks["allowlist"] = (
+        {"status": "ok", "detail": f"{len(allowed)} repo(s) allowed"}
+        if allowed
+        else {"status": "warn", "detail": "SWARM_PO_GITHUB_REPOS empty — every cycle will fail"}
+    )
+
+    # 3) GitHub bridge
+    bridge = getattr(request.app.state, "gateway_bridge", None)
+    has_github = bool(getattr(bridge, "_swarm_po_github", None)) if bridge else False
+    checks["github"] = (
+        {"status": "ok", "detail": "PyGithub client connected"}
+        if has_github
+        else {"status": "warn", "detail": "no GitHub client — running in stub mode"}
+    )
+
+    # 4) Claude CLI binary
+    binary = shutil.which("claude")
+    if binary is None:
+        checks["claude_cli"] = {"status": "warn", "detail": "claude binary missing — API fallback only"}
+    else:
+        # Quick version probe — capped at 8 seconds.
+        try:
+            env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+            env["CI"] = "1"
+            env["CLAUDE_CODE_NON_INTERACTIVE"] = "1"
+            proc = await asyncio.create_subprocess_exec(
+                binary, "--version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.DEVNULL,
+                env=env,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=8)
+            if proc.returncode == 0:
+                checks["claude_cli"] = {
+                    "status": "ok",
+                    "detail": stdout.decode(errors="replace").strip()[:80],
+                }
+            else:
+                checks["claude_cli"] = {"status": "warn", "detail": f"version exit {proc.returncode}"}
+        except asyncio.TimeoutError:
+            checks["claude_cli"] = {"status": "error", "detail": "claude --version hung > 8s"}
+
+    # 5) Subscription session present
+    home = os.environ.get("HOME", "")
+    creds = os.path.join(home, ".claude", ".credentials.json") if home else ""
+    if creds and os.path.isfile(creds):
+        size = os.path.getsize(creds)
+        if size > 200:
+            checks["claude_session"] = {"status": "ok", "detail": f".credentials.json {size} bytes"}
+        else:
+            checks["claude_session"] = {"status": "warn", "detail": f"file too small ({size} bytes) — re-run claude /login"}
+    else:
+        checks["claude_session"] = {"status": "warn", "detail": "~/.claude/.credentials.json missing"}
+
+    # 6) Memory headroom
+    try:
+        import resource
+        max_rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        # On Linux ru_maxrss is in KB; on macOS it's bytes. Assume KB.
+        checks["memory"] = {"status": "ok", "detail": f"{max_rss_kb // 1024} MB peak"}
+    except Exception:
+        checks["memory"] = {"status": "warn", "detail": "cannot read rusage"}
+
+    # 7) Stuck running cycles (orphans not yet reaped)
+    if cycle_repo is not None:
+        try:
+            recent = await cycle_repo.list_recent(limit=20)
+            running = [c for c in recent if str(getattr(c, "status", "")).endswith("running") or str(c.status) == "CycleStatus.RUNNING"]
+            stale = []
+            from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+            cutoff = _dt.now(_tz.utc) - _td(hours=2)
+            for c in running:
+                if c.started_at and c.started_at < cutoff:
+                    stale.append(c)
+            checks["cycles"] = (
+                {"status": "ok", "detail": f"{len(running)} running, none stale"}
+                if not stale
+                else {"status": "warn", "detail": f"{len(stale)} stale running cycle(s); reaper will clean on next boot"}
+            )
+        except Exception as exc:
+            checks["cycles"] = {"status": "warn", "detail": f"could not read cycles: {exc}"}
+
+    # Roll up
+    statuses = {c["status"] for c in checks.values()}
+    overall = "error" if "error" in statuses else ("warn" if "warn" in statuses else "ok")
+
+    return JSONResponse({
+        "status": overall,
+        "checks": checks,
+        "uptime_seconds": round(time.time() - _start_time, 1),
+    })
+
+
+@router.get("/health/ready/page", response_class=HTMLResponse)
+async def readiness_page(request: Request) -> HTMLResponse:
+    """Human-readable readiness page rendered with the standard sidebar shell."""
+    payload = await readiness(request)
+    import json as _json
+
+    data = _json.loads(payload.body.decode())
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "health_ready.html",
+        {"request": request, "data": data},
+    )
 
 
 @router.get("/diagnostics/claude")

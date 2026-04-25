@@ -1339,6 +1339,31 @@ body.modal-open { overflow: hidden; }
 .live-progress-role.role-system { color: var(--text-muted); }
 .live-progress-msg { color: var(--text-primary); flex: 1; }
 
+/* Readiness page */
+.ready-grid { display: flex; flex-direction: column; gap: 0.4rem; }
+.ready-row {
+  display: grid;
+  grid-template-columns: auto 12rem 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.85rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--text-muted);
+}
+.ready-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--text-muted);
+}
+.ready-row.ready-ok { border-left-color: var(--success); }
+.ready-row.ready-ok .ready-dot { background: var(--success); }
+.ready-row.ready-warn { border-left-color: var(--warning); }
+.ready-row.ready-warn .ready-dot { background: var(--warning); }
+.ready-row.ready-error { border-left-color: var(--danger); }
+.ready-row.ready-error .ready-dot { background: var(--danger); }
+.ready-name { font-weight: 600; color: var(--text-primary); }
+.ready-detail { color: var(--text-secondary); font-size: 0.88rem; }
+
 /* Sprint E M1 — project memory viewer */
 .memory-viewer { display: flex; flex-direction: column; gap: 0.75rem; }
 .memory-filters {

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Readiness — TheSwarm{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Readiness</h1>
+  <span class="badge badge-{{ data.status }} badge-lg">{{ data.status }}</span>
+</div>
+
+<p class="text-muted">
+  Pre-flight check — every component a cycle needs is green here before
+  you click <strong>Run Cycle</strong>. Auto-refreshes every 8 seconds.
+</p>
+
+<div class="card"
+     hx-get="{{ base }}/health/ready/page"
+     hx-trigger="every 8s"
+     hx-select="#ready-grid"
+     hx-target="#ready-grid"
+     hx-swap="outerHTML">
+  <div id="ready-grid" class="ready-grid">
+    {% for name, c in data.checks.items() %}
+    <div class="ready-row ready-{{ c.status }}">
+      <span class="ready-dot"></span>
+      <span class="ready-name">{{ name|replace('_', ' ')|capitalize }}</span>
+      <span class="ready-detail">{{ c.detail }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
