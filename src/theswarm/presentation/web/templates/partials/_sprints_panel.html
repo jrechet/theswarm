@@ -1,0 +1,32 @@
+<header class="sprints-panel-header">
+  <h2>Your sprints</h2>
+  <span class="text-muted">{{ sprints|length }} recent</span>
+</header>
+{% if sprints %}
+<ul class="sprints-list">
+  {% for s in sprints %}
+  <li class="sprint-row">
+    <div class="sprint-row-head">
+      <code class="sprint-id">{{ s.id }}</code>
+      <span class="sprint-when">{{ s.created_at.strftime('%Y-%m-%d %H:%M') }} UTC</span>
+      <span class="sprint-count badge badge-subtle">{{ s.issue_numbers|length }} issue{{ "s" if s.issue_numbers|length != 1 else "" }}</span>
+    </div>
+    <div class="sprint-row-request">{{ s.request }}</div>
+    {% if s.issue_numbers %}
+    <div class="sprint-row-issues">
+      {% for n in s.issue_numbers %}
+      <a class="badge badge-subtle"
+         href="https://github.com/{{ project_id }}/issues/{{ n }}"
+         target="_blank"
+         rel="noopener">#{{ n }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty-state">
+  No sprints yet. Use the composer above to describe what you want built.
+</p>
+{% endif %}

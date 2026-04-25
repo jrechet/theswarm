@@ -1364,6 +1364,49 @@ body.modal-open { overflow: hidden; }
 .ready-name { font-weight: 600; color: var(--text-primary); }
 .ready-detail { color: var(--text-secondary); font-size: 0.88rem; }
 
+/* Sprints panel */
+.sprints-panel { margin-bottom: 1.5rem; }
+.sprints-panel-header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+.sprints-panel-header h2 { margin: 0; font-size: 1.05rem; }
+.sprints-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.sprint-row {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  padding: 0.7rem 0.85rem;
+}
+.sprint-row-head {
+  display: flex; align-items: center; gap: 0.7rem;
+  margin-bottom: 0.35rem;
+}
+.sprint-id {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+  background: var(--bg-secondary);
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+}
+.sprint-when { color: var(--text-muted); font-size: 0.8rem; }
+.sprint-count { margin-left: auto; }
+.sprint-row-request {
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  margin-bottom: 0.4rem;
+  white-space: pre-wrap;
+}
+.sprint-row-issues { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.sprint-row-issues a:hover { background: var(--accent-subtle); }
+.sprint-result-header {
+  padding: 0.55rem 0.7rem;
+  background: var(--accent-subtle);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.4rem;
+}
+
 /* Sprint E M1 — project memory viewer */
 .memory-viewer { display: flex; flex-direction: column; gap: 0.75rem; }
 .memory-filters {

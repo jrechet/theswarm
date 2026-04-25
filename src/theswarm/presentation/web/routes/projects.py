@@ -406,6 +406,7 @@ async def create_sprint(
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"GitHub client unavailable: {exc}")
 
+    request_text = (payload.get("description") or "").strip()
     created: list[dict] = []
     errors: list[str] = []
     for it in issues[:5]:
@@ -428,4 +429,61 @@ async def create_sprint(
         except Exception as exc:
             errors.append(f"{title!r}: {type(exc).__name__}: {exc}")
 
-    return JSONResponse({"created": created, "errors": errors})
+    sprint_id: str | None = None
+    sprint_repo = getattr(request.app.state, "sprint_repo", None)
+    if sprint_repo is not None and created:
+        try:
+            sprint = await sprint_repo.create(
+                project_id=project_id,
+                request=request_text,
+                issue_numbers=[c["number"] for c in created if c.get("number")],
+            )
+            sprint_id = sprint.id
+        except Exception as exc:
+            errors.append(f"sprint persist: {type(exc).__name__}: {exc}")
+
+    return JSONResponse({
+        "created": created,
+        "errors": errors,
+        "sprint_id": sprint_id,
+    })
+
+
+@router.get("/{project_id}/sprints/panel", response_class=HTMLResponse)
+async def sprints_panel_fragment(
+    request: Request, project_id: str,
+) -> HTMLResponse:
+    """HTML fragment listing recent sprints, embedded in the project page."""
+    sprint_repo = getattr(request.app.state, "sprint_repo", None)
+    sprints: list = []
+    if sprint_repo is not None:
+        try:
+            sprints = await sprint_repo.list_for_project(project_id, limit=10)
+        except Exception:
+            sprints = []
+    return request.app.state.templates.TemplateResponse(
+        "partials/_sprints_panel.html",
+        {"request": request, "project_id": project_id, "sprints": sprints},
+    )
+
+
+@router.get("/{project_id}/sprints")
+async def list_project_sprints(
+    request: Request, project_id: str,
+) -> JSONResponse:
+    """Return recent sprints for a project (newest first)."""
+    sprint_repo = getattr(request.app.state, "sprint_repo", None)
+    if sprint_repo is None:
+        return JSONResponse({"sprints": []})
+    rows = await sprint_repo.list_for_project(project_id, limit=20)
+    return JSONResponse({
+        "sprints": [
+            {
+                "id": s.id,
+                "request": s.request,
+                "issue_numbers": list(s.issue_numbers),
+                "created_at": s.created_at.isoformat(),
+            }
+            for s in rows
+        ],
+    })

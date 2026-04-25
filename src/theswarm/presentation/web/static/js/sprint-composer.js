@@ -110,11 +110,22 @@
     fetch(createUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ issues: currentDraft.issues }),
+      body: JSON.stringify({
+        issues: currentDraft.issues,
+        description: currentDraft.request || description.value,
+      }),
     })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
       .then(function (resp) {
         var lines = [];
+        if (resp.sprint_id) {
+          lines.push(
+            '<div class="sprint-result-header">' +
+              '<strong>Sprint <code>' + resp.sprint_id + '</code></strong> ' +
+              '<span class="text-muted">— track its progress in the Sprints panel below.</span>' +
+            '</div>'
+          );
+        }
         (resp.created || []).forEach(function (c) {
           lines.push(
             '<div class="sprint-result-item">' +
@@ -132,6 +143,11 @@
         setStatus('Created ' + (resp.created || []).length + ' issue(s)', 'ok');
         clearPreview();
         description.value = '';
+        // Refresh the sprints panel so the new sprint shows up.
+        if (typeof htmx !== 'undefined') {
+          var panel = document.getElementById('sprints-panel');
+          if (panel) htmx.trigger(panel, 'refresh');
+        }
       })
       .catch(function (err) {
         setStatus('Create failed.', 'error');

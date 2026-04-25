@@ -134,6 +134,14 @@
 
 <script src="{{ base }}/static/js/sprint-composer.js" defer></script>
 
+<section class="card sprints-panel"
+         id="sprints-panel"
+         hx-get="{{ base }}/projects/{{ project.id }}/sprints/panel"
+         hx-trigger="load, refresh"
+         hx-swap="innerHTML">
+  <p class="empty-state">Loading sprints…</p>
+</section>
+
 <div class="detail-grid">
   <div class="card">
     <h2>Configuration</h2>

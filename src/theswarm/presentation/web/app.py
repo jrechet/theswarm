@@ -117,6 +117,13 @@ def create_web_app(
     app.state.project_repo = project_repo
     app.state.cycle_repo = cycle_repo
 
+    # Phase 1.4 — sprint tracking
+    if db is not None:
+        from theswarm.infrastructure.persistence.sprint_repo import (
+            SQLiteSprintRepository,
+        )
+        app.state.sprint_repo = SQLiteSprintRepository(db)
+
     # Queries
     app.state.list_projects_query = ListProjectsQuery(project_repo)
     app.state.get_project_query = GetProjectQuery(project_repo)
