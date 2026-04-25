@@ -62,6 +62,18 @@ async def browse_demos(
                     continue
                 demos_by_project.setdefault(r.project_id, []).append(r)
 
+    # When filtered by a specific project that has no demos, surface its
+    # recent cycle attempts (any status) so the empty state answers
+    # "we tried — here's what happened" rather than just saying nothing.
+    recent_attempts: list = []
+    if project and not demos_by_project:
+        cycle_repo = getattr(request.app.state, "cycle_repo", None)
+        if cycle_repo is not None:
+            try:
+                recent_attempts = await cycle_repo.list_by_project(project, limit=10)
+            except Exception:
+                recent_attempts = []
+
     return templates.TemplateResponse(
         "demos_browse.html",
         {
@@ -71,6 +83,7 @@ async def browse_demos(
             "total_demos": sum(len(v) for v in demos_by_project.values()),
             "active_project": project or "",
             "active_since": since or "",
+            "recent_attempts": recent_attempts,
         },
     )
 

@@ -468,6 +468,16 @@ async def start_server(
     schedule_repo = SQLiteScheduleRepository(conn)
     bus = EventBus()
 
+    # Reap orphan cycles left in 'running' state by a previous container's
+    # background task that died on restart. Marks anything older than 2h
+    # as failed so the dashboard list reflects reality.
+    try:
+        reaped = await cycle_repo.reap_orphans(max_age_seconds=7200)
+        if reaped:
+            log.info("Reaped %d orphan running cycle(s) on startup", reaped)
+    except Exception:
+        log.exception("Orphan cycle reap failed (continuing startup)")
+
     # Report storage
     from theswarm.infrastructure.recording.report_repo import SQLiteReportRepository
     from theswarm.infrastructure.recording.artifact_store import LocalArtifactStore

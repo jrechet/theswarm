@@ -36,9 +36,47 @@
 
 {% if not demos_by_project %}
 <div class="empty-state-large">
+    {% if active_project %}
+    <p>No demos for <code>{{ active_project }}</code> yet.</p>
+    <p class="text-muted">Demos are produced by the QA phase of a completed cycle. {% if recent_attempts %}Recent attempts on this project:{% else %}No cycle has been triggered yet — go to the project page and click <strong>Run Cycle</strong>.{% endif %}</p>
+    {% else %}
     <p>No demos yet.</p>
     <p class="text-muted">Demos are generated after completed cycles with QA reports.</p>
+    {% endif %}
 </div>
+
+{% if active_project and recent_attempts %}
+<section class="demo-project-section">
+    <div class="demo-project-header">
+        <h2>Recent attempts</h2>
+        <span class="badge badge-subtle">{{ recent_attempts | length }} cycle{{ "s" if recent_attempts | length != 1 else "" }}</span>
+    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Cycle</th>
+                <th>Status</th>
+                <th>Started</th>
+                <th>Duration</th>
+                <th>Cost</th>
+                <th>PRs</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in recent_attempts %}
+            <tr>
+                <td><a href="{{ base }}/cycles/{{ c.id }}" title="{{ c.id }}">{% if c.id|length > 24 %}{{ c.id[:12] }}…{{ c.id[-6:] }}{% else %}{{ c.id }}{% endif %}</a></td>
+                <td><span class="badge badge-{{ c.status.value if c.status.value is defined else c.status }}">{{ c.status.value if c.status.value is defined else c.status }}</span></td>
+                <td>{{ c.started_at.strftime('%Y-%m-%d %H:%M') if c.started_at else '—' }}</td>
+                <td>{{ c.duration_display if c.duration_display is defined else '—' }}</td>
+                <td>${{ "%.2f"|format(c.total_cost_usd) }}</td>
+                <td>{{ c.prs_opened|length }}/{{ c.prs_merged|length }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
 {% else %}
     {% for project_id, reports in demos_by_project.items() %}
     <section class="demo-project-section">

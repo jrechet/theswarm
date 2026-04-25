@@ -272,6 +272,38 @@ class SQLiteCycleRepository:
         rows = await cursor.fetchall()
         return [self._row_to_cycle(r) for r in rows]
 
+    async def reap_orphans(self, *, max_age_seconds: int = 7200) -> int:
+        """Mark stale 'running' cycles as 'failed'.
+
+        A cycle stays 'running' only while its in-process task is alive.
+        After a container restart the task is gone but the SQLite row still
+        says running, polluting the dashboard. Flip any row whose started_at
+        is older than ``max_age_seconds`` to 'failed' with completed_at=now
+        and a summary phase explaining the orphan.
+        """
+        from datetime import datetime as _dt
+        from datetime import timezone as _tz
+        from datetime import timedelta as _td
+
+        cutoff = (_dt.now(_tz.utc) - _td(seconds=max_age_seconds)).isoformat()
+        completed = _dt.now(_tz.utc).isoformat()
+        cursor = await self._db.execute(
+            "SELECT id FROM cycles WHERE status = 'running' AND started_at < ?",
+            (cutoff,),
+        )
+        rows = await cursor.fetchall()
+        ids = [r[0] for r in rows]
+        if not ids:
+            return 0
+        placeholders = ",".join("?" for _ in ids)
+        await self._db.execute(
+            f"UPDATE cycles SET status = 'failed', completed_at = ? "
+            f"WHERE id IN ({placeholders})",
+            (completed, *ids),
+        )
+        await self._db.commit()
+        return len(ids)
+
     async def save(self, cycle: Cycle) -> None:
         phases_json = json.dumps([
             {
