@@ -346,3 +346,86 @@ async def project_cost_estimate(request: Request, project_id: str) -> JSONRespon
         "max_dev_iterations": getattr(getattr(project, "config", None), "max_daily_stories", None) or getattr(project, "max_daily_stories", 5),
         "repo": str(project.repo),
     })
+
+
+# ── Sprint composer (Phase 1.1) ─────────────────────────────────────
+# Lets a non-technical user describe a sprint in plain English; we call
+# Claude to draft well-formed backlog issues, preview them, then on
+# confirm push them to GitHub with status:backlog + role:dev.
+
+@router.post("/{project_id}/sprints/draft")
+async def draft_sprint(
+    request: Request,
+    project_id: str,
+    description: str = Form(...),
+) -> JSONResponse:
+    """Turn a free-form sprint description into IssueDraft previews."""
+    project_repo = request.app.state.project_repo
+    project = await project_repo.get(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="project not found")
+
+    from theswarm.application.services.sprint_composer import SprintComposer
+    from theswarm.tools.claude import ClaudeCLI
+
+    composer = SprintComposer(claude_factory=lambda: ClaudeCLI(model="haiku"))
+    try:
+        draft = await composer.draft(description)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return JSONResponse({
+        "request": draft.request,
+        "issues": [
+            {"title": i.title, "body": i.body, "labels": list(i.labels)}
+            for i in draft.issues
+        ],
+    })
+
+
+@router.post("/{project_id}/sprints/create")
+async def create_sprint(
+    request: Request,
+    project_id: str,
+) -> JSONResponse:
+    """Create the previewed issues on GitHub. Body is JSON: {issues: [...]}."""
+    project_repo = request.app.state.project_repo
+    project = await project_repo.get(project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="project not found")
+
+    payload = await request.json()
+    issues = payload.get("issues") or []
+    if not isinstance(issues, list) or not issues:
+        raise HTTPException(status_code=400, detail="issues array required")
+
+    from theswarm.tools.github import GitHubClient
+
+    try:
+        gh = GitHubClient(repo_name=str(project.repo))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"GitHub client unavailable: {exc}")
+
+    created: list[dict] = []
+    errors: list[str] = []
+    for it in issues[:5]:
+        title = (it.get("title") or "").strip()
+        if not title:
+            continue
+        body = (it.get("body") or "").strip()
+        labels = [l for l in (it.get("labels") or []) if isinstance(l, str)]
+        if "status:backlog" not in labels:
+            labels.append("status:backlog")
+        if "role:dev" not in labels:
+            labels.append("role:dev")
+        try:
+            issue = await gh.create_issue(title=title, body=body, labels=labels)
+            created.append({
+                "number": issue.get("number"),
+                "title": issue.get("title"),
+                "url": issue.get("html_url"),
+            })
+        except Exception as exc:
+            errors.append(f"{title!r}: {type(exc).__name__}: {exc}")
+
+    return JSONResponse({"created": created, "errors": errors})

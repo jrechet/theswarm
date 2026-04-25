@@ -101,6 +101,39 @@
   </div>
 </div>
 
+<section class="sprint-composer card" data-testid="sprint-composer">
+  <header class="sprint-composer-header">
+    <h2>Describe the next sprint</h2>
+    <span class="text-muted">Plain English. The PO will draft backlog issues for you to review.</span>
+  </header>
+  <form id="sprint-form"
+        data-draft-url="{{ base }}/projects/{{ project.id }}/sprints/draft"
+        data-create-url="{{ base }}/projects/{{ project.id }}/sprints/create">
+    <textarea id="sprint-description"
+              name="description"
+              rows="3"
+              required
+              maxlength="4000"
+              placeholder="e.g. Add a venue capacity field to the Venue model, expose it on the GET API, and write tests."></textarea>
+    <div class="sprint-composer-actions">
+      <button type="submit" class="btn btn-primary" id="sprint-draft-btn">Draft issues →</button>
+      <span id="sprint-status" class="save-status"></span>
+    </div>
+  </form>
+
+  <div id="sprint-preview" class="sprint-preview" hidden>
+    <h3>Proposed issues</h3>
+    <ul id="sprint-preview-list" class="sprint-issue-list"></ul>
+    <div class="sprint-preview-actions">
+      <button type="button" class="btn btn-ghost" id="sprint-cancel-btn">Discard</button>
+      <button type="button" class="btn btn-primary" id="sprint-confirm-btn">Create on GitHub</button>
+    </div>
+  </div>
+  <div id="sprint-result" class="sprint-result" hidden></div>
+</section>
+
+<script src="{{ base }}/static/js/sprint-composer.js" defer></script>
+
 <div class="detail-grid">
   <div class="card">
     <h2>Configuration</h2>
