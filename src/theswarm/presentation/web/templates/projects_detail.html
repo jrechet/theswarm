@@ -42,21 +42,45 @@
       <div class="modal-backdrop" data-modal-close></div>
       <div class="modal-card" role="document">
         <header class="modal-header">
-          <h2 id="cost-preview-title">Estimated cost for this cycle</h2>
+          <h2 id="cost-preview-title">Run cycle for {{ project.id }}?</h2>
           <button type="button" class="modal-close" data-modal-close aria-label="Close">×</button>
         </header>
         <div class="modal-body">
-          <p class="modal-lead" data-cost-basis>Calculating…</p>
+          <p class="modal-lead">
+            This kicks off the full agent pipeline against
+            <code data-cycle-repo>{{ project.repo }}</code>.
+            Stages run in this order:
+          </p>
+          <ol class="cycle-stages">
+            <li><strong>PO</strong> — picks up open <code>status:backlog</code> issues, labels them <code>status:ready</code>.</li>
+            <li><strong>TechLead</strong> — splits each story into <code>role:dev</code> sub-tasks.</li>
+            <li><strong>Dev</strong> — up to <span data-cycle-iter>5</span> iterations: implement, run tests, open PR.</li>
+            <li><strong>TechLead</strong> — reviews PRs and merges approved ones.</li>
+            <li><strong>QA</strong> — Playwright + unit + security gates, demo report.</li>
+            <li><strong>PO evening</strong> — daily report, retrospective.</li>
+          </ol>
+
+          <h3 class="modal-section-title">Backlog PO will pick up</h3>
+          <ul class="cycle-backlog" data-cycle-backlog>
+            <li class="cycle-backlog-empty">Loading backlog…</li>
+          </ul>
+
+          <h3 class="modal-section-title">Estimated cost</h3>
+          <p class="modal-lead modal-lead-sub" data-cost-basis>Calculating…</p>
           <dl class="cost-breakdown">
             <dt>Tokens</dt>
             <dd data-cost-tokens>—</dd>
             <dt>USD</dt>
             <dd data-cost-usd>—</dd>
           </dl>
-          <h3 class="cost-models-title">Models by phase</h3>
-          <ul class="cost-models" data-cost-models></ul>
+
+          <details class="cycle-models-details">
+            <summary>Models by phase</summary>
+            <ul class="cost-models" data-cost-models></ul>
+          </details>
+
           <p class="cost-disclaimer">
-            Estimates are based on {{ '{' }}basis{{ '}' }}. Real cost may differ by ±30%.
+            Cost estimates are baseline approximations from prior cycles. Real cost may differ by ±30%.
           </p>
         </div>
         <footer class="modal-footer">

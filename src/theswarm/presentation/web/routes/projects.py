@@ -304,7 +304,11 @@ async def project_memory_viewer(
 
 @router.get("/{project_id}/cost-estimate")
 async def project_cost_estimate(request: Request, project_id: str) -> JSONResponse:
-    """Sprint D C5 — tokens + USD estimate for the next cycle."""
+    """Sprint D C5 — tokens + USD estimate for the next cycle.
+
+    Also returns the backlog preview — what PO will pick up — so the
+    Run Cycle modal can answer "what am I about to run?".
+    """
     project_repo = request.app.state.project_repo
     project = await project_repo.get(project_id)
     if project is None:
@@ -314,10 +318,31 @@ async def project_cost_estimate(request: Request, project_id: str) -> JSONRespon
         from theswarm.application.services.cost_estimator import CostEstimator
         estimator = CostEstimator(request.app.state.cycle_repo)
     estimate = await estimator.estimate(project)
+
+    # Backlog preview — call the project's ticket source for status:backlog issues
+    backlog: list[dict] = []
+    backlog_error: str | None = None
+    try:
+        from theswarm.tools.github import GitHubClient
+        gh = GitHubClient(repo_name=str(project.repo))
+        issues = await gh.get_issues(labels=["status:backlog"], state="open")
+        for issue in issues[:5]:
+            backlog.append({
+                "number": getattr(issue, "number", None),
+                "title": getattr(issue, "title", "") or "",
+                "url": getattr(issue, "html_url", "") or "",
+            })
+    except Exception as exc:
+        backlog_error = f"{type(exc).__name__}: {exc}"
+
     return JSONResponse({
         "tokens": estimate.tokens,
         "cost_usd": estimate.cost_usd,
         "basis": estimate.basis,
         "sample_size": estimate.sample_size,
         "models_by_phase": estimate.models_by_phase,
+        "backlog": backlog,
+        "backlog_error": backlog_error,
+        "max_dev_iterations": getattr(getattr(project, "config", None), "max_daily_stories", None) or getattr(project, "max_daily_stories", 5),
+        "repo": str(project.repo),
     })

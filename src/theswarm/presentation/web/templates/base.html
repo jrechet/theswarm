@@ -4,51 +4,86 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}TheSwarm{% endblock %}</title>
+  <link rel="stylesheet" href="{{ base }}/static/vendor/pico-2.min.css">
   <link rel="stylesheet" href="{{ base }}/static/css/dashboard.css">
   <script src="{{ base }}/static/vendor/htmx-2.0.4.min.js" defer></script>
 </head>
 <body>
-  <nav class="topnav">
-    <a href="{{ base }}/" class="logo">TheSwarm</a>
-    <div class="nav-links">
-      <a href="{{ base }}/">Dashboard</a>
-      <a href="{{ base }}/projects/">Projects</a>
-      <a href="{{ base }}/team">Team</a>
-      <a href="{{ base }}/chat">Chat</a>
-      <a href="{{ base }}/proposals">Proposals</a>
-      <a href="{{ base }}/cycles/">Cycles</a>
-      <a href="{{ base }}/reports/">Reports</a>
-      <a href="{{ base }}/demos/">Demos</a>
-      <a href="{{ base }}/features/">Features</a>
-      <a href="{{ base }}/architect/paved-road">Architect</a>
-      <a href="{{ base }}/chief-of-staff/routing">Chief of Staff</a>
-      <a href="{{ base }}/intel/feed">Scout</a>
-      <a href="{{ base }}/refactor-programs">Programs</a>
-      <a href="{{ base }}/semantic-memory">Memory</a>
-      <a href="{{ base }}/prompt-library">Prompts</a>
-      <a href="{{ base }}/health">Health</a>
-    </div>
-    <div class="nav-status" id="sse-status">
-      <span class="status-dot connecting"></span> Connecting...
-    </div>
-    <button type="button"
-            id="notifications-toggle"
-            class="nav-notifications"
-            data-state="idle"
-            title="Enable browser notifications for new demos"
-            hidden>
-      <span data-field="icon">🔔</span>
-      <span data-field="label">Notify me</span>
-    </button>
-  </nav>
+  <button id="sidebar-toggle"
+          class="sidebar-toggle"
+          type="button"
+          aria-controls="sidebar"
+          aria-expanded="true"
+          title="Toggle sidebar (\\)">
+    <span aria-hidden="true">☰</span>
+    <span class="visually-hidden">Toggle sidebar</span>
+  </button>
 
-  <main class="container">
-    {% block content %}{% endblock %}
+  <aside id="sidebar" class="sidebar" aria-label="Main navigation">
+    <a href="{{ base }}/" class="sidebar-logo">
+      <span class="sidebar-logo-mark">⬡</span>
+      <span class="sidebar-logo-text">TheSwarm</span>
+    </a>
+
+    <nav class="sidebar-nav">
+      <ul>
+        <li class="sidebar-section">Overview</li>
+        <li><a href="{{ base }}/" data-icon="◇"><span>Dashboard</span></a></li>
+        <li><a href="{{ base }}/projects/" data-icon="▤"><span>Projects</span></a></li>
+        <li><a href="{{ base }}/team" data-icon="◉"><span>Team</span></a></li>
+
+        <li class="sidebar-section">Activity</li>
+        <li><a href="{{ base }}/cycles/" data-icon="↻"><span>Cycles</span></a></li>
+        <li><a href="{{ base }}/chat" data-icon="✉"><span>Chat</span></a></li>
+        <li><a href="{{ base }}/proposals" data-icon="✦"><span>Proposals</span></a></li>
+
+        <li class="sidebar-section">Output</li>
+        <li><a href="{{ base }}/reports/" data-icon="▦"><span>Reports</span></a></li>
+        <li><a href="{{ base }}/demos/" data-icon="▶"><span>Demos</span></a></li>
+        <li><a href="{{ base }}/features/" data-icon="★"><span>Features</span></a></li>
+
+        <li class="sidebar-section">Roles</li>
+        <li><a href="{{ base }}/architect/paved-road" data-icon="△"><span>Architect</span></a></li>
+        <li><a href="{{ base }}/chief-of-staff/routing" data-icon="◈"><span>Chief of Staff</span></a></li>
+        <li><a href="{{ base }}/intel/feed" data-icon="◎"><span>Scout</span></a></li>
+
+        <li class="sidebar-section">Knowledge</li>
+        <li><a href="{{ base }}/refactor-programs" data-icon="⟲"><span>Programs</span></a></li>
+        <li><a href="{{ base }}/semantic-memory" data-icon="❖"><span>Memory</span></a></li>
+        <li><a href="{{ base }}/prompt-library" data-icon="❡"><span>Prompts</span></a></li>
+
+        <li class="sidebar-section">System</li>
+        <li><a href="{{ base }}/health" data-icon="♥"><span>Health</span></a></li>
+      </ul>
+    </nav>
+
+    <footer class="sidebar-footer">
+      <div class="sidebar-status" id="sse-status" title="Live event stream">
+        <span class="status-dot connecting"></span>
+        <span class="sidebar-status-label">Connecting…</span>
+      </div>
+      <button type="button"
+              id="notifications-toggle"
+              class="sidebar-notify"
+              data-state="idle"
+              title="Enable browser notifications for new demos"
+              hidden>
+        <span data-field="icon">🔔</span>
+        <span class="sidebar-notify-label" data-field="label">Notify me</span>
+      </button>
+    </footer>
+  </aside>
+
+  <main class="app-main">
+    <div class="container">
+      {% block content %}{% endblock %}
+    </div>
   </main>
 
   <div id="demo-toast-host" class="demo-toast-host" aria-live="polite" aria-atomic="false"></div>
   {% include "partials/_demo_toast.html" %}
 
+  <script src="{{ base }}/static/js/sidebar.js" defer></script>
   <script src="{{ base }}/static/js/sse.js" defer></script>
   <script src="{{ base }}/static/js/notifications.js" defer></script>
 </body>
