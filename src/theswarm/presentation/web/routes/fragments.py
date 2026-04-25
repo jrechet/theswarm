@@ -104,6 +104,19 @@ async def cycle_phases_fragment(request: Request, cycle_id: str) -> HTMLResponse
     )
 
 
+@router.get("/cycle/{cycle_id}/live-progress", response_class=HTMLResponse)
+async def cycle_live_progress_fragment(request: Request, cycle_id: str) -> HTMLResponse:
+    """Live messages per role from the in-process ProgressBridge cache."""
+    from theswarm.application.services.progress_bridge import get_live_progress
+
+    rows = get_live_progress(cycle_id)
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        "partials/_cycle_live_progress.html",
+        {"request": request, "rows": rows},
+    )
+
+
 def _merge_tracker_cycles(dto):
     """Merge in-memory tracker cycles into the dashboard DTO."""
     from theswarm.api import get_cycle_tracker

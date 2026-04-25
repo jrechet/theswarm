@@ -1,0 +1,12 @@
+{% if rows %}
+<ul class="live-progress" data-testid="cycle-live-progress">
+  {% for r in rows %}
+  <li class="live-progress-item">
+    <span class="live-progress-role role-{{ r.role|lower }}">{{ r.role }}</span>
+    <span class="live-progress-msg">{{ r.message }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty-state">Waiting for the first agent message…</p>
+{% endif %}

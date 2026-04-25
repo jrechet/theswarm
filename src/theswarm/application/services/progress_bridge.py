@@ -5,13 +5,17 @@ publishes them as domain events on the EventBus so that the SSE pipeline
 (EventBus -> SSEHub -> /api/events -> browser) receives live data.
 
 It also forwards calls to the legacy DashboardState for backward
-compatibility with the Mattermost event path.
+compatibility with the Mattermost event path, and stashes the latest
+message per (cycle, role) in a process-local cache so the cycle detail
+page can render a "live progress" panel without persisting every event.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import time
+from collections import OrderedDict
 
 from theswarm.application.events.bus import EventBus
 from theswarm.domain.cycles.events import (
@@ -26,6 +30,39 @@ log = logging.getLogger(__name__)
 
 _PR_OPENED_RE = re.compile(r"PR #(\d+) opened")
 _PR_DECISION_RE = re.compile(r"PR #(\d+): (\w+)")
+
+
+# In-process cache: latest progress message keyed by (cycle_id, role).
+# Capped to avoid unbounded growth across long-running prod processes.
+_LIVE_PROGRESS: "OrderedDict[tuple[str, str], dict]" = OrderedDict()
+_LIVE_PROGRESS_MAX = 500
+
+
+def record_live_progress(cycle_id: str, role: str, message: str) -> None:
+    """Stash the latest progress message for (cycle_id, role)."""
+    key = (cycle_id, role)
+    if key in _LIVE_PROGRESS:
+        _LIVE_PROGRESS.move_to_end(key)
+    _LIVE_PROGRESS[key] = {
+        "message": message,
+        "ts": time.time(),
+    }
+    while len(_LIVE_PROGRESS) > _LIVE_PROGRESS_MAX:
+        _LIVE_PROGRESS.popitem(last=False)
+
+
+def get_live_progress(cycle_id: str) -> list[dict]:
+    """Return latest message per role for a cycle, ordered by recency."""
+    rows: list[dict] = []
+    for (cid, role), payload in reversed(_LIVE_PROGRESS.items()):
+        if cid != cycle_id:
+            continue
+        rows.append({
+            "role": role,
+            "message": payload["message"],
+            "ts": payload["ts"],
+        })
+    return rows
 
 
 class ProgressBridge:
@@ -46,6 +83,9 @@ class ProgressBridge:
 
     async def __call__(self, role: str, message: str) -> None:
         """Handle an on_progress callback from cycle.py."""
+        # Stash for the live-progress panel.
+        record_live_progress(str(self._cycle_id), role, message)
+
         # Forward to legacy DashboardState (Mattermost path)
         if self._dashboard_state is not None:
             ds = self._dashboard_state

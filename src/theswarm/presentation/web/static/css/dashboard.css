@@ -1307,6 +1307,38 @@ body.modal-open { overflow: hidden; }
 }
 .sprint-result-err { color: var(--danger); }
 
+/* Live progress strip on cycle detail */
+.cycle-live-progress-slot {
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+.live-progress { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.live-progress-item {
+  display: flex; align-items: baseline; gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+.live-progress-role {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.live-progress-role.role-po { color: #a78bfa; }
+.live-progress-role.role-techlead { color: #60a5fa; }
+.live-progress-role.role-dev { color: #4ade80; }
+.live-progress-role.role-qa { color: #fbbf24; }
+.live-progress-role.role-system { color: var(--text-muted); }
+.live-progress-msg { color: var(--text-primary); flex: 1; }
+
 /* Sprint E M1 — project memory viewer */
 .memory-viewer { display: flex; flex-direction: column; gap: 0.75rem; }
 .memory-filters {

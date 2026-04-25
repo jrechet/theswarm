@@ -40,6 +40,13 @@
 
     <div class="card">
       <h2>Phases</h2>
+      <div id="cycle-live-progress"
+           class="cycle-live-progress-slot"
+           hx-get="{{ base }}/fragments/cycle/{{ cycle.id }}/live-progress"
+           hx-trigger="load, every 4s"
+           hx-swap="innerHTML">
+        <p class="empty-state">Loading live progress…</p>
+      </div>
       <div id="cycle-phases">
         {% include "partials/_cycle_phases.html" %}
       </div>
