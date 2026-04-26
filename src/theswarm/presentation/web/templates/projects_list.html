@@ -11,20 +11,34 @@
 <div class="project-grid">
   {% for p in projects %}
   <a href="{{ base }}/projects/{{ p.id }}" class="project-card">
-    <h3>{{ p.id }}</h3>
+    <div class="project-card-header">
+      <h3>{{ p.id }}</h3>
+      <span class="project-card-arrow" aria-hidden="true">→</span>
+    </div>
     <div class="project-meta">
       <span class="badge">{{ p.framework }}</span>
       <span class="badge badge-subtle">{{ p.ticket_source }}</span>
     </div>
     <span class="repo-url">{{ p.repo }}</span>
-    <span class="project-detail">Max {{ p.max_daily_stories }} stories/day</span>
+    <div class="project-card-footer">
+      <span class="project-detail">Max {{ p.max_daily_stories }} stor{{ "y" if p.max_daily_stories == 1 else "ies" }}/day</span>
+    </div>
   </a>
   {% endfor %}
+  <a href="{{ base }}/projects/new" class="project-card project-card-add" data-testid="project-add-tile">
+    <span class="project-card-add-mark" aria-hidden="true">+</span>
+    <span class="project-card-add-label">Add project</span>
+    <span class="project-card-add-hint">Connect a GitHub repo and start a cycle.</span>
+  </a>
 </div>
 {% else %}
-<div class="empty-state-large">
-  <p>No projects registered yet.</p>
-  <a href="{{ base }}/projects/new" class="btn btn-primary">Add your first project</a>
+<div class="empty-card" data-testid="projects-empty">
+  <div class="empty-card-icon" aria-hidden="true">▤</div>
+  <h2 class="empty-card-title">No projects registered yet</h2>
+  <p class="empty-card-body">A project links a GitHub repo to a roster of agents. Once connected, the swarm picks up backlog issues, runs cycles, and ships PRs for review.</p>
+  <div class="empty-card-cta">
+    <a href="{{ base }}/projects/new" class="btn btn-primary">+ Add your first project</a>
+  </div>
 </div>
 {% endif %}
 {% endblock %}

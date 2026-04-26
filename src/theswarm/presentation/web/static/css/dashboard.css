@@ -2600,3 +2600,285 @@ main.app-main > .container > .data-table {
   width: 100%;
   max-width: 100%;
 }
+
+/* ============================================================================
+ * UI fix bundle 2 — HIGH items 4–8.
+ *   #4 success-rate semantics handled in the partial template, no CSS change.
+ *   #5 designed empty states for Team / Proposals / Demos / Projects-empty.
+ *   #6 richer project cards + ghost "Add project" tile.
+ *   #7 demo grid + demo card styles (the markup existed but had no CSS).
+ *   #8 sidebar rhythm — separators, tighter section headers.
+ * ============================================================================ */
+
+/* (5) Designed empty-state card.
+ * Replaces the bare `<p class="empty-state">…</p>` with a centered tile that
+ * has an icon, title, body, and one or two CTAs. Used by Team, Proposals,
+ * Demos, and the projects-page no-projects branch. */
+.empty-card {
+  max-width: 36rem;
+  margin: 2.5rem auto;
+  padding: 2.5rem 2rem;
+  text-align: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+}
+.empty-card-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.75rem;
+  color: var(--accent);
+  background: var(--accent-subtle);
+  border-radius: 50%;
+  margin-bottom: 0.25rem;
+}
+.empty-card-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+.empty-card-body {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  max-width: 30rem;
+  margin: 0;
+}
+.empty-card-cta {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+
+/* (6) Richer project cards + ghost "Add project" tile.
+ * Cards get more padding, a header with hover-arrow affordance, a footer
+ * for secondary metadata, and consistent height across the grid row. */
+.project-grid {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.project-card {
+  padding: 1.25rem 1.25rem 1rem;
+  min-height: 11rem;
+  gap: 0.65rem;
+  position: relative;
+  overflow: hidden;
+}
+.project-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.project-card-header h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0;
+}
+.project-card-arrow {
+  color: var(--text-muted);
+  transition: transform 150ms ease, color 150ms ease;
+  font-size: 1.1rem;
+}
+.project-card:hover .project-card-arrow {
+  color: var(--accent);
+  transform: translateX(2px);
+}
+.project-card-footer {
+  margin-top: auto;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+.project-card-add {
+  border-style: dashed !important;
+  background: transparent;
+  color: var(--text-secondary) !important;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.5rem;
+  padding: 1.5rem 1.25rem;
+}
+.project-card-add:hover {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent) !important;
+}
+.project-card-add-mark {
+  font-size: 1.75rem;
+  line-height: 1;
+  color: var(--accent);
+  font-weight: 300;
+}
+.project-card-add-label {
+  font-size: 1rem;
+  font-weight: 600;
+}
+.project-card-add-hint {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 18rem;
+}
+.project-card-add:hover .project-card-add-hint { color: var(--text-secondary); }
+
+/* (7) Demos page — grid + card styles that the existing markup expects.
+ * Previously unstyled, so the page rendered as a vertical text wall. */
+.demo-project-section {
+  margin: 2rem 0;
+}
+.demo-project-section:first-of-type { margin-top: 1rem; }
+.demo-project-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.demo-project-header h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+.demo-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+.demo-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  text-decoration: none !important;
+  color: var(--text-primary) !important;
+  transition: border-color 150ms ease, transform 150ms ease;
+}
+.demo-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+.demo-card-top {
+  aspect-ratio: 16 / 9;
+  background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-primary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.demo-card-play {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  backdrop-filter: blur(4px);
+  transition: transform 150ms ease, background 150ms ease;
+}
+.demo-card:hover .demo-card-play {
+  transform: scale(1.08);
+  background: var(--accent);
+}
+.demo-card-meta {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+.demo-meta-item {
+  background: rgba(0, 0, 0, 0.55);
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+}
+.demo-card-body {
+  padding: 0.85rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  flex: 1;
+}
+.demo-card-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.demo-card-stats {
+  display: flex;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.demo-card-stats strong { color: var(--text-primary); font-weight: 600; }
+.demo-stat { white-space: nowrap; }
+.demo-card-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.demo-date { font-family: var(--font-mono); }
+.demo-cost { font-family: var(--font-mono); color: var(--text-secondary); }
+.badge-sm { font-size: 0.7rem; padding: 0.1rem 0.4rem; }
+
+/* (8) Sidebar rhythm — separators between sections, tighter section headers,
+ * slightly muted weight for advanced groups so daily-use items pop. */
+.sidebar-nav .sidebar-section {
+  padding: 1rem 0.7rem 0.35rem;
+  margin-top: 0.35rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  border-top: 1px solid var(--border);
+}
+.sidebar-nav .sidebar-section:first-of-type {
+  margin-top: 0.25rem;
+  border-top: 0;
+  padding-top: 0.5rem;
+}
+/* The first <li> after a section divider should not double up borders. */
+.sidebar-nav .sidebar-section + li > a {
+  margin-top: 0.2rem;
+}
+/* Hide the divider line in the collapsed icon-only state — keeps the rail
+ * clean since labels are gone. */
+html[data-sidebar="collapsed"] .sidebar-nav .sidebar-section {
+  border-top: 0;
+  padding: 0.4rem 0;
+}
+

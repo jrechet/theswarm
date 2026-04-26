@@ -18,8 +18,16 @@
       {% include "partials/_sparkline.html" %}
     {% endwith %}
   </div>
+  {# Tone: success at 80+, neutral 50-80 (no class), warning 25-50, danger only below 25.
+     42% used to render as alarm-red despite being a normal "needs attention" rate;
+     red is now reserved for genuinely broken states. #}
+  {% set rate = dashboard.success_rate_7d %}
+  {% if rate >= 80 %}{% set rate_class = 'stat-success' %}
+  {% elif rate >= 50 %}{% set rate_class = '' %}
+  {% elif rate >= 25 %}{% set rate_class = 'stat-warning' %}
+  {% else %}{% set rate_class = 'stat-danger' %}{% endif %}
   <div class="stat">
-    <span class="stat-value {{ 'stat-success' if dashboard.success_rate_7d >= 80 else ('stat-warning' if dashboard.success_rate_7d >= 50 else 'stat-danger') }}">{{ "%.0f" | format(dashboard.success_rate_7d) }}%</span>
+    <span class="stat-value {{ rate_class }}">{{ "%.0f" | format(rate) }}%</span>
     <span class="stat-label">Success Rate 7d</span>
   </div>
   <div class="stat">

@@ -40,6 +40,14 @@
   </tbody>
 </table>
 {% else %}
-<p class="empty-state">No roles assigned yet. Codenames are minted when you create a project.</p>
+<div class="empty-card" data-testid="team-empty">
+  <div class="empty-card-icon" aria-hidden="true">◉</div>
+  <h2 class="empty-card-title">No roles assigned yet</h2>
+  <p class="empty-card-body">Codenames are minted automatically when you create a project. Each project gets its own PO, TechLead, Dev, and QA — plus portfolio-wide roles like Architect and Chief of Staff.</p>
+  <div class="empty-card-cta">
+    <a href="{{ base }}/projects/new" class="btn btn-primary">+ Add a project</a>
+    <a href="{{ base }}/projects/" class="btn btn-subtle">Browse projects</a>
+  </div>
+</div>
 {% endif %}
 {% endblock %}
