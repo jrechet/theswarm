@@ -182,7 +182,17 @@ class ClaudeCLI:
             "--output-format", "json",
         ]
 
-        log.info("Claude CLI: model=%s workdir=%s timeout=%ds", model_id, workdir, effective_timeout)
+        prompt_chars = len(prompt or "")
+        log.info(
+            "Claude CLI: model=%s workdir=%s timeout=%ds prompt_chars=%d",
+            model_id, workdir, effective_timeout, prompt_chars,
+        )
+        if prompt_chars > 30_000:
+            log.warning(
+                "Claude CLI prompt is large (%d chars) — expect slow response. "
+                "Consider trimming context.",
+                prompt_chars,
+            )
 
         # Close stdin and set CI=1 so the CLI doesn't hang on any interactive
         # prompt (update banner, login nag, telemetry opt-in, etc.).
@@ -275,7 +285,10 @@ class ClaudeCLI:
 
         client = anthropic.AsyncAnthropic()
 
-        log.info("Claude API: model=%s workdir=%s timeout=%ds", model_id, workdir, effective_timeout)
+        log.info(
+            "Claude API: model=%s workdir=%s timeout=%ds prompt_chars=%d",
+            model_id, workdir, effective_timeout, len(prompt or ""),
+        )
 
         attempt = 0
         while True:
