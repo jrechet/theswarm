@@ -3,46 +3,45 @@
 {% block title %}Reports — TheSwarm{% endblock %}
 
 {% block content %}
-<div class="container">
-    <h1 class="page-title">Demo Reports</h1>
-
-    {% if project_id %}
-    <p class="subtitle">Showing reports for <strong>{{ project_id }}</strong></p>
-    {% endif %}
-
-    {% if not reports %}
-    <div class="empty-state">
-        <p>No reports yet. Reports are generated after completed cycles.</p>
-    </div>
-    {% else %}
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Report</th>
-                    <th>Project</th>
-                    <th>Stories</th>
-                    <th>PRs Merged</th>
-                    <th>Coverage</th>
-                    <th>Cost</th>
-                    <th>Created</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in reports %}
-                <tr>
-                    <td><a href="{{ base }}/reports/{{ r.id }}">{{ r.id }}</a></td>
-                    <td>{{ r.project_id }}</td>
-                    <td>{{ r.summary.stories_completed }}/{{ r.summary.stories_total }}</td>
-                    <td>{{ r.summary.prs_merged }}</td>
-                    <td>{{ "%.1f"|format(r.summary.coverage_percent) }}%</td>
-                    <td>${{ "%.2f"|format(r.summary.cost_usd) }}</td>
-                    <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
+<div class="page-header">
+    <h1>Demo Reports{% if project_id %} — <span class="page-header-subtitle">{{ project_id }}</span>{% endif %}</h1>
 </div>
+
+{% if not reports %}
+<div class="empty-card" data-testid="reports-empty">
+    <div class="empty-card-icon" aria-hidden="true">▦</div>
+    <h2 class="empty-card-title">No reports yet</h2>
+    <p class="empty-card-body">Reports summarise the QA outcomes of a completed cycle — stories shipped, PRs merged, coverage delta, cost spent. They're generated automatically once a cycle finishes.</p>
+    <div class="empty-card-cta">
+        <a href="{{ base }}/projects/" class="btn btn-primary">Open a project</a>
+    </div>
+</div>
+{% else %}
+<table class="data-table reports-table">
+    <thead>
+        <tr>
+            <th class="col-report">Report</th>
+            <th class="col-project">Project</th>
+            <th class="col-num">Stories</th>
+            <th class="col-num">PRs Merged</th>
+            <th class="col-num">Coverage</th>
+            <th class="col-num">Cost</th>
+            <th class="col-date">Created</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in reports %}
+        <tr>
+            <td><a href="{{ base }}/reports/{{ r.id }}">{{ r.id }}</a></td>
+            <td>{{ r.project_id }}</td>
+            <td class="col-num">{{ r.summary.stories_completed }}/{{ r.summary.stories_total }}</td>
+            <td class="col-num">{{ r.summary.prs_merged }}</td>
+            <td class="col-num">{{ "%.1f"|format(r.summary.coverage_percent) }}%</td>
+            <td class="col-num">${{ "%.2f"|format(r.summary.cost_usd) }}</td>
+            <td class="col-date">{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
 {% endblock %}

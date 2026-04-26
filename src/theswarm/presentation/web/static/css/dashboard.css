@@ -2882,3 +2882,220 @@ html[data-sidebar="collapsed"] .sidebar-nav .sidebar-section {
   padding: 0.4rem 0;
 }
 
+/* ============================================================================
+ * UI fix bundle 3 — MEDIUM / LOW polish.
+ *   #9 status pill alignment in table cells
+ *   #10 cycle ID hover affordance
+ *   #11 mobile sidebar gutter
+ *   #12 layering / atmosphere — cards get an inset highlight + accent border
+ *   #13 h1/page-title consistency
+ *   #16 reports table column widths
+ * ============================================================================ */
+
+/* (12) Layering — give every .card a subtle inset highlight on the top edge
+ * so cards stop reading as flat slate-on-slate. Plus a finer border tone
+ * derived from --bg-tertiary that scans as "raised surface." */
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.025) inset,
+    0 8px 24px -16px rgba(0, 0, 0, 0.55);
+}
+.card:hover { border-color: var(--border-strong, var(--border)); }
+/* Project + demo cards inherit the same layering treatment for consistency. */
+.project-card,
+.demo-card {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 8px 18px -14px rgba(0, 0, 0, 0.5);
+}
+
+/* (13) Page header h1 + page-title h1 unified.
+ * The reports page used `.page-title` while every other page uses the
+ * `.page-header h1` pattern. Standardise both selectors. */
+.page-header h1,
+h1.page-title {
+  font-size: clamp(1.35rem, 1rem + 0.6vw, 1.75rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.page-header-subtitle {
+  font-weight: 400;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+/* (9) Status pill vertical centering inside table cells.
+ * The pill is inline-flex with align-items:center, but in some browsers the
+ * baseline of the row text dragged the pill upward. Force the cell to
+ * align middle (already done in bundle 1) and the pill to use line-height:1
+ * so the cap-height matches text. */
+.data-table td .badge,
+.data-table td .badge-failed,
+.data-table td .badge-completed,
+.data-table td .badge-running { line-height: 1; }
+
+/* (10) Cycle ID + report ID hover affordance.
+ * Keep the link blue colour from the global rule but underline on hover and
+ * lift slightly so they read as actionable, not as styled text. */
+.data-table td:first-child a {
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.data-table td:first-child a:hover {
+  text-decoration: none;
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+/* (16) Reports table — give the columns sensible explicit widths so the
+ * Coverage column stops being wider than Cost. */
+.reports-table .col-report   { width: auto; }
+.reports-table .col-project  { width: 18ch; }
+.reports-table .col-num      { width: 7rem; text-align: right; white-space: nowrap; }
+.reports-table .col-date     { width: 11rem; white-space: nowrap; }
+.reports-table th.col-num    { text-align: right; }
+
+/* (11) Mobile / collapsed sidebar gutter.
+ * Bump the collapsed rail to ~56px and centre icons better so they're
+ * easier to thumb on mobile and don't crowd the active-state background. */
+:root {
+  --sidebar-width-collapsed: 60px;
+}
+html[data-sidebar="collapsed"] .sidebar-nav a {
+  padding: 0.55rem 0;
+  margin: 0 0.4rem;
+  border-radius: var(--radius-sm);
+}
+html[data-sidebar="collapsed"] .sidebar-nav a::before {
+  width: auto;
+}
+@media (max-width: 720px) {
+  /* On mobile the sidebar is hidden by default; when it slides in via
+   * data-sidebar="expanded" it should still feel comfortable to tap. */
+  .sidebar { font-size: 0.95rem; }
+  .sidebar-nav a { padding: 0.6rem 0.75rem; }
+}
+
+/* (15) Page-header polish — when the page has a header action button,
+ * gracefully wrap on narrow viewports so the heading and CTA don't collide. */
+.page-header {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+@media (max-width: 540px) {
+  .page-header { align-items: flex-start; }
+  .page-header .header-actions,
+  .page-header .btn { width: 100%; }
+}
+
+/* Bundle 3 supplement — fragment-page polish.
+ * The role pages (Architect, Chief of Staff, Scout, Semantic Memory) extend
+ * `_fragment_page.html` and render their fragment directly. The fragments
+ * use `.tl-panel` + `<h3>` for the panel title — at H3 size, that read as a
+ * minor section header instead of a page title. Lift the panel + header to
+ * page-level prominence and standardise the surface with the rest of the
+ * card system. */
+.tl-panel {
+  padding: 1.5rem 1.5rem 1.25rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 1.25rem;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.025) inset,
+    0 8px 24px -16px rgba(0, 0, 0, 0.55);
+}
+.tl-panel-header {
+  align-items: baseline;
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+.tl-panel-header h3 {
+  font-size: clamp(1.15rem, 0.95rem + 0.4vw, 1.45rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.tl-panel-header .muted {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-left: auto;
+  text-align: right;
+}
+
+/* Empty state inside fragment panels — currently an unstyled muted line.
+ * Promote it to a small bordered tile so it reads as a designed empty
+ * state rather than placeholder text. */
+.tl-panel > .empty-state,
+.tl-panel .empty-state {
+  display: block;
+  padding: 1rem 1.1rem;
+  margin: 0.5rem 0 1rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+/* `<details><summary>` used as the "Add new X" CTA at the bottom of role
+ * fragments (Architect rule, Memory entry, Routing rule, …) was rendered
+ * as plain text. Style it as a clear secondary button. */
+.tl-panel details {
+  margin-top: 1rem;
+}
+.tl-panel details > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  list-style: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.tl-panel details > summary::-webkit-details-marker { display: none; }
+.tl-panel details > summary::before {
+  content: "+";
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--accent);
+  font-weight: 400;
+}
+.tl-panel details[open] > summary::before { content: "−"; }
+.tl-panel details > summary:hover {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+.tl-panel details > form {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 0.75rem;
+}
+.tl-panel details > form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+
+
