@@ -1,0 +1,62 @@
+{# Self-playing dashboard demo — "Today's session" walkthrough.
+   Cycles through hero shots from the post-session production sweep.
+   Click to expand to a fullscreen modal; arrow keys + click controls. #}
+<section class="card todays-demo" data-testid="todays-demo">
+  <header class="todays-demo-header">
+    <div>
+      <h2 class="todays-demo-title">Today's session — UI overhaul</h2>
+      <p class="todays-demo-meta">2026-04-26 · 4 bundles shipped · 13 routes redesigned across 4 breakpoints</p>
+    </div>
+    <button type="button" class="todays-demo-expand" aria-label="Expand demo">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 3 21 3 21 9"></polyline>
+        <polyline points="9 21 3 21 3 15"></polyline>
+        <line x1="21" y1="3" x2="14" y2="10"></line>
+        <line x1="3" y1="21" x2="10" y2="14"></line>
+      </svg>
+    </button>
+  </header>
+
+  <div class="todays-demo-stage" data-todays-demo-stage>
+    {% set base_assets = base ~ '/static/demos/today' %}
+    {% set slides = [
+      ('dashboard-1280.png', 'Dashboard at 1280', 'Container now centered, success rate semantics fixed (42% renders amber, not alarm-red), stats compact.'),
+      ('recent-cycles-1280.png', 'Recent Cycles strip', 'Project column on a single line — no more 4-line wraps for jrechet/concert-tour-app. Status pills aligned with row text.'),
+      ('projects-1280.png', 'Projects', 'Hover-arrow cards plus a dashed-border "+ Add project" ghost tile at the end of the grid.'),
+      ('demos-1280.png', 'Demos bento grid', 'New 3-column grid with thumbnail, play overlay, stats, gates pill, cost. The page used to render as a vertical text wall.'),
+      ('team-1280.png', 'Team — designed empty state', 'Centered card with icon, body, and CTAs. Replaces the bare "No roles assigned yet." paragraph.'),
+      ('architect-1280.png', 'Architect (Paved Road) — fragment polish', 'tl-panel lifted to page-level prominence: large heading, right-aligned subtitle, dashed empty tile, +/− CTA button.'),
+      ('dashboard-375.png', 'Mobile (375)', 'Stats wrap, sidebar collapses to icon strip, tables scroll horizontally inside their own block — no horizontal page overflow.'),
+      ('demos-375.png', 'Mobile demos', 'Bento grid stacks to a single column on phones; cards retain thumbnail, stats, and footer.'),
+    ] %}
+    {% for slide in slides %}
+    <figure class="todays-demo-slide{% if loop.first %} is-active{% endif %}"
+            data-index="{{ loop.index0 }}"
+            data-total="{{ slides|length }}">
+      <img src="{{ base_assets }}/{{ slide[0] }}"
+           alt="{{ slide[1] }}"
+           loading="{% if loop.first %}eager{% else %}lazy{% endif %}"
+           {% if loop.first %}fetchpriority="high"{% endif %}>
+      <figcaption>
+        <span class="todays-demo-slide-title">{{ slide[1] }}</span>
+        <span class="todays-demo-slide-body">{{ slide[2] }}</span>
+      </figcaption>
+    </figure>
+    {% endfor %}
+
+    <div class="todays-demo-controls">
+      <button type="button" class="todays-demo-btn" data-todays-demo-prev aria-label="Previous slide">‹</button>
+      <button type="button" class="todays-demo-btn todays-demo-playpause" data-todays-demo-playpause aria-label="Pause">
+        <span data-icon-play hidden>▶</span>
+        <span data-icon-pause>❚❚</span>
+      </button>
+      <button type="button" class="todays-demo-btn" data-todays-demo-next aria-label="Next slide">›</button>
+    </div>
+
+    <div class="todays-demo-progress" aria-hidden="true">
+      {% for slide in slides %}
+      <span class="todays-demo-dot{% if loop.first %} is-active{% endif %}" data-todays-demo-dot="{{ loop.index0 }}"></span>
+      {% endfor %}
+    </div>
+  </div>
+</section>

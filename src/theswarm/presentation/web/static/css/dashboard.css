@@ -3139,6 +3139,204 @@ html[data-sidebar="collapsed"] .sidebar-nav a::before {
   background: var(--bg-secondary);
 }
 
+/* ============================================================================
+ * Today's session demo card — auto-cycling hero shot slideshow.
+ * Lives at the top of the dashboard grid as a full-width card.
+ * ============================================================================ */
+.todays-demo {
+  grid-column: 1 / -1;
+  padding: 1.25rem 1.5rem 1.5rem;
+  background:
+    radial-gradient(1200px 600px at 0% 0%, rgba(88, 166, 255, 0.06), transparent 60%),
+    var(--bg-secondary);
+}
+.todays-demo-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.card h2.todays-demo-title,
+.todays-demo-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+.todays-demo-meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+.todays-demo-expand {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 120ms, color 120ms;
+}
+.todays-demo-expand:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.todays-demo-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 12px 32px -20px rgba(0, 0, 0, 0.7);
+}
+
+.todays-demo-slide {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 600ms ease;
+  pointer-events: none;
+}
+.todays-demo-slide.is-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.todays-demo-slide img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--bg-primary);
+}
+.todays-demo-slide figcaption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 1.5rem 1.5rem 3.25rem;
+  background: linear-gradient(to top, rgba(8, 12, 20, 0.92) 30%, rgba(8, 12, 20, 0.0));
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  pointer-events: none;
+}
+.todays-demo-slide-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: #fff;
+}
+.todays-demo-slide-body {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+.todays-demo-controls {
+  position: absolute;
+  bottom: 0.85rem;
+  right: 0.85rem;
+  display: flex;
+  gap: 0.35rem;
+  z-index: 2;
+}
+.todays-demo-btn {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  backdrop-filter: blur(4px);
+  transition: background 120ms, border-color 120ms;
+}
+.todays-demo-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.todays-demo-playpause { font-size: 0.7rem; }
+
+.todays-demo-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 4px;
+  padding: 0.6rem 0.85rem;
+  z-index: 2;
+}
+.todays-demo-dot {
+  flex: 1;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 200ms;
+}
+.todays-demo-dot.is-active {
+  background: var(--accent);
+}
+.todays-demo-dot:hover { background: rgba(255, 255, 255, 0.4); }
+
+/* Expanded "fullscreen" mode — reuse the card markup but pin to the viewport. */
+body.has-todays-demo-expanded { overflow: hidden; }
+.todays-demo.is-expanded {
+  position: fixed;
+  inset: 2.5rem;
+  z-index: 100;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.8);
+}
+.todays-demo.is-expanded::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  z-index: -1;
+}
+.todays-demo.is-expanded .todays-demo-stage {
+  flex: 1;
+  aspect-ratio: auto;
+}
+
+@media (max-width: 720px) {
+  .todays-demo { padding: 1rem; }
+  .todays-demo-header { flex-direction: column; gap: 0.5rem; }
+  .todays-demo-stage { aspect-ratio: 4 / 5; }
+  .todays-demo-slide figcaption { padding: 1rem 1rem 2.75rem; }
+  .todays-demo-slide-title { font-size: 0.85rem; }
+  .todays-demo-slide-body { font-size: 0.78rem; }
+}
+
 
 
 
