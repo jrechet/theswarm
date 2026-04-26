@@ -3097,5 +3097,48 @@ html[data-sidebar="collapsed"] .sidebar-nav a::before {
   color: var(--text-secondary);
 }
 
+/* Bundle 4 — bugs surfaced by the post-bundle-3 prod sweep. */
+
+/* Chat / general page-lede paragraph: a description that follows a
+ * .page-header but isn't an action button. Style as standard subtitle. */
+.page-lede {
+  margin: -0.5rem 0 1.25rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  max-width: 70ch;
+}
+.page-lede code {
+  font-size: 0.85em;
+  padding: 0.1rem 0.35rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+/* "Notifications blocked" sidebar pill — when the browser denied notification
+ * permission the button can't actually do anything (the user has to fix it in
+ * browser settings). Demote it visually so it stops looking like a primary
+ * CTA and stops competing with the Live status row. */
+.sidebar-notify[data-state="denied"],
+.sidebar-notify[data-state="unsupported"] {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.7;
+}
+.sidebar-notify[data-state="denied"]:hover,
+.sidebar-notify[data-state="unsupported"]:hover {
+  border-color: var(--border);
+  background: transparent;
+}
+/* Default-state notify pill should also be a touch quieter — only the
+ * "enabled" success state can carry the bright CTA treatment. */
+.sidebar-notify[data-state="idle"] {
+  background: var(--bg-secondary);
+}
+
+
 
 
