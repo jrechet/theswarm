@@ -19,6 +19,12 @@ router = APIRouter()
 
 _start_time = time.time()
 
+# Cache the result of the expensive CLI probe so the readiness endpoint
+# doesn't spawn `claude --version` on every refresh. Re-runs at most once
+# per minute. Lives in-process, drops on container restart.
+_CLAUDE_READINESS_CACHE: dict = {"value": None, "expires_at": 0.0}
+_CLAUDE_READINESS_TTL_SECONDS = 60
+
 
 # Status values per check:
 #   "connected" / "ok" — healthy
@@ -124,12 +130,15 @@ async def readiness(request: Request) -> JSONResponse:
         else {"status": "warn", "detail": "no GitHub client — running in stub mode"}
     )
 
-    # 4) Claude CLI binary
+    # 4) Claude CLI binary — result cached for 60s to avoid hammering the CLI
+    #    every time the readiness page auto-refreshes (every 8s).
+    now = time.time()
     binary = shutil.which("claude")
     if binary is None:
         checks["claude_cli"] = {"status": "warn", "detail": "claude binary missing — API fallback only"}
+    elif _CLAUDE_READINESS_CACHE["value"] is not None and now < _CLAUDE_READINESS_CACHE["expires_at"]:
+        checks["claude_cli"] = _CLAUDE_READINESS_CACHE["value"]
     else:
-        # Quick version probe — capped at 8 seconds.
         try:
             env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
             env["CI"] = "1"
@@ -141,16 +150,20 @@ async def readiness(request: Request) -> JSONResponse:
                 stdin=asyncio.subprocess.DEVNULL,
                 env=env,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=8)
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
             if proc.returncode == 0:
-                checks["claude_cli"] = {
+                result = {
                     "status": "ok",
                     "detail": stdout.decode(errors="replace").strip()[:80],
                 }
             else:
-                checks["claude_cli"] = {"status": "warn", "detail": f"version exit {proc.returncode}"}
+                result = {"status": "warn", "detail": f"version exit {proc.returncode}"}
         except asyncio.TimeoutError:
-            checks["claude_cli"] = {"status": "error", "detail": "claude --version hung > 8s"}
+            result = {"status": "error", "detail": "claude --version hung > 20s"}
+
+        _CLAUDE_READINESS_CACHE["value"] = result
+        _CLAUDE_READINESS_CACHE["expires_at"] = now + _CLAUDE_READINESS_TTL_SECONDS
+        checks["claude_cli"] = result
 
     # 5) Subscription session present
     home = os.environ.get("HOME", "")
