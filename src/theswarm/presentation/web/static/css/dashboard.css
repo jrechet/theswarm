@@ -2514,3 +2514,89 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 720px) {
   .role-group-hint { display: none; }
 }
+
+/* ============================================================================
+ * UI fix bundle 1 — container centering, table wrap, stat scale.
+ * Loaded last so it wins over earlier rules (and Pico responsive .container).
+ * ============================================================================ */
+
+/* (1) Container centering at wide viewports.
+ * `.app-main` lives in the `1fr` grid column next to the sidebar. The inner
+ * `.container` was rendering left-anchored at 1280–1920 because Pico's
+ * responsive `.container` rules clamp max-width to 1200px from 1280px and
+ * 1450px from 1536px. Re-assert the layout with higher specificity. */
+main.app-main {
+  width: 100%;
+  min-width: 0;
+  display: block;
+}
+main.app-main > .container {
+  width: auto;
+  max-width: 1400px;
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 2vw, 2rem);
+}
+
+/* (3) Stat strip — tighten the value/label proportion.
+ * Previously 1.75rem mono digits paired with 0.75rem labels read as
+ * display-hero stats. Drop the value to 1.25rem and lift the label so the
+ * row reads as a metric strip, not a hero callout. */
+.stats-card .stat-row {
+  gap: 1.5rem 2.5rem;
+  align-items: baseline;
+}
+.stats-card .stat-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+.stats-card .stat-label {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  letter-spacing: 0.01em;
+}
+@media (max-width: 768px) {
+  .stats-card .stat-value { font-size: 1.125rem; }
+  .stats-card .stat-label { font-size: 0.75rem; }
+  .stats-card .stat-row { gap: 1rem 1.5rem; }
+}
+
+/* (2) Project column no longer wraps owner/repo to four lines.
+ * Strategy: keep cells on a single line; if the host (a half-width card,
+ * a narrow viewport, or the .container) is too narrow for the table's
+ * natural width, scroll horizontally inside the host instead of wrapping
+ * cell content. Crucially we do NOT set min-width on the table globally —
+ * that would force the document wider than the viewport on mobile. */
+.data-table { table-layout: auto; }
+.data-table th,
+.data-table td {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.data-table td:nth-child(2),
+.data-table th:nth-child(2) {
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.data-table td:first-child a {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+/* Scroll the immediate parent of any data-table when content overflows.
+ * Covers HTMX swap targets (e.g. #recent-cycles-container) and any card
+ * div that contains a data-table. */
+.card div:has(> .data-table),
+[id$="-container"]:has(> .data-table) {
+  overflow-x: auto;
+}
+/* Cycles list / chat / reports pages have the table as a direct child of
+ * .container. Treat the table itself as a horizontally scrollable block. */
+main.app-main > .container > .data-table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  max-width: 100%;
+}
