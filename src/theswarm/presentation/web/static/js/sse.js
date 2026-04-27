@@ -185,7 +185,7 @@
 
     es.onopen = function() {
       if (statusEl) {
-        statusEl.innerHTML = '<span class="status-dot connected"></span> Live';
+        statusEl.innerHTML = '<span class="status-dot connected"></span><span class="sidebar-status-label">Live updates</span>';
       }
       reconnectDelay = 1000;
 
@@ -208,7 +208,7 @@
     es.onerror = function() {
       es.close();
       if (statusEl) {
-        statusEl.innerHTML = '<span class="status-dot reconnecting"></span> Reconnecting...';
+        statusEl.innerHTML = '<span class="status-dot reconnecting"></span><span class="sidebar-status-label">Live updates: reconnecting…</span>';
       }
       setTimeout(connect, reconnectDelay);
       reconnectDelay = Math.min(reconnectDelay * 2, 30000);

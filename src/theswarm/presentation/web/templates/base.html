@@ -27,7 +27,7 @@
 
     <nav class="sidebar-nav">
       <ul>
-        <li class="sidebar-section">Overview</li>
+        <li class="sidebar-section">Workspace</li>
         <li><a href="{{ base }}/" data-icon="◇"><span>Dashboard</span></a></li>
         <li><a href="{{ base }}/projects/" data-icon="▤"><span>Projects</span></a></li>
         <li><a href="{{ base }}/team" data-icon="◉"><span>Team</span></a></li>
@@ -48,20 +48,19 @@
         <li><a href="{{ base }}/intel/feed" data-icon="◎"><span>Scout</span></a></li>
 
         <li class="sidebar-section">Knowledge</li>
-        <li><a href="{{ base }}/refactor-programs" data-icon="⟲"><span>Programs</span></a></li>
         <li><a href="{{ base }}/semantic-memory" data-icon="❖"><span>Memory</span></a></li>
         <li><a href="{{ base }}/prompt-library" data-icon="❡"><span>Prompts</span></a></li>
+        <li><a href="{{ base }}/refactor-programs" data-icon="⟲"><span>Refactors</span></a></li>
 
         <li class="sidebar-section">System</li>
-        <li><a href="{{ base }}/health/ready/page" data-icon="✓"><span>Readiness</span></a></li>
         <li><a href="{{ base }}/health" data-icon="♥"><span>Health</span></a></li>
       </ul>
     </nav>
 
     <footer class="sidebar-footer">
-      <div class="sidebar-status" id="sse-status" title="Live event stream">
+      <div class="sidebar-status" id="sse-status" title="Server-sent events stream — used for live cycle updates">
         <span class="status-dot connecting"></span>
-        <span class="sidebar-status-label">Connecting…</span>
+        <span class="sidebar-status-label">Live updates: connecting…</span>
       </div>
       <button type="button"
               id="notifications-toggle"
@@ -73,6 +72,8 @@
         <span class="sidebar-notify-label" data-field="label">Notify me</span>
       </button>
     </footer>
+
+    <div class="sidebar-resize-handle" id="sidebar-resize-handle" aria-hidden="true" title="Drag to resize"></div>
   </aside>
 
   <main class="app-main">

@@ -22,8 +22,10 @@
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 
   /* Sidebar layout */
-  --sidebar-width: 240px;
-  --sidebar-width-collapsed: 56px;
+  --sidebar-width: 260px;
+  --sidebar-width-min: 220px;
+  --sidebar-width-max: 380px;
+  --sidebar-width-collapsed: 60px;
   --sidebar-bg: #0a0d12;
   --sidebar-section-color: #6b7280;
 }
@@ -70,13 +72,49 @@ html[data-sidebar="collapsed"] body {
   height: 100vh;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
-  padding: 1rem 0.5rem 0.5rem;
+  padding: 1rem 0.6rem 0.6rem;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  overflow: hidden;
+  gap: 0.85rem;
+  overflow-x: hidden;
+  overflow-y: hidden;
   z-index: 10;
 }
+/* Drag handle on the right edge of the sidebar — lets the user widen the
+ * sidebar to taste. Width is persisted to localStorage by sidebar.js. */
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 11;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.sidebar-resize-handle::after {
+  /* a 1px guideline so the user knows where to grab */
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1px;
+  height: 100%;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.sidebar-resize-handle:hover::after,
+.sidebar-resize-handle.is-dragging::after {
+  background: var(--accent);
+}
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.is-dragging {
+  background: var(--accent-subtle);
+}
+html[data-sidebar="collapsed"] .sidebar-resize-handle,
+html[data-sidebar-resizing="1"] body { user-select: none; }
+html[data-sidebar="collapsed"] .sidebar-resize-handle { display: none; }
 .sidebar-logo {
   display: flex; align-items: center; gap: 0.6rem;
   padding: 0.25rem 0.7rem 0.75rem;
@@ -88,25 +126,47 @@ html[data-sidebar="collapsed"] body {
 }
 .sidebar-logo:hover { text-decoration: none; color: var(--accent); }
 .sidebar-logo-mark { font-size: 1.4rem; color: var(--accent); }
-.sidebar-nav { flex: 1; overflow-y: auto; min-height: 0; }
-.sidebar-nav ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1px; }
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  /* Hairline scrollbar so the gutter is barely visible until needed. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  margin-right: -0.4rem;
+  padding-right: 0.4rem;
+}
+.sidebar-nav::-webkit-scrollbar { width: 6px; }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.sidebar-nav ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
 .sidebar-nav .sidebar-section {
-  padding: 0.85rem 0.7rem 0.25rem;
+  padding: 0.95rem 0.75rem 0.3rem;
+  margin-top: 0.25rem;
   font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: var(--sidebar-section-color);
   font-weight: 600;
+  border-top: 1px solid var(--border);
+}
+.sidebar-nav .sidebar-section:first-of-type {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0.4rem;
 }
 .sidebar-nav a {
-  display: flex; align-items: center; gap: 0.7rem;
-  padding: 0.5rem 0.7rem;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   text-decoration: none;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   transition: background 100ms ease, color 100ms ease;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sidebar-nav a::before {
   content: attr(data-icon);
@@ -138,7 +198,7 @@ html[data-sidebar="collapsed"] body {
 }
 .sidebar-status, .sidebar-notify {
   display: flex; align-items: center; gap: 0.5rem;
-  padding: 0.4rem 0.55rem;
+  padding: 0.45rem 0.6rem;
   font-size: 0.82rem;
   color: var(--text-secondary);
   background: transparent;
@@ -147,6 +207,13 @@ html[data-sidebar="collapsed"] body {
   cursor: default;
   width: 100%;
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-status .sidebar-status-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sidebar-notify {
   cursor: pointer;
