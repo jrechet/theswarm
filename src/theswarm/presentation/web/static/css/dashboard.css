@@ -2925,22 +2925,42 @@ main.app-main > .container > .data-table {
 .badge-sm { font-size: 0.7rem; padding: 0.1rem 0.4rem; }
 
 /* (8) Sidebar rhythm — separators between sections, tighter section headers,
- * slightly muted weight for advanced groups so daily-use items pop. */
+ * slightly muted weight for advanced groups so daily-use items pop.
+ * Densified 2026-04-29 so 6 sections + 14 items fit a 1080p viewport without
+ * burying Roles/Knowledge/System below the fold. */
 .sidebar-nav .sidebar-section {
-  padding: 1rem 0.7rem 0.35rem;
-  margin-top: 0.35rem;
+  padding: 0.7rem 0.7rem 0.25rem;
+  margin-top: 0.2rem;
   font-size: 0.68rem;
   letter-spacing: 0.12em;
   border-top: 1px solid var(--border);
 }
 .sidebar-nav .sidebar-section:first-of-type {
-  margin-top: 0.25rem;
+  margin-top: 0.15rem;
   border-top: 0;
-  padding-top: 0.5rem;
+  padding-top: 0.35rem;
 }
 /* The first <li> after a section divider should not double up borders. */
 .sidebar-nav .sidebar-section + li > a {
-  margin-top: 0.2rem;
+  margin-top: 0.15rem;
+}
+/* Tighter item rhythm so the full nav fits 1080p — saves ~84px across 14 items. */
+.sidebar-nav a { padding: 0.45rem 0.75rem; }
+.sidebar-nav ul { gap: 1px; }
+/* Bottom fade affordance: a sticky pseudo-tail inside the scroll viewport so
+ * users see a hint that more nav items exist below the fold. Tracks the
+ * bottom edge of the visible nav as you scroll. */
+.sidebar-nav { isolation: isolate; }
+.sidebar-nav::after {
+  content: "";
+  display: block;
+  position: sticky;
+  bottom: 0;
+  margin: -28px -0.4rem 0;
+  height: 28px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--bg-primary) 80%);
+  z-index: 1;
 }
 /* Hide the divider line in the collapsed icon-only state — keeps the rail
  * clean since labels are gone. */
