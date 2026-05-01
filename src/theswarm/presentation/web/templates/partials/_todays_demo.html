@@ -1,11 +1,11 @@
-{# Self-playing dashboard demo — "Today's session" walkthrough.
-   Cycles through hero shots from the post-session production sweep.
-   Click to expand to a fullscreen modal; arrow keys + click controls. #}
+{# Self-playing dashboard demo — full project tour.
+   Walks through every major surface in the swarm: workspace, output, roles,
+   knowledge, project detail. ~80s autoplay, click to pause / expand fullscreen. #}
 <section class="card todays-demo" data-testid="todays-demo">
   <header class="todays-demo-header">
     <div>
-      <h2 class="todays-demo-title">Today's session — UI overhaul</h2>
-      <p class="todays-demo-meta">2026-04-26 · 4 bundles shipped · 13 routes redesigned across 4 breakpoints</p>
+      <h2 class="todays-demo-title">Full project tour — every surface in 80 seconds</h2>
+      <p class="todays-demo-meta">18 surfaces · phases A–L shipped · captured live from production 2026-05-01</p>
     </div>
     <button type="button" class="todays-demo-expand" aria-label="Expand demo">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -18,16 +18,26 @@
   </header>
 
   <div class="todays-demo-stage" data-todays-demo-stage>
-    {% set base_assets = base ~ '/static/demos/today' %}
+    {% set base_assets = base ~ '/static/demos/tour' %}
     {% set slides = [
-      ('dashboard-1280.png', 'Dashboard at 1280', 'Container now centered, success rate semantics fixed (42% renders amber, not alarm-red), stats compact.'),
-      ('recent-cycles-1280.png', 'Recent Cycles strip', 'Project column on a single line — no more 4-line wraps for jrechet/concert-tour-app. Status pills aligned with row text.'),
-      ('projects-1280.png', 'Projects', 'Hover-arrow cards plus a dashed-border "+ Add project" ghost tile at the end of the grid.'),
-      ('demos-1280.png', 'Demos bento grid', 'New 3-column grid with thumbnail, play overlay, stats, gates pill, cost. The page used to render as a vertical text wall.'),
-      ('team-1280.png', 'Team — designed empty state', 'Centered card with icon, body, and CTAs. Replaces the bare "No roles assigned yet." paragraph.'),
-      ('architect-1280.png', 'Architect (Paved Road) — fragment polish', 'tl-panel lifted to page-level prominence: large heading, right-aligned subtitle, dashed empty tile, +/− CTA button.'),
-      ('dashboard-375.png', 'Mobile (375)', 'Stats wrap, sidebar collapses to icon strip, tables scroll horizontally inside their own block — no horizontal page overflow.'),
-      ('demos-375.png', 'Mobile demos', 'Bento grid stacks to a single column on phones; cards retain thumbnail, stats, and footer.'),
+      ('01-dashboard.png', 'Dashboard — the home base', 'Portfolio KPIs (cost, success rate, cycle count), live cycle activity, recent cycles, and a self-playing tour of the swarm.'),
+      ('02-projects.png', 'Projects — every repo the swarm owns', 'Registered projects with framework + ticket-source pills, daily story budget, and a dashed "+ Add project" tile that wires a new GitHub repo into the cycle pipeline.'),
+      ('15-cycles.png', 'Cycles — full sprint history', 'Every cycle the swarm has run — completed in green, failed in red, with duration, $ cost, and merged-PR count. Click any id to drill into per-phase progress.'),
+      ('18-reports.png', 'Reports — what each sprint shipped', 'Demo reports per sprint: stories delivered, PRs merged, coverage delta, total cost. Sprint G was the latest — 5/5 stories at 85% coverage for $0.37.'),
+      ('03-demos.png', 'Demos — bento grid of recorded sessions', '8 demos across 2 projects. Each card has a video, gates pill, and outcome card. Built-in A vs B comparison field at the top — paste two report ids, hit Compare.'),
+      ('16-features.png', 'Features — phase-grouped catalogue', '10 platform features grouped by P1/P2/P3 phase: Hashline edit tool, Ralph loop, Todo enforcer watchdog. Each card slot for a recorded Playwright demo video.'),
+      ('14-team.png', 'Team — codename roster', 'Designed empty state explains how codenames are minted: each project gets PO / TechLead / Dev / QA, plus portfolio-wide Architect and Chief of Staff.'),
+      ('17-chat.png', 'Chat — per-(project, codename) threads', 'Threads scoped to a project + codename. Mention @Codename in any message to address a specific agent — full audit log + HITL gates behind it.'),
+      ('08-proposals.png', 'Proposals inbox — work waiting for triage', 'Candidate stories from Scout intel, QA regressions, or chat feature requests show up here. Inbox-zero state when the PO has triaged everything.'),
+      ('04-architect-paved-road.png', 'Architect — Paved Road', 'Portfolio-wide conventions that every project must respect. Rules block merges across all projects until satisfied — opt-out requires an ADR.'),
+      ('05-architect-adrs.png', 'Architect — Portfolio ADRs', 'Architecture Decision Records in MADR format. Spans multiple projects when a decision is portfolio-wide. Accept/reject from the dashboard.'),
+      ('06-cos-routing.png', 'Chief of Staff — Routing Rules', 'Pattern-matched routing of incoming chat to the right role. Priority-sorted, also covers budget policies, onboarding checklist, and project archive.'),
+      ('07-scout-intel.png', 'Scout — Intel feed', 'External intelligence ingest: CVEs, releases, papers, competitor moves. Tag with category + urgency, scope to projects, cluster into briefs for the PO.'),
+      ('09-refactor-programs.png', 'Refactor programs — cross-project rollouts', 'Coordinate a refactor across multiple projects ("move every API to v2 auth"). Track proposed → active → completed status with opt-in per project.'),
+      ('10-semantic-memory.png', 'Semantic Memory — opt-in retrieval', 'Tag + substring search across portfolio + project notes. Each role decides what to write; agents query at session start to recover prior context.'),
+      ('11-prompt-library.png', 'Prompt Library — versioned + audited', 'Every prompt the swarm uses, versioned with a full create/update/deprecate/restore audit trail. Diff between versions before promoting.'),
+      ('12-project-detail.png', 'Project detail — sprint composer + controls', 'Plain-English sprint composer ("add venue capacity field…") drafts backlog issues for review. Effort dial, model routing per phase, Run Cycle / Pause / Memory buttons.'),
+      ('13-autonomy.png', 'Autonomy — gating spectrum per role', 'Per-(project, role) override of manual / assisted / supervised / autonomous. Defaults are conservative — opt in deliberately because every action is logged + irreversible.'),
     ] %}
     {% for slide in slides %}
     <figure class="todays-demo-slide{% if loop.first %} is-active{% endif %}"
