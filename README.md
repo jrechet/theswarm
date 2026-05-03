@@ -1,52 +1,124 @@
 # TheSwarm
 
-Autonomous AI dev team. Four specialized agents (PO, TechLead, Dev, QA) that receive feature requests via Mattermost DMs and execute the full development cycle: planning, implementation, code review, testing, and reporting.
-
-You describe what you want. TheSwarm builds it, reviews it, tests it, and reports back.
-
-## How It Works
+**Autonomous multi-role AI dev team.** You describe a sprint in plain English. A staffed swarm of role-specialised agents — PO, TechLead, Dev, QA, Architect, Chief of Staff, Scout, Designer, Security, SRE, Analyst, Writer, Release — plans it, builds it, reviews it, tests it, and ships it. Every action is logged, gated by per-role autonomy levels, and visible in a real-time dashboard.
 
 ```
-You (Mattermost DM)          TheSwarm Agents              Your Repo
-       |                          |                          |
-  "Add dark mode"                 |                          |
-       |-----> PO: generates      |                          |
-       |       user stories       |                          |
-       |<----- "Approve?"         |                          |
-       |                          |                          |
-  "Approve"                       |                          |
-       |-----> PO: creates        |                          |
-       |       GitHub issues  ----|------------------------->|
-       |                          |                          |
-  "go"                            |                          |
-       |-----> PO: daily plan     |                          |
-       |       TechLead: breaks   |                          |
-       |         stories into     |                          |
-       |         dev tasks        |                          |
-       |       Dev: implements    |                          |
-       |         (up to 5 PRs) ---|-------- opens PRs ------>|
-       |       TechLead: reviews  |                          |
-       |         and merges    ---|-------- merges PRs ----->|
-       |       QA: runs tests,    |                          |
-       |         security scan,   |                          |
-       |         generates demo   |                          |
-       |       PO: validates,     |                          |
-       |         writes report    |                          |
-       |<----- "Cycle complete!   |                          |
-       |        3 PRs merged,     |                          |
-       |        $0.42 spent"      |                          |
+plain-English sprint  →  PO drafts issues  →  TechLead breaks down  →  Dev opens PRs
+                                ↓                                          ↓
+                          OKRs · ADRs · paved-road rules                TechLead reviews + merges
+                                ↓                                          ↓
+                          Memory · Prompt library · Audit trail        QA: e2e + security + demo
+                                                                            ↓
+                                                                     PO validates · Report shipped
 ```
+
+---
+
+## Features
+
+### Role-specialised agents (LangGraph state graphs)
+
+| Role | Owns | Surface |
+|------|------|---------|
+| **PO** | Outcome framing, backlog, OKRs, policy, signals, digest | `/proposals`, `/projects/{id}/okrs` |
+| **TechLead** | ADRs, debt register, dep radar, review verdicts, second-opinion | `/projects/{id}/adrs`, `/debt`, `/deps` |
+| **Dev** | TDD artifacts, dev thoughts, refactor preflight, self-review, coverage delta | `/projects/{id}/dev/tdd`, `/dev/thoughts`, `/dev/preflight` |
+| **QA** | Test plans, archetype mix, flake log, quarantines, quality gates, outcome cards | `/projects/{id}/qa/plans`, `/qa/flakes`, `/qa/quarantine` |
+| **Designer** | Tokens, component inventory, briefs, visual regression, anti-template audit | `/designer/...` |
+| **Security** | Threat models, data inventory, findings, SBOM, AuthZ matrix | `/security/...` |
+| **SRE** | Deployments, incidents, cost tracking | `/sre/...` |
+| **Analyst** | Metric definitions, instrumentation plans, outcome observations | `/analyst/...` |
+| **Writer** | Doc artifacts, quickstart checks, changelog | `/writer/...` |
+| **Release** | Versions, feature flags, rollback actions | `/release/...` |
+| **Architect** *(portfolio)* | Paved-road rules, portfolio ADRs, direction briefs | `/architect/paved-road`, `/architect/adrs`, `/architect/briefs` |
+| **Chief of Staff** *(portfolio)* | Routing rules, budget policies, onboarding, archive | `/chief-of-staff/routing`, `/budgets`, `/archive` |
+| **Scout** *(portfolio)* | External intel ingest (CVEs, releases, papers, competitors), clustered into briefs | `/intel/feed`, `/intel/sources`, `/intel/clusters` |
+
+### Portfolio knowledge surfaces
+
+- **Refactor programs** (`/refactor-programs`) — coordinate refactors across multiple projects (proposed → active → completed); opt-in per project.
+- **Semantic memory** (`/semantic-memory`, `/projects/{id}/semantic-memory`) — opt-in retrieval-friendly notes with tag + substring search; portfolio-wide and per-project.
+- **Prompt library** (`/prompt-library`, `/prompt-library/audit`) — versioned prompts with full create/update/deprecate/restore audit trail.
+- **Three-layer memory** — portfolio × project × role; persona prompts inject role-scoped memory at every agent call.
+
+### Autonomy spectrum
+
+Per-(project, role) gating:
+
+| Level | Behaviour |
+|-------|-----------|
+| `manual` | Human-initiated only. Agent does not act. |
+| `assisted` | Agent proposes; human confirms every step. |
+| `supervised` | Agent acts; human reviews before merge. |
+| `autonomous` | Agent acts and ships unless blocked. |
+
+Defaults are conservative. Override per project at `/projects/{id}/autonomy`. Higher autonomy is opt-in because every action is logged and irreversible.
+
+### Cycle pipeline
+
+1. **PO morning** — picks `status:backlog` issues, labels `status:ready`, writes daily plan.
+2. **TechLead breakdown** — splits user stories into `role:dev` sub-tasks.
+3. **Dev loop** (≤ 5 iters) — picks a `status:ready` task, calls Anthropic, runs tests, opens PR.
+4. **TechLead review_loop** — Claude review → approve/request-changes; merges approved PRs.
+5. **QA** — Playwright E2E, unit tests, semgrep scan, demo screenshots, demo report with quality gates.
+6. **PO evening** — validates demo report, writes daily report.
+
+**Autonomous mode** loops `run_daily_cycle()` until all user stories resolved (or `--max-cycles` hit). Continues past transient failures (rate limits, timeouts).
+
+### Resilience features (Sprint G)
+
+- **Per-phase hard timeouts** — a hung agent cannot brick a cycle.
+- **One-retry on transient Dev errors** + orphan cycle reaper (leaves stale state clean).
+- **Circuit-breaker** on GitHub client (sprint G demo).
+- **Pre-flight `/health/ready`** — clicking *Run cycle* checks Claude CLI, GitHub, repo permissions before launching.
+- **Cancel button** on running cycles.
+- **Tight CLI timeouts** — prevent runaway `claude` spawn.
+
+### Platform features
+
+| Phase | Feature | Purpose |
+|-------|---------|---------|
+| 1 | Hashline Edit Tool | Hash-anchored file editing prevents stale-line errors. |
+| 1 | Ralph Loop | Persistent retry loop when quality gates fail. |
+| 1 | Todo Enforcer Watchdog | Idle agent detection with configurable threshold + escalation. |
+| 2 | Context Condensation | LLM-powered context summarisation using Haiku. |
+| 2 | AGENTS.md Generator | Auto-generates docs by introspecting agent graphs. |
+| 2 | Skill-Embedded MCPs | Mount/unmount skill manifests per task category. |
+| 2 | Model Routing Table | Task category → model (Haiku for cheap, Sonnet for code). |
+| 2 | IntentGate (Haiku NLU) | Param extraction with keyword fast path. |
+| 3 | Sandbox Protocol | Pluggable execution backend (local, Docker, OpenHands). |
+| 3 | AST-Grep Tool | Structural code search via `ast-grep` CLI wrapper. |
+
+### Dashboard
+
+- **Workspace** — Dashboard, Projects, Team
+- **Activity** — Cycles (full history with cost, status, PRs), Chat (per `(project, codename)` thread, `@Codename` mentions), Proposals inbox
+- **Output** — Reports, Demos (bento grid + A vs B compare), Features
+- **Roles** — every role's surface (Architect, Chief of Staff, Scout, Product, TechLead, Dev rigour, QA, Designer, Security, SRE, Analyst, Writer, Release)
+- **Knowledge** — Refactor programs, Semantic memory, Prompt library
+- **System** — Health, Diagnostics, Autonomy config
+
+Live updates via SSE. **Sprint composer** on every project page: describe the next sprint in plain English, the PO drafts backlog issues for review.
+
+### Integrations
+
+- **Mattermost** — `@swarm-po` DM bot with intent classifier (Haiku NLU), interactive button callbacks for story approval.
+- **GitHub** — async PyGithub wrapper, webhook handler with HMAC-SHA256 verification, label-driven state machine.
+- **Anthropic** — Claude CLI (subscription) preferred over API credits; falls back to Messages API. Per-phase model routing.
+- **Seq** — CLEF-formatted logs at `SEQ_URL` for production observability.
+
+---
 
 ## Quickstart
 
 ### Prerequisites
 
 - Python 3.12+
-- [uv](https://docs.astral.sh/uv/) (package manager)
-- An Anthropic API key (`ANTHROPIC_API_KEY`)
-- A GitHub personal access token (`GITHUB_TOKEN`)
+- [`uv`](https://docs.astral.sh/uv/)
+- `ANTHROPIC_API_KEY` (or Claude CLI subscription)
+- `GITHUB_TOKEN` for real mode (stub mode works without)
 
-### 1. Install
+### Install
 
 ```bash
 git clone https://github.com/jrechet/theswarm.git
@@ -54,171 +126,106 @@ cd theswarm
 uv sync --dev
 ```
 
-### 2. Configure environment
-
-Create a `.env` file (or export env vars):
+### Configure
 
 ```bash
-# Required for real mode
+# .env
 ANTHROPIC_API_KEY=sk-ant-...
 GITHUB_TOKEN=ghp_...
-
-# Target repo (the repo TheSwarm will work on)
 SWARM_GITHUB_REPO=owner/my-app
 
-# Optional: Mattermost chat integration
-SWARM_PO_MATTERMOST_TOKEN=your-bot-token
-MATTERMOST_BOT_TOKEN=your-bot-token
+# Optional
+SWARM_PO_MATTERMOST_TOKEN=...
+MATTERMOST_BOT_TOKEN=...
 EXTERNAL_URL=https://your-domain.com
+BASE_PATH=/swarm           # if behind a reverse proxy that strips a prefix
+SEQ_URL=https://logs.example.com
+SEQ_API_KEY=...
 ```
 
-### 3. Validate configuration
-
 ```bash
-uv run python -m theswarm validate
+uv run python -m theswarm validate    # check env before starting
 ```
 
-This checks all required env vars and reports errors/warnings before you start.
-
-### 4. Start the server
+### Start
 
 ```bash
-uv run python -m theswarm
+uv run python -m theswarm             # unified server on :8091
 ```
 
-This starts the unified server on port 8091 with:
-- Web dashboard at `http://localhost:8091`
-- Real-time SSE updates at `http://localhost:8091/swarm/dashboard`
-- Health check at `http://localhost:8091/health`
-- Headless API at `http://localhost:8091/api/cycle`
-- Mattermost webhook handler (if configured)
+Dashboard: `http://localhost:8091/` (or `http://localhost:8091/swarm/` if `BASE_PATH=/swarm`).
 
-### 5. Run a cycle
+### First sprint
 
-**Via Mattermost DM** (if configured): message `@swarm-po` with `go`
+1. Open dashboard → **+ Add Project** → enter `owner/repo`.
+2. Click into the project → describe a sprint in the composer ("Add a venue capacity field to Venue, expose on GET API, write tests").
+3. Click **Draft issues** → PO generates user stories → review.
+4. Click **Run Cycle** → PO/TechLead/Dev/QA execute end-to-end.
+5. Watch live progress on Cycles page; review demo report on Reports page when done.
 
-**Via CLI:**
-```bash
-uv run python -m theswarm --cycle
-```
+### Stub mode
 
-**Via API:**
-```bash
-curl -X POST http://localhost:8091/api/cycle \
-  -H "Content-Type: application/json" \
-  -d '{"repo": "owner/my-app"}'
-```
+`SWARM_GITHUB_REPO` unset → all agents log what they *would* do without API calls. Perfect for testing the pipeline locally.
 
-## Stub Mode
+---
 
-When `SWARM_GITHUB_REPO` is not set, agents run in stub mode. They log what they would do but make no API calls. Good for testing the pipeline without spending money.
+## CLI reference
 
 ```bash
-# No env vars needed
-uv run python -m theswarm --cycle
-```
+# Server
+python -m theswarm                                  # serve (default)
+python -m theswarm serve --port 9000                # custom port
+python -m theswarm validate                         # env check
+python -m theswarm status                           # registered projects + active cycles
+python -m theswarm dashboard                        # Textual TUI
 
-## CLI Reference
-
-| Command | Description |
-|---------|-------------|
-| `python -m theswarm` | Start the unified server (default) |
-| `python -m theswarm serve` | Same as above (explicit) |
-| `python -m theswarm serve --port 9000` | Custom port |
-| `python -m theswarm validate` | Check env vars before starting |
-| `python -m theswarm status` | Show registered projects and active cycles |
-| `python -m theswarm dashboard` | Terminal UI dashboard |
-| `python -m theswarm --cycle` | Run a full daily cycle from CLI |
-| `python -m theswarm --dev-only` | Run only the Dev agent |
-| `python -m theswarm --techlead-only` | Run only the TechLead agent |
-
-### Project Management
-
-```bash
-# Register a repo as a project
-python -m theswarm projects add my-app owner/my-app
-python -m theswarm projects add my-app owner/my-app --framework fastapi
-
-# List registered projects
+# Projects
 python -m theswarm projects list
-
-# Remove a project
+python -m theswarm projects add my-app owner/my-app [--framework fastapi]
 python -m theswarm projects remove my-app
 
-# Run a cycle for a registered project
+# Cycles
 python -m theswarm cycle --project my-app
-```
+python -m theswarm cycle --project my-app --autonomous
+python -m theswarm cycle --project my-app -a --max-cycles 5
 
-### Scheduling
-
-```bash
-# Set a cron schedule (weekdays at 8am)
+# Schedules (cron-driven autonomous cycles)
 python -m theswarm schedule set my-app "0 8 * * 1-5"
-
-# List active schedules
 python -m theswarm schedule list
-
-# Disable without deleting
 python -m theswarm schedule disable my-app
-
-# Delete a schedule
 python -m theswarm schedule delete my-app
+
+# Legacy (single SWARM_GITHUB_REPO)
+python -m theswarm --cycle
+python -m theswarm --autonomous
+python -m theswarm --dev-only
+python -m theswarm --techlead-only
 ```
 
-## The Agents
+---
 
-### PO (Product Owner)
-- Receives feature descriptions via Mattermost DM
-- Generates user stories with acceptance criteria using Claude
-- Creates GitHub issues with `status:backlog` labels
-- Writes daily plans (morning) and validates demo reports (evening)
+## Chat interface (Mattermost)
 
-### TechLead
-- Breaks user stories into implementable dev tasks
-- Reviews all PRs via Claude (code quality, architecture, tests)
-- Approves and merges PRs that pass review
-- Requests changes on PRs that need work
-
-### Dev
-- Picks `status:ready` tasks from the backlog
-- Implements features using Claude (Anthropic API)
-- Runs tests locally before opening PRs
-- Iterates up to 5 times per cycle
-
-### QA
-- Writes and runs Playwright E2E tests
-- Runs unit test suite
-- Runs semgrep security scan
-- Generates demo report with screenshots, coverage, and quality gates
-
-## Chat Interface (Mattermost)
-
-DM `@swarm-po` with any of these:
+DM `@swarm-po`:
 
 | Message | What happens |
-|---------|-------------|
-| `Add Google auth` / any feature description | Generates user stories for approval |
-| `go` / `start` / `lance` | Launches a dev cycle on the default repo |
+|---------|--------------|
+| Plain feature description | Generates user stories, asks for approval |
+| `go` / `start` / `lance` | Launches a cycle on the default repo |
 | `go on owner/repo` | Launches a cycle on a specific repo |
-| `status` | Checks if a cycle is running |
-| `plan` / `plan du jour` | Shows today's daily plan |
-| `rapport` / `report` | Shows the latest daily report |
-| `backlog` / `issues` | Lists open GitHub issues |
-| `repos` | Lists allowed repositories |
-| `ping` | Tests button callbacks (interactive buttons) |
-| `help` | Shows the help message |
+| `status` | Is a cycle running? |
+| `plan` / `plan du jour` | Today's daily plan |
+| `rapport` / `report` | Latest daily report |
+| `backlog` / `issues` | Open GitHub issues |
+| `repos` | Allowed repositories |
+| `ping` | Tests interactive button callbacks |
+| `help` | Help message |
 
-Channel commands (in any channel): `!swarm-po status`, `!swarm-po plan`, `!swarm-po report`
+Channel commands (any channel): `!swarm-po status`, `!swarm-po plan`, `!swarm-po report`.
 
-## Web Dashboard
+In the dashboard chat, `@Codename` to address a specific agent in a project thread.
 
-The web dashboard at `http://localhost:8091` shows:
-- Registered projects and their status
-- Cycle history with cost tracking
-- Real-time SSE updates during active cycles
-- Demo reports with quality gates
-
-The legacy real-time dashboard at `/swarm/dashboard` shows live cycle events via SSE.
+---
 
 ## Headless API
 
@@ -228,50 +235,48 @@ curl -X POST http://localhost:8091/api/cycle \
   -H "Content-Type: application/json" \
   -d '{"repo": "owner/repo", "callback_url": "https://your-webhook.com/done"}'
 
-# Check cycle status
+# Status
 curl http://localhost:8091/api/cycle/{cycle_id}
 
-# List recent cycles
+# List recent
 curl http://localhost:8091/api/cycles
 
-# Cancel a running cycle
+# Cancel
 curl -X POST http://localhost:8091/api/cycle/{cycle_id}/cancel
 ```
 
-When `callback_url` is provided, TheSwarm POSTs the result when the cycle completes.
+`callback_url` (optional) — POSTed when the cycle completes.
 
-## GitHub Webhooks
+---
 
-TheSwarm can auto-trigger cycles on push events. Configure a GitHub webhook pointing to:
+## GitHub webhook
 
 ```
 POST https://your-domain.com/webhooks/github
 ```
 
-Set the webhook secret in your config. TheSwarm verifies the HMAC-SHA256 signature.
+HMAC-SHA256 verified. Triggers cycles on push to default branch, new issues, PR review requests.
 
-Triggers on:
-- Push to the default branch
-- New issues opened
-- PR review requests
+---
 
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `ANTHROPIC_API_KEY` | Yes (real mode) | Claude API access for all agents |
-| `GITHUB_TOKEN` | Yes (real mode) | GitHub API operations (issues, PRs, reviews) |
-| `SWARM_GITHUB_REPO` | Yes (real mode) | Default target repo (`owner/repo`) |
-| `SWARM_PO_GITHUB_REPOS` | No | Comma-separated allowlist of repos |
-| `SWARM_PO_MATTERMOST_TOKEN` | No | Mattermost bot token for @swarm-po |
-| `MATTERMOST_BOT_TOKEN` | No | Shared Mattermost bot token |
-| `EXTERNAL_URL` | No | Public URL for Mattermost button callbacks |
-| `SEQ_URL` | No | Seq log aggregation endpoint |
-| `SEQ_API_KEY` | No | Seq API key |
+| `ANTHROPIC_API_KEY` | yes (real) | Claude API access |
+| `GITHUB_TOKEN` | yes (real) | GitHub API |
+| `SWARM_GITHUB_REPO` | yes (legacy mode) | Default target repo |
+| `SWARM_PO_GITHUB_REPOS` | no | Comma-separated repo allowlist |
+| `SWARM_PO_MATTERMOST_TOKEN` | no | `@swarm-po` Mattermost token |
+| `MATTERMOST_BOT_TOKEN` | no | Shared Mattermost token |
+| `EXTERNAL_URL` | no | Public URL for button callbacks |
+| `BASE_PATH` | no | Reverse-proxy prefix (e.g. `/swarm`) |
+| `SEQ_URL` | no | Seq endpoint for logs |
+| `SEQ_API_KEY` | no | Seq API key |
 
-### theswarm.yaml
+### `theswarm.yaml`
 
 ```yaml
 mattermost:
@@ -287,23 +292,22 @@ agents:
   swarm_po:
     enabled: true
     llm_backend: "claude-code"
-    github_repos:
-      - "owner/repo-1"
-      - "owner/repo-2"
+    github_repos: ["owner/repo-1", "owner/repo-2"]
     default_repo: "owner/repo-1"
     team_channel: "swarm-team"
-    channel: "swarm-bots-logs"
 ```
 
-Env vars override YAML values. The `external_url` automatically gets `/swarm` appended for Traefik routing.
+Env vars override YAML.
 
-### Data Storage
+### Storage
 
-TheSwarm stores data in `~/.swarm-data/`:
-- `theswarm.db` — SQLite database (projects, cycles, schedules, reports)
-- `artifacts/` — cycle artifacts (screenshots, videos, diffs)
+`~/.swarm-data/`:
+- `theswarm.db` — SQLite (projects, cycles, schedules, reports, memory, prompt library, audit log).
+- `artifacts/{cycle_id}/` — demo screenshots/videos, served at `/artifacts/{path}`.
 
-Agent memory (learnings, retrospectives) is stored as `AGENT_MEMORY.jsonl` in the target repo itself.
+Per-repo agent memory: `AGENT_MEMORY.jsonl` checked into the target repo.
+
+---
 
 ## Deployment
 
@@ -313,92 +317,81 @@ Agent memory (learnings, retrospectives) is stored as `AGENT_MEMORY.jsonl` in th
 docker compose up
 ```
 
-The `docker-compose.yml` configures:
-- Port 8091 exposed
-- `.env` file for secrets
-- Health check via `/health`
-- 1GB memory limit
-- Traefik labels for reverse proxy routing
-
 ### Docker Swarm + Traefik
 
 ```bash
 docker stack deploy -c docker-compose.yml theswarm
 ```
 
-Routes through Traefik at `PathPrefix(/swarm)` on your domain. The container mounts the host's `.claude` config directory for Claude Code access.
+Routes through Traefik at `PathPrefix(/swarm)`. Container mounts host's `~/.claude` for Claude CLI subscription auth.
 
 ### CI/CD
 
-The GitHub Actions pipeline:
-1. **CI** (`ci.yml`): runs `uv run pytest tests/ -v --tb=short` on push/PR
-2. **CD** (`cd.yml`): builds container image to GHCR, deploys via `docker stack up`
+- `ci.yml` — `uv run pytest tests/ -v --tb=short --ignore=tests/e2e -p no:playwright` on push/PR.
+- `cd.yml` — builds image to GHCR, deploys via `docker stack up`.
+
+---
 
 ## Architecture
 
+Clean Architecture / DDD. Two packages in `src/`:
+
+- `theswarm` — agents, cycle orchestration, gateway, dashboard.
+- `theswarm_common` — shared infrastructure (Mattermost adapter, config loader, models).
+
 ```
-python -m theswarm
-  |
-  v
-__main__.py  -->  presentation/cli/main.py  -->  presentation/web/server.py
-                                                    |
-                                                    |-- v2 web app (FastAPI + HTMX + Jinja2)
-                                                    |     |-- /           (dashboard)
-                                                    |     |-- /projects   (CRUD)
-                                                    |     |-- /cycles     (run + status)
-                                                    |     |-- /reports    (view + approve)
-                                                    |     |-- /health     (real connectivity check)
-                                                    |     |-- /webhooks   (GitHub HMAC)
-                                                    |
-                                                    |-- Legacy routes (backward compat)
-                                                    |     |-- /swarm/dashboard  (SSE live view)
-                                                    |     |-- /swarm/reports    (HTML reports)
-                                                    |     |-- /api/cycle        (headless API)
-                                                    |
-                                                    |-- GatewayBridge
-                                                    |     |-- Mattermost WS listener
-                                                    |     |-- persona.py (NLU DM handler)
-                                                    |     |-- wiring.py (button callbacks)
-                                                    |
-                                                    |-- Agents (LangGraph)
-                                                          |-- PO (morning + evening)
-                                                          |-- TechLead (breakdown + review)
-                                                          |-- Dev (implement, up to 5 iters)
-                                                          |-- QA (test + security + demo)
+src/theswarm/
+├── domain/               # frozen dataclasses, value objects, Protocol ports
+├── application/          # CQRS commands/queries, EventBus, services, DTOs
+├── infrastructure/       # SQLite repos, schedulers, webhook, ticket sources, recorders
+└── presentation/
+    ├── cli/              # argparse CLI
+    ├── web/              # FastAPI + HTMX + Jinja2 + SSE
+    │   ├── routes/       # 33 route modules (one per role + portfolio surfaces)
+    │   ├── templates/    # server-rendered HTML
+    │   └── static/       # design-system CSS, SSE client
+    └── tui/              # Textual dashboard
 ```
 
-The system follows Clean Architecture / DDD with 8 bounded contexts: Projects, Cycles, Agents, Tickets, Memory, Reporting, Scheduling, Chat. Domain entities are frozen dataclasses. Ports are Protocols. Infrastructure implements the ports.
+### Issue label state machine
 
-### Issue Label State Machine
+```
+status:backlog → status:ready → status:in-progress → status:review → merged/closed
+```
 
-Issues flow through GitHub labels:
+### Bounded contexts
 
-`status:backlog` -> `status:ready` -> `status:in-progress` -> `status:review` -> merged/closed
+Projects · Cycles · Agents · Tickets · Memory · Reporting · Scheduling · Chat.
+Domain entities are frozen dataclasses. Ports are Protocols. Infrastructure implements them.
+
+---
 
 ## Testing
 
 ```bash
-# Run all tests (890+)
-uv run pytest tests/ -v --tb=short
+# All unit + integration (~2100 tests)
+uv run pytest tests/ -v --tb=short --ignore=tests/e2e -p no:playwright
 
-# Run a single test
+# Single test
 uv run pytest tests/test_cycle.py::test_stub_cycle_runs -v
 
-# Run by layer
-uv run pytest tests/domain/ -v          # domain entities (100% coverage target)
-uv run pytest tests/application/ -v     # commands, queries, services
-uv run pytest tests/infrastructure/ -v  # SQLite, schedulers, webhooks
-uv run pytest tests/presentation/ -v    # CLI, web app, TUI
-uv run pytest tests/integration/ -v     # cross-layer end-to-end
+# By layer
+uv run pytest tests/domain/ -v          # 100 % coverage target
+uv run pytest tests/application/ -v
+uv run pytest tests/infrastructure/ -v
+uv run pytest tests/presentation/ -v
+uv run pytest tests/integration/ -v
+
+# E2E (separate — Playwright sync fixtures conflict with pytest-asyncio)
+uv run pytest tests/e2e/ -v --headed
 ```
 
-Test organization:
-- `tests/domain/` — domain entities, value objects (100% coverage target)
-- `tests/application/` — command handlers, queries, event bus, services
-- `tests/infrastructure/` — SQLite repos, artifact store, cron scheduler, webhooks
-- `tests/presentation/` — CLI parsing, web app (httpx ASGI), TUI (Textual pilot), unified server
-- `tests/integration/` — full-stack flows (project -> cycle -> dashboard), unified server route coexistence
-- `tests/test_*.py` — original agent and tool tests
+Conventions:
+- pytest with `asyncio_mode = "auto"`.
+- `respx` for HTTP mocks, `pytest-mock` for general.
+- AAA test structure, descriptive names (`test_returns_empty_when_…`).
+
+---
 
 ## License
 
