@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TheSwarm — autonomous AI dev team</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" id="theme">
+
+  <style>
+    :root {
+      --bg-primary: #0a0d12;
+      --bg-card: #11161e;
+      --border: #1f2733;
+      --text-primary: #e6ebf2;
+      --text-muted: #8a94a4;
+      --accent: #3b82f6;
+      --accent-soft: #1e3a8a;
+      --good: #16a34a;
+      --warn: #d97706;
+      --bad: #dc2626;
+    }
+    html, body { background: var(--bg-primary); }
+    .reveal {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      color: var(--text-primary);
+    }
+    .reveal .slides section {
+      text-align: left;
+      font-size: 0.78em;
+      line-height: 1.45;
+    }
+    .reveal h1, .reveal h2, .reveal h3 {
+      color: var(--text-primary);
+      text-transform: none;
+      letter-spacing: -0.01em;
+      font-weight: 600;
+    }
+    .reveal h1 { font-size: 2.6em; }
+    .reveal h2 { font-size: 1.7em; margin-bottom: 0.6em; }
+    .reveal h3 { font-size: 1.15em; color: var(--accent); margin-bottom: 0.3em; }
+    .reveal p, .reveal li { color: var(--text-primary); }
+    .reveal code {
+      background: var(--bg-card);
+      color: #e6ebf2;
+      padding: 0.1em 0.4em;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    .reveal pre {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: none;
+      font-size: 0.6em;
+    }
+    .reveal pre code {
+      background: transparent;
+      padding: 1em;
+      max-height: none;
+    }
+    .reveal a { color: var(--accent); }
+    .reveal table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 0.85em;
+      margin: 0.5em 0;
+    }
+    .reveal th, .reveal td {
+      border-bottom: 1px solid var(--border);
+      padding: 0.45em 0.7em;
+      text-align: left;
+      vertical-align: top;
+    }
+    .reveal th {
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.78em;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .reveal td.muted { color: var(--text-muted); }
+    .lede {
+      color: var(--text-muted);
+      font-size: 0.9em;
+      margin-top: 0.2em;
+    }
+    .pill {
+      display: inline-block;
+      padding: 0.15em 0.6em;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.7em;
+      color: var(--text-muted);
+      margin-right: 0.3em;
+    }
+    .pill.good { border-color: var(--good); color: var(--good); }
+    .pill.warn { border-color: var(--warn); color: var(--warn); }
+    .pill.accent { border-color: var(--accent); color: var(--accent); }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.8em 1.4em;
+      margin-top: 0.5em;
+    }
+    .grid.three { grid-template-columns: 1fr 1fr 1fr; }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.7em 0.9em;
+    }
+    .card h3 { margin: 0 0 0.2em; font-size: 1em; }
+    .card p { margin: 0; color: var(--text-muted); font-size: 0.82em; }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 0.6em 0.9em;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg-card);
+    }
+    .stat .num {
+      font-size: 1.8em;
+      font-weight: 600;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .stat .label {
+      font-size: 0.75em;
+      color: var(--text-muted);
+      margin-top: 0.3em;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .footer-note {
+      position: fixed;
+      bottom: 14px;
+      left: 24px;
+      color: var(--text-muted);
+      font-size: 0.7em;
+      letter-spacing: 0.04em;
+    }
+    .reveal section.title-slide {
+      text-align: center;
+    }
+    .reveal section.title-slide h1 {
+      font-size: 4em;
+      background: linear-gradient(135deg, #3b82f6, #06b6d4 60%, #a855f7);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      margin-bottom: 0.2em;
+    }
+    .reveal section.title-slide .lede {
+      font-size: 1.4em;
+      color: var(--text-primary);
+    }
+    .ascii {
+      font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+      font-size: 0.7em;
+      white-space: pre;
+      color: var(--text-muted);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.8em 1em;
+    }
+  </style>
+</head>
+<body>
+
+<div class="reveal">
+  <div class="slides">
+
+    <!-- 1. Title -->
+    <section class="title-slide">
+      <h1>TheSwarm</h1>
+      <p class="lede">Autonomous AI dev team. Plain English in, shipped PRs out.</p>
+      <p style="margin-top:2em;color:var(--text-muted);font-size:0.9em">
+        13 role-specialised agents · 4-level autonomy spectrum · full audit trail
+      </p>
+    </section>
+
+    <!-- 2. Problem -->
+    <section>
+      <h2>The problem</h2>
+      <p>Most "AI coding assistants" are autocomplete in a tab.</p>
+      <p>Real product work isn't autocomplete. It is:</p>
+      <ul>
+        <li>Framing outcomes (PO)</li>
+        <li>Architecture decisions and paved roads (TechLead, Architect)</li>
+        <li>Implementation with TDD discipline (Dev)</li>
+        <li>End-to-end testing and quality gates (QA)</li>
+        <li>Security, SRE, design, docs, release, analytics — all the roles you actually need</li>
+      </ul>
+      <p class="lede">A single agent loop cannot replace a team. So we built a team.</p>
+    </section>
+
+    <!-- 3. The pitch -->
+    <section>
+      <h2>The pitch</h2>
+      <p>Describe a sprint. The swarm plans, builds, reviews, tests, ships, reports.</p>
+      <pre class="ascii">plain-English sprint
+        ↓
+    PO drafts issues  ──→  TechLead breaks down  ──→  Dev opens PRs
+        ↓                          ↓                      ↓
+  OKRs · ADRs · paved-road    Review verdicts        TechLead merges
+        ↓                          ↓                      ↓
+  Memory · Prompt library    Audit trail logged      QA: e2e + security + demo
+                                                          ↓
+                                                  PO validates · Report ships</pre>
+    </section>
+
+    <!-- 4. Roles roster -->
+    <section>
+      <h2>Roles — project-level</h2>
+      <table>
+        <tr><th>Role</th><th>Owns</th></tr>
+        <tr><td><strong>PO</strong></td><td>Outcome framing · backlog · OKRs · policy · digest</td></tr>
+        <tr><td><strong>TechLead</strong></td><td>ADRs · debt register · dep radar · review verdicts</td></tr>
+        <tr><td><strong>Dev</strong></td><td>TDD artifacts · refactor preflight · self-review · coverage</td></tr>
+        <tr><td><strong>QA</strong></td><td>Test plans · flake log · quarantines · quality gates</td></tr>
+        <tr><td><strong>Designer</strong></td><td>Tokens · component inventory · visual regression · anti-template</td></tr>
+        <tr><td><strong>Security</strong></td><td>Threat models · data inventory · findings · SBOM · AuthZ</td></tr>
+        <tr><td><strong>SRE</strong></td><td>Deployments · incidents · cost tracking</td></tr>
+        <tr><td><strong>Analyst</strong></td><td>Metric defs · instrumentation plans · outcome observations</td></tr>
+        <tr><td><strong>Writer</strong></td><td>Doc artifacts · quickstart checks · changelog</td></tr>
+        <tr><td><strong>Release</strong></td><td>Versions · feature flags · rollback actions</td></tr>
+      </table>
+    </section>
+
+    <!-- 5. Portfolio roles -->
+    <section>
+      <h2>Roles — portfolio-level</h2>
+      <div class="grid three">
+        <div class="card">
+          <h3>Architect</h3>
+          <p>Paved-road rules, portfolio ADRs, direction briefs. Rules block merges across all projects until satisfied.</p>
+        </div>
+        <div class="card">
+          <h3>Chief of Staff</h3>
+          <p>Routes incoming chat to the right role, enforces budget policies, runs onboarding checklist, archives.</p>
+        </div>
+        <div class="card">
+          <h3>Scout</h3>
+          <p>External intel: CVEs, releases, papers, competitors. Tags + clusters into briefs for the PO.</p>
+        </div>
+      </div>
+      <p class="lede">Three roles operate above any single project. They make portfolio-wide decisions and feed every project-level role.</p>
+    </section>
+
+    <!-- 6. Cycle pipeline -->
+    <section>
+      <h2>The daily cycle</h2>
+      <table>
+        <tr><th>Phase</th><th>Agent</th><th>Output</th></tr>
+        <tr><td>Morning</td><td>PO</td><td>Picks <code>status:backlog</code>, labels <code>status:ready</code>, daily plan</td></tr>
+        <tr><td>Breakdown</td><td>TechLead</td><td>Splits user stories into <code>role:dev</code> sub-tasks</td></tr>
+        <tr><td>Dev loop ×5</td><td>Dev</td><td>Picks ready task, implements, tests, opens PR</td></tr>
+        <tr><td>Review loop</td><td>TechLead</td><td>Approve/request-changes, merge approved PRs</td></tr>
+        <tr><td>QA</td><td>QA</td><td>Playwright e2e, unit, semgrep, demo screenshots, gates</td></tr>
+        <tr><td>Evening</td><td>PO</td><td>Validates demo report, writes daily report</td></tr>
+      </table>
+      <p class="lede"><strong>Autonomous mode:</strong> <code>--autonomous</code> loops the cycle until backlog is empty or <code>--max-cycles</code> hit. Recovers past transient failures.</p>
+    </section>
+
+    <!-- 7. Autonomy spectrum -->
+    <section>
+      <h2>Autonomy spectrum</h2>
+      <p>Per-(project, role) gating. Defaults are conservative — opt in deliberately.</p>
+      <table>
+        <tr><th>Level</th><th>Behaviour</th></tr>
+        <tr><td><code>manual</code></td><td>Human-initiated only. Agent does not act.</td></tr>
+        <tr><td><code>assisted</code></td><td>Agent proposes; human confirms every step.</td></tr>
+        <tr><td><code>supervised</code></td><td>Agent acts; human reviews before merge.</td></tr>
+        <tr><td><code>autonomous</code></td><td>Agent acts and ships unless blocked.</td></tr>
+      </table>
+      <p class="lede">Override at <code>/projects/{id}/autonomy</code>. Every action is logged and irreversible — that is why higher autonomy is opt-in.</p>
+    </section>
+
+    <!-- 8. Dashboard sections -->
+    <section>
+      <h2>Dashboard</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Workspace</h3>
+          <p>Dashboard · Projects · Team roster (codenames per project).</p>
+        </div>
+        <div class="card">
+          <h3>Activity</h3>
+          <p>Cycles (history + cost) · Chat (per <code>(project, codename)</code>, <code>@mention</code>) · Proposals inbox.</p>
+        </div>
+        <div class="card">
+          <h3>Output</h3>
+          <p>Reports · Demos (bento grid + A/B compare) · Features.</p>
+        </div>
+        <div class="card">
+          <h3>Roles</h3>
+          <p>Every role's surface — Architect to Release.</p>
+        </div>
+        <div class="card">
+          <h3>Knowledge</h3>
+          <p>Refactor programs · Semantic memory · Prompt library.</p>
+        </div>
+        <div class="card">
+          <h3>System</h3>
+          <p>Health · Diagnostics · Autonomy config.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. Live tour -->
+    <section>
+      <h2>Live tour on dashboard</h2>
+      <p>Open the dashboard. The home card auto-plays an 80-second tour through every surface — captured live from production.</p>
+      <p class="lede">
+        18 slides · ~4.5s each · click to expand fullscreen · ←/→ to scrub · Esc to close.
+      </p>
+      <p style="margin-top:1.5em">
+        <a href="https://bots.jrec.fr/swarm/" target="_blank">bots.jrec.fr/swarm/</a>
+      </p>
+    </section>
+
+    <!-- 10. Knowledge surfaces -->
+    <section>
+      <h2>Portfolio knowledge</h2>
+      <div class="grid three">
+        <div class="card">
+          <h3>Refactor programs</h3>
+          <p>Coordinate refactors across multiple projects ("move every API to v2 auth"). Proposed → active → completed; opt-in per project.</p>
+        </div>
+        <div class="card">
+          <h3>Semantic memory</h3>
+          <p>Opt-in retrieval. Tag + substring search. Portfolio-wide and per-project. Each role decides what to write.</p>
+        </div>
+        <div class="card">
+          <h3>Prompt library</h3>
+          <p>Versioned prompts with full create/update/deprecate/restore audit. Diff before promoting.</p>
+        </div>
+      </div>
+      <p class="lede">Three-layer memory: portfolio × project × role. Persona prompts inject role-scoped memory at every call.</p>
+    </section>
+
+    <!-- 11. Resilience -->
+    <section>
+      <h2>Resilience</h2>
+      <p>A swarm that crashes once a day is not a swarm. Sprint G shipped:</p>
+      <ul>
+        <li><strong>Per-phase hard timeouts</strong> — a hung agent cannot brick the cycle.</li>
+        <li><strong>One-retry on transient Dev errors</strong> + orphan cycle reaper.</li>
+        <li><strong>Circuit-breaker</strong> on the GitHub client.</li>
+        <li><strong>Pre-flight <code>/health/ready</code></strong> — checks Claude CLI, GitHub, repo perms before launch.</li>
+        <li><strong>Cancel button</strong> on running cycles.</li>
+        <li><strong>Tight CLI timeouts</strong> + memory bump (1G → 2G).</li>
+      </ul>
+    </section>
+
+    <!-- 12. Platform features -->
+    <section>
+      <h2>Platform features</h2>
+      <table>
+        <tr><th>Phase</th><th>Feature</th><th>Purpose</th></tr>
+        <tr><td>1</td><td>Hashline edit tool</td><td>Hash-anchored editing — no stale-line errors.</td></tr>
+        <tr><td>1</td><td>Ralph loop</td><td>Persistent retry when quality gates fail.</td></tr>
+        <tr><td>1</td><td>Watchdog</td><td>Idle agent detection + escalation.</td></tr>
+        <tr><td>2</td><td>Context condensation</td><td>Haiku-powered summarisation.</td></tr>
+        <tr><td>2</td><td>AGENTS.md generator</td><td>Auto-doc by introspecting agent graphs.</td></tr>
+        <tr><td>2</td><td>Skill-embedded MCPs</td><td>Mount skill manifests per task category.</td></tr>
+        <tr><td>2</td><td>Model routing</td><td>Haiku for cheap, Sonnet for code.</td></tr>
+        <tr><td>2</td><td>IntentGate (Haiku NLU)</td><td>Param extraction + keyword fast path.</td></tr>
+        <tr><td>3</td><td>Sandbox protocol</td><td>Pluggable backend: local, Docker, OpenHands.</td></tr>
+        <tr><td>3</td><td>AST-grep tool</td><td>Structural code search.</td></tr>
+      </table>
+    </section>
+
+    <!-- 13. Integrations -->
+    <section>
+      <h2>Integrations</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Mattermost</h3>
+          <p><code>@swarm-po</code> DM bot, Haiku-NLU intent classifier, interactive button callbacks for story approval.</p>
+        </div>
+        <div class="card">
+          <h3>GitHub</h3>
+          <p>Async PyGithub, webhook with HMAC-SHA256, label-driven state machine: backlog → ready → in-progress → review → merged.</p>
+        </div>
+        <div class="card">
+          <h3>Anthropic</h3>
+          <p>Claude CLI subscription preferred over API credits. Per-phase model routing.</p>
+        </div>
+        <div class="card">
+          <h3>Seq</h3>
+          <p>CLEF logs at <code>SEQ_URL</code> for production observability.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 14. Three control planes -->
+    <section>
+      <h2>Three ways to drive it</h2>
+      <h3 style="margin-top:1em">CLI</h3>
+      <pre><code>python -m theswarm projects add my-app owner/my-app
+python -m theswarm cycle --project my-app --autonomous</code></pre>
+
+      <h3>Chat</h3>
+      <pre><code>@swarm-po add a venue capacity field to Venue, expose on GET API, write tests
+@swarm-po go</code></pre>
+
+      <h3>API</h3>
+      <pre><code>curl -X POST http://localhost:8091/api/cycle \
+  -d '{"repo":"owner/repo","callback_url":"https://your-webhook.com/done"}'</code></pre>
+    </section>
+
+    <!-- 15. Architecture -->
+    <section>
+      <h2>Architecture</h2>
+      <p class="lede">Clean Architecture / DDD. 8 bounded contexts. Frozen dataclasses. Protocol ports.</p>
+      <pre class="ascii">src/theswarm/
+├── domain/         frozen dataclasses, value objects, Protocol ports
+├── application/    CQRS commands/queries, EventBus, services, DTOs
+├── infrastructure/ SQLite repos, schedulers, webhook, ticket sources
+└── presentation/
+    ├── cli/        argparse CLI
+    ├── web/        FastAPI + HTMX + Jinja2 + SSE
+    │   └── routes/ 33 modules — one per role + portfolio surface
+    └── tui/        Textual dashboard</pre>
+      <p class="lede">Bounded contexts: Projects · Cycles · Agents · Tickets · Memory · Reporting · Scheduling · Chat.</p>
+    </section>
+
+    <!-- 16. Stats -->
+    <section>
+      <h2>The numbers</h2>
+      <div class="grid three">
+        <div class="stat"><span class="num">2,100+</span><span class="label">tests passing</span></div>
+        <div class="stat"><span class="num">13</span><span class="label">specialised roles</span></div>
+        <div class="stat"><span class="num">33</span><span class="label">route modules</span></div>
+        <div class="stat"><span class="num">A–L</span><span class="label">phases shipped</span></div>
+        <div class="stat"><span class="num">$0.37</span><span class="label">avg sprint cost</span></div>
+        <div class="stat"><span class="num">85%</span><span class="label">avg coverage delta</span></div>
+      </div>
+      <p class="lede">Real numbers from the swarm dogfooding itself on the <code>theswarm</code> repo.</p>
+    </section>
+
+    <!-- 17. Get started -->
+    <section>
+      <h2>Get started</h2>
+      <pre><code>git clone https://github.com/jrechet/theswarm.git
+cd theswarm
+uv sync --dev
+uv run python -m theswarm validate
+uv run python -m theswarm</code></pre>
+      <p>Then open the dashboard, add a project, type a sprint into the composer, click <strong>Run Cycle</strong>.</p>
+      <p class="lede">Stub mode (no env vars set) runs the entire pipeline without API calls — for trying it out locally.</p>
+    </section>
+
+    <!-- 18. Closing -->
+    <section class="title-slide">
+      <h1 style="font-size:3em">Thanks</h1>
+      <p class="lede">github.com/jrechet/theswarm · bots.jrec.fr/swarm/</p>
+    </section>
+
+  </div>
+</div>
+
+<div class="footer-note">TheSwarm · 2026</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    transition: 'fade',
+    transitionSpeed: 'fast',
+    backgroundTransition: 'none',
+    controls: true,
+    progress: true,
+    center: false,
+    width: 1200,
+    height: 760,
+    margin: 0.06,
+  });
+</script>
+
+</body>
+</html>
