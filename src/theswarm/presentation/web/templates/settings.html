@@ -84,14 +84,20 @@
   display: flex; gap: 0.5rem; margin-top: 0.75rem;
 }
 .settings-input-row input {
-  flex: 1; min-width: 0;
-  padding: 0.5rem 0.75rem;
+  flex: 1 1 240px; min-width: 200px;
+  padding: 0.55rem 0.85rem;
   border-radius: 0.4rem;
-  border: 1px solid var(--border, #2a2a36);
-  background: var(--input-bg, #0e0e14);
-  color: inherit;
+  border: 1px solid #4a4a58;
+  background: #0e0e14;
+  color: #e8e8ec;
   font-family: ui-monospace, monospace;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
+}
+.settings-input-row input:focus { outline: 2px solid #5b8def; outline-offset: 1px; }
+.settings-input-row .btn { flex: 0 0 auto; }
+@media (max-width: 600px) {
+  .settings-input-row { flex-wrap: wrap; }
+  .settings-input-row input { flex: 1 1 100%; }
 }
 .banner {
   padding: 1rem 1.25rem; border-radius: 0.5rem; margin-bottom: 1.25rem;
