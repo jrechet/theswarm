@@ -489,6 +489,16 @@ async def start_server(
     from theswarm.infrastructure.persistence.secret_vault import SqliteSecretVault
     secret_vault = SqliteSecretVault(conn)
 
+    # Apply dashboard-managed global settings to os.environ before anything
+    # downstream reads ANTHROPIC_API_KEY / GITHUB_TOKEN etc.
+    try:
+        from theswarm.application.services.global_settings import GlobalSettings
+        applied = await GlobalSettings(secret_vault).apply_to_env()
+        if applied:
+            log.info("Global settings applied to env: %d key(s)", applied)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Could not apply global settings (vault unavailable?): %s", exc)
+
     # Sprint D V2 — replay event store
     from theswarm.infrastructure.persistence.cycle_event_store import SQLiteCycleEventStore
     cycle_event_store = SQLiteCycleEventStore(conn)

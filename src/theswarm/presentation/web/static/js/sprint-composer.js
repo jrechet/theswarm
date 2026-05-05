@@ -85,13 +85,24 @@
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     })
-      .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
+      .then(function (r) {
+        if (r.ok) return r.json();
+        return r.json().catch(function () { return { detail: 'HTTP ' + r.status }; })
+          .then(function (j) { return Promise.reject(j); });
+      })
       .then(function (draft) {
         showPreview(draft);
         setStatus('Drafted ' + (draft.issues || []).length + ' issue(s)', 'ok');
       })
       .catch(function (err) {
-        setStatus('Failed to draft. Try again.', 'error');
+        var msg = (err && err.detail) || (typeof err === 'string' ? err : 'Failed to draft. Try again.');
+        var setup = err && err.setup_url;
+        setStatus(msg, 'error');
+        if (setup) {
+          var base = (document.documentElement.dataset.base) || '';
+          status.innerHTML = (status.textContent || '') +
+            ' <a href="' + base + setup + '" class="settings-link">Open Settings →</a>';
+        }
         console.error(err);
       })
       .finally(function () { draftBtn.disabled = false; });
@@ -115,7 +126,11 @@
         description: currentDraft.request || description.value,
       }),
     })
-      .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
+      .then(function (r) {
+        if (r.ok) return r.json();
+        return r.json().catch(function () { return { detail: 'HTTP ' + r.status }; })
+          .then(function (j) { return Promise.reject(j.detail || ('HTTP ' + r.status)); });
+      })
       .then(function (resp) {
         var lines = [];
         if (resp.sprint_id) {
@@ -150,7 +165,8 @@
         }
       })
       .catch(function (err) {
-        setStatus('Create failed.', 'error');
+        var msg = typeof err === 'string' ? err : 'Create failed.';
+        setStatus(msg, 'error');
         console.error(err);
       })
       .finally(function () {

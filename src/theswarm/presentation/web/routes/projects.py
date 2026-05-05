@@ -373,6 +373,26 @@ async def draft_sprint(
         draft = await composer.draft(description)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001 — surface upstream LLM/network failure to UI
+        logging.getLogger(__name__).exception("sprint draft failed for project=%s", project_id)
+        msg = str(exc) or exc.__class__.__name__
+        if "x-api-key" in msg or "authentication" in msg.lower() or "401" in msg:
+            detail = (
+                "Anthropic API key is invalid or missing. "
+                "Open Settings and paste a working ANTHROPIC_API_KEY."
+            )
+            setup_url = "/settings"
+        elif "timeout" in msg.lower():
+            detail = "Claude request timed out. Try a shorter description or retry."
+            setup_url = None
+        else:
+            detail = f"Claude call failed: {msg[:300]}"
+            setup_url = None
+        from fastapi.responses import JSONResponse as _JR
+        return _JR(
+            status_code=502,
+            content={"detail": detail, **({"setup_url": setup_url} if setup_url else {})},
+        )
 
     return JSONResponse({
         "request": draft.request,

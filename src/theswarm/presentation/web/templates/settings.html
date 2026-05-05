@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Settings — TheSwarm{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Settings</h1>
+  <p class="text-muted">API keys, tokens, and URLs the platform needs. Stored encrypted in the
+    vault. Values set here override any environment variable on the next request.</p>
+</div>
+
+{% if not vault_ok %}
+<div class="banner banner-warning">
+  <strong>Vault unavailable.</strong>
+  {{ vault_error or "SWARM_VAULT_MASTER_KEY is not set on the server, so settings cannot be stored from the dashboard." }}
+  <p style="margin-top: 0.5rem;">Generate a key:
+    <code>python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</code>,
+    set it as <code>SWARM_VAULT_MASTER_KEY</code> on the server, then redeploy.</p>
+</div>
+{% endif %}
+
+<div class="settings-grid">
+  {% for row in rows %}
+  <form method="POST" action="{{ base }}/settings/{{ row.key }}" class="settings-card">
+    <div class="settings-card-head">
+      <div>
+        <h2>{{ row.label }}</h2>
+        <p class="text-muted">{{ row.description }}</p>
+      </div>
+      <div class="settings-status">
+        {% if row.is_set %}
+          <span class="badge badge-completed">set</span>
+          {% if row.from_env_only %}<span class="badge badge-subtle" title="Value comes from environment, not vault">env-only</span>{% endif %}
+        {% else %}
+          {% if row.required %}
+            <span class="badge badge-error">missing</span>
+          {% else %}
+            <span class="badge badge-subtle">unset</span>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    {% if row.is_set and row.secret %}
+      <p class="settings-current text-muted">Current: <code>{{ row.masked }}</code></p>
+    {% elif row.is_set %}
+      <p class="settings-current">Current: <code>{{ row.masked }}</code></p>
+    {% endif %}
+
+    <div class="settings-input-row">
+      <input
+        type="{% if row.secret %}password{% else %}text{% endif %}"
+        name="value"
+        autocomplete="off"
+        placeholder="{% if row.secret %}{% if row.is_set %}leave empty to keep current; type new value to replace{% else %}paste new value{% endif %}{% else %}{{ row.label }}{% endif %}"
+        {% if not row.secret and row.is_set %}value="{{ row.masked }}"{% endif %}
+      >
+      <button type="submit" class="btn btn-primary">Save</button>
+      {% if row.is_set %}
+        <button type="submit" class="btn btn-secondary" name="value" value="" formnovalidate
+          onclick="return confirm('Clear {{ row.label }}?');">Clear</button>
+      {% endif %}
+    </div>
+  </form>
+  {% endfor %}
+</div>
+
+<style>
+.settings-grid { display: grid; gap: 1rem; max-width: 880px; margin-top: 1rem; }
+.settings-card {
+  background: var(--card-bg, #1a1a22);
+  border: 1px solid var(--border, #2a2a36);
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+}
+.settings-card-head {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+}
+.settings-card-head h2 { margin: 0 0 0.25rem; font-size: 1.05rem; }
+.settings-card-head p { margin: 0; font-size: 0.9rem; }
+.settings-status { white-space: nowrap; }
+.settings-current { margin: 0.75rem 0 0.5rem; font-size: 0.85rem; }
+.settings-current code { font-family: ui-monospace, monospace; }
+.settings-input-row {
+  display: flex; gap: 0.5rem; margin-top: 0.75rem;
+}
+.settings-input-row input {
+  flex: 1; min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--border, #2a2a36);
+  background: var(--input-bg, #0e0e14);
+  color: inherit;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+}
+.banner {
+  padding: 1rem 1.25rem; border-radius: 0.5rem; margin-bottom: 1.25rem;
+  border-left: 4px solid;
+}
+.banner-warning { background: rgba(255, 180, 0, 0.08); border-color: #ffb400; }
+.badge-error { background: rgba(255, 80, 80, 0.18); color: #ff8888; }
+</style>
+{% endblock %}
