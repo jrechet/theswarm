@@ -70,12 +70,14 @@ async def settings_page(request: Request) -> HTMLResponse:
             "from_env_only": bool(env_value and not stored_value),
         })
 
-    return templates.render(
+    return templates.TemplateResponse(
         "settings.html",
-        request=request,
-        rows=rows,
-        vault_ok=vault_ok,
-        vault_error=vault_error,
+        {
+            "request": request,
+            "rows": rows,
+            "vault_ok": vault_ok,
+            "vault_error": vault_error,
+        },
     )
 
 
