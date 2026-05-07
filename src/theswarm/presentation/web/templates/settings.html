@@ -73,7 +73,13 @@
 .settings-card-head p { margin: 0.15rem 0 0; }
 .settings-status { display: inline-flex; gap: 0.35rem; align-items: center; white-space: nowrap; }
 .settings-missing { background: #5a1d22; color: #ffb3b8; }
-.settings-clear { margin-top: 0.5rem; padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+.settings-clear[type="submit"] {
+  margin-top: 0.5rem; padding: 0.2rem 0.6rem; font-size: 0.75rem;
+  width: auto; display: inline-block;
+  background: transparent; color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.settings-clear[type="submit"]:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 .settings-warning { border-left: 4px solid #ffb400; }
 </style>
 {% endblock %}
