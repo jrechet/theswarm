@@ -313,6 +313,7 @@ input:focus, select:focus, textarea:focus {
 input::placeholder, textarea::placeholder { color: var(--text-muted); }
 input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
 button {
+  width: auto;
   padding: 0.45rem 0.9rem;
   background: var(--bg-tertiary);
   color: var(--text-primary);
@@ -322,6 +323,10 @@ button {
   transition: background 120ms ease, border-color 120ms ease;
 }
 button:hover { background: var(--border); }
+/* Pico forces button[type=submit] to 100% width. Override so submits look like
+   normal inline buttons by default. Parent flex/role=group layouts can still
+   stretch them via flex rules. */
+button[type="submit"] { width: auto; }
 button[type="submit"], button.primary {
   background: var(--accent);
   color: #fff;
