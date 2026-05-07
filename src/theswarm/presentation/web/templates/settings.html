@@ -2,108 +2,78 @@
 {% block title %}Settings — TheSwarm{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<header class="page-header">
   <h1>Settings</h1>
-  <p class="text-muted">API keys, tokens, and URLs the platform needs. Stored encrypted in the
-    vault. Values set here override any environment variable on the next request.</p>
-</div>
+  <p><small>API keys, tokens, and URLs the platform needs. Stored encrypted in the vault. Values set here override any environment variable on the next request.</small></p>
+</header>
 
 {% if not vault_ok %}
-<div class="banner banner-warning">
-  <strong>Vault unavailable.</strong>
-  {{ vault_error or "SWARM_VAULT_MASTER_KEY is not set on the server, so settings cannot be stored from the dashboard." }}
-  <p style="margin-top: 0.5rem;">Generate a key:
+<article class="settings-warning">
+  <header><strong>Vault unavailable.</strong></header>
+  <p>{{ vault_error or "SWARM_VAULT_MASTER_KEY is not set on the server, so settings cannot be stored from the dashboard." }}</p>
+  <p><small>Generate a key:
     <code>python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</code>,
-    set it as <code>SWARM_VAULT_MASTER_KEY</code> on the server, then redeploy.</p>
-</div>
+    set it as <code>SWARM_VAULT_MASTER_KEY</code> on the server, then redeploy.</small></p>
+</article>
 {% endif %}
 
-<div class="settings-grid">
+<div class="settings-list">
   {% for row in rows %}
-  <form method="POST" action="{{ base }}/settings/{{ row.key }}" class="settings-card">
-    <div class="settings-card-head">
-      <div>
+  <article class="settings-card">
+    <header class="settings-card-head">
+      <hgroup>
         <h2>{{ row.label }}</h2>
-        <p class="text-muted">{{ row.description }}</p>
-      </div>
-      <div class="settings-status">
+        <p><small>{{ row.description }}</small></p>
+      </hgroup>
+      <span class="settings-status">
         {% if row.is_set %}
-          <span class="badge badge-completed">set</span>
-          {% if row.from_env_only %}<span class="badge badge-subtle" title="Value comes from environment, not vault">env-only</span>{% endif %}
+          <kbd>set</kbd>
+          {% if row.from_env_only %}<small>env-only</small>{% endif %}
+        {% elif row.required %}
+          <kbd class="settings-missing">missing</kbd>
         {% else %}
-          {% if row.required %}
-            <span class="badge badge-error">missing</span>
-          {% else %}
-            <span class="badge badge-subtle">unset</span>
-          {% endif %}
+          <small>unset</small>
         {% endif %}
-      </div>
-    </div>
+      </span>
+    </header>
 
-    {% if row.is_set and row.secret %}
-      <p class="settings-current text-muted">Current: <code>{{ row.masked }}</code></p>
-    {% elif row.is_set %}
-      <p class="settings-current">Current: <code>{{ row.masked }}</code></p>
+    {% if row.is_set %}
+      <p><small>Current: <code>{{ row.masked }}</code></small></p>
     {% endif %}
 
-    <div class="settings-input-row">
-      <input
-        type="{% if row.secret %}password{% else %}text{% endif %}"
-        name="value"
-        autocomplete="off"
-        placeholder="{% if row.secret %}{% if row.is_set %}leave empty to keep current; type new value to replace{% else %}paste new value{% endif %}{% else %}{{ row.label }}{% endif %}"
-        {% if not row.secret and row.is_set %}value="{{ row.masked }}"{% endif %}
-      >
-      <button type="submit" class="btn btn-primary">Save</button>
+    <form method="POST" action="{{ base }}/settings/{{ row.key }}">
+      <fieldset role="group">
+        <input
+          type="{% if row.secret %}password{% else %}text{% endif %}"
+          name="value"
+          autocomplete="off"
+          placeholder="{% if row.is_set %}new value (empty = keep current){% else %}paste value{% endif %}"
+        >
+        <button type="submit">Save</button>
+      </fieldset>
       {% if row.is_set %}
-        <button type="submit" class="btn btn-secondary" name="value" value="" formnovalidate
+        <button type="submit" name="value" value="" formnovalidate
+          class="secondary outline settings-clear"
           onclick="return confirm('Clear {{ row.label }}?');">Clear</button>
       {% endif %}
-    </div>
-  </form>
+    </form>
+  </article>
   {% endfor %}
 </div>
 
 <style>
-.settings-grid { display: grid; gap: 1rem; max-width: 880px; margin-top: 1rem; }
-.settings-card {
-  background: var(--card-bg, #1a1a22);
-  border: 1px solid var(--border, #2a2a36);
-  border-radius: 0.75rem;
-  padding: 1.25rem 1.5rem;
+.settings-list { display: grid; gap: 1rem; max-width: 720px; }
+.settings-card { padding: 1rem 1.25rem; }
+.settings-card > header.settings-card-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 1rem; padding: 0; margin: 0 0 0.5rem; background: transparent; border: 0;
 }
-.settings-card-head {
-  display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
-}
-.settings-card-head h2 { margin: 0 0 0.25rem; font-size: 1.05rem; }
-.settings-card-head p { margin: 0; font-size: 0.9rem; }
-.settings-status { white-space: nowrap; }
-.settings-current { margin: 0.75rem 0 0.5rem; font-size: 0.85rem; }
-.settings-current code { font-family: ui-monospace, monospace; }
-.settings-input-row {
-  display: flex; gap: 0.5rem; margin-top: 0.75rem;
-}
-.settings-input-row input {
-  flex: 1 1 240px; min-width: 200px;
-  padding: 0.55rem 0.85rem;
-  border-radius: 0.4rem;
-  border: 1px solid #4a4a58;
-  background: #0e0e14;
-  color: #e8e8ec;
-  font-family: ui-monospace, monospace;
-  font-size: 0.92rem;
-}
-.settings-input-row input:focus { outline: 2px solid #5b8def; outline-offset: 1px; }
-.settings-input-row .btn { flex: 0 0 auto; }
-@media (max-width: 600px) {
-  .settings-input-row { flex-wrap: wrap; }
-  .settings-input-row input { flex: 1 1 100%; }
-}
-.banner {
-  padding: 1rem 1.25rem; border-radius: 0.5rem; margin-bottom: 1.25rem;
-  border-left: 4px solid;
-}
-.banner-warning { background: rgba(255, 180, 0, 0.08); border-color: #ffb400; }
-.badge-error { background: rgba(255, 80, 80, 0.18); color: #ff8888; }
+.settings-card-head hgroup { margin: 0; }
+.settings-card-head h2 { font-size: 1rem; margin: 0; }
+.settings-card-head p { margin: 0.15rem 0 0; }
+.settings-status { display: inline-flex; gap: 0.35rem; align-items: center; white-space: nowrap; }
+.settings-missing { background: #5a1d22; color: #ffb3b8; }
+.settings-clear { margin-top: 0.5rem; padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+.settings-warning { border-left: 4px solid #ffb400; }
 </style>
 {% endblock %}
