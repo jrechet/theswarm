@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -62,6 +63,9 @@ _TEMPLATE_DIR = _HERE / "templates"
 _STATIC_DIR = _HERE / "static"
 
 
+_ASSET_VERSION = str(int(time.time()))
+
+
 class _TemplateEngine:
     """Thin wrapper matching Starlette's Jinja2Templates interface."""
 
@@ -77,6 +81,7 @@ class _TemplateEngine:
     ) -> "HTMLResponse":
         from fastapi.responses import HTMLResponse
         context.setdefault("base", self._base_path)
+        context.setdefault("asset_v", _ASSET_VERSION)
         template = self._env.get_template(name)
         html = template.render(**context)
         return HTMLResponse(content=html, status_code=status_code)

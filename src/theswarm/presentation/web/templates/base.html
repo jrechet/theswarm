@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}TheSwarm{% endblock %}</title>
-  <link rel="stylesheet" href="{{ base }}/static/vendor/pico-2.min.css">
-  <link rel="stylesheet" href="{{ base }}/static/css/dashboard.css">
-  <script src="{{ base }}/static/vendor/htmx-2.0.4.min.js" defer></script>
+  <link rel="stylesheet" href="{{ base }}/static/vendor/pico-2.min.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="{{ base }}/static/css/dashboard.css?v={{ asset_v }}">
+  <script src="{{ base }}/static/vendor/htmx-2.0.4.min.js?v={{ asset_v }}" defer></script>
 </head>
 <body>
   <button id="sidebar-toggle"
@@ -86,9 +86,9 @@
   <div id="demo-toast-host" class="demo-toast-host" aria-live="polite" aria-atomic="false"></div>
   {% include "partials/_demo_toast.html" %}
 
-  <script src="{{ base }}/static/js/sidebar.js" defer></script>
-  <script src="{{ base }}/static/js/sse.js" defer></script>
-  <script src="{{ base }}/static/js/notifications.js" defer></script>
-  <script src="{{ base }}/static/js/todays-demo.js" defer></script>
+  <script src="{{ base }}/static/js/sidebar.js?v={{ asset_v }}" defer></script>
+  <script src="{{ base }}/static/js/sse.js?v={{ asset_v }}" defer></script>
+  <script src="{{ base }}/static/js/notifications.js?v={{ asset_v }}" defer></script>
+  <script src="{{ base }}/static/js/todays-demo.js?v={{ asset_v }}" defer></script>
 </body>
 </html>
