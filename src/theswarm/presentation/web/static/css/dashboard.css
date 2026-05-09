@@ -1,5 +1,11 @@
 /* TheSwarm Dashboard — Dark theme on top of Pico CSS */
 
+/* Pico ramps --pico-font-size from 100% up to 131.25% at large viewports,
+   which makes everything balloon at desktop sizes. Pin html font-size to
+   15px so 1rem is always 15px no matter the viewport. !important defeats
+   pico's media-query rules without needing per-breakpoint overrides. */
+html { font-size: 15px !important; }
+
 :root {
   --bg-primary: #0d1117;
   --bg-secondary: #161b22;
@@ -39,6 +45,8 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { overflow-x: hidden; }
 
 body {
   background: var(--bg-primary);
@@ -140,13 +148,13 @@ html[data-sidebar="collapsed"] .sidebar-resize-handle { display: none; }
 .sidebar-nav::-webkit-scrollbar { width: 6px; }
 .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
 .sidebar-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-.sidebar-nav ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.sidebar-nav ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1px; }
 .sidebar-nav .sidebar-section {
-  padding: 0.95rem 0.75rem 0.3rem;
-  margin-top: 0.25rem;
-  font-size: 0.7rem;
+  padding: 0.6rem 0.75rem 0.2rem;
+  margin-top: 0.15rem;
+  font-size: 0.65rem;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   color: var(--sidebar-section-color);
   font-weight: 600;
   border-top: 1px solid var(--border);
@@ -154,15 +162,15 @@ html[data-sidebar="collapsed"] .sidebar-resize-handle { display: none; }
 .sidebar-nav .sidebar-section:first-of-type {
   margin-top: 0;
   border-top: 0;
-  padding-top: 0.4rem;
+  padding-top: 0.3rem;
 }
 .sidebar-nav a {
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 0.6rem 0.75rem;
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.35rem 0.65rem;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   text-decoration: none;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   transition: background 100ms ease, color 100ms ease;
   white-space: nowrap;
   overflow: hidden;
