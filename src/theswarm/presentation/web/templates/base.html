@@ -26,36 +26,58 @@
     </a>
 
     <nav class="sidebar-nav">
-      <ul>
-        <li class="sidebar-section">Workspace</li>
-        <li><a href="{{ base }}/" data-icon="◇"><span>Dashboard</span></a></li>
-        <li><a href="{{ base }}/projects/" data-icon="▤"><span>Projects</span></a></li>
-        <li><a href="{{ base }}/team" data-icon="◉"><span>Team</span></a></li>
+      <details open>
+        <summary>Workspace</summary>
+        <ul>
+          <li><a href="{{ base }}/">Dashboard</a></li>
+          <li><a href="{{ base }}/projects/">Projects</a></li>
+          <li><a href="{{ base }}/team">Team</a></li>
+        </ul>
+      </details>
 
-        <li class="sidebar-section">Activity</li>
-        <li><a href="{{ base }}/cycles/" data-icon="↻"><span>Cycles</span></a></li>
-        <li><a href="{{ base }}/chat" data-icon="✉"><span>Chat</span></a></li>
-        <li><a href="{{ base }}/proposals" data-icon="✦"><span>Proposals</span></a></li>
+      <details open>
+        <summary>Activity</summary>
+        <ul>
+          <li><a href="{{ base }}/cycles/">Cycles</a></li>
+          <li><a href="{{ base }}/chat">Chat</a></li>
+          <li><a href="{{ base }}/proposals">Proposals</a></li>
+        </ul>
+      </details>
 
-        <li class="sidebar-section">Output</li>
-        <li><a href="{{ base }}/reports/" data-icon="▦"><span>Reports</span></a></li>
-        <li><a href="{{ base }}/demos/" data-icon="▶"><span>Demos</span></a></li>
-        <li><a href="{{ base }}/features/" data-icon="★"><span>Features</span></a></li>
+      <details open>
+        <summary>Output</summary>
+        <ul>
+          <li><a href="{{ base }}/reports/">Reports</a></li>
+          <li><a href="{{ base }}/demos/">Demos</a></li>
+          <li><a href="{{ base }}/features/">Features</a></li>
+        </ul>
+      </details>
 
-        <li class="sidebar-section">Roles</li>
-        <li><a href="{{ base }}/architect/paved-road" data-icon="△"><span>Architect</span></a></li>
-        <li><a href="{{ base }}/chief-of-staff/routing" data-icon="◈"><span>Chief of Staff</span></a></li>
-        <li><a href="{{ base }}/intel/feed" data-icon="◎"><span>Scout</span></a></li>
+      <details>
+        <summary>Roles</summary>
+        <ul>
+          <li><a href="{{ base }}/architect/paved-road">Architect</a></li>
+          <li><a href="{{ base }}/chief-of-staff/routing">Chief of Staff</a></li>
+          <li><a href="{{ base }}/intel/feed">Scout</a></li>
+        </ul>
+      </details>
 
-        <li class="sidebar-section">Knowledge</li>
-        <li><a href="{{ base }}/semantic-memory" data-icon="❖"><span>Memory</span></a></li>
-        <li><a href="{{ base }}/prompt-library" data-icon="❡"><span>Prompts</span></a></li>
-        <li><a href="{{ base }}/refactor-programs" data-icon="⟲"><span>Refactors</span></a></li>
+      <details>
+        <summary>Knowledge</summary>
+        <ul>
+          <li><a href="{{ base }}/semantic-memory">Memory</a></li>
+          <li><a href="{{ base }}/prompt-library">Prompts</a></li>
+          <li><a href="{{ base }}/refactor-programs">Refactors</a></li>
+        </ul>
+      </details>
 
-        <li class="sidebar-section">System</li>
-        <li><a href="{{ base }}/settings" data-icon="⚙"><span>Settings</span></a></li>
-        <li><a href="{{ base }}/health/ready/page" data-icon="♥"><span>Health</span></a></li>
-      </ul>
+      <details open>
+        <summary>System</summary>
+        <ul>
+          <li><a href="{{ base }}/settings">Settings</a></li>
+          <li><a href="{{ base }}/health/ready/page">Health</a></li>
+        </ul>
+      </details>
     </nav>
 
     <footer class="sidebar-footer">

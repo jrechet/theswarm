@@ -148,55 +148,68 @@ html[data-sidebar="collapsed"] .sidebar-resize-handle { display: none; }
 .sidebar-nav::-webkit-scrollbar { width: 6px; }
 .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
 .sidebar-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-.sidebar-nav ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1px; }
-.sidebar-nav .sidebar-section {
-  padding: 0.6rem 0.75rem 0.2rem;
-  margin-top: 0.15rem;
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--sidebar-section-color);
-  font-weight: 600;
+/* Pico nav — let Pico handle defaults, override only sidebar-specific bits */
+.sidebar-nav details {
+  border: 0;
+  padding: 0;
+  margin: 0 0 0.25rem;
+  background: transparent;
+}
+.sidebar-nav details + details {
   border-top: 1px solid var(--border);
+  padding-top: 0.25rem;
 }
-.sidebar-nav .sidebar-section:first-of-type {
-  margin-top: 0;
-  border-top: 0;
-  padding-top: 0.3rem;
+.sidebar-nav summary {
+  padding: 0.45rem 0.75rem 0.25rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--sidebar-section-color);
+  cursor: pointer;
+  list-style: none;
 }
+.sidebar-nav summary::-webkit-details-marker { display: none; }
+.sidebar-nav summary::after {
+  float: right;
+  content: "›";
+  transition: transform 150ms ease;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.sidebar-nav details[open] > summary::after { transform: rotate(90deg); }
+.sidebar-nav summary:hover { color: var(--text-primary); }
+
+.sidebar-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sidebar-nav li { padding: 0; margin: 0; }
 .sidebar-nav a {
-  display: flex; align-items: center; gap: 0.6rem;
-  padding: 0.35rem 0.65rem;
+  display: block;
+  padding: 0.4rem 0.75rem 0.4rem 1.25rem;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   text-decoration: none;
-  font-size: 0.875rem;
-  transition: background 100ms ease, color 100ms ease;
+  font-size: 0.9rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.sidebar-nav a::before {
-  content: attr(data-icon);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.5rem;
-  font-size: 0.95rem;
-  color: var(--text-muted);
-  flex-shrink: 0;
+  transition: background 100ms ease, color 100ms ease;
 }
 .sidebar-nav a:hover {
   background: var(--bg-secondary);
   color: var(--text-primary);
   text-decoration: none;
 }
-.sidebar-nav a:hover::before { color: var(--accent); }
 .sidebar-nav a[aria-current="page"] {
   background: var(--accent-subtle);
   color: var(--accent);
 }
-.sidebar-nav a[aria-current="page"]::before { color: var(--accent); }
 .sidebar-footer {
   border-top: 1px solid var(--border);
   padding: 0.6rem 0.5rem 0.4rem;
@@ -238,15 +251,15 @@ html[data-sidebar="collapsed"] .sidebar-resize-handle { display: none; }
 .sidebar-status .status-dot.disconnected { background: var(--danger); }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-/* Collapsed: hide labels, sections, footer text. Keep icons. */
+/* Collapsed: hide every label and the entire nav body. The rail keeps only
+ * the logo mark and footer status dot. Clicking the toggle re-expands. */
 html[data-sidebar="collapsed"] .sidebar-logo-text,
-html[data-sidebar="collapsed"] .sidebar-nav a span,
-html[data-sidebar="collapsed"] .sidebar-section,
+html[data-sidebar="collapsed"] .sidebar-nav,
 html[data-sidebar="collapsed"] .sidebar-status-label,
 html[data-sidebar="collapsed"] .sidebar-notify-label { display: none; }
-html[data-sidebar="collapsed"] .sidebar-nav a {
+html[data-sidebar="collapsed"] .sidebar-logo {
   justify-content: center;
-  padding: 0.5rem 0.25rem;
+  padding: 0.6rem 0;
 }
 
 /* Sidebar toggle button — fixed top-left, floats above sidebar. */
@@ -2975,12 +2988,6 @@ main.app-main > .container > .data-table {
   background: linear-gradient(to bottom, transparent, var(--bg-primary) 80%);
   z-index: 1;
 }
-/* Hide the divider line in the collapsed icon-only state — keeps the rail
- * clean since labels are gone. */
-html[data-sidebar="collapsed"] .sidebar-nav .sidebar-section {
-  border-top: 0;
-  padding: 0.4rem 0;
-}
 
 /* ============================================================================
  * UI fix bundle 3 — MEDIUM / LOW polish.
@@ -3060,19 +3067,10 @@ h1.page-title {
 .reports-table .col-date     { width: 11rem; white-space: nowrap; }
 .reports-table th.col-num    { text-align: right; }
 
-/* (11) Mobile / collapsed sidebar gutter.
- * Bump the collapsed rail to ~56px and centre icons better so they're
- * easier to thumb on mobile and don't crowd the active-state background. */
+/* Collapsed sidebar rail width. Nav is hidden entirely when collapsed; only
+ * the logo mark remains, so a narrow rail is enough. */
 :root {
-  --sidebar-width-collapsed: 60px;
-}
-html[data-sidebar="collapsed"] .sidebar-nav a {
-  padding: 0.55rem 0;
-  margin: 0 0.4rem;
-  border-radius: var(--radius-sm);
-}
-html[data-sidebar="collapsed"] .sidebar-nav a::before {
-  width: auto;
+  --sidebar-width-collapsed: 56px;
 }
 @media (max-width: 720px) {
   /* On mobile the sidebar is hidden by default; when it slides in via
