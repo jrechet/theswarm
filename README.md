@@ -126,12 +126,36 @@ cd theswarm
 uv sync --dev
 ```
 
+### Required environment variables
+
+| Variable | Required? | Purpose | Failure mode if missing |
+|----------|-----------|---------|-------------------------|
+| `ANTHROPIC_API_KEY` | **yes** (real mode) | Claude API access for every agent | Cycles fail / sprint composer 502s |
+| `GITHUB_TOKEN` | **yes** (real mode) | PyGithub: read backlog, open PRs, merge | All GitHub ops fail |
+| `SWARM_VAULT_MASTER_KEY` | **yes** (dashboard) | Fernet key encrypting Settings page secrets | Settings page can't save API keys |
+| `SWARM_GITHUB_REPO` | optional | Default repo for legacy `--cycle` modes | Legacy CLI flags fail |
+| `SWARM_PO_GITHUB_REPOS` | optional | Comma-separated allowlist of repos | Without it cycles refuse to run |
+| `SWARM_PO_MATTERMOST_TOKEN` | optional | Mattermost bot for `@swarm-po` DMs | Chat integration disabled |
+| `MATTERMOST_BOT_TOKEN` | optional | Shared Mattermost token | Chat integration disabled |
+| `EXTERNAL_URL` | optional | Public URL for Mattermost callbacks | Mattermost interactive buttons broken |
+| `BASE_PATH` | optional | URL prefix when behind a reverse proxy | URL generation wrong behind proxy |
+| `SEQ_URL` / `SEQ_API_KEY` | optional | Centralised CLEF logs | No remote log aggregation |
+
+#### Generate the vault master key once
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Copy the printed value into `SWARM_VAULT_MASTER_KEY`. **Do not regenerate** — every secret previously stored becomes unrecoverable.
+
 ### Configure
 
 ```bash
 # .env
 ANTHROPIC_API_KEY=sk-ant-...
 GITHUB_TOKEN=ghp_...
+SWARM_VAULT_MASTER_KEY=...   # output of the Fernet command above
 SWARM_GITHUB_REPO=owner/my-app
 
 # Optional
@@ -146,6 +170,8 @@ SEQ_API_KEY=...
 ```bash
 uv run python -m theswarm validate    # check env before starting
 ```
+
+After boot the dashboard runs `/health/ready` and shows a banner at the top of every page if anything is missing — open `/health/ready/page` for the full per-component breakdown.
 
 ### Start
 

@@ -3440,3 +3440,34 @@ body.has-todays-demo-expanded { overflow: hidden; }
 
 
 
+
+/* Readiness banner — surfaces missing config (vault, API keys, etc.) */
+.readiness-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.9rem;
+  margin: 0 0 1rem;
+  border-left: 4px solid #ffb400;
+  background: rgba(255, 180, 0, 0.08);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  border-radius: 4px;
+}
+.readiness-banner.readiness-banner-error {
+  border-left-color: #ff5d6c;
+  background: rgba(255, 93, 108, 0.08);
+}
+.readiness-banner a { margin-left: 0.25rem; }
+.readiness-banner-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.35rem;
+  width: auto;
+}
+.readiness-banner-dismiss:hover { color: var(--text-primary); }

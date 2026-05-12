@@ -205,6 +205,41 @@ async def readiness(request: Request) -> JSONResponse:
         except Exception as exc:
             checks["cycles"] = {"status": "warn", "detail": f"could not read cycles: {exc}"}
 
+    # 8) Secret vault — required for the Settings page to persist API keys
+    if os.environ.get("SWARM_VAULT_MASTER_KEY", "").strip():
+        checks["secret_vault"] = {"status": "ok", "detail": "SWARM_VAULT_MASTER_KEY set"}
+    else:
+        checks["secret_vault"] = {
+            "status": "warn",
+            "detail": (
+                "SWARM_VAULT_MASTER_KEY not set — Settings page cannot save API keys. "
+                "Generate: python -c \"from cryptography.fernet import Fernet; "
+                "print(Fernet.generate_key().decode())\""
+            ),
+        }
+
+    # 9) Anthropic key reachable (env or vault) — required for any Claude call
+    has_anthropic_env = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+    has_anthropic_vault = False
+    vault = getattr(request.app.state, "secret_vault", None)
+    if vault is not None and not has_anthropic_env:
+        try:
+            from theswarm.application.services.global_settings import GLOBAL_NAMESPACE
+            stored = await vault.get(GLOBAL_NAMESPACE, "ANTHROPIC_API_KEY")
+            has_anthropic_vault = bool(stored)
+        except Exception:
+            has_anthropic_vault = False
+    if has_anthropic_env or has_anthropic_vault:
+        checks["anthropic_key"] = {
+            "status": "ok",
+            "detail": "ANTHROPIC_API_KEY available (" + ("env" if has_anthropic_env else "vault") + ")",
+        }
+    else:
+        checks["anthropic_key"] = {
+            "status": "error",
+            "detail": "ANTHROPIC_API_KEY not set in env and not in vault — Claude calls will fail",
+        }
+
     # Roll up
     statuses = {c["status"] for c in checks.values()}
     overall = "error" if "error" in statuses else ("warn" if "warn" in statuses else "ok")

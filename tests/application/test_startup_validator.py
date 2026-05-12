@@ -21,10 +21,20 @@ class TestValidate:
         monkeypatch.setenv("SWARM_GITHUB_REPO", "owner/repo")
         monkeypatch.setenv("EXTERNAL_URL", "https://swarm.example.com")
         monkeypatch.setenv("MATTERMOST_BOT_TOKEN", "mm-test")
+        monkeypatch.setenv("SWARM_VAULT_MASTER_KEY", "fake-fernet-key")
         result = validator.validate()
         assert result.ok
         assert len(result.errors) == 0
         assert len(result.warnings) == 0
+
+    def test_missing_vault_master_key_warns(self, validator, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp-test")
+        monkeypatch.setenv("MATTERMOST_BOT_TOKEN", "mm-test")
+        monkeypatch.delenv("SWARM_VAULT_MASTER_KEY", raising=False)
+        result = validator.validate()
+        assert result.ok
+        assert any("SWARM_VAULT_MASTER_KEY" in w for w in result.warnings)
 
     def test_missing_anthropic_key(self, validator, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)

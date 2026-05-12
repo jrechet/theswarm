@@ -34,13 +34,21 @@ class StartupValidator:
         if require_api_keys:
             if not os.environ.get("ANTHROPIC_API_KEY"):
                 errors.append(
-                    "ANTHROPIC_API_KEY not set. Required for Claude API access."
+                    "ANTHROPIC_API_KEY not set. Required for Claude API access. "
+                    "Set in env or paste via Settings page (requires SWARM_VAULT_MASTER_KEY)."
                 )
 
             github_token = os.environ.get("GITHUB_TOKEN", "")
             if not github_token:
                 warnings.append(
                     "GITHUB_TOKEN not set. GitHub operations will fail."
+                )
+
+            if not os.environ.get("SWARM_VAULT_MASTER_KEY", "").strip():
+                warnings.append(
+                    "SWARM_VAULT_MASTER_KEY not set. Dashboard Settings cannot persist "
+                    "API keys/tokens. Generate with: "
+                    "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
                 )
 
         # Check for common misconfigs

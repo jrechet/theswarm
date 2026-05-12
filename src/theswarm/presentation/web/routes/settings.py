@@ -82,15 +82,65 @@ async def settings_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/{key}")
-async def update_setting(request: Request, key: str, value: str = Form("")) -> RedirectResponse:
+async def update_setting(request: Request, key: str, value: str = Form("")):
+    """Persist a setting. On vault failure, re-render the settings page with
+    a friendly explanation instead of returning raw JSON 503."""
     svc = _settings_service(request)
+    base = request.app.state.base_path or ""
+
     if svc is None:
-        raise HTTPException(status_code=501, detail="vault not configured on this server")
+        return await _render_with_error(
+            request,
+            "Vault not configured on this server. Set SWARM_VAULT_MASTER_KEY env "
+            "var on the server and redeploy. Generate a key with: "
+            "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"",
+        )
+
     try:
         await svc.set(key, value)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except VaultError as exc:
-        raise HTTPException(status_code=503, detail=f"vault error: {exc}")
-    base = request.app.state.base_path or ""
+        return await _render_with_error(request, f"Vault error: {exc}")
+
     return RedirectResponse(url=f"{base}/settings", status_code=303)
+
+
+async def _render_with_error(request: Request, message: str) -> HTMLResponse:
+    """Re-render the settings page with the supplied error banner."""
+    templates = request.app.state.templates
+    svc = _settings_service(request)
+
+    rows: list[dict] = []
+    stored: dict[str, str | None] = {}
+    if svc is not None:
+        try:
+            stored = await svc.all()
+        except Exception:
+            stored = {}
+
+    for s in SETTINGS_SCHEMA:
+        env_value = os.environ.get(s.key, "")
+        stored_value = stored.get(s.key)
+        active = stored_value or env_value
+        rows.append({
+            "key": s.key,
+            "label": s.label,
+            "description": s.description,
+            "secret": s.secret,
+            "required": s.required,
+            "is_set": bool(active),
+            "masked": _mask(active) if s.secret else (active or ""),
+            "from_env_only": bool(env_value and not stored_value),
+        })
+
+    return templates.TemplateResponse(
+        "settings.html",
+        {
+            "request": request,
+            "rows": rows,
+            "vault_ok": False,
+            "vault_error": message,
+        },
+        status_code=503,
+    )
