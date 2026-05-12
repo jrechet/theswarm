@@ -19,6 +19,8 @@ inputs:
     required: true
   seq_api_key:
     required: true
+  swarm_vault_master_key:
+    required: true
 runs:
   using: composite
   steps:
@@ -33,6 +35,7 @@ runs:
         EXTERNAL_URL: ${{ inputs.external_url }}
         SEQ_URL: ${{ inputs.seq_url }}
         SEQ_API_KEY: ${{ inputs.seq_api_key }}
+        SWARM_VAULT_MASTER_KEY: ${{ inputs.swarm_vault_master_key }}
       run: |
         {
           echo "MATTERMOST_BOT_TOKEN=$MATTERMOST_BOT_TOKEN"
@@ -44,4 +47,5 @@ runs:
           echo "EXTERNAL_URL=$EXTERNAL_URL"
           echo "SEQ_URL=$SEQ_URL"
           echo "SEQ_API_KEY=$SEQ_API_KEY"
+          echo "SWARM_VAULT_MASTER_KEY=$SWARM_VAULT_MASTER_KEY"
         } > .env
