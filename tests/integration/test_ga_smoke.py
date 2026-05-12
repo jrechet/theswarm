@@ -106,4 +106,4 @@ class TestGASmokeGate:
         assert "cost-preview-modal" in r.text
         # Sidebar entries we shipped in the redesign.
         assert "TheSwarm" in r.text
-        assert 'data-icon=' in r.text
+        assert "<summary>Workspace</summary>" in r.text
