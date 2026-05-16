@@ -148,53 +148,69 @@ html[data-sidebar="collapsed"] .sidebar-resize-handle { display: none; }
 .sidebar-nav::-webkit-scrollbar { width: 6px; }
 .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
 .sidebar-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-/* Pico nav — let Pico handle defaults, override only sidebar-specific bits */
+/* Sidebar nav — Pico's `nav ul` applies `display:flex; align-items:center`
+ * and `nav li { display:inline-block }` which centers everything horizontally.
+ * Undo those for a vertical, left-aligned sidebar list. */
 .sidebar-nav details {
   border: 0;
   padding: 0;
-  margin: 0 0 0.25rem;
+  margin: 0;
   background: transparent;
 }
 .sidebar-nav details + details {
   border-top: 1px solid var(--border);
-  padding-top: 0.25rem;
 }
 .sidebar-nav summary {
-  padding: 0.45rem 0.75rem 0.25rem;
-  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   font-weight: 600;
   color: var(--sidebar-section-color);
   cursor: pointer;
   list-style: none;
+  user-select: none;
 }
-.sidebar-nav summary::-webkit-details-marker { display: none; }
+.sidebar-nav summary::-webkit-details-marker,
+.sidebar-nav summary::marker { display: none; content: ""; }
 .sidebar-nav summary::after {
-  float: right;
-  content: "›";
+  content: "";
+  width: 0; height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  opacity: 0.55;
   transition: transform 150ms ease;
-  font-size: 0.9rem;
-  line-height: 1;
 }
 .sidebar-nav details[open] > summary::after { transform: rotate(90deg); }
 .sidebar-nav summary:hover { color: var(--text-primary); }
 
+/* Override Pico's `nav ul { display:flex; align-items:center }`
+ * and `nav li { display:inline-block }`. */
 .sidebar-nav ul {
   list-style: none;
-  padding: 0;
-  margin: 0 0 0.15rem;
+  padding: 0 0 0.25rem;
+  margin: 0;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 1px;
 }
-.sidebar-nav li { padding: 0; margin: 0; }
+.sidebar-nav li {
+  display: block;
+  padding: 0;
+  margin: 0;
+}
 .sidebar-nav a {
   display: block;
-  padding: 0.4rem 0.75rem 0.4rem 1.25rem;
+  padding: 0.4rem 0.75rem 0.4rem 1.4rem;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   text-decoration: none;
+  text-align: left;
   font-size: 0.9rem;
   white-space: nowrap;
   overflow: hidden;
