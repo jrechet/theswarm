@@ -118,6 +118,66 @@ async def test_commit_all_with_changes(mocker):
     assert asyncio.create_subprocess_exec.call_count == 3
 
 
+async def test_commit_all_sets_identity_fallback_on_rc128(mocker):
+    """Prod cycle adf70608e595: commit failed rc=128 'Author identity unknown'.
+
+    commit_all must set a repo-local identity and retry once instead of
+    failing the whole Dev iteration.
+    """
+    commit_attempts = 0
+    config_calls: list[tuple[str, ...]] = []
+
+    async def fake_subprocess(*args, **kwargs):
+        nonlocal commit_attempts
+        proc = AsyncMock()
+        proc.returncode = 0
+        if args[1] == "status":
+            proc.communicate = AsyncMock(return_value=(b"M file.py", b""))
+        elif args[1] == "commit":
+            commit_attempts += 1
+            if commit_attempts == 1:
+                proc.returncode = 128
+                proc.communicate = AsyncMock(return_value=(
+                    b"",
+                    b"Author identity unknown\n\n*** Please tell me who you are.",
+                ))
+            else:
+                proc.communicate = AsyncMock(return_value=(b"", b""))
+        elif args[1] == "config":
+            config_calls.append(args[1:])
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+        else:
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+        return proc
+
+    mocker.patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess)
+    result = await commit_all("/tmp/repo", "test commit")
+
+    assert result is True
+    assert commit_attempts == 2
+    configured = {c[1] for c in config_calls}
+    assert configured == {"user.name", "user.email"}
+
+
+async def test_commit_all_other_error_still_raises(mocker):
+    """A commit failure unrelated to identity must still propagate."""
+    async def fake_subprocess(*args, **kwargs):
+        proc = AsyncMock()
+        proc.returncode = 0
+        if args[1] == "status":
+            proc.communicate = AsyncMock(return_value=(b"M file.py", b""))
+        elif args[1] == "commit":
+            proc.returncode = 1
+            proc.communicate = AsyncMock(return_value=(b"", b"pre-commit hook failed"))
+        else:
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+        return proc
+
+    mocker.patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess)
+    with pytest.raises(RuntimeError, match="pre-commit hook failed"):
+        await commit_all("/tmp/repo", "test commit")
+
+
 async def test_commit_all_no_changes(mocker):
     """When status returns empty, no commit should happen."""
 

@@ -123,6 +123,48 @@ async def test_write_e2e_tests_with_github_issues(tmp_path):
     assert result["tokens_used"] == 500
 
 
+async def test_write_e2e_tests_bounds_source_context(tmp_path):
+    """Huge source files must not blow up the prompt (prod 400: prompt too long)."""
+    routers_dir = tmp_path / "src" / "routers"
+    routers_dir.mkdir(parents=True)
+    for i in range(5):
+        (routers_dir / f"router{i}.py").write_text("x = 1\n" * 20_000)  # ~120k chars each
+    (tmp_path / "src" / "schemas.py").write_text("y = 2\n" * 20_000)
+
+    code = "import pytest\n\ndef test_ok():\n    pass\n"
+    claude = _make_claude_mock(FakeClaudeResult(text=code))
+
+    state = {"claude": claude, "workspace": str(tmp_path), "github": None}
+    await write_e2e_tests(state)
+
+    prompt = claude.run.call_args[0][0]
+    from theswarm.agents.qa import _MAX_SOURCE_CONTEXT_CHARS
+    # Prompt = template + bounded source context; the bound must hold with margin
+    assert len(prompt) < _MAX_SOURCE_CONTEXT_CHARS + 5_000
+    assert "truncated" in prompt
+
+
+async def test_write_e2e_tests_survives_bad_request(tmp_path):
+    """A 400 from the API must degrade gracefully, not kill the QA phase."""
+    import anthropic
+    import httpx
+
+    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    response = httpx.Response(400, request=request)
+    error = anthropic.BadRequestError(
+        "prompt is too long", response=response, body=None,
+    )
+    claude = MagicMock()
+    claude.run = AsyncMock(side_effect=error)
+
+    state = {"claude": claude, "workspace": str(tmp_path), "github": None}
+    result = await write_e2e_tests(state)  # must not raise
+
+    assert result["tokens_used"] == 0
+    test_file = tmp_path / "tests" / "e2e" / "test_api_e2e.py"
+    assert not test_file.exists()
+
+
 # ── run_e2e_tests ────────────────────────────────────────────────────────
 
 

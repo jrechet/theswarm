@@ -11,6 +11,8 @@ import logging
 import re
 from datetime import datetime
 
+import anthropic
+
 from langgraph.graph import END, StateGraph
 
 from theswarm.agents.base import load_context, stub_result
@@ -19,6 +21,13 @@ from theswarm.config import AgentState, Role
 log = logging.getLogger(__name__)
 
 E2E_PORT = 8000  # port for the live server during E2E tests
+
+# Hard bounds on the source context appended to the E2E prompt. Prod cycle
+# 3859db29d158 failed with a 400 'prompt is too long' because whole router
+# files were embedded unbounded; E2E generation only needs signatures and
+# routes, which live at the top of each file.
+_MAX_SNIPPET_CHARS = 8_000  # per source file
+_MAX_SOURCE_CONTEXT_CHARS = 24_000  # total across all files
 
 
 # ── Prompts ──────────────────────────────────────────────────────────────
@@ -89,19 +98,33 @@ async def write_e2e_tests(state: AgentState) -> dict:
         except Exception:
             pass
 
-    # Read source files to give Claude full context
+    # Read source files to give Claude context — bounded, or the prompt can
+    # exceed the model's context window (400 invalid_request_error).
     source_snippets = []
+    budget = _MAX_SOURCE_CONTEXT_CHARS
+
+    def _add_snippet(label: str, text: str) -> None:
+        nonlocal budget
+        if budget <= 0:
+            return
+        if len(text) > _MAX_SNIPPET_CHARS:
+            text = text[:_MAX_SNIPPET_CHARS] + "\n# … (truncated)"
+        if len(text) > budget:
+            text = text[:budget] + "\n# … (truncated)"
+        budget -= len(text)
+        source_snippets.append(f"### {label}\n```python\n{text}\n```")
+
     routers_dir = os.path.join(workspace, "src", "routers")
     if os.path.isdir(routers_dir):
         for fname in sorted(os.listdir(routers_dir)):
             if fname.endswith(".py") and not fname.startswith("_"):
                 fpath = os.path.join(routers_dir, fname)
                 with open(fpath) as f:
-                    source_snippets.append(f"### {fname}\n```python\n{f.read()}\n```")
+                    _add_snippet(fname, f.read())
     schemas_path = os.path.join(workspace, "src", "schemas.py")
     if os.path.exists(schemas_path):
         with open(schemas_path) as f:
-            source_snippets.append(f"### schemas.py\n```python\n{f.read()}\n```")
+            _add_snippet("schemas.py", f.read())
 
     context = state.get("context", "")
     prompt = E2E_PROMPT.format(
@@ -112,7 +135,16 @@ async def write_e2e_tests(state: AgentState) -> dict:
     if source_snippets:
         prompt += "\n\n## Source code\n" + "\n\n".join(source_snippets)
 
-    result = await claude.run(prompt, workdir=workspace, timeout=90)
+    try:
+        result = await claude.run(prompt, workdir=workspace, timeout=90)
+    except anthropic.BadRequestError:
+        # E2E generation is an enhancement — a rejected request must not
+        # fail the whole QA phase (and with it the cycle).
+        log.exception(
+            "QA: E2E generation request rejected (prompt_chars=%d) — skipping",
+            len(prompt),
+        )
+        return {"tokens_used": 0}
 
     # Extract code from Claude's response
     test_code = _extract_python_code(result.text)

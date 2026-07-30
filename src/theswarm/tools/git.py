@@ -9,6 +9,12 @@ import shutil
 
 log = logging.getLogger(__name__)
 
+# Repo-local identity applied when the environment provides none (matches the
+# GIT_AUTHOR/COMMITTER values in docker-compose.yml). Prod cycles died with
+# rc=128 'Author identity unknown' when the deploy env lost those vars.
+_FALLBACK_IDENTITY_NAME = "TheSwarm Dev Agent"
+_FALLBACK_IDENTITY_EMAIL = "swarm-dev@jrec.fr"
+
 
 async def _run_git(
     *args: str,
@@ -62,7 +68,15 @@ async def commit_all(workdir: str, message: str) -> bool:
         log.info("Nothing to commit")
         return False
 
-    await _run_git("commit", "-m", message, cwd=workdir)
+    try:
+        await _run_git("commit", "-m", message, cwd=workdir)
+    except RuntimeError as exc:
+        if "Author identity unknown" not in str(exc) and "user.email" not in str(exc):
+            raise
+        log.warning("No git identity in environment — setting repo-local fallback")
+        await _run_git("config", "user.name", _FALLBACK_IDENTITY_NAME, cwd=workdir)
+        await _run_git("config", "user.email", _FALLBACK_IDENTITY_EMAIL, cwd=workdir)
+        await _run_git("commit", "-m", message, cwd=workdir)
     log.info("Committed: %s", message)
     return True
 
