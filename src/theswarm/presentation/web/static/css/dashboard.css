@@ -80,7 +80,10 @@ html[data-sidebar="collapsed"] body {
   height: 100vh;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
-  padding: 1rem 0.6rem 0.6rem;
+  /* Top padding clears the fixed hamburger toggle (0.5rem offset + 2rem
+   * button) so the logo link never sits under it — overlapping hit targets
+   * made taps near the toggle navigate to "/" instead of toggling. */
+  padding: 2.75rem 0.6rem 0.6rem;
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
@@ -189,8 +192,14 @@ html[data-sidebar="collapsed"] .sidebar-resize-handle { display: none; }
 .sidebar-nav summary:hover { color: var(--text-primary); }
 
 /* Override Pico's `nav ul { display:flex; align-items:center }`
- * and `nav li { display:inline-block }`. */
-.sidebar-nav ul {
+ * and `nav li { display:inline-block }`. The :first-of-type/:last-of-type
+ * co-selectors are needed to outrank Pico's
+ * `nav ul:first-of-type { margin-left: calc(spacing * -1) }` (0-1-2),
+ * which otherwise beats a bare `.sidebar-nav ul` (0-1-1) and drags the
+ * list off the left edge — clipping the first characters of every label. */
+.sidebar-nav ul,
+.sidebar-nav ul:first-of-type,
+.sidebar-nav ul:last-of-type {
   list-style: none;
   padding: 0 0 0.25rem;
   margin: 0;
@@ -205,8 +214,13 @@ html[data-sidebar="collapsed"] .sidebar-resize-handle { display: none; }
   margin: 0;
 }
 .sidebar-nav a {
-  display: block;
-  padding: 0.4rem 0.75rem 0.4rem 1.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  /* Pico's `nav li :where(a)` applies negative margins to pull links flush
+   * with the nav edge; reset them or labels get clipped. */
+  margin: 0;
+  padding: 0.4rem 0.75rem;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   text-decoration: none;
@@ -217,15 +231,27 @@ html[data-sidebar="collapsed"] .sidebar-resize-handle { display: none; }
   text-overflow: ellipsis;
   transition: background 100ms ease, color 100ms ease;
 }
+.sidebar-nav a::before {
+  content: attr(data-icon);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
 .sidebar-nav a:hover {
   background: var(--bg-secondary);
   color: var(--text-primary);
   text-decoration: none;
 }
+.sidebar-nav a:hover::before { color: var(--accent); }
 .sidebar-nav a[aria-current="page"] {
   background: var(--accent-subtle);
   color: var(--accent);
 }
+.sidebar-nav a[aria-current="page"]::before { color: var(--accent); }
 .sidebar-footer {
   border-top: 1px solid var(--border);
   padding: 0.6rem 0.5rem 0.4rem;
@@ -316,7 +342,9 @@ html[data-sidebar="collapsed"] .sidebar-logo {
   }
   html[data-sidebar="expanded"] .sidebar {
     position: fixed;
-    width: var(--sidebar-width);
+    /* Cap the drawer so it never covers the whole viewport, even if the
+     * user widened the sidebar on desktop (width is persisted). */
+    width: min(var(--sidebar-width), 82vw);
     box-shadow: 0 0 30px rgba(0,0,0,0.6);
   }
   html[data-sidebar="expanded"] body { grid-template-columns: 0 1fr; }
