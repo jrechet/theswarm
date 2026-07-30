@@ -191,15 +191,10 @@ html[data-sidebar="collapsed"] .sidebar-resize-handle { display: none; }
 .sidebar-nav details[open] > summary::after { transform: rotate(90deg); }
 .sidebar-nav summary:hover { color: var(--text-primary); }
 
-/* Override Pico's `nav ul { display:flex; align-items:center }`
- * and `nav li { display:inline-block }`. The :first-of-type/:last-of-type
- * co-selectors are needed to outrank Pico's
- * `nav ul:first-of-type { margin-left: calc(spacing * -1) }` (0-1-2),
- * which otherwise beats a bare `.sidebar-nav ul` (0-1-1) and drags the
- * list off the left edge — clipping the first characters of every label. */
-.sidebar-nav ul,
-.sidebar-nav ul:first-of-type,
-.sidebar-nav ul:last-of-type {
+/* The nav container is a <div role="navigation">, NOT a <nav> element —
+ * Pico styles every <nav> (flex row, centered items, negative ul margins)
+ * and kept clipping labels. Plain lists, plain rules. */
+.sidebar-nav ul {
   list-style: none;
   padding: 0 0 0.25rem;
   margin: 0;
@@ -217,8 +212,6 @@ html[data-sidebar="collapsed"] .sidebar-resize-handle { display: none; }
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  /* Pico's `nav li :where(a)` applies negative margins to pull links flush
-   * with the nav edge; reset them or labels get clipped. */
   margin: 0;
   padding: 0.4rem 0.75rem;
   border-radius: var(--radius-sm);

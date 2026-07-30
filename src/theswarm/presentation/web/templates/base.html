@@ -19,13 +19,17 @@
     <span class="visually-hidden">Toggle sidebar</span>
   </button>
 
-  <aside id="sidebar" class="sidebar" aria-label="Main navigation">
+  <aside id="sidebar" class="sidebar">
     <a href="{{ base }}/" class="sidebar-logo">
       <span class="sidebar-logo-mark">⬡</span>
       <span class="sidebar-logo-text">TheSwarm</span>
     </a>
 
-    <nav class="sidebar-nav">
+    <!-- div + role=navigation instead of <nav>: Pico styles every <nav>
+         (flex row, centered items, negative ul margins) and its element
+         selectors kept outranking our overrides. Opting out of the tag
+         opts out of the whole fight. -->
+    <div class="sidebar-nav" role="navigation" aria-label="Main navigation">
       <details open>
         <summary>Workspace</summary>
         <ul>
@@ -78,7 +82,7 @@
           <li><a href="{{ base }}/health/ready/page" data-icon="♥"><span>Health</span></a></li>
         </ul>
       </details>
-    </nav>
+    </div>
 
     <footer class="sidebar-footer">
       <div class="sidebar-status" id="sse-status" title="Server-sent events stream — used for live cycle updates">
