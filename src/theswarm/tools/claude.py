@@ -61,11 +61,13 @@ def _classify_fatal(exc: BaseException) -> str | None:
             return f"Anthropic account/billing error: {exc}"
     return None
 
-# Map short names to full model IDs
+# Map short names to model IDs (aliases, no date suffix — kept current).
+# Prod cycle 129d471406b1: the CLI 404'd on the retired claude-sonnet-4-*
+# date-pinned ID, silently falling back to the API path.
 _MODEL_MAP: dict[str, str] = {
-    "sonnet": "claude-sonnet-4-20250514",
-    "opus": "claude-opus-4-20250514",
-    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-5",
+    "opus": "claude-opus-5",
+    "haiku": "claude-haiku-4-5",
 }
 
 
@@ -82,14 +84,14 @@ class ClaudeResult:
 
 # Approximate pricing per 1M tokens (USD) — used for the API path.
 _INPUT_COST: dict[str, float] = {
-    "claude-sonnet-4-20250514": 3.0,
-    "claude-opus-4-20250514": 15.0,
-    "claude-haiku-4-5-20251001": 0.80,
+    "claude-sonnet-5": 3.0,
+    "claude-opus-5": 5.0,
+    "claude-haiku-4-5": 1.0,
 }
 _OUTPUT_COST: dict[str, float] = {
-    "claude-sonnet-4-20250514": 15.0,
-    "claude-opus-4-20250514": 75.0,
-    "claude-haiku-4-5-20251001": 4.0,
+    "claude-sonnet-5": 15.0,
+    "claude-opus-5": 25.0,
+    "claude-haiku-4-5": 5.0,
 }
 
 

@@ -11,18 +11,18 @@ class TestEstimateCost:
     def test_sonnet_cost(self):
         # 1M input + 1M output: input $3.00 + output $15.00 = $18.00
         # With 1000 tokens: 3.0 * 1000 / 1_000_000 + 15.0 * 1000 / 1_000_000
-        cost = _estimate_cost("claude-sonnet-4-20250514", 1_000_000, 1_000_000)
+        cost = _estimate_cost("claude-sonnet-5", 1_000_000, 1_000_000)
         assert cost == pytest.approx(18.0, abs=0.01)
 
     def test_opus_cost(self):
-        # 1M input + 1M output: input $15.00 + output $75.00 = $90.00
-        cost = _estimate_cost("claude-opus-4-20250514", 1_000_000, 1_000_000)
-        assert cost == pytest.approx(90.0, abs=0.01)
+        # 1M input + 1M output: input $5.00 + output $25.00 = $30.00
+        cost = _estimate_cost("claude-opus-5", 1_000_000, 1_000_000)
+        assert cost == pytest.approx(30.0, abs=0.01)
 
     def test_haiku_cost(self):
-        # 1M input + 1M output: input $0.80 + output $4.00 = $4.80
-        cost = _estimate_cost("claude-haiku-4-5-20251001", 1_000_000, 1_000_000)
-        assert cost == pytest.approx(4.80, abs=0.01)
+        # 1M input + 1M output: input $1.00 + output $5.00 = $6.00
+        cost = _estimate_cost("claude-haiku-4-5", 1_000_000, 1_000_000)
+        assert cost == pytest.approx(6.00, abs=0.01)
 
     def test_unknown_model_uses_default_rates(self):
         # Default rates: input=3.0, output=15.0 (same as sonnet)
@@ -30,32 +30,32 @@ class TestEstimateCost:
         assert cost == pytest.approx(18.0, abs=0.01)
 
     def test_zero_tokens(self):
-        cost = _estimate_cost("claude-sonnet-4-20250514", 0, 0)
+        cost = _estimate_cost("claude-sonnet-5", 0, 0)
         assert cost == 0.0
 
     def test_large_token_count(self):
         # 1M input tokens for sonnet: 3.0 * 1M / 1M = $3.00
         # 1M output tokens for sonnet: 15.0 * 1M / 1M = $15.00
-        cost = _estimate_cost("claude-sonnet-4-20250514", 1_000_000, 1_000_000)
+        cost = _estimate_cost("claude-sonnet-5", 1_000_000, 1_000_000)
         assert cost == pytest.approx(18.0, abs=0.01)
 
 
 class TestResolveModel:
     def test_sonnet_short_name(self):
         cli = ClaudeCLI(model="sonnet")
-        assert cli._resolve_model() == "claude-sonnet-4-20250514"
+        assert cli._resolve_model() == "claude-sonnet-5"
 
     def test_opus_short_name(self):
         cli = ClaudeCLI(model="opus")
-        assert cli._resolve_model() == "claude-opus-4-20250514"
+        assert cli._resolve_model() == "claude-opus-5"
 
     def test_haiku_short_name(self):
         cli = ClaudeCLI(model="haiku")
-        assert cli._resolve_model() == "claude-haiku-4-5-20251001"
+        assert cli._resolve_model() == "claude-haiku-4-5"
 
     def test_full_model_id_passthrough(self):
-        cli = ClaudeCLI(model="claude-sonnet-4-20250514")
-        assert cli._resolve_model() == "claude-sonnet-4-20250514"
+        cli = ClaudeCLI(model="claude-sonnet-5")
+        assert cli._resolve_model() == "claude-sonnet-5"
 
     def test_unknown_model_passthrough(self):
         cli = ClaudeCLI(model="my-custom-model")
@@ -79,11 +79,11 @@ class TestClaudeResult:
             output_tokens=200,
             total_tokens=700,
             cost_usd=0.0045,
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-5",
         )
         assert result.text == "response"
         assert result.input_tokens == 500
         assert result.output_tokens == 200
         assert result.total_tokens == 700
         assert result.cost_usd == pytest.approx(0.0045)
-        assert result.model == "claude-sonnet-4-20250514"
+        assert result.model == "claude-sonnet-5"
