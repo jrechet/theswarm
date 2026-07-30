@@ -12,6 +12,7 @@ from theswarm.agents.qa import build_qa_graph
 from theswarm.agents.techlead import build_techlead_graph
 from theswarm.config import CycleConfig, Phase, Role
 from theswarm.token_counter import TokenTracker
+from theswarm.tools.claude import ClaudeFatalError
 
 log = logging.getLogger(__name__)
 
@@ -326,6 +327,10 @@ async def run_daily_cycle(
             except PhaseTimeout:
                 await _progress("Dev", f"Iteration {iteration} timed out — moving on")
                 continue
+            except ClaudeFatalError as exc:
+                # Billing/auth error — every later call would fail identically.
+                await _progress("Dev", f"Fatal Claude error — aborting cycle: {str(exc)[:160]}")
+                raise
             except Exception as exc:
                 msg = f"{type(exc).__name__}: {str(exc)[:160]}"
                 await _progress("Dev", f"Iteration {iteration} failed ({msg}) — retrying once")
@@ -340,6 +345,9 @@ async def run_daily_cycle(
                 except PhaseTimeout:
                     await _progress("Dev", f"Iteration {iteration} retry timed out — moving on")
                     continue
+                except ClaudeFatalError as exc2:
+                    await _progress("Dev", f"Fatal Claude error — aborting cycle: {str(exc2)[:160]}")
+                    raise
                 except Exception as exc2:
                     msg2 = f"{type(exc2).__name__}: {str(exc2)[:160]}"
                     await _progress("Dev", f"Iteration {iteration} retry also failed ({msg2}) — skipping")

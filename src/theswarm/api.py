@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -17,6 +18,12 @@ from typing import Any
 from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
+
+# Whole-cycle hard timeout. Per-phase timeouts in cycle.py cover normal
+# operation; this is the backstop for hangs outside phase scopes (workspace
+# clone, retrospective, anything awaiting without its own timeout). Sized
+# above the worst-case sum of phase budgets (~2h20).
+CYCLE_HARD_TIMEOUT_SECONDS = int(os.environ.get("SWARM_CYCLE_TIMEOUT", str(3 * 3600)))
 
 
 class CycleStatus(str, Enum):
@@ -345,12 +352,20 @@ async def run_api_cycle(
                 except Exception:
                     log.exception("checkpoint save failed for cycle %s phase %s", cycle_id, phase)
 
-        result = await run_daily_cycle(
-            cycle_config,
-            on_progress=on_progress,
-            on_checkpoint=on_checkpoint,
-            resume_from=resume_from,
-        )
+        try:
+            result = await asyncio.wait_for(
+                run_daily_cycle(
+                    cycle_config,
+                    on_progress=on_progress,
+                    on_checkpoint=on_checkpoint,
+                    resume_from=resume_from,
+                ),
+                timeout=CYCLE_HARD_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            raise RuntimeError(
+                f"cycle exceeded hard timeout ({CYCLE_HARD_TIMEOUT_SECONDS}s) — aborted"
+            ) from None
 
         dash.cost_so_far = result.get("cost_usd", 0.0)
         cycle_date = result.get("date", "")

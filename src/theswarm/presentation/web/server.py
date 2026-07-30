@@ -478,6 +478,16 @@ async def start_server(
     except Exception:
         log.exception("Orphan cycle reap failed (continuing startup)")
 
+    # Also reap periodically: an in-process hang past the whole-cycle hard
+    # timeout must not stay "running" until the next deploy. The age cutoff
+    # sits above CYCLE_HARD_TIMEOUT_SECONDS so live cycles are never reaped.
+    from theswarm.api import CYCLE_HARD_TIMEOUT_SECONDS
+    from theswarm.application.services.orphan_reaper import run_orphan_reap_loop
+
+    asyncio.create_task(run_orphan_reap_loop(
+        cycle_repo, max_age_seconds=CYCLE_HARD_TIMEOUT_SECONDS + 1800,
+    ))
+
     # Report storage
     from theswarm.infrastructure.recording.report_repo import SQLiteReportRepository
     from theswarm.infrastructure.recording.artifact_store import LocalArtifactStore
