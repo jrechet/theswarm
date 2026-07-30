@@ -31,7 +31,7 @@ async def test_run_basic():
     assert result.output_tokens == 50
     assert result.total_tokens == 150
     assert result.cost_usd > 0
-    assert result.model == "claude-sonnet-4-20250514"
+    assert result.model == "claude-sonnet-5"
 
 
 async def test_run_with_workdir():
