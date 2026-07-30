@@ -36,6 +36,31 @@ _RETRYABLE_ERRORS: tuple[type[BaseException], ...] = (
     asyncio.TimeoutError,
 )
 
+# BadRequestError substrings that indicate an account-level problem (not a
+# malformed prompt): every subsequent call in the cycle will fail the same way.
+_FATAL_BAD_REQUEST_MARKERS = ("credit balance", "billing", "plans & billing")
+
+
+class ClaudeFatalError(Exception):
+    """Non-retryable Claude failure: billing, auth, or invalid credentials.
+
+    The same error would recur on every call, so the cycle should abort
+    immediately instead of retrying through remaining phases/iterations.
+    """
+
+
+def _classify_fatal(exc: BaseException) -> str | None:
+    """Return a human-readable reason if exc is account-fatal, else None."""
+    if isinstance(exc, anthropic.AuthenticationError):
+        return f"Anthropic authentication failed: {exc}"
+    if isinstance(exc, anthropic.PermissionDeniedError):
+        return f"Anthropic permission denied: {exc}"
+    if isinstance(exc, anthropic.BadRequestError):
+        msg = str(exc).lower()
+        if any(marker in msg for marker in _FATAL_BAD_REQUEST_MARKERS):
+            return f"Anthropic account/billing error: {exc}"
+    return None
+
 # Map short names to full model IDs
 _MODEL_MAP: dict[str, str] = {
     "sonnet": "claude-sonnet-4-20250514",
@@ -303,7 +328,13 @@ class ClaudeCLI:
                     timeout=effective_timeout,
                 )
                 break
-            except _RETRYABLE_ERRORS as exc:
+            except (anthropic.APIError, asyncio.TimeoutError) as exc:
+                fatal_reason = _classify_fatal(exc)
+                if fatal_reason is not None:
+                    log.error("Claude API fatal (non-retryable): %s", fatal_reason)
+                    raise ClaudeFatalError(fatal_reason) from exc
+                if not isinstance(exc, _RETRYABLE_ERRORS):
+                    raise
                 if attempt >= self.max_retries:
                     log.error(
                         "Claude API exhausted retries (%d): %s: %s",

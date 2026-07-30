@@ -133,7 +133,7 @@ async def test_commit_all_sets_identity_fallback_on_rc128(mocker):
         proc.returncode = 0
         if args[1] == "status":
             proc.communicate = AsyncMock(return_value=(b"M file.py", b""))
-        elif args[1] == "commit":
+        elif "commit" in args:
             commit_attempts += 1
             if commit_attempts == 1:
                 proc.returncode = 128
@@ -166,7 +166,7 @@ async def test_commit_all_other_error_still_raises(mocker):
         proc.returncode = 0
         if args[1] == "status":
             proc.communicate = AsyncMock(return_value=(b"M file.py", b""))
-        elif args[1] == "commit":
+        elif "commit" in args:
             proc.returncode = 1
             proc.communicate = AsyncMock(return_value=(b"", b"pre-commit hook failed"))
         else:
@@ -196,6 +196,142 @@ async def test_commit_all_no_changes(mocker):
     # Only 2 calls: add -A, status --porcelain (no commit)
     import asyncio
     assert asyncio.create_subprocess_exec.call_count == 2
+
+
+async def test_commit_all_passes_explicit_identity(mocker):
+    """Commit must carry -c user.name/user.email — containers have no git config."""
+    commit_calls = []
+
+    async def fake_subprocess(*args, **kwargs):
+        proc = AsyncMock()
+        proc.returncode = 0
+        if args[1] == "status":
+            proc.communicate = AsyncMock(return_value=(b"M file.py", b""))
+        else:
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+        if "commit" in args:
+            commit_calls.append(args)
+        return proc
+
+    mocker.patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess)
+    await commit_all("/tmp/repo", "feat: x")
+
+    assert len(commit_calls) == 1
+    args = commit_calls[0]
+    assert "user.name=TheSwarm Dev Agent" in args
+    assert "user.email=swarm-dev@jrec.fr" in args
+    # -c flags must come before the subcommand
+    assert args.index("user.name=TheSwarm Dev Agent") < args.index("commit")
+
+
+async def test_commit_all_identity_env_override(mocker, monkeypatch):
+    monkeypatch.setenv("SWARM_GIT_USER_NAME", "custom-bot")
+    monkeypatch.setenv("SWARM_GIT_USER_EMAIL", "bot@example.com")
+    commit_calls = []
+
+    async def fake_subprocess(*args, **kwargs):
+        proc = AsyncMock()
+        proc.returncode = 0
+        if args[1] == "status":
+            proc.communicate = AsyncMock(return_value=(b"M file.py", b""))
+        else:
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+        if "commit" in args:
+            commit_calls.append(args)
+        return proc
+
+    mocker.patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess)
+    await commit_all("/tmp/repo", "feat: x")
+
+    assert "user.name=custom-bot" in commit_calls[0]
+    assert "user.email=bot@example.com" in commit_calls[0]
+
+
+async def test_commit_all_multiline_message_is_single_argv(mocker):
+    """The multi-line PR-closing message travels as ONE argv element."""
+    message = (
+        "feat: Verify LICENSE file follows standard conventions\n\n"
+        "Closes #173\n\n"
+        "Co-Authored-By: swarm-dev-agent <agent@swarm-bots.local>"
+    )
+    commit_calls = []
+
+    async def fake_subprocess(*args, **kwargs):
+        proc = AsyncMock()
+        proc.returncode = 0
+        if args[1] == "status":
+            proc.communicate = AsyncMock(return_value=(b"M file.py", b""))
+        else:
+            proc.communicate = AsyncMock(return_value=(b"", b""))
+        if "commit" in args:
+            commit_calls.append(args)
+        return proc
+
+    mocker.patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess)
+    await commit_all("/tmp/repo", message)
+
+    args = commit_calls[0]
+    assert args[args.index("-m") + 1] == message
+
+
+async def test_run_git_timeout_kills_and_raises(mocker):
+    """A git command hanging (e.g. credential prompt) is killed, not awaited forever."""
+    import asyncio as _asyncio
+
+    proc = AsyncMock()
+    proc.returncode = None
+
+    async def hang():
+        await _asyncio.sleep(30)
+
+    proc.communicate = hang
+    proc.kill = lambda: None
+    mocker.patch("asyncio.create_subprocess_exec", return_value=proc)
+
+    with pytest.raises(RuntimeError, match="timed out"):
+        await _run_git("clone", "https://example.com/r.git", timeout=0.05)
+
+
+async def test_run_git_disables_credential_prompts(mock_subprocess):
+    import asyncio
+
+    await _run_git("fetch")
+    kwargs = asyncio.create_subprocess_exec.call_args.kwargs
+    assert kwargs["env"]["GIT_TERMINAL_PROMPT"] == "0"
+    assert "BatchMode=yes" in kwargs["env"]["GIT_SSH_COMMAND"]
+
+
+async def test_commit_all_real_repo_without_identity(tmp_path, monkeypatch):
+    """Prod repro (cycle adf70608e595): container git has no identity configured.
+
+    ``user.useConfigOnly=true`` makes git refuse to guess from the OS user,
+    which is exactly the 'Author identity unknown' rc=128 seen in prod.
+    The explicit -c identity flags in commit_all must make the commit pass.
+    """
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+    monkeypatch.delenv("SWARM_GIT_USER_NAME", raising=False)
+    monkeypatch.delenv("SWARM_GIT_USER_EMAIL", raising=False)
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    await _run_git("init", "-q", cwd=str(repo))
+    await _run_git("config", "user.useConfigOnly", "true", cwd=str(repo))
+    (repo / "f.txt").write_text("x\n")
+
+    # The exact multi-line message shape that failed in prod
+    message = (
+        "feat: Verify LICENSE file follows standard conventions\n\n"
+        "Closes #173\n\n"
+        "Co-Authored-By: swarm-dev-agent <agent@swarm-bots.local>"
+    )
+    committed = await commit_all(str(repo), message)
+    assert committed is True
+
+    body = await _run_git("log", "-1", "--pretty=%B", cwd=str(repo))
+    author = await _run_git("log", "-1", "--pretty=%an <%ae>", cwd=str(repo))
+    assert "Closes #173" in body
+    assert author == "TheSwarm Dev Agent <swarm-dev@jrec.fr>"
 
 
 # ── push_branch ────────────────────────────────────────────────────────

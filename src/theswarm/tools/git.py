@@ -9,31 +9,58 @@ import shutil
 
 log = logging.getLogger(__name__)
 
-# Repo-local identity applied when the environment provides none (matches the
-# GIT_AUTHOR/COMMITTER values in docker-compose.yml). Prod cycles died with
-# rc=128 'Author identity unknown' when the deploy env lost those vars.
-_FALLBACK_IDENTITY_NAME = "TheSwarm Dev Agent"
-_FALLBACK_IDENTITY_EMAIL = "swarm-dev@jrec.fr"
+# Default committer identity for agent commits (matches the GIT_AUTHOR/
+# COMMITTER values in docker-compose.yml). In containers there is no global
+# git config, so `git commit` fails with rc=128 "Author identity unknown"
+# unless the identity is supplied explicitly.
+DEFAULT_GIT_USER_NAME = "TheSwarm Dev Agent"
+DEFAULT_GIT_USER_EMAIL = "swarm-dev@jrec.fr"
+
+# Hard cap on any single git command. Without it, a clone/push waiting on a
+# credential prompt hangs forever — outside the cycle's phase timeouts.
+GIT_COMMAND_TIMEOUT = 300
 
 
 async def _run_git(
     *args: str,
     cwd: str | None = None,
     check: bool = True,
+    timeout: float = GIT_COMMAND_TIMEOUT,
 ) -> str:
     """Run a git command and return stdout."""
+    env = {
+        **os.environ,
+        # Never prompt for credentials or SSH host confirmation — fail instead.
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_SSH_COMMAND": os.environ.get("GIT_SSH_COMMAND", "ssh -oBatchMode=yes"),
+    }
     proc = await asyncio.create_subprocess_exec(
         "git", *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        stdin=asyncio.subprocess.DEVNULL,
         cwd=cwd,
+        env=env,
     )
-    stdout, stderr = await proc.communicate()
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        raise RuntimeError(
+            f"git {' '.join(args)} timed out after {timeout:.0f}s"
+        ) from None
     if check and proc.returncode != 0:
         raise RuntimeError(
             f"git {' '.join(args)} failed (rc={proc.returncode}): {stderr.decode()[:500]}"
         )
     return stdout.decode().strip()
+
+
+def _identity_args() -> list[str]:
+    """Explicit committer identity flags, overridable via env."""
+    name = os.environ.get("SWARM_GIT_USER_NAME", DEFAULT_GIT_USER_NAME)
+    email = os.environ.get("SWARM_GIT_USER_EMAIL", DEFAULT_GIT_USER_EMAIL)
+    return ["-c", f"user.name={name}", "-c", f"user.email={email}"]
 
 
 async def clone_repo(repo_url: str, dest: str) -> str:
@@ -69,13 +96,17 @@ async def commit_all(workdir: str, message: str) -> bool:
         return False
 
     try:
-        await _run_git("commit", "-m", message, cwd=workdir)
+        await _run_git(*_identity_args(), "commit", "-m", message, cwd=workdir)
     except RuntimeError as exc:
         if "Author identity unknown" not in str(exc) and "user.email" not in str(exc):
             raise
+        # The -c flags should make this unreachable; if git still refuses,
+        # persist a repo-local identity and retry once.
         log.warning("No git identity in environment — setting repo-local fallback")
-        await _run_git("config", "user.name", _FALLBACK_IDENTITY_NAME, cwd=workdir)
-        await _run_git("config", "user.email", _FALLBACK_IDENTITY_EMAIL, cwd=workdir)
+        name = os.environ.get("SWARM_GIT_USER_NAME", DEFAULT_GIT_USER_NAME)
+        email = os.environ.get("SWARM_GIT_USER_EMAIL", DEFAULT_GIT_USER_EMAIL)
+        await _run_git("config", "user.name", name, cwd=workdir)
+        await _run_git("config", "user.email", email, cwd=workdir)
         await _run_git("commit", "-m", message, cwd=workdir)
     log.info("Committed: %s", message)
     return True
