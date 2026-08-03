@@ -63,6 +63,7 @@ class AgentState(TypedDict, total=False):
     issue_stats: dict
     demo_report: dict | None
     demo_artifacts: list  # list of (Artifact, bytes) tuples from screenshot capture
+    video_artifacts: list  # (Artifact, bytes) from record_demo_video → generate_demo_report
     story_preview_urls: dict  # F2 — {pr_number: {"before": url_or_none, "after": url}}
     story_artifacts: dict  # F2 — {pr_number: {"before": [...], "after": [...]}}
     story_videos: dict  # F3 — {pr_number: (Artifact, bytes)}
