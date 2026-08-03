@@ -81,6 +81,9 @@ class TestCLIBackendSuccess:
 class TestCLIFallbackToAPI:
     async def test_binary_missing_falls_back(self, monkeypatch):
         monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "auto")
+        # A real API key — the fallback is skipped when the key is an
+        # OAuth token the Messages API cannot accept.
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-test")
         cli = ClaudeCLI(model="haiku", max_retries=0)
 
         with (
@@ -97,6 +100,9 @@ class TestCLIFallbackToAPI:
 
     async def test_cli_nonzero_exit_falls_back(self, monkeypatch):
         monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "auto")
+        # A real API key — the fallback is skipped when the key is an
+        # OAuth token the Messages API cannot accept.
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-test")
         cli = ClaudeCLI(model="haiku", max_retries=0)
 
         with (
@@ -119,6 +125,9 @@ class TestCLIFallbackToAPI:
 
     async def test_cli_bad_json_falls_back(self, monkeypatch):
         monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "auto")
+        # A real API key — the fallback is skipped when the key is an
+        # OAuth token the Messages API cannot accept.
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-test")
         cli = ClaudeCLI(model="haiku", max_retries=0)
 
         with (
@@ -139,6 +148,9 @@ class TestCLIFallbackToAPI:
 
     async def test_cli_reports_is_error_falls_back(self, monkeypatch):
         monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "auto")
+        # A real API key — the fallback is skipped when the key is an
+        # OAuth token the Messages API cannot accept.
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-test")
         cli = ClaudeCLI(model="haiku", max_retries=0)
 
         env = _cli_envelope(is_error=True, text="quota exhausted")

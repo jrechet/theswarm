@@ -44,6 +44,11 @@ class AgentState(TypedDict, total=False):
     tests_passed: bool
     test_output: str
     diff_stat: str
+    # Ralph Loop retry accounting. LangGraph drops keys absent from this
+    # schema, so omitting these pinned retry_count at 0 and the dev loop
+    # retried until the phase timeout (prod cycle 65ab4b0fdf3e).
+    retry_count: int
+    max_dev_retries: int
     blockers: list[dict]
     pr: dict | None
     # TechLead-specific

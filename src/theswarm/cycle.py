@@ -140,6 +140,9 @@ def _build_base_state(config: CycleConfig) -> dict:
         "github": None,
         "claude": None,
         "workspace": None,
+        # Honour the project's configured retry budget instead of the
+        # dev-graph default.
+        "max_dev_retries": config.max_dev_retries,
     }
 
     if config.is_real_mode:

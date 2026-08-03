@@ -116,6 +116,19 @@ def _resolve_backend_mode() -> str:
     return "auto"
 
 
+def _api_backend_viable() -> bool:
+    """True when ANTHROPIC_API_KEY can actually authenticate the Messages API.
+
+    ``sk-ant-oat`` tokens come from ``claude setup-token`` and are only
+    accepted through the CLI's ``Authorization: Bearer`` flow — the API's
+    ``x-api-key`` header rejects them with 401. Falling back to the API while
+    holding one turns any transient CLI failure into a fatal auth error
+    (prod cycle 65ab4b0fdf3e), so check before falling back.
+    """
+    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    return bool(key) and not key.startswith("sk-ant-oat")
+
+
 @dataclass
 class ClaudeCLI:
     """Runs a prompt through Claude Code CLI first, Anthropic API as fallback.
@@ -175,14 +188,39 @@ class ClaudeCLI:
         """
         backend = _resolve_backend_mode()
 
-        if backend != "api":
+        if backend == "api":
+            return await self._run_api(prompt, workdir=workdir, timeout=timeout)
+
+        try:
+            return await self._run_cli(prompt, workdir=workdir, timeout=timeout)
+        except _CLIUnavailable as exc:
+            first_error = exc
+
+        if backend == "cli":
+            raise RuntimeError(
+                f"Claude CLI unavailable (forced): {first_error}"
+            ) from first_error
+
+        # Auto mode. Falling back to the API only helps when the API can
+        # authenticate; with an OAuth session token it always 401s, so a
+        # transient CLI hiccup would become a fatal cycle error. Retry the
+        # CLI once instead and surface its real failure.
+        if not _api_backend_viable():
+            log.warning(
+                "Claude CLI failed (%s) and the API fallback cannot authenticate "
+                "(no usable ANTHROPIC_API_KEY) — retrying the CLI once",
+                first_error,
+            )
             try:
                 return await self._run_cli(prompt, workdir=workdir, timeout=timeout)
-            except _CLIUnavailable as exc:
-                if backend == "cli":
-                    raise RuntimeError(f"Claude CLI unavailable (forced): {exc}") from exc
-                log.warning("Claude CLI unavailable (%s) — falling back to API", exc)
+            except _CLIUnavailable as retry_error:
+                raise RuntimeError(
+                    "Claude CLI failed twice and no usable API credential is "
+                    f"available (ANTHROPIC_API_KEY is unset or an OAuth token): "
+                    f"{retry_error}"
+                ) from retry_error
 
+        log.warning("Claude CLI unavailable (%s) — falling back to API", first_error)
         return await self._run_api(prompt, workdir=workdir, timeout=timeout)
 
     async def _run_cli(
