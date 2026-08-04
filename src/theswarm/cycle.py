@@ -170,9 +170,11 @@ async def _pull_latest(config: CycleConfig) -> None:
     if not config.is_real_mode:
         return
 
-    from theswarm.tools.git import _run_git
+    from theswarm.tools.git import _auth_args, _run_git
     await _run_git("checkout", "main", cwd=config.workspace_dir, check=False)
-    await _run_git("pull", "--ff-only", cwd=config.workspace_dir, check=False)
+    await _run_git(
+        *_auth_args(), "pull", "--ff-only", cwd=config.workspace_dir, check=False,
+    )
 
 
 async def run_daily_cycle(
