@@ -178,9 +178,13 @@ async def run_quality_gates(state: AgentState) -> dict:
         return stub_result(Role.DEV, "run_quality_gates",
                            "run pytest on workspace")
 
-    # Install dependencies if requirements.txt exists
+    # Install dependencies once per dev iteration. The Ralph Loop re-runs this
+    # node after every retry, and a failing install burns its full timeout each
+    # time — three attempts ate 360s of the 480s phase budget in prod cycle
+    # 1d816463e34b, so the iteration died before it could open its PR.
+    deps_installed = state.get("deps_installed", False)
     req_file = os.path.join(workspace, "requirements.txt")
-    if os.path.isfile(req_file):
+    if not deps_installed and os.path.isfile(req_file):
         install_result = await claude.run_tests(
             workspace, ["pip", "install", "-q", "-r", "requirements.txt"], timeout=120,
         )
@@ -200,6 +204,7 @@ async def run_quality_gates(state: AgentState) -> dict:
     return {
         "tests_passed": test_result["passed"],
         "test_output": test_result["output"][-2000:],
+        "deps_installed": True,
         "tokens_used": 0,
     }
 
