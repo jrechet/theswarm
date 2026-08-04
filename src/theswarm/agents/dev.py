@@ -119,7 +119,10 @@ async def implement_task(state: AgentState) -> dict:
         task_body=task["body"],
     )
 
-    # Run Claude in the workspace; system is cached across iterations
+    # No cache=True: the dev loop reuses this prefix across iterations, but
+    # each iteration is separated by quality gates and a full TechLead review,
+    # which routinely exceeds the 5-minute cache TTL. Caching here would bill
+    # a 1.25x write per iteration and never read it back.
     result = await claude.run(prompt, system=system, workdir=workspace)
     log.info("Claude implementation done: %d tokens, $%.4f",
              result.total_tokens, result.cost_usd)

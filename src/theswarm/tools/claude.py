@@ -42,9 +42,16 @@ _OUTPUT_COST: dict[str, float] = {
     "claude-opus-4-20250514": 75.0,
     "claude-haiku-4-5-20251001": 4.0,
 }
-# Cache write costs 25% more than base input; cache read costs 10% of base input
+# Cache write costs 25% more than base input; cache read costs 10% of base input.
+# A cache entry written but never read before it expires therefore costs 25% MORE
+# than not caching at all — only enable caching where several calls share the
+# same system prefix in quick succession (default TTL is 5 minutes).
 _CACHE_WRITE_MULT = 1.25
 _CACHE_READ_MULT = 0.10
+
+# Anthropic silently ignores cache_control on prefixes below this size —
+# no error is returned, so we detect it from the usage counters instead.
+_MIN_CACHEABLE_TOKENS = 1024
 
 
 def _estimate_cost(
@@ -79,23 +86,27 @@ class ClaudeCLI:
         system: str | None = None,
         workdir: str | None = None,
         timeout: int | None = None,
+        cache: bool = False,
     ) -> ClaudeResult:
         """Run a prompt via Anthropic Messages API.
 
         Args:
             prompt: The user message (dynamic, task-specific content).
-            system: Static system prompt cached with ``cache_control``.
-                    Ideal for agent role descriptions + project context that
-                    remain unchanged across calls within a cycle.
+            system: Static system prompt — agent role description + project
+                    context that stays identical across calls.
             workdir: Appended to the system prompt as "Working directory: …".
             timeout: Per-call timeout override (seconds).
+            cache: Mark the system prompt with ``cache_control``. Only enable
+                   this when several calls share the same system prefix within
+                   the 5-minute cache TTL (e.g. a review loop over N PRs).
+                   A single call per prefix costs 25% MORE with caching on,
+                   because the write is billed at 1.25x and never read back.
         """
         effective_timeout = timeout or self.timeout
         model_id = self._resolve_model()
 
-        # Build system content with prompt caching enabled.
-        # All static content (role description + project context) goes here so
-        # Anthropic can cache it across repeated calls with identical prefixes.
+        # Static content (role description + project context) goes in the
+        # system prompt so it can form a stable, cacheable prefix.
         system_text_parts = []
         if system:
             system_text_parts.append(system)
@@ -103,13 +114,10 @@ class ClaudeCLI:
             system_text_parts.append(f"Working directory: {workdir}")
 
         if system_text_parts:
-            system_param: object = [
-                {
-                    "type": "text",
-                    "text": "\n\n".join(system_text_parts),
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ]
+            block: dict = {"type": "text", "text": "\n\n".join(system_text_parts)}
+            if cache:
+                block["cache_control"] = {"type": "ephemeral"}
+            system_param: object = [block]
         else:
             system_param = anthropic.NOT_GIVEN
 
@@ -135,6 +143,15 @@ class ClaudeCLI:
         cache_write = getattr(response.usage, "cache_creation_input_tokens", None) or 0
         cost_usd = _estimate_cost(model_id, input_tokens, output_tokens, cache_read, cache_write)
 
+        # Caching was requested but the API neither wrote nor read a cache entry:
+        # the prefix was below the model minimum and cache_control was dropped.
+        if cache and cache_read == 0 and cache_write == 0:
+            log.warning(
+                "Prompt caching requested but no cache entry was created — system "
+                "prefix is likely below the %d-token minimum, so cache_control was "
+                "silently ignored.", _MIN_CACHEABLE_TOKENS,
+            )
+
         log.info(
             "Claude result: $%.4f  model=%s  in=%d out=%d  cache_read=%d cache_write=%d",
             cost_usd, model_id, input_tokens, output_tokens, cache_read, cache_write,
@@ -144,7 +161,9 @@ class ClaudeCLI:
             text=text,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            total_tokens=input_tokens + output_tokens,
+            # input_tokens excludes cached tokens, so they must be added back —
+            # otherwise per-role budget enforcement silently under-counts.
+            total_tokens=input_tokens + cache_read + cache_write + output_tokens,
             cost_usd=cost_usd,
             model=model_id,
             cache_read_tokens=cache_read,

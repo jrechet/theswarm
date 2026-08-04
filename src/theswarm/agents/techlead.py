@@ -153,7 +153,10 @@ async def breakdown_stories(state: AgentState) -> dict:
             issue_body=issue.get("body", "(no description)"),
         )
 
-        result = await claude.run(prompt, system=system, timeout=60)
+        # cache=True: this loop issues one call per ready story with an
+        # identical system prefix, back to back — the cache is read on every
+        # story after the first.
+        result = await claude.run(prompt, system=system, timeout=60, cache=True)
         total_tokens += result.total_tokens
         total_cost += result.cost_usd
 
@@ -257,7 +260,9 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
         files_diff=files_diff,
     )
 
-    result = await claude.run(prompt, system=system)
+    # cache=True: poll_and_review_prs calls this once per open PR in a tight
+    # loop; only the diff in the user message changes between calls.
+    result = await claude.run(prompt, system=system, cache=True)
     log.info("Claude review done for PR #%d: %d tokens, $%.4f",
              pr_number, result.total_tokens, result.cost_usd)
 

@@ -114,6 +114,8 @@ async def write_e2e_tests(state: AgentState) -> dict:
     if source_snippets:
         prompt += "\n\n## Source code\n" + "\n\n".join(source_snippets)
 
+    # No cache=True: E2E generation runs once per cycle, and is skipped
+    # entirely when the test file already exists.
     result = await claude.run(prompt, system=system, workdir=workspace, timeout=90)
 
     # Extract code from Claude's response

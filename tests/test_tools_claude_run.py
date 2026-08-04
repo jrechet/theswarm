@@ -55,12 +55,12 @@ async def test_run_with_workdir():
         cli = ClaudeCLI(model="haiku")
         result = await cli.run("test", workdir="/tmp/test")
 
-    # System is now a list of blocks with cache_control
+    # System is a list of blocks; caching is off by default
     call_kwargs = mock_client.messages.create.call_args[1]
     system_blocks = call_kwargs["system"]
     assert isinstance(system_blocks, list)
     assert "/tmp/test" in system_blocks[0]["text"]
-    assert system_blocks[0]["cache_control"] == {"type": "ephemeral"}
+    assert "cache_control" not in system_blocks[0]
 
 
 async def test_run_empty_response():
@@ -98,8 +98,8 @@ async def test_run_custom_model_id():
     assert result.model == "claude-custom-model-v1"
 
 
-async def test_run_with_system_uses_cache_control():
-    """System prompt is passed as a cached block."""
+async def test_run_system_not_cached_by_default():
+    """Caching is opt-in — a plain system prompt carries no cache_control."""
     from theswarm.tools.claude import ClaudeCLI
 
     mock_client = AsyncMock()
@@ -111,12 +111,48 @@ async def test_run_with_system_uses_cache_control():
         cli = ClaudeCLI(model="sonnet")
         await cli.run("Do the task", system="You are a developer.")
 
-    call_kwargs = mock_client.messages.create.call_args[1]
-    system_blocks = call_kwargs["system"]
-    assert isinstance(system_blocks, list)
+    system_blocks = mock_client.messages.create.call_args[1]["system"]
     assert system_blocks[0]["type"] == "text"
     assert "You are a developer." in system_blocks[0]["text"]
+    assert "cache_control" not in system_blocks[0]
+
+
+async def test_run_cache_true_sets_cache_control():
+    """cache=True marks the system block as cacheable."""
+    from theswarm.tools.claude import ClaudeCLI
+
+    mock_client = AsyncMock()
+    mock_client.messages.create = AsyncMock(
+        return_value=_make_mock_response(text="done", input_tokens=200,
+                                         output_tokens=30, cache_write=2000)
+    )
+
+    with patch("theswarm.tools.claude.anthropic.AsyncAnthropic", return_value=mock_client):
+        cli = ClaudeCLI(model="sonnet")
+        await cli.run("Do the task", system="You are a developer.", cache=True)
+
+    system_blocks = mock_client.messages.create.call_args[1]["system"]
     assert system_blocks[0]["cache_control"] == {"type": "ephemeral"}
+
+
+async def test_run_warns_when_cache_silently_ignored(caplog):
+    """Below the 1024-token minimum the API drops cache_control silently."""
+    import logging
+
+    from theswarm.tools.claude import ClaudeCLI
+
+    mock_client = AsyncMock()
+    # Neither written nor read => prefix was too short
+    mock_client.messages.create = AsyncMock(
+        return_value=_make_mock_response(text="ok", input_tokens=90, output_tokens=10)
+    )
+
+    with patch("theswarm.tools.claude.anthropic.AsyncAnthropic", return_value=mock_client):
+        cli = ClaudeCLI(model="sonnet")
+        with caplog.at_level(logging.WARNING):
+            await cli.run("short", system="tiny", cache=True)
+
+    assert "below the 1024-token minimum" in caplog.text
 
 
 async def test_run_tracks_cache_tokens():
@@ -137,6 +173,26 @@ async def test_run_tracks_cache_tokens():
 
     assert result.cache_read_tokens == 500
     assert result.cache_write_tokens == 0
+
+
+async def test_total_tokens_includes_cached_tokens():
+    """usage.input_tokens excludes cached tokens — budgets must count them anyway."""
+    from theswarm.tools.claude import ClaudeCLI
+
+    mock_client = AsyncMock()
+    mock_client.messages.create = AsyncMock(
+        return_value=_make_mock_response(
+            text="ok", input_tokens=50, output_tokens=20,
+            cache_read=4000, cache_write=1000,
+        )
+    )
+
+    with patch("theswarm.tools.claude.anthropic.AsyncAnthropic", return_value=mock_client):
+        cli = ClaudeCLI(model="sonnet")
+        result = await cli.run("task", system="role", cache=True)
+
+    # 50 input + 4000 read + 1000 written + 20 output
+    assert result.total_tokens == 5070
 
 
 async def test_run_cache_reduces_cost():

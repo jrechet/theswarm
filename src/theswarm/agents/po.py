@@ -110,6 +110,8 @@ async def select_daily_issues(state: AgentState) -> dict:
         max_stories=MAX_DAILY_STORIES,
     )
 
+    # No cache=True: one call per cycle with this prefix — a cache write would
+    # never be read back.
     result = await claude.run(prompt, system=system, workdir=state.get("workspace"), timeout=60)
 
     # Parse Claude's response
@@ -201,6 +203,7 @@ async def validate_demo(state: AgentState) -> dict:
         demo_report=report_text,
     )
 
+    # No cache=True: single evening call — see select_daily_issues.
     result = await claude.run(prompt, system=system, workdir=state.get("workspace"), timeout=60)
 
     return {
