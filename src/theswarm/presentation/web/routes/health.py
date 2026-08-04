@@ -30,10 +30,21 @@ _CLAUDE_READINESS_TTL_SECONDS = 60
 #   "connected" / "ok" — healthy
 #   "not_configured"   — expected absence (standalone server, missing optional bot)
 #   "missing"          — optional integration unavailable → warn
+#   "busy"             — reachable but contended → warn (still alive)
 #   "error"            — critical failure → error
 _OK_VALUES = frozenset({"ok", "connected", "not_configured"})
-_WARN_VALUES = frozenset({"missing"})
+_WARN_VALUES = frozenset({"missing", "busy"})
 _ERROR_VALUES = frozenset({"error"})
+
+# Upper bound on the liveness probe's DB query. Every repo shares one
+# aiosqlite connection, and aiosqlite serialises work per connection — so a
+# cycle writing checkpoints and events queues this read behind it. Docker's
+# healthcheck allows 5s and kills the container after three failures, which
+# is how a busy cycle used to take the whole service down mid-run (prod
+# cycle 2f1b9a9515d3, "task: non-zero exit (137): unhealthy container").
+# Liveness asks whether the process is alive; DB responsiveness is
+# /health/ready's job, and that endpoint keeps its unbounded check.
+_LIVENESS_DB_TIMEOUT_SECONDS = 1.0
 
 
 def _derive_status(checks: dict[str, str]) -> str:
@@ -55,11 +66,17 @@ async def health(request: Request) -> JSONResponse:
 
     checks: dict[str, str] = {}
 
-    # DB check (critical)
+    # DB check — bounded, so a cycle saturating the shared connection cannot
+    # stall the probe past Docker's 5s healthcheck timeout.
     if project_repo is not None:
         try:
-            await project_repo.list_all()
+            await asyncio.wait_for(
+                project_repo.list_all(), timeout=_LIVENESS_DB_TIMEOUT_SECONDS,
+            )
             checks["database"] = "connected"
+        except asyncio.TimeoutError:
+            # Contended, not broken: the process is alive and serving.
+            checks["database"] = "busy"
         except Exception:
             checks["database"] = "error"
     else:
