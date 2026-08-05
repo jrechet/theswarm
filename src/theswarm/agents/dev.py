@@ -14,10 +14,14 @@ from datetime import datetime
 
 from langgraph.graph import END, StateGraph
 
-from theswarm.agents.base import load_context, stub_result
+from theswarm.agents.base import find_system_python, load_context, stub_result
 from theswarm.config import AgentState, Role
 
 log = logging.getLogger(__name__)
+
+# Cold install of a typical FastAPI stack measured 145s in the deploy
+# container, so the previous 120s cap expired every time.
+DEP_INSTALL_TIMEOUT_SECONDS = 300
 
 
 # ── Prompts ─────────────────────────────────────────────────────────────
@@ -178,22 +182,32 @@ async def run_quality_gates(state: AgentState) -> dict:
         return stub_result(Role.DEV, "run_quality_gates",
                            "run pytest on workspace")
 
-    # Install dependencies once per dev iteration. The Ralph Loop re-runs this
-    # node after every retry, and a failing install burns its full timeout each
-    # time — three attempts ate 360s of the 480s phase budget in prod cycle
-    # 1d816463e34b, so the iteration died before it could open its PR.
+    # Both commands must run under the *same* interpreter. A bare `pip`
+    # resolves to the system python while a bare `python` resolves to
+    # TheSwarm's venv, so dependencies landed in the system user site while
+    # pytest ran in a venv that ignores it — the target's tests never saw
+    # them (prod cycle 882694d44248).
+    python = find_system_python()
+
+    # Install once per dev iteration: the Ralph Loop re-enters this node after
+    # every retry, and three cold installs ate 360s of the 480s phase budget
+    # in prod cycle 1d816463e34b.
     deps_installed = state.get("deps_installed", False)
     req_file = os.path.join(workspace, "requirements.txt")
     if not deps_installed and os.path.isfile(req_file):
         install_result = await claude.run_tests(
-            workspace, ["pip", "install", "-q", "-r", "requirements.txt"], timeout=120,
+            workspace,
+            [python, "-m", "pip", "install", "-q", "-r", "requirements.txt"],
+            # A cold install of a typical FastAPI stack measured 145s in the
+            # deploy container, so the old 120s cap always expired.
+            timeout=DEP_INSTALL_TIMEOUT_SECONDS,
         )
         if not install_result["passed"]:
             log.warning("pip install failed:\n%s", install_result["output"][-1000:])
 
     # Run pytest if available
     test_result = await claude.run_tests(
-        workspace, ["python", "-m", "pytest", "tests/", "-v", "--tb=short"], timeout=120,
+        workspace, [python, "-m", "pytest", "tests/", "-v", "--tb=short"], timeout=120,
     )
 
     if test_result["passed"]:

@@ -23,6 +23,12 @@ dependencies = [
     "textual>=1.0",
     "imageio-ffmpeg>=0.5",
     "cryptography>=42.0",
+    # Runtime dependency: the QA agent captures demo screenshots and videos of
+    # the target app via PlaywrightRecorder. It lived in the dev group while
+    # the image built with --no-dev, so every capture failed in production
+    # with "No module named 'playwright'". The browser binary is installed
+    # separately in the Dockerfile.
+    "playwright>=1.58.0",
 ]
 
 [dependency-groups]
@@ -32,7 +38,6 @@ dev = [
     "respx>=0.22",
     "pytest-mock>=3.14",
     "pytest-cov>=7.1.0",
-    "playwright>=1.58.0",
     "pytest-playwright>=0.7.2",
 ]
 

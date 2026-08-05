@@ -214,11 +214,27 @@ async def readiness(request: Request) -> JSONResponse:
             for c in running:
                 if c.started_at and c.started_at < cutoff:
                     stale.append(c)
-            checks["cycles"] = (
-                {"status": "ok", "detail": f"{len(running)} running, none stale"}
-                if not stale
-                else {"status": "warn", "detail": f"{len(stale)} stale running cycle(s); reaper will clean on next boot"}
-            )
+            if stale:
+                from theswarm.application.services.orphan_reaper import (
+                    DEFAULT_REAP_INTERVAL_SECONDS,
+                    reap_max_age_seconds,
+                )
+
+                reap_hours = reap_max_age_seconds() / 3600
+                every_minutes = round(DEFAULT_REAP_INTERVAL_SECONDS / 60)
+                checks["cycles"] = {
+                    "status": "warn",
+                    "detail": (
+                        f"{len(stale)} stale running cycle(s); the reaper runs every "
+                        f"{every_minutes} min and clears them once they pass "
+                        f"{reap_hours:.1f}h"
+                    ),
+                }
+            else:
+                checks["cycles"] = {
+                    "status": "ok",
+                    "detail": f"{len(running)} running, none stale",
+                }
         except Exception as exc:
             checks["cycles"] = {"status": "warn", "detail": f"could not read cycles: {exc}"}
 

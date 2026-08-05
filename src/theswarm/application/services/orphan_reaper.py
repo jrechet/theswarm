@@ -18,6 +18,23 @@ log = logging.getLogger(__name__)
 
 DEFAULT_REAP_INTERVAL_SECONDS = 15 * 60
 
+# Grace period on top of the whole-cycle hard timeout before a 'running' row
+# is treated as orphaned. Sits above the timeout so a cycle that is still
+# legitimately executing is never reaped out from under its own task.
+REAP_GRACE_SECONDS = 30 * 60
+
+
+def reap_max_age_seconds() -> int:
+    """Age at which a 'running' cycle row is considered orphaned.
+
+    Single source of truth for the reaper loop and for the readiness banner,
+    so the UI never promises a different cleanup window than the one that
+    actually runs.
+    """
+    from theswarm.api import CYCLE_HARD_TIMEOUT_SECONDS
+
+    return CYCLE_HARD_TIMEOUT_SECONDS + REAP_GRACE_SECONDS
+
 
 class CycleReaperPort(Protocol):
     async def reap_orphans(self, *, max_age_seconds: int) -> int: ...

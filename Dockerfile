@@ -41,10 +41,22 @@ COPY --from=builder --chown=botuser:botuser /app/src /app/src
 COPY --from=builder --chown=botuser:botuser /app/docs /app/docs
 COPY --from=builder --chown=botuser:botuser /app/theswarm.yaml* /app/
 
+# Chromium's shared libraries, for the QA agent's screenshot and video
+# capture. Needs root, so it runs before the USER switch; the browser itself
+# is fetched afterwards as botuser.
+RUN /app/.venv/bin/playwright install-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
+
 USER botuser
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
+
+# Only the headless shell, which is what `chromium.launch(headless=True)`
+# actually executes — the full Chromium build is ~800MB more for a UI this
+# image never opens. Installed as botuser so it lands in the cache of the
+# user the app runs as.
+RUN playwright install chromium-headless-shell
 
 EXPOSE 8091
 
