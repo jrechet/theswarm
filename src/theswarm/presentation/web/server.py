@@ -481,11 +481,13 @@ async def start_server(
     # Also reap periodically: an in-process hang past the whole-cycle hard
     # timeout must not stay "running" until the next deploy. The age cutoff
     # sits above CYCLE_HARD_TIMEOUT_SECONDS so live cycles are never reaped.
-    from theswarm.api import CYCLE_HARD_TIMEOUT_SECONDS
-    from theswarm.application.services.orphan_reaper import run_orphan_reap_loop
+    from theswarm.application.services.orphan_reaper import (
+        reap_max_age_seconds,
+        run_orphan_reap_loop,
+    )
 
     asyncio.create_task(run_orphan_reap_loop(
-        cycle_repo, max_age_seconds=CYCLE_HARD_TIMEOUT_SECONDS + 1800,
+        cycle_repo, max_age_seconds=reap_max_age_seconds(),
     ))
 
     # Report storage

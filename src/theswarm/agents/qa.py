@@ -952,18 +952,14 @@ def build_qa_graph() -> StateGraph:
 
 
 def _find_system_python() -> str:
-    """Find system python3, excluding the current venv."""
-    import os
-    import sys as _sys
+    """Find system python3, excluding the current venv.
 
-    venv_prefix = _sys.prefix
-    for p in os.environ.get("PATH", "").split(os.pathsep):
-        if venv_prefix in p:
-            continue
-        candidate = os.path.join(p, "python3")
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            return candidate
-    return "python3"
+    Thin alias kept for existing call sites; the implementation is shared with
+    the Dev agent so both install and test against the same interpreter.
+    """
+    from theswarm.agents.base import find_system_python
+
+    return find_system_python()
 
 
 def _extract_python_code(text: str) -> str | None:

@@ -105,6 +105,28 @@ def _infer_role(phase: str) -> str | None:
     return phase_role_map.get(phase)
 
 
+def find_system_python() -> str:
+    """Interpreter used to install and run the *target* project's code.
+
+    Deliberately not TheSwarm's own venv: the target project's dependencies
+    must not be installed into it, and the venv ignores the user site-packages
+    directory that a non-root ``pip install`` writes to. Dev and QA must agree
+    on this — installing with one interpreter and testing with another means
+    the tests never see the dependencies (prod cycle 882694d44248).
+    """
+    import os
+    import sys as _sys
+
+    venv_prefix = _sys.prefix
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        if venv_prefix in entry:
+            continue
+        candidate = os.path.join(entry, "python3")
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return "python3"
+
+
 def stub_result(role: Role, phase: str, detail: str = "") -> dict[str, Any]:
     """Return a standard stub result for a phase that is not yet implemented."""
     msg = f"[STUB] {role.value}/{phase}: would execute here"
