@@ -174,7 +174,9 @@ async def run_unit_tests(state: AgentState) -> dict:
                            "run pytest unit tests")
 
     result = await claude.run_tests(
-        workspace, ["python", "-m", "pytest", "tests/unit/", "-v", "--tb=short"], timeout=120,
+        workspace,
+        [_find_system_python(), "-m", "pytest", "tests/unit/", "-v", "--tb=short"],
+        timeout=120,
     )
 
     output = result["output"]
@@ -242,7 +244,7 @@ async def run_e2e_tests(state: AgentState) -> dict:
     try:
         await wait_for_http_ready(f"http://127.0.0.1:{port}/", timeout=30.0, interval=0.5)
     except ReadinessTimeout as exc:
-        log.warning("QA E2E: %s — running tests anyway", exc)
+        await _log_readiness_failure("QA E2E", server_proc, exc)
 
     e2e_output = ""
     e2e_passed = False
@@ -416,7 +418,7 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
     try:
         await wait_for_http_ready(f"http://127.0.0.1:{port}/", timeout=30.0, interval=0.5)
     except ReadinessTimeout as exc:
-        log.warning("QA screenshots: %s — capturing anyway", exc)
+        await _log_readiness_failure("QA screenshots", server_proc, exc)
 
     recorder = PlaywrightRecorder()
     base_url = f"http://127.0.0.1:{port}"
@@ -558,7 +560,7 @@ async def record_demo_video(state: AgentState) -> dict:
     try:
         await wait_for_http_ready(f"http://127.0.0.1:{port}/", timeout=30.0, interval=0.5)
     except ReadinessTimeout as exc:
-        log.warning("QA video: %s — recording anyway", exc)
+        await _log_readiness_failure("QA video", server_proc, exc)
 
     recorder = PlaywrightRecorder()
     base_url = f"http://127.0.0.1:{port}"
@@ -949,6 +951,35 @@ def build_qa_graph() -> StateGraph:
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
+
+
+async def _log_readiness_failure(label: str, server_proc, exc: Exception) -> None:
+    """Report *why* the target app never came up.
+
+    The server's output is piped but otherwise never read, so a target that
+    dies on import — a missing dependency, a syntax error — produced only a
+    bare connection-refused with no cause anywhere in the logs (prod cycle
+    8170b32ca48f). Read it back when the process has already exited; if it is
+    still alive, say so rather than blocking on communicate().
+    """
+    import asyncio as _asyncio
+
+    if server_proc.returncode is None:
+        log.warning("%s: %s — server still running but not serving", label, exc)
+        return
+
+    output = ""
+    try:
+        stdout, _ = await _asyncio.wait_for(server_proc.communicate(), timeout=5)
+        output = stdout.decode(errors="replace").strip()[-1500:]
+    except (_asyncio.TimeoutError, ValueError):
+        pass
+
+    log.warning(
+        "%s: %s — server exited rc=%s%s",
+        label, exc, server_proc.returncode,
+        f"\n--- server output ---\n{output}" if output else " (no output captured)",
+    )
 
 
 def _find_system_python() -> str:
