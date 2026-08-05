@@ -42,12 +42,16 @@ _OUTPUT_COST: dict[str, float] = {
     "claude-opus-4-20250514": 75.0,
     "claude-haiku-4-5-20251001": 4.0,
 }
-# Cache write costs 25% more than base input; cache read costs 10% of base input.
-# A cache entry written but never read before it expires therefore costs 25% MORE
-# than not caching at all — only enable caching where several calls share the
-# same system prefix in quick succession (default TTL is 5 minutes).
-_CACHE_WRITE_MULT = 1.25
+# Cache reads cost 10% of base input. Writes cost more than an uncached read,
+# so a cache entry that expires before it is read back is a net loss:
+#   5m TTL -> write 1.25x, break-even at 2 calls sharing the prefix
+#   1h TTL -> write 2.00x, break-even at 3 calls sharing the prefix
+# Only enable caching where enough calls reuse the prefix inside the TTL.
+_CACHE_WRITE_MULT = {"5m": 1.25, "1h": 2.0}
 _CACHE_READ_MULT = 0.10
+
+# The 1-hour TTL is still gated behind a beta header.
+_EXTENDED_TTL_BETA = "extended-cache-ttl-2025-04-11"
 
 # Anthropic silently ignores cache_control on prefixes below this size —
 # no error is returned, so we detect it from the usage counters instead.
@@ -60,11 +64,13 @@ def _estimate_cost(
     output_tokens: int,
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
+    cache_ttl: str = "5m",
 ) -> float:
     base = _INPUT_COST.get(model, 3.0)
+    write_mult = _CACHE_WRITE_MULT.get(cache_ttl, 1.25)
     inp = base * input_tokens / 1_000_000
     out = _OUTPUT_COST.get(model, 15.0) * output_tokens / 1_000_000
-    cache_write = base * _CACHE_WRITE_MULT * cache_write_tokens / 1_000_000
+    cache_write = base * write_mult * cache_write_tokens / 1_000_000
     cache_read = base * _CACHE_READ_MULT * cache_read_tokens / 1_000_000
     return inp + out + cache_write + cache_read
 
@@ -87,6 +93,7 @@ class ClaudeCLI:
         workdir: str | None = None,
         timeout: int | None = None,
         cache: bool = False,
+        cache_ttl: str = "5m",
     ) -> ClaudeResult:
         """Run a prompt via Anthropic Messages API.
 
@@ -98,12 +105,21 @@ class ClaudeCLI:
             timeout: Per-call timeout override (seconds).
             cache: Mark the system prompt with ``cache_control``. Only enable
                    this when several calls share the same system prefix within
-                   the 5-minute cache TTL (e.g. a review loop over N PRs).
-                   A single call per prefix costs 25% MORE with caching on,
-                   because the write is billed at 1.25x and never read back.
+                   the TTL. A prefix written once and never read back costs
+                   MORE than not caching at all.
+            cache_ttl: ``"5m"`` (default) or ``"1h"``. The 1-hour TTL suits
+                   calls spread across a long-running cycle, but bills writes
+                   at 2x, so it needs 3+ calls sharing the prefix to pay off.
+                   Requires the extended-cache-ttl beta header, sent
+                   automatically when selected.
         """
         effective_timeout = timeout or self.timeout
         model_id = self._resolve_model()
+
+        if cache_ttl not in _CACHE_WRITE_MULT:
+            raise ValueError(
+                f"cache_ttl must be one of {sorted(_CACHE_WRITE_MULT)}, got {cache_ttl!r}"
+            )
 
         # Static content (role description + project context) goes in the
         # system prompt so it can form a stable, cacheable prefix.
@@ -113,17 +129,24 @@ class ClaudeCLI:
         if workdir:
             system_text_parts.append(f"Working directory: {workdir}")
 
+        extra_headers: dict[str, str] = {}
+
         if system_text_parts:
             block: dict = {"type": "text", "text": "\n\n".join(system_text_parts)}
             if cache:
-                block["cache_control"] = {"type": "ephemeral"}
+                cache_control: dict = {"type": "ephemeral"}
+                if cache_ttl != "5m":
+                    cache_control["ttl"] = cache_ttl
+                    extra_headers["anthropic-beta"] = _EXTENDED_TTL_BETA
+                block["cache_control"] = cache_control
             system_param: object = [block]
         else:
             system_param = anthropic.NOT_GIVEN
 
         client = anthropic.AsyncAnthropic()
 
-        log.info("Claude API: model=%s workdir=%s timeout=%ds", model_id, workdir, effective_timeout)
+        log.info("Claude API: model=%s workdir=%s timeout=%ds cache=%s(%s)",
+                 model_id, workdir, effective_timeout, cache, cache_ttl if cache else "-")
 
         response = await asyncio.wait_for(
             client.messages.create(
@@ -131,6 +154,7 @@ class ClaudeCLI:
                 max_tokens=self.max_tokens,
                 system=system_param,
                 messages=[{"role": "user", "content": prompt}],
+                extra_headers=extra_headers or None,
             ),
             timeout=effective_timeout,
         )
@@ -141,7 +165,8 @@ class ClaudeCLI:
         # cache_* attributes only present when prompt caching is active
         cache_read = getattr(response.usage, "cache_read_input_tokens", None) or 0
         cache_write = getattr(response.usage, "cache_creation_input_tokens", None) or 0
-        cost_usd = _estimate_cost(model_id, input_tokens, output_tokens, cache_read, cache_write)
+        cost_usd = _estimate_cost(model_id, input_tokens, output_tokens,
+                                  cache_read, cache_write, cache_ttl)
 
         # Caching was requested but the API neither wrote nor read a cache entry:
         # the prefix was below the model minimum and cache_control was dropped.

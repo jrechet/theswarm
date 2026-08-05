@@ -175,6 +175,84 @@ async def test_run_tracks_cache_tokens():
     assert result.cache_write_tokens == 0
 
 
+async def test_run_extended_ttl_sets_beta_header():
+    """cache_ttl='1h' adds the ttl field and the beta header."""
+    from theswarm.tools.claude import ClaudeCLI
+
+    mock_client = AsyncMock()
+    mock_client.messages.create = AsyncMock(
+        return_value=_make_mock_response(text="ok", input_tokens=20,
+                                         output_tokens=10, cache_write=3000)
+    )
+
+    with patch("theswarm.tools.claude.anthropic.AsyncAnthropic", return_value=mock_client):
+        cli = ClaudeCLI(model="sonnet")
+        await cli.run("task", system="role", cache=True, cache_ttl="1h")
+
+    call_kwargs = mock_client.messages.create.call_args[1]
+    assert call_kwargs["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+    assert call_kwargs["extra_headers"]["anthropic-beta"] == "extended-cache-ttl-2025-04-11"
+
+
+async def test_run_default_ttl_sends_no_beta_header():
+    """The 5m default must not carry the beta header or a ttl field."""
+    from theswarm.tools.claude import ClaudeCLI
+
+    mock_client = AsyncMock()
+    mock_client.messages.create = AsyncMock(
+        return_value=_make_mock_response(text="ok", input_tokens=20,
+                                         output_tokens=10, cache_write=3000)
+    )
+
+    with patch("theswarm.tools.claude.anthropic.AsyncAnthropic", return_value=mock_client):
+        cli = ClaudeCLI(model="sonnet")
+        await cli.run("task", system="role", cache=True)
+
+    call_kwargs = mock_client.messages.create.call_args[1]
+    assert call_kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert call_kwargs["extra_headers"] is None
+
+
+async def test_run_rejects_unknown_ttl():
+    from theswarm.tools.claude import ClaudeCLI
+
+    cli = ClaudeCLI(model="sonnet")
+    with pytest.raises(ValueError, match="cache_ttl"):
+        await cli.run("task", system="role", cache=True, cache_ttl="30m")
+
+
+async def test_extended_ttl_write_costs_double():
+    """1h writes bill at 2x base input, vs 1.25x for the 5m default."""
+    from theswarm.tools.claude import _estimate_cost
+
+    model = "claude-sonnet-4-20250514"
+    base = _estimate_cost(model, 1000, 0)
+    write_5m = _estimate_cost(model, 0, 0, cache_write_tokens=1000, cache_ttl="5m")
+    write_1h = _estimate_cost(model, 0, 0, cache_write_tokens=1000, cache_ttl="1h")
+
+    assert abs(write_5m / base - 1.25) < 0.01
+    assert abs(write_1h / base - 2.0) < 0.01
+
+
+async def test_extended_ttl_breaks_even_at_three_calls():
+    """1h caching must beat no caching once 3 calls share the prefix."""
+    from theswarm.tools.claude import _estimate_cost
+
+    model = "claude-sonnet-4-20250514"
+    prefix = 1000
+
+    def cached(n_calls):
+        write = _estimate_cost(model, 0, 0, cache_write_tokens=prefix, cache_ttl="1h")
+        reads = _estimate_cost(model, 0, 0, cache_read_tokens=prefix * (n_calls - 1))
+        return write + reads
+
+    uncached = lambda n: _estimate_cost(model, prefix * n, 0)
+
+    assert cached(2) > uncached(2)   # still a loss
+    assert cached(3) < uncached(3)   # pays off
+    assert cached(5) < uncached(5)
+
+
 async def test_total_tokens_includes_cached_tokens():
     """usage.input_tokens excludes cached tokens — budgets must count them anyway."""
     from theswarm.tools.claude import ClaudeCLI

@@ -119,11 +119,13 @@ async def implement_task(state: AgentState) -> dict:
         task_body=task["body"],
     )
 
-    # No cache=True: the dev loop reuses this prefix across iterations, but
-    # each iteration is separated by quality gates and a full TechLead review,
-    # which routinely exceeds the 5-minute cache TTL. Caching here would bill
-    # a 1.25x write per iteration and never read it back.
-    result = await claude.run(prompt, system=system, workdir=workspace)
+    # The dev loop reuses this prefix across up to MAX_DEV_ITERATIONS calls, but
+    # each iteration is separated by quality gates and a full TechLead review —
+    # far beyond the 5-minute default TTL. The 1-hour TTL spans the whole loop.
+    # Writes bill at 2x, so this pays off from the 3rd iteration onward; a cycle
+    # that finds only one or two tasks pays a small premium.
+    result = await claude.run(prompt, system=system, workdir=workspace,
+                              cache=True, cache_ttl="1h")
     log.info("Claude implementation done: %d tokens, $%.4f",
              result.total_tokens, result.cost_usd)
 
