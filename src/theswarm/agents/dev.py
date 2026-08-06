@@ -7,6 +7,7 @@ In real mode, clones the repo, calls claude CLI to implement, pushes a PR.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import re
@@ -189,12 +190,15 @@ async def run_quality_gates(state: AgentState) -> dict:
     # them (prod cycle 882694d44248).
     python = find_system_python()
 
-    # Install once per dev iteration: the Ralph Loop re-enters this node after
-    # every retry, and three cold installs ate 360s of the 480s phase budget
-    # in prod cycle 1d816463e34b.
-    deps_installed = state.get("deps_installed", False)
+    # Install only when the requirements actually change. The Ralph Loop
+    # re-enters this node after every retry, and three cold installs ate 360s
+    # of the 480s phase budget in prod cycle 1d816463e34b — but a flat "already
+    # installed" flag is wrong too: a retry that adds a missing dependency
+    # needs it installed, which is how cycle 8170b32ca48f kept failing on a
+    # module the retry had just declared.
     req_file = os.path.join(workspace, "requirements.txt")
-    if not deps_installed and os.path.isfile(req_file):
+    fingerprint = _requirements_fingerprint(req_file)
+    if fingerprint and fingerprint != state.get("deps_fingerprint", ""):
         install_result = await claude.run_tests(
             workspace,
             [python, "-m", "pip", "install", "-q", "-r", "requirements.txt"],
@@ -218,7 +222,7 @@ async def run_quality_gates(state: AgentState) -> dict:
     return {
         "tests_passed": test_result["passed"],
         "test_output": test_result["output"][-2000:],
-        "deps_installed": True,
+        "deps_fingerprint": fingerprint,
         "tokens_used": 0,
     }
 
@@ -423,6 +427,20 @@ def _extract_files_from_response(text: str, workspace: str) -> int:
         log.info("Wrote file: %s", filepath)
 
     return files_written
+
+
+def _requirements_fingerprint(req_file: str) -> str:
+    """Content hash of requirements.txt, or "" when there is no file.
+
+    Keyed on content rather than a boolean so a Ralph Loop retry that adds a
+    missing dependency triggers a reinstall, while repeated retries over
+    unchanged requirements still skip the expensive install.
+    """
+    try:
+        with open(req_file, "rb") as handle:
+            return hashlib.sha256(handle.read()).hexdigest()
+    except OSError:
+        return ""
 
 
 def _make_branch_name(task: dict) -> str:

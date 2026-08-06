@@ -49,7 +49,7 @@ class AgentState(TypedDict, total=False):
     # retried until the phase timeout (prod cycle 65ab4b0fdf3e).
     retry_count: int
     max_dev_retries: int
-    deps_installed: bool  # requirements.txt installed once per dev iteration
+    deps_fingerprint: str  # hash of requirements.txt last installed
     blockers: list[dict]
     pr: dict | None
     # TechLead-specific
