@@ -51,10 +51,17 @@ Write a pytest + playwright E2E test file for a FastAPI REST API.
 
 ## Requirements
 - Use `playwright.sync_api.APIRequestContext` (NOT browser — this is API-only)
-- Full user journey: register → login → create todos → list → mark done
-- Use `uuid.uuid4().hex[:8]` in emails for uniqueness
+- Derive every scenario from the routes and schemas in the "Source code" \
+section below. Test ONLY endpoints that are actually defined there — do NOT \
+invent endpoints (no register/login/todos unless the source defines them)
+- Cover the main happy-path journey the API actually supports: create its \
+real resources, list them, fetch one, update/delete where routes exist
+- Build request bodies from the actual schema fields; use \
+`uuid.uuid4().hex[:8]` to keep unique fields unique
 - Assert status codes AND response body content
-- Test error cases: wrong password (401), unauthorized (401/403), duplicate email (409)
+- Test error cases the API actually implements: fetching a missing resource \
+(404), sending an invalid body (422), plus auth errors only if the source \
+defines auth
 - The app runs at `http://localhost:{{port}}`
 - Use a module-level `BASE_URL` constant
 - Fixture `api_context` creates the Playwright API context
@@ -173,9 +180,13 @@ async def run_unit_tests(state: AgentState) -> dict:
         return stub_result(Role.QA, "run_unit_tests",
                            "run pytest unit tests")
 
+    # Run the whole test tree except tests/e2e — the generated E2E file needs
+    # a live server and runs in its own node. Target repos rarely have a
+    # tests/unit/ layout, and pointing pytest there reported unit=0 forever.
     result = await claude.run_tests(
         workspace,
-        [_find_system_python(), "-m", "pytest", "tests/unit/", "-v", "--tb=short"],
+        [_find_system_python(), "-m", "pytest", "tests/", "--ignore=tests/e2e",
+         "-v", "--tb=short"],
         timeout=120,
     )
 
@@ -334,7 +345,8 @@ async def run_security_scan(state: AgentState) -> dict:
         python = _find_system_python()
         cov_result = await claude.run_tests(
             workspace,
-            [python, "-m", "pytest", "tests/unit/", "--cov=src", "--cov-report=json", "-q"],
+            [python, "-m", "pytest", "tests/", "--ignore=tests/e2e",
+             "--cov=src", "--cov-report=json", "-q"],
             timeout=120,
         )
         coverage_status = "pass" if cov_result["passed"] else "fail"
