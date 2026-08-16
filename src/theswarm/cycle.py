@@ -21,12 +21,17 @@ MAX_AUTONOMOUS_CYCLES = 10  # safety cap for autonomous mode
 MAX_DAILY_STORIES = 3  # imported by PO but defined here for reference
 
 # Per-phase hard timeouts (seconds). Beyond this we abort the phase rather
-# than letting it hang indefinitely. Sized for the new ClaudeCLI default
-# (180s per call) plus a safety margin.
+# than letting it hang indefinitely.
+#
+# dev_iter budget: an implementation call runs up to IMPLEMENT_TIMEOUT_SECONDS
+# (420s, retried once by ClaudeCLI on a transient failure), a cold dependency
+# install up to 300s, pytest 120s, plus up to two Ralph Loop repair rounds.
+# The old 8-minute cap was sized for the 180s-per-call era and killed every
+# substantial task mid-flight during the endurance run.
 PHASE_TIMEOUTS = {
     "po_morning": 5 * 60,
     "techlead_breakdown": 5 * 60,
-    "dev_iter": 8 * 60,
+    "dev_iter": 25 * 60,
     "techlead_review": 5 * 60,
     "qa": 15 * 60,
     "po_evening": 5 * 60,
