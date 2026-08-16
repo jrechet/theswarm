@@ -24,6 +24,13 @@ log = logging.getLogger(__name__)
 # container, so the previous 120s cap expired every time.
 DEP_INSTALL_TIMEOUT_SECONDS = 300
 
+# Implementation calls get more room than ClaudeCLI's 180s default. That
+# default was calibrated when a Dev prompt "finished in <90s"; on the current
+# model a real feature (a route plus a template plus tests) regularly runs
+# past 180s, and during the endurance run every such task died in
+# 'CLI timed out after 180s' while trivial ones passed.
+IMPLEMENT_TIMEOUT_SECONDS = 420
+
 
 # ── Prompts ─────────────────────────────────────────────────────────────
 
@@ -124,33 +131,50 @@ async def implement_task(state: AgentState) -> dict:
 
     from theswarm.tools import git as git_ops
 
-    # Create a feature branch
-    branch_name = _make_branch_name(task)
-    await git_ops.create_branch(workspace, branch_name)
+    # Any failure from here on — git, a Claude timeout, the phase abort's
+    # cancellation — must put the task back in the queue before surfacing:
+    # cycle.py's iteration retry re-runs the whole graph, and pick_task would
+    # otherwise grab a *different* issue while this one stays orphaned in
+    # status:in-progress. During the endurance run that drained 13 ready
+    # issues in two cycles with almost nothing shipped.
+    github = state.get("github")
+    try:
+        # Create a feature branch
+        branch_name = _make_branch_name(task)
+        await git_ops.create_branch(workspace, branch_name)
 
-    # Build the prompt
-    context = state.get("context", "")
-    prompt = DEV_TASK_PROMPT.format(
-        task_title=task["title"],
-        task_body=task["body"],
-        context=context,
-    )
+        # Build the prompt
+        context = state.get("context", "")
+        prompt = DEV_TASK_PROMPT.format(
+            task_title=task["title"],
+            task_body=task["body"],
+            context=context,
+        )
 
-    # Run Claude in the workspace
-    result = await claude.run(prompt, workdir=workspace)
-    log.info("Claude implementation done: %d tokens, $%.4f",
-             result.total_tokens, result.cost_usd)
+        # Run Claude in the workspace
+        result = await claude.run(
+            prompt, workdir=workspace, timeout=IMPLEMENT_TIMEOUT_SECONDS,
+        )
+        log.info("Claude implementation done: %d tokens, $%.4f",
+                 result.total_tokens, result.cost_usd)
 
-    # Extract files from Claude's response and write them to workspace
-    files_written = _extract_files_from_response(result.text, workspace)
-    log.info("Extracted %d files from Claude's response", files_written)
+        # Extract files from Claude's response and write them to workspace
+        files_written = _extract_files_from_response(result.text, workspace)
+        log.info("Extracted %d files from Claude's response", files_written)
 
-    # Commit all changes
-    committed = await git_ops.commit_all(
-        workspace,
-        f"feat: {task['title']}\n\nCloses #{task['number']}\n\n"
-        f"Co-Authored-By: swarm-dev-agent <agent@swarm-bots.local>",
-    )
+        # Commit all changes
+        committed = await git_ops.commit_all(
+            workspace,
+            f"feat: {task['title']}\n\nCloses #{task['number']}\n\n"
+            f"Co-Authored-By: swarm-dev-agent <agent@swarm-bots.local>",
+        )
+    except BaseException:
+        if github is not None:
+            try:
+                await asyncio.shield(_requeue_task(github, task))
+            except Exception:
+                log.exception("Failed to requeue task #%s", task.get("number"))
+        raise
 
     if not committed:
         log.warning("Claude produced no file changes for task #%d", task["number"])
@@ -327,7 +351,9 @@ async def retry_implement(state: AgentState) -> dict:
         f"Output the corrected files using the --- FILE: path --- format.\n"
     )
 
-    result = await claude.run(prompt, workdir=workspace)
+    result = await claude.run(
+        prompt, workdir=workspace, timeout=IMPLEMENT_TIMEOUT_SECONDS,
+    )
 
     from theswarm.tools import git as git_ops
     files_written = _extract_files_from_response(result.text, workspace)
@@ -427,6 +453,14 @@ def _extract_files_from_response(text: str, workspace: str) -> int:
         log.info("Wrote file: %s", filepath)
 
     return files_written
+
+
+async def _requeue_task(github, task: dict) -> None:
+    """Return a task to the ready queue after a failed implementation."""
+    number = task["number"]
+    await github.add_labels(number, ["status:ready"])
+    await github.remove_label(number, "status:in-progress")
+    log.info("Requeued task #%d after failed implementation", number)
 
 
 def _requirements_fingerprint(req_file: str) -> str:
