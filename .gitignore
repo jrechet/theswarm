@@ -9,3 +9,8 @@ __pycache__/
 tmp/
 .gstack/
 .playwright-mcp/
+.serena/
+test.db*
+*.db-journal
+coverage.json
+.coverage
