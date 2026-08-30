@@ -148,6 +148,7 @@ def _build_base_state(config: CycleConfig) -> dict:
         # Honour the project's configured retry budget instead of the
         # dev-graph default.
         "max_dev_retries": config.max_dev_retries,
+        "target_issue": config.target_issue,
     }
 
     if config.is_real_mode:

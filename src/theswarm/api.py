@@ -38,6 +38,7 @@ class CycleRequest(BaseModel):
     repo: str
     description: str = ""
     callback_url: str = ""
+    issue_number: int | None = None
 
 
 class CycleRecord(BaseModel):
@@ -218,6 +219,7 @@ async def run_api_cycle(
     cycle_repo: object | None = None,
     project_id: str = "",
     checkpoint_repo: object | None = None,
+    issue_number: int | None = None,
     resume_from: str | None = None,
     role_assignment_service: object | None = None,
 ) -> None:
@@ -291,7 +293,10 @@ async def run_api_cycle(
             dash.push_event(role, message)
 
     try:
-        cycle_config = CycleConfig(github_repo=repo, project_id=project_id or repo)
+        cycle_config = CycleConfig(
+            github_repo=repo, project_id=project_id or repo,
+            target_issue=issue_number,
+        )
 
         # Populate codenames for persona rendering. Cheap DB read; skipped
         # cleanly if the service is unavailable.
