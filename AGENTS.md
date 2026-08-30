@@ -48,9 +48,12 @@ Full details: `docs/ARCHITECTURE-V2.md`, `docs/ROLES-OVERVIEW.md`.
 
 ## Environment
 
-Secrets in `.env` (never committed). Key vars: `ANTHROPIC_API_KEY` (only a real
-`sk-ant-api` key enables the API fallback; an `sk-ant-oat` OAuth token is
-CLI-only and is deliberately ignored by the fallback), `GITHUB_TOKEN` (push auth,
+Secrets in `.env` (never committed). Key vars: `CLAUDE_CODE_OAUTH_TOKEN`
+(headless auth for the Claude CLI, minted with `claude setup-token`; the
+browser-session credentials mounted from the host expire when their refresh
+token dies), `ANTHROPIC_API_KEY` (only a real `sk-ant-api` key enables the API
+fallback; an `sk-ant-oat` OAuth token is CLI-only and is deliberately ignored
+by the fallback), `GITHUB_TOKEN` (push auth,
 injected per git command — never written to `.git/config`), `SWARM_GITHUB_REPO`,
 `MATTERMOST_BOT_TOKEN`, `BASE_PATH` (reverse-proxy prefix, templates use
 `{{ base }}`), `SEQ_URL`/`SEQ_API_KEY` (log aggregation).
