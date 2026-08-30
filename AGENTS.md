@@ -58,6 +58,9 @@ injected per git command — never written to `.git/config`), `SWARM_GITHUB_REPO
 ## Deployment
 
 CI (GitHub Actions) → GHCR image → Docker Swarm + Traefik on the self-hosted box.
+PR CI is the quality gate; a push to main deploys immediately (tests re-run in
+parallel as a safety net, and the deploy job rolls back if the service does not
+come up healthy). Never push to main without a green PR.
 Prod: <https://bots.jrec.fr/swarm> — logs: <https://logs.jrec.fr> (Seq).
 Done means: merged on `main`, deploy landed, behavior re-verified on prod
 (trigger a real cycle and read the phase timeline).
