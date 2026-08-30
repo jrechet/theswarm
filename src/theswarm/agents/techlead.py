@@ -129,8 +129,19 @@ async def breakdown_stories(state: AgentState) -> dict:
         return stub_result(Role.TECHLEAD, "breakdown_stories",
                            "split US into 2-4 technical tasks, create sub-issues")
 
-    # Fetch issues that PO marked as ready but haven't been broken down yet
-    ready_issues = await github.get_issues(labels=["status:ready"])
+    # Issue-driven flow (P1): a targeted cycle breaks down ONLY the target
+    # issue, whatever its current status label — the user pressed Play on
+    # it, so it must not wait for the PO to move it to ready.
+    target_issue = state.get("target_issue")
+    if target_issue:
+        target = await github.get_issue(target_issue)
+        if target is None or target.get("state") == "closed":
+            log.info("TechLead: target issue #%s not found or closed — nothing to break down", target_issue)
+            return {"result": f"Target #{target_issue} not available", "tokens_used": 0}
+        ready_issues = [target]
+    else:
+        # Fetch issues that PO marked as ready but haven't been broken down yet
+        ready_issues = await github.get_issues(labels=["status:ready"])
     # Filter out issues that already have sub-tasks (role:dev label)
     ready_issues = [i for i in ready_issues if not any(
         (l if isinstance(l, str) else l.get("name", "")) == "role:dev"

@@ -7,6 +7,7 @@ async event loop.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from dataclasses import dataclass, field
 from functools import partial
@@ -14,6 +15,8 @@ from typing import Any
 
 from github import Github, GithubException, RateLimitExceededException
 from github.Issue import Issue
+
+log = logging.getLogger(__name__)
 from github.PullRequest import PullRequest
 from github.Repository import Repository
 
@@ -60,6 +63,17 @@ class GitHubClient:
             lambda: list(self._repo.get_issues(**kwargs))
         )
         return [_issue_to_dict(i) for i in issues if not i.pull_request]
+
+    async def get_issue(self, number: int) -> dict | None:
+        """Return one issue as a dict, or None if it does not exist."""
+        try:
+            issue: Issue = await self._run(self._repo.get_issue, number)
+        except Exception:
+            log.warning("get_issue(#%d) failed", number, exc_info=True)
+            return None
+        if issue.pull_request:
+            return None
+        return _issue_to_dict(issue)
 
     async def create_issue(
         self,

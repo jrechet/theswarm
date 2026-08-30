@@ -49,6 +49,7 @@ class AgentState(TypedDict, total=False):
     # retried until the phase timeout (prod cycle 65ab4b0fdf3e).
     retry_count: int
     max_dev_retries: int
+    target_issue: int | None  # issue-driven flow: pin the cycle to one GH issue
     deps_fingerprint: str  # hash of requirements.txt last installed
     blockers: list[dict]
     pr: dict | None
@@ -103,6 +104,11 @@ class CycleConfig:
 
     # Ralph Loop: max retries when quality gates fail
     max_dev_retries: int = 2
+
+    # Issue-driven flow (P1): when set, the cycle implements THIS GitHub
+    # issue and nothing else — breakdown scopes to it, the dev loop pins it
+    # then its `Parent: #N` children, and never drains unrelated backlog.
+    target_issue: int | None = None
 
     # Watchdog: idle threshold in seconds (> Claude's 600s timeout)
     watchdog_idle_threshold: float = 720.0

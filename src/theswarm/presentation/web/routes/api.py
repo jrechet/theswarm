@@ -324,6 +324,7 @@ async def start_cycle(request: Request) -> JSONResponse:
             project_repo=project_repo, cycle_repo=cycle_repo,
             project_id=project_id,
             role_assignment_service=role_assignment_service,
+            issue_number=req.issue_number,
         )
     )
     tracker.set_task(record.id, task)

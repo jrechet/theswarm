@@ -92,12 +92,65 @@ Focus on correctness and simplicity. Ship working code.
 # ── Node functions ──────────────────────────────────────────────────────
 
 
+def _label_names(issue: dict) -> set[str]:
+    return {
+        label if isinstance(label, str) else label.get("name", "")
+        for label in issue.get("labels", [])
+    }
+
+
+async def _mark_in_progress(github, task: dict) -> None:
+    await asyncio.gather(
+        github.add_labels(task["number"], ["status:in-progress"]),
+        github.remove_label(task["number"], "status:ready"),
+    )
+
+
+async def _pick_targeted(github, target_issue: int) -> dict | None:
+    """Issue-driven flow (P1): resolve the pinned issue to a workable task.
+
+    Order: the target itself when it is directly implementable (open,
+    ``role:dev``, not already in review), otherwise its ``Parent: #N``
+    children created by the TechLead breakdown. Never falls back to
+    unrelated backlog — a targeted cycle implements this issue or nothing.
+    """
+    target = await github.get_issue(target_issue)
+    if target is None or target.get("state") == "closed":
+        log.info("Target issue #%s not found or closed", target_issue)
+        return None
+
+    labels = _label_names(target)
+    if "role:dev" in labels and "status:review" not in labels:
+        # Pressed Play on a directly implementable task: take it whatever
+        # its status label says (backlog, ready, or orphaned in-progress).
+        return target
+
+    ready = await github.get_issues(labels=["role:dev", "status:ready"])
+    parent_marker = f"Parent: #{target_issue}"
+    for child in ready:
+        if parent_marker in (child.get("body") or ""):
+            return child
+
+    log.info("Target #%s has no workable task (state=%s, labels=%s)",
+             target_issue, target.get("state"), sorted(labels))
+    return None
+
+
 async def pick_task(state: AgentState) -> dict:
-    """Pick the next role:dev + status:ready task from GitHub."""
+    """Pick the next task: the targeted issue if one is pinned, else backlog."""
     github = state.get("github")
     if github is None:
         return stub_result(Role.DEV, "pick_task",
                            "pick first issue with labels role:dev + status:ready")
+
+    target_issue = state.get("target_issue")
+    if target_issue:
+        task = await _pick_targeted(github, target_issue)
+        if task is None:
+            return {"task": None, "tokens_used": 0}
+        log.info("Picked targeted task: #%d %s", task["number"], task["title"])
+        await _mark_in_progress(github, task)
+        return {"task": task, "tokens_used": 0}
 
     # Look for tasks labeled for dev work
     for labels in [["role:dev", "status:ready"], ["status:ready"]]:
@@ -105,11 +158,7 @@ async def pick_task(state: AgentState) -> dict:
         if issues:
             task = issues[0]
             log.info("Picked task: #%d %s", task["number"], task["title"])
-            # Mark as in-progress
-            await asyncio.gather(
-                github.add_labels(task["number"], ["status:in-progress"]),
-                github.remove_label(task["number"], "status:ready"),
-            )
+            await _mark_in_progress(github, task)
             return {"task": task, "tokens_used": 0}
 
     log.warning("No ready tasks found")
