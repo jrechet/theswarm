@@ -142,6 +142,15 @@
   <p class="empty-state">Loading sprints…</p>
 </section>
 
+{# Issue-driven flow: describe above → the PO drafts issues → pick one and
+   press ▶ to run a cycle pinned to it. #}
+<div hx-get="{{ base }}/projects/{{ project.id }}/issues"
+     hx-trigger="load"
+     hx-swap="outerHTML"
+     data-testid="issues-board-slot">
+  <section class="card"><p class="empty-state">Loading issues…</p></section>
+</div>
+
 <div class="detail-grid">
   <div class="card">
     <h2>Configuration</h2>
