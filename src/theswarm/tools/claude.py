@@ -101,6 +101,29 @@ def _estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     return inp + out
 
 
+_AUTH_FAILURE_MARKERS = (
+    "oauth", "authenticate", "401", "not logged in", "invalid api key",
+)
+
+
+def _is_auth_failure(error: BaseException) -> bool:
+    """True when a CLI failure looks like bad credentials rather than a hiccup."""
+    text = str(error).lower()
+    return any(marker in text for marker in _AUTH_FAILURE_MARKERS)
+
+
+def _envelope_error(stdout: bytes) -> str:
+    """Pull the CLI's error message out of its JSON envelope on stdout."""
+    try:
+        envelope = json.loads(stdout.decode(errors="replace").strip())
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return ""
+    if not isinstance(envelope, dict):
+        return ""
+    message = envelope.get("result") or envelope.get("api_error_status")
+    return str(message)[:300] if message else ""
+
+
 class _CLIUnavailable(Exception):
     """Raised when the Claude Code CLI can't service a request.
 
@@ -196,6 +219,23 @@ class ClaudeCLI:
         except _CLIUnavailable as exc:
             first_error = exc
 
+        # A stale CLAUDE_CODE_OAUTH_TOKEN outranks the session on disk, so it
+        # breaks every call while ~/.claude still holds valid, self-refreshing
+        # credentials — which is exactly what took prod down twice. Drop the
+        # env token and try again before treating this as a real outage.
+        if _is_auth_failure(first_error) and os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+            log.warning(
+                "Claude CLI auth failed (%s) — retrying without the "
+                "CLAUDE_CODE_OAUTH_TOKEN env override",
+                first_error,
+            )
+            try:
+                return await self._run_cli(
+                    prompt, workdir=workdir, timeout=timeout, drop_oauth_env=True,
+                )
+            except _CLIUnavailable as exc2:
+                first_error = exc2
+
         if backend == "cli":
             raise RuntimeError(
                 f"Claude CLI unavailable (forced): {first_error}"
@@ -229,6 +269,7 @@ class ClaudeCLI:
         *,
         workdir: str | None,
         timeout: int | None,
+        drop_oauth_env: bool = False,
     ) -> ClaudeResult:
         """Invoke ``claude -p`` and parse the JSON envelope.
 
@@ -277,6 +318,11 @@ class ClaudeCLI:
         }
         cli_env["CI"] = "1"
         cli_env["CLAUDE_CODE_NON_INTERACTIVE"] = "1"
+        if drop_oauth_env:
+            # CLAUDE_CODE_OAUTH_TOKEN wins over the session on disk, so a
+            # stale one breaks every call even when ~/.claude holds valid,
+            # self-refreshing credentials. Retry without it before giving up.
+            cli_env.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -299,8 +345,13 @@ class ClaudeCLI:
             raise _CLIUnavailable(f"CLI timed out after {effective_timeout}s") from exc
 
         if proc.returncode != 0:
+            # The CLI reports failures as a JSON envelope on *stdout* and
+            # often leaves stderr empty, so reporting stderr alone produced
+            # a bare "exit 1:" that hid the cause for three debugging rounds
+            # (the real message was "OAuth access token has expired").
             err = stderr.decode(errors="replace").strip()[:500]
-            raise _CLIUnavailable(f"exit {proc.returncode}: {err}")
+            detail = err or _envelope_error(stdout) or "no output"
+            raise _CLIUnavailable(f"exit {proc.returncode}: {detail}")
 
         raw = stdout.decode(errors="replace").strip()
         try:
