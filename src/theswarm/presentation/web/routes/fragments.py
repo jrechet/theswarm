@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from theswarm.application.queries.get_cycle_status import GetCycleStatusQuery
 from theswarm.application.queries.get_dashboard import GetDashboardQuery
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/fragments")
 
@@ -114,6 +118,67 @@ async def cycle_live_progress_fragment(request: Request, cycle_id: str) -> HTMLR
     return templates.TemplateResponse(
         "partials/_cycle_live_progress.html",
         {"request": request, "rows": rows},
+    )
+
+
+@router.get("/cycle/{cycle_id}/issue", response_class=HTMLResponse)
+async def cycle_issue_fragment(request: Request, cycle_id: str) -> HTMLResponse:
+    """What a targeted cycle is building: the pinned issue and its breakdown.
+
+    Issue-driven flow P3 (theswarm#25). The TechLead breakdown already
+    creates sub-issues carrying ``Parent: #N``; this reads them back so the
+    page answers 'the feature was split into X tasks, here is where each
+    one stands' while the cycle runs.
+    """
+    from theswarm.api import get_cycle_tracker
+
+    record = get_cycle_tracker().get(cycle_id)
+    context: dict = {
+        "request": request,
+        "cycle_id": cycle_id,
+        "issue": None,
+        "children": [],
+        "done": 0,
+        "repo": "",
+        "error": "",
+    }
+
+    if record is None or record.issue_number is None:
+        # Untargeted (or DB-backed) cycle: nothing to pin, render nothing.
+        return request.app.state.templates.TemplateResponse(
+            "partials/_cycle_issue.html", context,
+        )
+
+    context["repo"] = record.repo
+    try:
+        from theswarm.tools.github import GitHubClient
+
+        client = GitHubClient(record.repo)
+        issue = await client.get_issue(record.issue_number)
+        context["issue"] = issue
+        if issue is not None:
+            from theswarm.tools.github import issue_status
+
+            marker = f"Parent: #{record.issue_number}"
+            everything = await client.get_issues(state="all")
+            children = [
+                {
+                    "number": child["number"],
+                    "title": child["title"],
+                    "status": issue_status(child),
+                }
+                for child in everything
+                if marker in (child.get("body") or "")
+            ]
+            context["children"] = children
+            context["done"] = sum(1 for c in children if c["status"] == "review")
+    except Exception as exc:  # noqa: BLE001 — degrade the panel, not the page
+        log.exception("Failed to read issue %s for cycle %s",
+                      record.issue_number, cycle_id)
+        context["error"] = str(exc)[:200]
+
+    return request.app.state.templates.TemplateResponse(
+        "partials/_cycle_issue.html", context,
     )
 
 

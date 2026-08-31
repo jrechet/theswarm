@@ -95,18 +95,8 @@ async def project_detail(request: Request, project_id: str) -> HTMLResponse:
 # Issue-driven flow (P2, theswarm#24): browse the target repo's GitHub
 # issues and press Play on one. The board groups by `status:*` label so the
 # swarm's own workflow is visible at a glance.
-_STATUS_COLUMNS = ("ready", "in-progress", "review", "backlog")
-
-
-def _issue_status(issue: dict) -> str:
-    """Column an issue belongs to, from its `status:*` label."""
-    for label in issue.get("labels", []):
-        name = label if isinstance(label, str) else label.get("name", "")
-        if name.startswith("status:"):
-            suffix = name.split(":", 1)[1]
-            if suffix in _STATUS_COLUMNS:
-                return suffix
-    return "backlog"
+from theswarm.tools.github import STATUS_VALUES as _STATUS_COLUMNS
+from theswarm.tools.github import issue_status as _issue_status
 
 
 @router.get("/{project_id}/issues", response_class=HTMLResponse)

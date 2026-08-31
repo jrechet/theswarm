@@ -1,0 +1,33 @@
+{# What a targeted cycle is building: the pinned issue and its breakdown.
+   Renders nothing for an untargeted cycle (theswarm#25). #}
+{% if error %}
+  <p class="empty-state" data-testid="cycle-issue-error">Could not read the issue: {{ error }}</p>
+{% elif issue %}
+  <div class="cycle-issue" data-testid="cycle-issue">
+    <div class="cycle-issue-head">
+      <a class="cycle-issue-link"
+         href="https://github.com/{{ repo }}/issues/{{ issue.number }}"
+         target="_blank" rel="noopener">#{{ issue.number }}</a>
+      <span class="cycle-issue-title">{{ issue.title }}</span>
+    </div>
+
+    {% if children %}
+      <p class="cycle-issue-summary" data-testid="breakdown-summary">
+        Split into {{ children | length }} task{{ '' if children | length == 1 else 's' }}
+        — {{ done }} in review
+      </p>
+      <ul class="cycle-issue-children">
+        {% for child in children %}
+          <li class="cycle-issue-child" data-testid="child-{{ child.number }}">
+            <span class="chip chip-{{ child.status }}">{{ child.status }}</span>
+            <a href="https://github.com/{{ repo }}/issues/{{ child.number }}"
+               target="_blank" rel="noopener">#{{ child.number }}</a>
+            <span class="cycle-issue-child-title">{{ child.title }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="cycle-issue-summary">Not broken down — implemented directly.</p>
+    {% endif %}
+  </div>
+{% endif %}
