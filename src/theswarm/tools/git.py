@@ -112,10 +112,18 @@ async def clone_repo(repo_url: str, dest: str) -> str:
 
 
 async def create_branch(workdir: str, branch_name: str, base: str = "main") -> None:
-    """Create and checkout a new branch from base."""
+    """Create (or reset) a branch at the tip of base and check it out.
+
+    ``-B`` rather than ``-b``: the workspace is reused across dev iterations,
+    so a retried task derives the same branch name and ``-b`` fails with
+    rc=128 'a branch named X already exists'. Pinning a cycle to one issue
+    made that permanent — every retry rebuilt the same name and burned the
+    iteration (prod cycle 89c42c25875a). Each attempt wants a clean branch
+    off base anyway, which is exactly what resetting gives.
+    """
     await _run_git("checkout", base, cwd=workdir)
     await _run_git(*_auth_args(), "pull", "--ff-only", cwd=workdir, check=False)
-    await _run_git("checkout", "-b", branch_name, cwd=workdir)
+    await _run_git("checkout", "-B", branch_name, cwd=workdir)
     log.info("Created branch %s from %s", branch_name, base)
 
 

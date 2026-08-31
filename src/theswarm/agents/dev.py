@@ -359,6 +359,11 @@ def _should_skip(state: AgentState) -> str:
     return "implement"
 
 
+async def _noop(state: AgentState) -> dict:
+    """Routing-only node: carries the graph to the open-PR decision."""
+    return {}
+
+
 def _should_open_pr(state: AgentState) -> str:
     """Skip PR if no branch was created or no changes were committed."""
     if state.get("branch") is None or not state.get("diff_stat"):
@@ -445,13 +450,23 @@ def build_dev_graph() -> StateGraph:
         "implement": "implement",
         "end": END,
     })
+    graph.add_node("check_pr", _noop)
+
     graph.add_edge("implement", "quality_gates")
-    # Ralph Loop: retry if tests fail, otherwise proceed to PR
+    # Ralph Loop: retry if tests fail, otherwise consider opening a PR
     graph.add_conditional_edges("quality_gates", _should_retry, {
         "retry": "retry_implement",
-        "check_pr": "open_pr",
+        "check_pr": "check_pr",
     })
     graph.add_edge("retry_implement", "quality_gates")  # re-run tests after retry
+    # _should_open_pr existed but was never wired: the loop ran straight into
+    # open_pr, so a task that committed nothing still tried to open one and
+    # GitHub answered 422 'No commits between main and …' (prod cycle
+    # 89c42c25875a, a verification task with nothing to change).
+    graph.add_conditional_edges("check_pr", _should_open_pr, {
+        "open_pr": "open_pr",
+        "end": END,
+    })
     graph.add_edge("open_pr", END)
 
     return graph.compile()

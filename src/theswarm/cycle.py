@@ -317,6 +317,7 @@ async def run_daily_cycle(
             )
 
         # --- DEVELOPMENT: Dev implements → TechLead reviews → repeat ---
+        attempted_without_pr: set[int] = set()
         _dev_loop_ran = not _skip("dev_loop")
         if _dev_loop_ran:
             _enter("dev_loop")
@@ -379,7 +380,21 @@ async def run_daily_cycle(
                 if task is None:
                     await _progress("Dev", "No more ready tasks — ending dev loop")
                     break
-                await _progress("Dev", f"No PR produced for task #{task['number']}")
+                # A task that yields no PR twice yields none at all: a
+                # verification story with nothing to change, or work the
+                # model cannot complete. Without this the loop re-picks it
+                # every iteration — harmless before targeting (each iteration
+                # took a different issue), a guaranteed five-times-nothing
+                # once the cycle is pinned to one issue.
+                number = task["number"]
+                if number in attempted_without_pr:
+                    await _progress(
+                        "Dev",
+                        f"Task #{number} produced no changes twice — ending dev loop",
+                    )
+                    break
+                attempted_without_pr.add(number)
+                await _progress("Dev", f"No PR produced for task #{number}")
 
             # TechLead reviews and merges
             await _progress("TechLead", "Reviewing open PRs…")

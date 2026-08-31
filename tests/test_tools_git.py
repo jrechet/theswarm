@@ -87,7 +87,9 @@ async def test_create_branch(mock_subprocess):
     assert calls[0].args[1] == "checkout"
     assert calls[0].args[2] == "main"
     assert calls[2].args[1] == "checkout"
-    assert calls[2].args[2] == "-b"
+    # -B, not -b: the workspace is reused across dev iterations, so a retried
+    # task derives the same branch name and -b would fail rc=128.
+    assert calls[2].args[2] == "-B"
     assert calls[2].args[3] == "feat/new"
 
 
