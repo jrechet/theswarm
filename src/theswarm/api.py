@@ -46,6 +46,7 @@ class CycleRecord(BaseModel):
     repo: str
     description: str
     callback_url: str
+    issue_number: int | None = None
     status: CycleStatus
     created_at: str
     started_at: str = ""
@@ -68,6 +69,7 @@ class CycleTracker:
             repo=req.repo,
             description=req.description,
             callback_url=req.callback_url,
+            issue_number=req.issue_number,
             status=CycleStatus.QUEUED,
             created_at=datetime.now().isoformat(timespec="seconds"),
         )

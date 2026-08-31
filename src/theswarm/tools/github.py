@@ -246,6 +246,20 @@ class GitHubClient:
 # ── Helpers ─────────────────────────────────────────────────────────
 
 
+STATUS_VALUES = ("ready", "in-progress", "review", "backlog")
+
+
+def issue_status(issue: dict) -> str:
+    """Workflow column an issue dict belongs to, from its `status:*` label."""
+    for label in issue.get("labels", []):
+        name = label if isinstance(label, str) else label.get("name", "")
+        if name.startswith("status:"):
+            suffix = name.split(":", 1)[1]
+            if suffix in STATUS_VALUES:
+                return suffix
+    return "backlog"
+
+
 def _is_pull_request(issue: Issue) -> bool:
     """True when the issues endpoint returned a PR rather than an issue.
 

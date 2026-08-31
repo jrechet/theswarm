@@ -3584,3 +3584,80 @@ body.has-todays-demo-expanded { overflow: hidden; }
 .po-count-in-progress { background: var(--warning-subtle); color: var(--warning); }
 .po-count-review { background: var(--accent-subtle); color: var(--accent); }
 .po-count-backlog { background: var(--bg-tertiary); color: var(--text-secondary); }
+
+/* ── Targeted issue panel on the cycle page ──────────────────────────── */
+
+.cycle-issue {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.cycle-issue-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.cycle-issue-link {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.cycle-issue-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cycle-issue-summary {
+  margin: 0.4rem 0 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.cycle-issue-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cycle-issue-child {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.cycle-issue-child a {
+  color: var(--text-secondary);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  text-decoration: none;
+}
+
+.cycle-issue-child a:hover { color: var(--accent); }
+
+.cycle-issue-child-title { color: var(--text-primary); }
+
+.chip {
+  display: inline-block;
+  min-width: 5.5rem;
+  text-align: center;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.chip-ready { background: var(--success-subtle); color: var(--success); }
+.chip-in-progress { background: var(--warning-subtle); color: var(--warning); }
+.chip-review { background: var(--accent-subtle); color: var(--accent); }
+.chip-backlog { background: var(--bg-tertiary); color: var(--text-secondary); }

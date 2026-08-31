@@ -30,6 +30,12 @@
     </div>
   </div>
 
+  {# Issue-driven flow: what this cycle is building, and how it was split. #}
+  <div hx-get="{{ base }}/fragments/cycle/{{ cycle.id }}/issue"
+       hx-trigger="load{% if cycle.status == 'running' %}, every 15s{% endif %}"
+       hx-swap="innerHTML"
+       data-testid="cycle-issue-slot"></div>
+
   <div class="detail-grid">
     <div class="card">
       <h2>Overview</h2>
