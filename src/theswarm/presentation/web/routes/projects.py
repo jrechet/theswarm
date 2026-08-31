@@ -92,6 +92,98 @@ async def project_detail(request: Request, project_id: str) -> HTMLResponse:
     )
 
 
+# Issue-driven flow (P2, theswarm#24): browse the target repo's GitHub
+# issues and press Play on one. The board groups by `status:*` label so the
+# swarm's own workflow is visible at a glance.
+_STATUS_COLUMNS = ("ready", "in-progress", "review", "backlog")
+
+
+def _issue_status(issue: dict) -> str:
+    """Column an issue belongs to, from its `status:*` label."""
+    for label in issue.get("labels", []):
+        name = label if isinstance(label, str) else label.get("name", "")
+        if name.startswith("status:"):
+            suffix = name.split(":", 1)[1]
+            if suffix in _STATUS_COLUMNS:
+                return suffix
+    return "backlog"
+
+
+@router.get("/{project_id}/issues", response_class=HTMLResponse)
+async def project_issues(request: Request, project_id: str) -> HTMLResponse:
+    """HTMX fragment: the target repo's open issues, grouped by status."""
+    query: GetProjectQuery = request.app.state.get_project_query
+    project = await query.execute(project_id)
+    if project is None:
+        return HTMLResponse("Project not found", status_code=404)
+
+    columns: dict[str, list[dict]] = {name: [] for name in _STATUS_COLUMNS}
+    error = ""
+    try:
+        from theswarm.tools.github import GitHubClient
+
+        issues = await GitHubClient(str(project.repo)).get_issues()
+        for issue in issues:
+            columns[_issue_status(issue)].append(issue)
+    except Exception as exc:  # noqa: BLE001 — surfaced in the panel, not fatal
+        log.exception("Failed to list issues for project %s", project_id)
+        error = str(exc)[:200]
+
+    return request.app.state.templates.TemplateResponse(
+        "project_issues_fragment.html",
+        {
+            "request": request,
+            "project": project,
+            "project_id": project_id,
+            "columns": columns,
+            "column_names": _STATUS_COLUMNS,
+            "error": error,
+        },
+    )
+
+
+@router.post("/{project_id}/issues/{issue_number}/play", response_class=HTMLResponse)
+async def play_issue(
+    request: Request, project_id: str, issue_number: int,
+) -> HTMLResponse:
+    """Start a cycle pinned to one issue and point the user at it."""
+    query: GetProjectQuery = request.app.state.get_project_query
+    project = await query.execute(project_id)
+    if project is None:
+        return HTMLResponse("Project not found", status_code=404)
+
+    import asyncio
+
+    from theswarm.api import CycleRequest, get_cycle_tracker, run_api_cycle
+
+    repo = str(project.repo)
+    tracker = get_cycle_tracker()
+    record = tracker.create(CycleRequest(repo=repo, issue_number=issue_number))
+    state = request.app.state
+    task = asyncio.create_task(
+        run_api_cycle(
+            record.id, repo, f"Play on issue #{issue_number}", "",
+            getattr(state, "allowed_repos", []),
+            event_bus=getattr(state, "event_bus", None),
+            report_repo=getattr(state, "report_repo", None),
+            base_path=getattr(state, "base_path", ""),
+            project_repo=getattr(state, "project_repo", None),
+            cycle_repo=getattr(state, "cycle_repo", None),
+            project_id=project_id,
+            role_assignment_service=getattr(state, "role_assignment_service", None),
+            issue_number=issue_number,
+        )
+    )
+    tracker.set_task(record.id, task)
+    log.info("Play on #%d (%s) → cycle %s", issue_number, repo, record.id)
+
+    base = state.base_path
+    # HTMX drives the redirect so the button can live inside the board.
+    return HTMLResponse(
+        "", headers={"HX-Redirect": f"{base}/cycles/{record.id}"},
+    )
+
+
 @router.post("/{project_id}/delete", response_class=RedirectResponse)
 async def delete_project(request: Request, project_id: str) -> RedirectResponse:
     handler: DeleteProjectHandler = request.app.state.delete_project_handler
