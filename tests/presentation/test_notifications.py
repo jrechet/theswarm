@@ -32,7 +32,7 @@ async def test_dashboard_renders_notifications_button(db):
     app = await _mk_app(db)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
-        r = await c.get("/")
+        r = await c.get("/dashboard")
     assert r.status_code == 200
     assert 'id="notifications-toggle"' in r.text
     assert 'data-state="idle"' in r.text

@@ -151,6 +151,12 @@
   <section class="card"><p class="empty-state">Loading issues…</p></section>
 </div>
 
+
+{# Everything below answers 'how is this project configured' rather than
+   'build me this feature'. Collapsed so the job above stays the page. #}
+<details class="project-advanced" data-testid="project-advanced">
+  <summary>Advanced — configuration, secrets, and role surfaces</summary>
+
 <div class="detail-grid">
   <div class="card">
     <h2>Configuration</h2>
@@ -525,4 +531,7 @@
   </details>
 
 </section>
+
+</details>
+
 {% endblock %}

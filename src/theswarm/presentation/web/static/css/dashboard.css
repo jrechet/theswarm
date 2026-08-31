@@ -3661,3 +3661,33 @@ body.has-todays-demo-expanded { overflow: hidden; }
 .chip-in-progress { background: var(--warning-subtle); color: var(--warning); }
 .chip-review { background: var(--accent-subtle); color: var(--accent); }
 .chip-backlog { background: var(--bg-tertiary); color: var(--text-secondary); }
+
+/* ── Focus mode: primary nav vs collapsed Advanced ───────────────────── */
+
+.nav-primary {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+
+.project-advanced {
+  margin-top: 2rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.project-advanced > summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  padding: 0.35rem 0;
+  list-style: none;
+}
+
+.project-advanced > summary::before {
+  content: "▸ ";
+  color: var(--text-muted);
+}
+
+.project-advanced[open] > summary::before { content: "▾ "; }
+.project-advanced > summary:hover { color: var(--text-primary); }

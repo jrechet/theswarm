@@ -53,7 +53,7 @@ async def client(app):
 
 class TestDashboardRoutes:
     async def test_dashboard_empty(self, client):
-        r = await client.get("/")
+        r = await client.get("/dashboard")
         assert r.status_code == 200
         assert "TheSwarm" in r.text
         assert "No active cycles" in r.text
@@ -62,7 +62,7 @@ class TestDashboardRoutes:
         project_repo, cycle_repo = repos
         await project_repo.save(Project(id="p1", repo=RepoUrl("o/p1")))
 
-        r = await client.get("/")
+        r = await client.get("/dashboard")
         assert r.status_code == 200
         assert "p1" in r.text
 
@@ -83,7 +83,7 @@ class TestDashboardRoutes:
             ),
         )
 
-        r = await client.get("/")
+        r = await client.get("/dashboard")
         assert r.status_code == 200
         assert r.text.count('class="sparkline"') >= 1 or 'class="sparkline sparkline-empty"' in r.text
 
