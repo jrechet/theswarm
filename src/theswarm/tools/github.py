@@ -62,7 +62,7 @@ class GitHubClient:
         issues: list[Issue] = await self._run(
             lambda: list(self._repo.get_issues(**kwargs))
         )
-        return [_issue_to_dict(i) for i in issues if not i.pull_request]
+        return [_issue_to_dict(i) for i in issues if not _is_pull_request(i)]
 
     async def get_issue(self, number: int) -> dict | None:
         """Return one issue as a dict, or None if it does not exist."""
@@ -71,7 +71,7 @@ class GitHubClient:
         except Exception:
             log.warning("get_issue(#%d) failed", number, exc_info=True)
             return None
-        if issue.pull_request:
+        if _is_pull_request(issue):
             return None
         return _issue_to_dict(issue)
 
@@ -244,6 +244,19 @@ class GitHubClient:
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
+
+
+def _is_pull_request(issue: Issue) -> bool:
+    """True when the issues endpoint returned a PR rather than an issue.
+
+    GitHub's issues endpoint includes pull requests, flagged by a
+    ``pull_request`` key. Reading PyGithub's ``.pull_request`` property fires
+    a completion request *per issue* when that key is absent — 50 issues took
+    27.8s that way, timing out the board fragment behind Traefik's 30s cap.
+    ``html_url`` is in the list payload already and discriminates for free
+    (…/pull/N vs …/issues/N): the same listing then costs 1.2s.
+    """
+    return "/pull/" in (issue.html_url or "")
 
 
 def _issue_to_dict(issue: Issue) -> dict:

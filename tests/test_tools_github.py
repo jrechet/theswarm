@@ -40,6 +40,10 @@ def _make_mock_issue(
         am.login = login
         assignee_mocks.append(am)
     issue.assignees = assignee_mocks
+    # GitHub gives PRs a /pull/N html_url; get_issues() discriminates on that
+    # rather than the lazy .pull_request property (one API call per issue).
+    if pull_request is not None and html_url == "https://github.com/o/r/issues/1":
+        html_url = f"https://github.com/o/r/pull/{number}"
     issue.html_url = html_url
     issue.pull_request = pull_request
     return issue
