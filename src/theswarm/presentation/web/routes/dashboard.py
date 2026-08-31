@@ -3,14 +3,26 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from theswarm.application.queries.get_dashboard import GetDashboardQuery
 
 router = APIRouter()
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/", response_class=RedirectResponse)
+async def home(request: Request) -> RedirectResponse:
+    """Land on the job: pick a repo, pick an issue, press Play.
+
+    The portfolio dashboard stays reachable under Advanced (/dashboard); it
+    answers 'how is everything going', which is not what someone opening the
+    app is here to do.
+    """
+    base = request.app.state.base_path
+    return RedirectResponse(url=f"{base}/projects/", status_code=307)
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request) -> HTMLResponse:
     query: GetDashboardQuery = request.app.state.get_dashboard_query
     dto = await query.execute()

@@ -104,6 +104,7 @@ class TestGASmokeGate:
         # Sprint composer + Run Cycle modal must both be on the page.
         assert "sprint-composer" in r.text
         assert "cost-preview-modal" in r.text
-        # Sidebar entries we shipped in the redesign.
+        # Sidebar: the primary nav is the job itself; the rest is demoted.
         assert "TheSwarm" in r.text
-        assert "<summary>Workspace</summary>" in r.text
+        assert '<ul class="nav-primary">' in r.text
+        assert "<summary>Advanced</summary>" in r.text

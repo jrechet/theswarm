@@ -37,7 +37,7 @@ class TestDashboardRoutes:
     """Dashboard and core routes work."""
 
     async def test_dashboard_home(self, client):
-        resp = await client.get("/")
+        resp = await client.get("/dashboard")
         assert resp.status_code == 200
 
     async def test_health(self, client):

@@ -30,45 +30,27 @@
          selectors kept outranking our overrides. Opting out of the tag
          opts out of the whole fight. -->
     <div class="sidebar-nav" role="navigation" aria-label="Main navigation">
-      <details open>
-        <summary>Workspace</summary>
-        <ul>
-          <li><a href="{{ base }}/" data-icon="◇"><span>Dashboard</span></a></li>
-          <li><a href="{{ base }}/projects/" data-icon="▤"><span>Projects</span></a></li>
-          <li><a href="{{ base }}/team" data-icon="◉"><span>Team</span></a></li>
-        </ul>
-      </details>
-
-      <details open>
-        <summary>Activity</summary>
-        <ul>
-          <li><a href="{{ base }}/cycles/" data-icon="↻"><span>Cycles</span></a></li>
-          <li><a href="{{ base }}/chat" data-icon="✉"><span>Chat</span></a></li>
-          <li><a href="{{ base }}/proposals" data-icon="✦"><span>Proposals</span></a></li>
-        </ul>
-      </details>
-
-      <details open>
-        <summary>Output</summary>
-        <ul>
-          <li><a href="{{ base }}/reports/" data-icon="▦"><span>Reports</span></a></li>
-          <li><a href="{{ base }}/demos/" data-icon="▶"><span>Demos</span></a></li>
-          <li><a href="{{ base }}/features/" data-icon="★"><span>Features</span></a></li>
-        </ul>
-      </details>
+      {# The nav answers one job: build a feature and watch it happen.
+         Everything else lives under Advanced, collapsed — the surfaces still
+         exist, they just stop competing with the main path. #}
+      <ul class="nav-primary">
+        <li><a href="{{ base }}/projects/" data-icon="▤"><span>Projects</span></a></li>
+        <li><a href="{{ base }}/cycles/" data-icon="↻"><span>Cycles</span></a></li>
+        <li><a href="{{ base }}/demos/" data-icon="▶"><span>Demos</span></a></li>
+      </ul>
 
       <details>
-        <summary>Roles</summary>
+        <summary>Advanced</summary>
         <ul>
+          <li><a href="{{ base }}/dashboard" data-icon="◇"><span>Dashboard</span></a></li>
+          <li><a href="{{ base }}/team" data-icon="◉"><span>Team</span></a></li>
+          <li><a href="{{ base }}/chat" data-icon="✉"><span>Chat</span></a></li>
+          <li><a href="{{ base }}/proposals" data-icon="✦"><span>Proposals</span></a></li>
+          <li><a href="{{ base }}/reports/" data-icon="▦"><span>Reports</span></a></li>
+          <li><a href="{{ base }}/features/" data-icon="★"><span>Features</span></a></li>
           <li><a href="{{ base }}/architect/paved-road" data-icon="△"><span>Architect</span></a></li>
           <li><a href="{{ base }}/chief-of-staff/routing" data-icon="◈"><span>Chief of Staff</span></a></li>
           <li><a href="{{ base }}/intel/feed" data-icon="◎"><span>Scout</span></a></li>
-        </ul>
-      </details>
-
-      <details>
-        <summary>Knowledge</summary>
-        <ul>
           <li><a href="{{ base }}/semantic-memory" data-icon="❖"><span>Memory</span></a></li>
           <li><a href="{{ base }}/prompt-library" data-icon="❡"><span>Prompts</span></a></li>
           <li><a href="{{ base }}/refactor-programs" data-icon="⟲"><span>Refactors</span></a></li>
