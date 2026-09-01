@@ -51,6 +51,26 @@ class StartupValidator:
                     "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
                 )
 
+        # Auth wall (issue #38) — fail-safe closed, so the checks are
+        # about being locked OUT or having knowingly opened up.
+        if os.environ.get("SWARM_AUTH_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+            warnings.append(
+                "SWARM_AUTH_DISABLED is set: the dashboard is OPEN to anyone "
+                "who can reach it. Only acceptable for local dev and tests."
+            )
+        else:
+            if not os.environ.get("SWARM_ACCESS_KEY", "").strip():
+                warnings.append(
+                    "SWARM_ACCESS_KEY not set: the auth wall is up but nobody "
+                    "can log in. Generate one: python -c \"import secrets; "
+                    "print(secrets.token_urlsafe(32))\""
+                )
+            if not os.environ.get("SWARM_SESSION_SECRET", "").strip():
+                warnings.append(
+                    "SWARM_SESSION_SECRET not set: sessions won't survive a "
+                    "restart (an ephemeral secret is generated per boot)."
+                )
+
         # Check for common misconfigs
         repo = os.environ.get("SWARM_GITHUB_REPO", "")
         if repo and "/" not in repo:

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TheSwarm — Sign in</title>
+  <style>
+    :root {
+      --paper: #FAF9F6; --ink: #1C1E21; --soft: #6B7178;
+      --rule: #DDDCD6; --accent: #B8860B; --error: #A8452B;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      background: var(--paper); color: var(--ink);
+      font: 16px/1.5 system-ui, -apple-system, sans-serif;
+    }
+    main { width: min(22rem, 90vw); display: flex; flex-direction: column; gap: 1.5rem; }
+    h1 { font-size: 1.4rem; margin: 0; letter-spacing: -0.01em; }
+    h1 span { color: var(--accent); }
+    p.hint { margin: 0; color: var(--soft); font-size: 0.9rem; }
+    form { display: flex; flex-direction: column; gap: 0.75rem; }
+    input[type=password] {
+      font: inherit; padding: 0.65rem 0.8rem; border: 1px solid var(--rule);
+      border-radius: 6px; background: #fff; color: var(--ink); width: 100%;
+    }
+    input[type=password]:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+    button {
+      font: inherit; font-weight: 600; padding: 0.65rem; border: none;
+      border-radius: 6px; background: var(--ink); color: var(--paper); cursor: pointer;
+    }
+    button:hover { background: #000; }
+    button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .error { color: var(--error); font-size: 0.9rem; margin: 0; }
+    @media (prefers-color-scheme: dark) {
+      :root { --paper: #15171A; --ink: #E9EAE7; --soft: #9AA1A8; --rule: #33383E; }
+      input[type=password] { background: #1E2126; }
+      button { background: var(--ink); color: var(--paper); }
+      button:hover { background: #fff; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>The<span>Swarm</span></h1>
+    <p class="hint">This instance is private. Enter the access key from the server's <code>.env</code>.</p>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <form method="post" action="{{ base }}/login">
+      <input type="hidden" name="next" value="{{ next }}">
+      <input type="password" name="access_key" placeholder="Access key"
+             autocomplete="current-password" autofocus required>
+      <button type="submit">Sign in</button>
+    </form>
+  </main>
+</body>
+</html>

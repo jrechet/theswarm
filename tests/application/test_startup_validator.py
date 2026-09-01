@@ -22,6 +22,10 @@ class TestValidate:
         monkeypatch.setenv("EXTERNAL_URL", "https://swarm.example.com")
         monkeypatch.setenv("MATTERMOST_BOT_TOKEN", "mm-test")
         monkeypatch.setenv("SWARM_VAULT_MASTER_KEY", "fake-fernet-key")
+        # A fully-configured deployment runs with the auth wall up (issue #38)
+        monkeypatch.setenv("SWARM_AUTH_DISABLED", "")
+        monkeypatch.setenv("SWARM_ACCESS_KEY", "fake-access-key")
+        monkeypatch.setenv("SWARM_SESSION_SECRET", "fake-session-secret")
         result = validator.validate()
         assert result.ok
         assert len(result.errors) == 0

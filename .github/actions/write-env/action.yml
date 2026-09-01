@@ -24,6 +24,10 @@ inputs:
   claude_code_oauth_token:
     required: false
     default: ''
+  swarm_access_key:
+    required: true
+  swarm_session_secret:
+    required: true
 runs:
   using: composite
   steps:
@@ -40,6 +44,8 @@ runs:
         SEQ_API_KEY: ${{ inputs.seq_api_key }}
         SWARM_VAULT_MASTER_KEY: ${{ inputs.swarm_vault_master_key }}
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.claude_code_oauth_token }}
+        SWARM_ACCESS_KEY: ${{ inputs.swarm_access_key }}
+        SWARM_SESSION_SECRET: ${{ inputs.swarm_session_secret }}
       run: |
         {
           echo "MATTERMOST_BOT_TOKEN=$MATTERMOST_BOT_TOKEN"
@@ -53,4 +59,6 @@ runs:
           echo "SEQ_API_KEY=$SEQ_API_KEY"
           echo "SWARM_VAULT_MASTER_KEY=$SWARM_VAULT_MASTER_KEY"
           echo "CLAUDE_CODE_OAUTH_TOKEN=$CLAUDE_CODE_OAUTH_TOKEN"
+          echo "SWARM_ACCESS_KEY=$SWARM_ACCESS_KEY"
+          echo "SWARM_SESSION_SECRET=$SWARM_SESSION_SECRET"
         } > .env

@@ -56,7 +56,10 @@ fallback; an `sk-ant-oat` OAuth token is CLI-only and is deliberately ignored
 by the fallback), `GITHUB_TOKEN` (push auth,
 injected per git command — never written to `.git/config`), `SWARM_GITHUB_REPO`,
 `MATTERMOST_BOT_TOKEN`, `BASE_PATH` (reverse-proxy prefix, templates use
-`{{ base }}`), `SEQ_URL`/`SEQ_API_KEY` (log aggregation).
+`{{ base }}`), `SEQ_URL`/`SEQ_API_KEY` (log aggregation), `SWARM_ACCESS_KEY`/`SWARM_SESSION_SECRET`
+(dashboard auth wall — fail-safe closed; `SWARM_AUTH_DISABLED=1` opens it for
+local dev/tests only; the access key also works as `Authorization: Bearer` on
+`/api/*`).
 
 ## Deployment
 

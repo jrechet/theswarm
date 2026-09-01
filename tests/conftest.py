@@ -22,6 +22,19 @@ def _default_claude_backend_for_tests(monkeypatch):
         monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "api")
 
 
+@pytest.fixture(autouse=True)
+def _auth_open_for_tests(monkeypatch):
+    """Keep the auth wall (issue #38) down for the suite.
+
+    Production fails CLOSED: the wall is up unless SWARM_AUTH_DISABLED is
+    truthy. The 86 web-test modules build the app directly and would all
+    need a login dance otherwise. Tests that exercise the wall re-enable it
+    with ``monkeypatch.setenv("SWARM_AUTH_DISABLED", "")``.
+    """
+    if "SWARM_AUTH_DISABLED" not in os.environ:
+        monkeypatch.setenv("SWARM_AUTH_DISABLED", "1")
+
+
 @pytest.fixture()
 def mock_settings():
     """Return a SwarmSettings-like object without importing pydantic models."""
