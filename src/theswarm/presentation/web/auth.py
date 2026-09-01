@@ -212,7 +212,10 @@ class AuthWallMiddleware:
             )
         elif method == "GET" and "text/html" in headers.get("accept", ""):
             query = scope.get("query_string", b"").decode()
-            target = path + (f"?{query}" if query else "")
+            # The app sees proxy-stripped paths, the browser does not:
+            # next must carry the public prefix or the post-login redirect
+            # lands outside the app (bots.jrec.fr/projects/ → 404).
+            target = f"{self.base}{path}" + (f"?{query}" if query else "")
             response = RedirectResponse(
                 f"{login_url}?next={quote(target, safe='')}", status_code=303,
             )

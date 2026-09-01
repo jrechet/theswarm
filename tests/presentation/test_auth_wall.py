@@ -84,6 +84,22 @@ async def test_anonymous_html_page_redirects_to_login(client):
     assert r.headers["location"].endswith("/login?next=%2Fprojects%2F")
 
 
+async def test_next_carries_the_reverse_proxy_prefix(tmp_path):
+    """Behind Traefik the app sees stripped paths but the browser doesn't:
+    a next of /projects/ would send the signed-in user to a 404."""
+    conn = await init_db(str(tmp_path / "test.db"))
+    app = create_web_app(
+        SQLiteProjectRepository(conn), SQLiteCycleRepository(conn),
+        EventBus(), SSEHub(), base_path="/swarm",
+    )
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        r = await c.get("/projects/", headers={"Accept": "text/html"})
+    await conn.close()
+    assert r.status_code == 303
+    assert r.headers["location"] == "/swarm/login?next=%2Fswarm%2Fprojects%2F"
+
+
 async def test_anonymous_api_gets_401(client):
     r = await client.get("/api/dashboard")
     assert r.status_code == 401
