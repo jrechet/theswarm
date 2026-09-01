@@ -218,7 +218,7 @@ async def test_play_starts_a_cycle_pinned_to_the_issue(web, _isolate_cycle_track
         await asyncio.sleep(0)  # let the created task reach the mock
 
     assert r.status_code == 303
-    assert r.headers["location"].startswith("/swarm/cycles/")
+    assert r.headers["location"].startswith("/swarm/c/")
     cycle_id = r.headers["location"].rsplit("/", 1)[-1]
     record = _isolate_cycle_tracker.get(cycle_id)
     assert record is not None
@@ -241,6 +241,6 @@ async def test_running_cycle_shows_the_follow_banner(web, _isolate_cycle_tracker
         r = await client.get("/r/jrechet/concert-tour-app")
 
     assert 'data-testid="running-banner"' in r.text
-    assert f"/swarm/cycles/{record.id}" in r.text
+    assert f"/swarm/c/{record.id}" in r.text
     assert "Follow" in r.text
     assert "▶" not in r.text  # the building issue offers Follow, not Play
