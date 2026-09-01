@@ -213,4 +213,145 @@ async def play(
     log.info("V2: Play #%d on %s → cycle %s", issue_number, full_name, record.id)
 
     base = state.base_path
-    return RedirectResponse(f"{base}/cycles/{record.id}", status_code=303)
+    return RedirectResponse(f"{base}/c/{record.id}", status_code=303)
+
+
+# ── The theater: watch the swarm build ─────────────────────────────────
+
+_STATIONS = (
+    ("po", "PO", "Product Owner"),
+    ("techlead", "TL", "Tech Lead"),
+    ("dev", "DEV", "Developer"),
+    ("qa", "QA", "QA"),
+)
+_ROLE_ALIASES = {
+    "po": "po", "product_owner": "po", "productowner": "po",
+    "techlead": "techlead", "tech_lead": "techlead", "tl": "techlead",
+    "dev": "dev", "developer": "dev",
+    "qa": "qa", "tester": "qa",
+}
+_FEED_LIMIT = 250
+
+
+def _normalize_role(raw: str) -> str | None:
+    return _ROLE_ALIASES.get(raw.strip().lower().replace("-", "_"))
+
+
+def _stations(record, progress: list[dict]) -> list[dict]:
+    """Map live progress onto the four fixed stations.
+
+    ``progress`` is most-recent-first; the freshest role is the active
+    station, everything before it on the rail is done, everything after
+    waits. On failure the active station carries the cross.
+    """
+    latest: dict[str, str] = {}
+    active: str | None = None
+    for row in progress:
+        role = _normalize_role(str(row.get("role", "")))
+        if role is None:
+            continue
+        if role not in latest:
+            latest[role] = str(row.get("message", ""))
+        if active is None:
+            active = role
+
+    keys = [key for key, _, _ in _STATIONS]
+    status = record.status.value
+    if active is None:
+        active_index = 0 if status == "running" else -1
+    else:
+        active_index = keys.index(active)
+
+    stations: list[dict] = []
+    for index, (key, glyph, name) in enumerate(_STATIONS):
+        if status == "completed":
+            state = "done"
+        elif status in ("failed", "cancelled"):
+            if active_index == -1 or index > active_index:
+                state = "waiting"
+            elif index == active_index:
+                state = "failed"
+            else:
+                state = "done"
+        elif status in ("running", "queued") and active_index >= 0:
+            if index < active_index:
+                state = "done"
+            elif index == active_index:
+                state = "active"
+            else:
+                state = "waiting"
+        else:
+            state = "waiting"
+        stations.append({
+            "key": key, "glyph": glyph, "name": name,
+            "state": state, "message": latest.get(key, ""),
+        })
+    return stations
+
+
+async def _stage_context(request: Request, record) -> dict:
+    from theswarm.application.services.pinned_issue import load_pinned_issue
+    from theswarm.application.services.progress_bridge import get_live_progress
+
+    progress = get_live_progress(record.id)
+
+    feed: list[dict] = []
+    thoughts_query = getattr(request.app.state, "get_agent_thoughts_query", None)
+    if thoughts_query is not None:
+        try:
+            entries = await thoughts_query.execute(record.id)
+        except Exception:  # noqa: BLE001 — the feed degrades, the page stays
+            log.exception("V2: reading thoughts for %s failed", record.id)
+            entries = []
+        glyphs = {key: glyph for key, glyph, _ in _STATIONS}
+        for entry in reversed(entries[-_FEED_LIMIT:]):
+            role = _normalize_role(entry.agent) or ""
+            feed.append({
+                "time": entry.occurred_at.strftime("%H:%M:%S"),
+                "agent": role or entry.agent,
+                "glyph": glyphs.get(role, entry.agent[:3].upper()),
+                "kind": entry.kind,
+                "text": entry.text,
+            })
+
+    pinned = await load_pinned_issue(record.repo, record.issue_number)
+    return {
+        "record": record,
+        "stations": _stations(record, progress),
+        "pinned": pinned,
+        "feed": feed,
+    }
+
+
+def _tracker_record(cycle_id: str):
+    from theswarm.api import get_cycle_tracker
+
+    return get_cycle_tracker().get(cycle_id)
+
+
+@router.get("/c/{cycle_id}", response_class=HTMLResponse)
+async def theater(request: Request, cycle_id: str):
+    state = request.app.state
+    record = _tracker_record(cycle_id)
+    if record is None:
+        # Historical cycle (tracker is in-memory): the V1 detail page reads
+        # the database and stays the archive view.
+        cycle = await state.get_cycle_status_query.execute(cycle_id)
+        if cycle is not None:
+            return RedirectResponse(
+                f"{state.base_path}/cycles/{cycle_id}", status_code=303,
+            )
+        return HTMLResponse("Cycle not found", status_code=404)
+    context = await _stage_context(request, record)
+    return state.templates.TemplateResponse("v2/theater.html", context)
+
+
+@router.get("/c/{cycle_id}/stage", response_class=HTMLResponse)
+async def theater_stage(request: Request, cycle_id: str):
+    record = _tracker_record(cycle_id)
+    if record is None:
+        return HTMLResponse("", status_code=404)
+    context = await _stage_context(request, record)
+    return request.app.state.templates.TemplateResponse(
+        "v2/_stage.html", context,
+    )

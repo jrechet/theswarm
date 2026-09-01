@@ -16,6 +16,8 @@
     --font-weight-medium: 500;
     --font-weight-semibold: 600;
     --tracking-tight: -0.025em;
+    --tracking-normal: 0em;
+    --leading-tight: 1.25;
     --leading-snug: 1.375;
     --leading-relaxed: 1.625;
     --radius-sm: 0.25rem;
@@ -241,11 +243,26 @@
   .mt-2 {
     margin-top: calc(var(--spacing) * 2);
   }
+  .mt-3 {
+    margin-top: calc(var(--spacing) * 3);
+  }
+  .mt-6 {
+    margin-top: calc(var(--spacing) * 6);
+  }
+  .mt-7 {
+    margin-top: calc(var(--spacing) * 7);
+  }
   .mb-2 {
     margin-bottom: calc(var(--spacing) * 2);
   }
   .ml-auto {
     margin-left: auto;
+  }
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
   .block {
     display: block;
@@ -277,6 +294,12 @@
   .h-14 {
     height: calc(var(--spacing) * 14);
   }
+  .max-h-\[26rem\] {
+    max-height: 26rem;
+  }
+  .min-h-\[2\.4em\] {
+    min-height: 2.4em;
+  }
   .min-h-screen {
     min-height: 100vh;
   }
@@ -286,8 +309,14 @@
   .w-2 {
     width: calc(var(--spacing) * 2);
   }
+  .w-9 {
+    width: calc(var(--spacing) * 9);
+  }
   .w-12 {
     width: calc(var(--spacing) * 12);
+  }
+  .w-14 {
+    width: calc(var(--spacing) * 14);
   }
   .w-full {
     width: 100%;
@@ -328,6 +357,9 @@
   .resize-y {
     resize: vertical;
   }
+  .grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .flex-col {
     flex-direction: column;
   }
@@ -343,6 +375,9 @@
   .items-end {
     align-items: flex-end;
   }
+  .items-start {
+    align-items: flex-start;
+  }
   .justify-between {
     justify-content: space-between;
   }
@@ -351,6 +386,9 @@
   }
   .gap-2 {
     gap: calc(var(--spacing) * 2);
+  }
+  .gap-2\.5 {
+    gap: calc(var(--spacing) * 2.5);
   }
   .gap-3 {
     gap: calc(var(--spacing) * 3);
@@ -377,6 +415,12 @@
   :where(.divide-rule > :not(:last-child)) {
     border-color: var(--rule);
   }
+  :where(.divide-rule\/60 > :not(:last-child)) {
+    border-color: var(--rule);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--rule) 60%, transparent);
+    }
+  }
   .self-start {
     align-self: flex-start;
   }
@@ -384,6 +428,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .overflow-y-auto {
+    overflow-y: auto;
   }
   .rounded {
     border-radius: 0.25rem;
@@ -413,19 +460,43 @@
     --tw-border-style: dashed;
     border-style: dashed;
   }
+  .border-honey {
+    border-color: var(--honey);
+  }
   .border-honey\/40 {
     border-color: var(--honey);
     @supports (color: color-mix(in lab, red, red)) {
       border-color: color-mix(in oklab, var(--honey) 40%, transparent);
     }
   }
+  .border-honey\/50 {
+    border-color: var(--honey);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--honey) 50%, transparent);
+    }
+  }
+  .border-moss\/50 {
+    border-color: var(--moss);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--moss) 50%, transparent);
+    }
+  }
   .border-rule {
     border-color: var(--rule);
+  }
+  .border-rust {
+    border-color: var(--rust);
   }
   .border-rust\/30 {
     border-color: var(--rust);
     @supports (color: color-mix(in lab, red, red)) {
       border-color: color-mix(in oklab, var(--rust) 30%, transparent);
+    }
+  }
+  .border-rust\/50 {
+    border-color: var(--rust);
+    @supports (color: color-mix(in lab, red, red)) {
+      border-color: color-mix(in oklab, var(--rust) 50%, transparent);
     }
   }
   .bg-honey {
@@ -434,8 +505,20 @@
   .bg-honey-wash {
     background-color: var(--honey-wash);
   }
+  .bg-honey-wash\/50 {
+    background-color: var(--honey-wash);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--honey-wash) 50%, transparent);
+    }
+  }
   .bg-ink {
     background-color: var(--ink);
+  }
+  .bg-moss {
+    background-color: var(--moss);
+  }
+  .bg-moss-wash {
+    background-color: var(--moss-wash);
   }
   .bg-panel {
     background-color: var(--panel);
@@ -443,11 +526,23 @@
   .bg-paper {
     background-color: var(--paper);
   }
+  .bg-rule {
+    background-color: var(--rule);
+  }
   .bg-rust-wash {
     background-color: var(--rust-wash);
   }
+  .bg-rust-wash\/40 {
+    background-color: var(--rust-wash);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--rust-wash) 40%, transparent);
+    }
+  }
   .bg-transparent {
     background-color: transparent;
+  }
+  .p-4 {
+    padding: calc(var(--spacing) * 4);
   }
   .p-5 {
     padding: calc(var(--spacing) * 5);
@@ -473,6 +568,9 @@
   .py-0\.5 {
     padding-block: calc(var(--spacing) * 0.5);
   }
+  .py-1 {
+    padding-block: var(--spacing);
+  }
   .py-1\.5 {
     padding-block: calc(var(--spacing) * 1.5);
   }
@@ -497,8 +595,17 @@
   .py-10 {
     padding-block: calc(var(--spacing) * 10);
   }
+  .pt-0\.5 {
+    padding-top: calc(var(--spacing) * 0.5);
+  }
+  .pt-1 {
+    padding-top: var(--spacing);
+  }
   .text-center {
     text-align: center;
+  }
+  .text-left {
+    text-align: left;
   }
   .font-mono {
     font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
@@ -517,6 +624,12 @@
   .text-\[11px\] {
     font-size: 11px;
   }
+  .text-\[12\.5px\] {
+    font-size: 12.5px;
+  }
+  .text-\[13\.5px\] {
+    font-size: 13.5px;
+  }
   .text-\[13px\] {
     font-size: 13px;
   }
@@ -525,6 +638,9 @@
   }
   .text-\[17px\] {
     font-size: 17px;
+  }
+  .text-\[22px\] {
+    font-size: 22px;
   }
   .text-\[26px\] {
     font-size: 26px;
@@ -536,6 +652,10 @@
   .leading-snug {
     --tw-leading: var(--leading-snug);
     line-height: var(--leading-snug);
+  }
+  .leading-tight {
+    --tw-leading: var(--leading-tight);
+    line-height: var(--leading-tight);
   }
   .font-medium {
     --tw-font-weight: var(--font-weight-medium);
@@ -549,9 +669,21 @@
     --tw-font-weight: var(--font-weight-semibold);
     font-weight: var(--font-weight-semibold);
   }
+  .tracking-\[0\.1em\] {
+    --tw-tracking: 0.1em;
+    letter-spacing: 0.1em;
+  }
+  .tracking-\[0\.12em\] {
+    --tw-tracking: 0.12em;
+    letter-spacing: 0.12em;
+  }
   .tracking-\[0\.14em\] {
     --tw-tracking: 0.14em;
     letter-spacing: 0.14em;
+  }
+  .tracking-normal {
+    --tw-tracking: var(--tracking-normal);
+    letter-spacing: var(--tracking-normal);
   }
   .tracking-tight {
     --tw-tracking: var(--tracking-tight);
@@ -559,6 +691,9 @@
   }
   .text-balance {
     text-wrap: balance;
+  }
+  .break-words {
+    overflow-wrap: break-word;
   }
   .text-faint {
     color: var(--faint);
@@ -572,6 +707,9 @@
   .text-ink {
     color: var(--ink);
   }
+  .text-moss {
+    color: var(--moss);
+  }
   .text-paper {
     color: var(--paper);
   }
@@ -581,6 +719,9 @@
   .text-soft {
     color: var(--soft);
   }
+  .normal-case {
+    text-transform: none;
+  }
   .uppercase {
     text-transform: uppercase;
   }
@@ -588,9 +729,18 @@
     --tw-ordinal: ordinal;
     font-variant-numeric: var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,);
   }
+  .line-through {
+    text-decoration-line: line-through;
+  }
+  .decoration-rule {
+    text-decoration-color: var(--rule);
+  }
   .antialiased {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+  .opacity-55 {
+    opacity: 55%;
   }
   .shadow {
     --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
@@ -599,6 +749,13 @@
   .ring {
     --tw-ring-shadow: var(--tw-ring-inset,) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+  .ring-2 {
+    --tw-ring-shadow: var(--tw-ring-inset,) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+  .ring-honey {
+    --tw-ring-color: var(--honey);
   }
   .outline {
     outline-style: var(--tw-outline-style);
@@ -685,6 +842,11 @@
   }
   .focus-visible\:outline-honey:focus-visible {
     outline-color: var(--honey);
+  }
+  @media (width >= 48rem) {
+    .md\:grid-cols-4 {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
   }
 }
 @font-face {

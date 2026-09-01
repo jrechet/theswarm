@@ -1,0 +1,87 @@
+{% extends "v2/base.html" %}
+{% block title %}Cycle {{ record.id[:8] }} — TheSwarm{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-6">
+
+  <div class="flex items-start justify-between gap-4 flex-wrap">
+    <div class="min-w-0">
+      <a href="{{ base }}/r/{{ record.repo }}" class="font-mono text-[11px] uppercase tracking-[0.14em] text-faint hover:text-soft focus-visible:outline-2 focus-visible:outline-honey">← {{ record.repo }}</a>
+      <h1 class="text-[22px] font-semibold tracking-tight mt-2 text-balance">
+        {% if pinned.issue %}<span class="font-mono text-faint font-normal">#{{ pinned.issue.number }}</span> {{ pinned.issue.title }}
+        {% elif record.issue_number %}Issue <span class="font-mono">#{{ record.issue_number }}</span>
+        {% else %}{{ record.description or "Cycle" }}{% endif %}
+      </h1>
+    </div>
+    <div class="flex items-center gap-3 shrink-0 pt-1">
+      <span id="status-pill" data-status="{{ record.status.value }}"
+        class="font-mono text-[11px] uppercase tracking-[0.1em] rounded-full px-3 py-1 border
+        {% if record.status.value == 'running' %}border-honey/50 text-honey-deep bg-honey-wash
+        {% elif record.status.value == 'completed' %}border-moss/50 text-moss bg-moss-wash
+        {% elif record.status.value == 'failed' %}border-rust/50 text-rust bg-rust-wash
+        {% else %}border-rule text-soft bg-panel{% endif %}">
+        {{ record.status.value }}</span>
+      <a href="{{ base }}/cycles/{{ record.id }}" class="font-mono text-[11px] text-faint hover:text-soft focus-visible:outline-2 focus-visible:outline-honey">details ↗</a>
+    </div>
+  </div>
+
+  <div id="stage">{% include "v2/_stage.html" %}</div>
+</div>
+
+<script>
+(function () {
+  var stage = document.getElementById("stage");
+  var filter = null;
+
+  function applyFilter() {
+    var note = document.getElementById("feed-filter-note");
+    stage.querySelectorAll(".feed-entry").forEach(function (row) {
+      row.style.display = (!filter || row.dataset.agent === filter) ? "" : "none";
+    });
+    stage.querySelectorAll(".station").forEach(function (b) {
+      b.classList.toggle("ring-2", filter === b.dataset.role);
+      b.classList.toggle("ring-honey", filter === b.dataset.role);
+    });
+    if (note) note.textContent = filter ? "— " + filter + " only (click again to clear)" : "";
+  }
+
+  stage.addEventListener("click", function (event) {
+    var station = event.target.closest(".station");
+    if (!station) return;
+    filter = (filter === station.dataset.role) ? null : station.dataset.role;
+    applyFilter();
+  });
+
+  var FINAL = ["completed", "failed", "cancelled"];
+  var lastHtml = null;
+  function tick() {
+    var inner = document.getElementById("stage-inner");
+    if (inner && FINAL.indexOf(inner.dataset.status) !== -1) return;
+    fetch("{{ base }}/c/{{ record.id }}/stage", {headers: {"Accept": "text/html"}})
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) {
+        // Swap only on real change: a blind 3s innerHTML replace destroys
+        // focus, text selection and the feed's scroll position.
+        if (html && lastHtml === null) {
+          // First poll: the page was just server-rendered with the same
+          // data — seed the baseline without a destructive swap. A change
+          // in this window is caught by the next poll.
+          lastHtml = html;
+        } else if (html && html !== lastHtml) {
+          lastHtml = html;
+          var feed = stage.querySelector('[data-testid="feed"]');
+          var scrollTop = feed ? feed.scrollTop : 0;
+          stage.innerHTML = html;
+          applyFilter();
+          var fresh = stage.querySelector('[data-testid="feed"]');
+          if (fresh) fresh.scrollTop = scrollTop;
+        }
+        var now = document.getElementById("stage-inner");
+        if (!now || FINAL.indexOf(now.dataset.status) === -1) setTimeout(tick, 3000);
+        else window.location.reload();
+      })
+      .catch(function () { setTimeout(tick, 6000); });
+  }
+  setTimeout(tick, 3000);
+})();
+</script>
+{% endblock %}

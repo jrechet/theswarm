@@ -150,32 +150,13 @@ async def cycle_issue_fragment(request: Request, cycle_id: str) -> HTMLResponse:
         )
 
     context["repo"] = record.repo
-    try:
-        from theswarm.tools.github import GitHubClient
+    from theswarm.application.services.pinned_issue import load_pinned_issue
 
-        client = GitHubClient(record.repo)
-        issue = await client.get_issue(record.issue_number)
-        context["issue"] = issue
-        if issue is not None:
-            from theswarm.tools.github import issue_status
-
-            marker = f"Parent: #{record.issue_number}"
-            everything = await client.get_issues(state="all")
-            children = [
-                {
-                    "number": child["number"],
-                    "title": child["title"],
-                    "status": issue_status(child),
-                }
-                for child in everything
-                if marker in (child.get("body") or "")
-            ]
-            context["children"] = children
-            context["done"] = sum(1 for c in children if c["status"] == "review")
-    except Exception as exc:  # noqa: BLE001 — degrade the panel, not the page
-        log.exception("Failed to read issue %s for cycle %s",
-                      record.issue_number, cycle_id)
-        context["error"] = str(exc)[:200]
+    pinned = await load_pinned_issue(record.repo, record.issue_number)
+    context["issue"] = pinned.issue
+    context["children"] = list(pinned.children)
+    context["done"] = pinned.done
+    context["error"] = pinned.error
 
     return request.app.state.templates.TemplateResponse(
         "partials/_cycle_issue.html", context,
