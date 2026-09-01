@@ -6,6 +6,8 @@ import asyncio
 import base64
 import logging
 import os
+
+from theswarm.tools import github_app
 import re
 import shutil
 
@@ -99,6 +101,7 @@ def _auth_args() -> list[str]:
 
 async def clone_repo(repo_url: str, dest: str) -> str:
     """Clone a repo to dest. If dest already exists, pull instead."""
+    await github_app.ensure_github_token()
     if os.path.isdir(os.path.join(dest, ".git")):
         log.info("Repo already cloned at %s — pulling latest", dest)
         await _run_git("checkout", "main", cwd=dest, check=False)
@@ -121,6 +124,7 @@ async def create_branch(workdir: str, branch_name: str, base: str = "main") -> N
     iteration (prod cycle 89c42c25875a). Each attempt wants a clean branch
     off base anyway, which is exactly what resetting gives.
     """
+    await github_app.ensure_github_token()
     await _run_git("checkout", base, cwd=workdir)
     await _run_git(*_auth_args(), "pull", "--ff-only", cwd=workdir, check=False)
     await _run_git("checkout", "-B", branch_name, cwd=workdir)
@@ -156,6 +160,7 @@ async def commit_all(workdir: str, message: str) -> bool:
 
 async def push_branch(workdir: str, branch_name: str) -> None:
     """Push branch to origin."""
+    await github_app.ensure_github_token()
     await _run_git(*_auth_args(), "push", "-u", "origin", branch_name, cwd=workdir)
     log.info("Pushed branch %s", branch_name)
 

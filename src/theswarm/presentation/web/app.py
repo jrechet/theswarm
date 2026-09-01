@@ -57,7 +57,7 @@ from theswarm.domain.cycles.events import (
 )
 from theswarm.presentation.web.routes import analyst, api, architect, artifacts, autonomy_config, chat, chief_of_staff, cycles, dashboard, demos, designer, dev_rigour, features, fragments, health, hitl, metrics, product, projects, prompt_library, qa, refactor_programs, release, reports, scout, security, semantic_memory, settings as settings_route, sre, team, techlead, webhooks, writer
 from theswarm.presentation.web.auth import AuthWallMiddleware
-from theswarm.presentation.web.routes import auth_routes
+from theswarm.presentation.web.routes import auth_routes, github_setup
 from theswarm.presentation.web.sse import SSEHub
 
 _HERE = Path(__file__).parent
@@ -992,6 +992,7 @@ def create_web_app(
     app.include_router(settings_route.router)
     app.include_router(api.router)
     app.include_router(auth_routes.router)
+    app.include_router(github_setup.router)
 
     # Static files
     if _STATIC_DIR.is_dir():

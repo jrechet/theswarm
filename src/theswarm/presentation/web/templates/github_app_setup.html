@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TheSwarm — GitHub App</title>
+  <style>
+    :root { --paper:#FAF9F6; --ink:#1C1E21; --soft:#6B7178; --rule:#DDDCD6; --accent:#B8860B; --ok:#4B7A3F; --error:#A8452B; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; background:var(--paper);
+           color:var(--ink); font:16px/1.55 system-ui,-apple-system,sans-serif; padding:2rem 1rem; }
+    main { width:min(30rem,92vw); display:flex; flex-direction:column; gap:1.25rem; }
+    h1 { font-size:1.3rem; margin:0; }
+    p { margin:0; color:var(--soft); font-size:0.95rem; }
+    .card { border:1px solid var(--rule); border-radius:8px; padding:1.25rem; background:#fff;
+            display:flex; flex-direction:column; gap:0.9rem; }
+    .ok { color:var(--ok); font-weight:600; }
+    .error { color:var(--error); }
+    label { font-size:0.85rem; color:var(--soft); }
+    input[type=text] { font:inherit; padding:0.55rem 0.7rem; border:1px solid var(--rule);
+                       border-radius:6px; width:100%; background:#fff; color:var(--ink); }
+    button, a.button { font:inherit; font-weight:600; padding:0.6rem 1rem; border:none; border-radius:6px;
+             background:var(--ink); color:var(--paper); cursor:pointer; text-decoration:none;
+             text-align:center; display:inline-block; }
+    button:hover, a.button:hover { background:#000; }
+    button:focus-visible, a.button:focus-visible, input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+    code { background:#F0EFEA; padding:0.1em 0.35em; border-radius:4px; font-size:0.88em; }
+    a.plain { color:var(--accent); }
+    @media (prefers-color-scheme: dark) {
+      :root { --paper:#15171A; --ink:#E9EAE7; --soft:#9AA1A8; --rule:#33383E; }
+      .card { background:#1B1E22; }
+      input[type=text] { background:#1E2126; }
+      code { background:#24272C; }
+      button:hover, a.button:hover { background:#fff; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>GitHub App</h1>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  {% if creds %}
+  <div class="card">
+    <p class="ok">Connected — app <strong>{{ creds.slug or creds.app_id }}</strong>{% if created %} was just created{% endif %}.</p>
+    <p>Next: install it on the repositories you trust the swarm with.
+       You can change that list on GitHub at any time.</p>
+    {% if creds.html_url %}
+      <a class="button" href="{{ creds.html_url }}/installations/new">Choose repositories on GitHub</a>
+      <p><a class="plain" href="{{ creds.html_url }}">App settings on GitHub</a></p>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="card">
+    <p>One click creates a GitHub App under your account. GitHub sends its
+       credentials straight back to this server, which stores them encrypted
+       — nothing to copy.</p>
+    <form action="https://github.com/settings/apps/new" method="post" id="manifest-form">
+      <input type="hidden" name="manifest" id="manifest" value="{{ manifest_json }}">
+      <label for="app-name">App name (must be unique on GitHub)</label>
+      <input type="text" id="app-name" value="{{ default_name }}" autocomplete="off">
+      <br><br>
+      <button type="submit">Create the app on GitHub</button>
+    </form>
+    <p>It only touches repositories you explicitly install it on:
+       <code>issues</code>, <code>contents</code>, <code>pull requests</code>,
+       <code>checks</code> — nothing account-wide.</p>
+  </div>
+  <script>
+    document.getElementById("manifest-form").addEventListener("submit", () => {
+      const field = document.getElementById("manifest");
+      const manifest = JSON.parse(field.value);
+      manifest.name = document.getElementById("app-name").value || manifest.name;
+      field.value = JSON.stringify(manifest);
+    });
+  </script>
+  {% endif %}
+</main>
+</body>
+</html>
