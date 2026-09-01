@@ -500,6 +500,8 @@ async def start_server(
     # Sprint B C3 — secret vault (lazy key load)
     from theswarm.infrastructure.persistence.secret_vault import SqliteSecretVault
     secret_vault = SqliteSecretVault(conn)
+    from theswarm.tools import github_app as _github_app
+    _github_app.configure(secret_vault)
 
     # Apply dashboard-managed global settings to os.environ before anything
     # downstream reads ANTHROPIC_API_KEY / GITHUB_TOKEN etc.

@@ -31,6 +31,13 @@
     }
     button:hover { background: #000; }
     button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .github-btn {
+      display: block; text-align: center; font-weight: 600; padding: 0.65rem;
+      border-radius: 6px; background: var(--accent); color: #fff;
+      text-decoration: none;
+    }
+    .github-btn:hover { filter: brightness(0.92); }
+    .github-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
     .error { color: var(--error); font-size: 0.9rem; margin: 0; }
     @media (prefers-color-scheme: dark) {
       :root { --paper: #15171A; --ink: #E9EAE7; --soft: #9AA1A8; --rule: #33383E; }
@@ -45,6 +52,10 @@
     <h1>The<span>Swarm</span></h1>
     <p class="hint">This instance is private. Enter the access key from the server's <code>.env</code>.</p>
     {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    {% if github_login %}
+    <a class="github-btn" href="{{ base }}/auth/github">Sign in with GitHub</a>
+    <p class="hint" style="text-align:center">or use the access key</p>
+    {% endif %}
     <form method="post" action="{{ base }}/login">
       <input type="hidden" name="next" value="{{ next }}">
       <input type="password" name="access_key" placeholder="Access key"

@@ -21,6 +21,7 @@ from github.PullRequest import PullRequest
 from github.Repository import Repository
 
 from theswarm.infrastructure.resilience import CircuitBreaker
+from theswarm.tools import github_app
 
 
 @dataclass
@@ -30,9 +31,11 @@ class GitHubClient:
     _gh: Github = field(init=False, repr=False)
     _repo: Repository = field(init=False, repr=False)
     _breaker: CircuitBreaker = field(init=False, repr=False)
+    _token: str = field(init=False, repr=False, default="")
 
     def __post_init__(self) -> None:
         token = os.environ.get("GITHUB_TOKEN", "")
+        self._token = token
         self._gh = Github(token)
         self._repo = self._gh.get_repo(self.repo_name)
         self._breaker = CircuitBreaker(
@@ -41,6 +44,23 @@ class GitHubClient:
             reset_seconds=60.0,
             immediate_trip_errors=(RateLimitExceededException,),
         )
+
+    async def _fresh(self) -> None:
+        """Rebuild the PyGitHub session when the token rotated.
+
+        GitHub App installation tokens live one hour; ``ensure_github_token``
+        refreshes the env and this rebinds ``_repo`` so bound methods stop
+        pointing at a session holding the expired token. Without App
+        credentials the token never changes and this is a cheap no-op.
+        """
+        token = await github_app.ensure_github_token()
+        if token and token != self._token:
+            self._token = token
+            self._gh = Github(token)
+            loop = asyncio.get_running_loop()
+            self._repo = await loop.run_in_executor(
+                None, self._gh.get_repo, self.repo_name,
+            )
 
     async def _run(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
         loop = asyncio.get_running_loop()
@@ -56,6 +76,7 @@ class GitHubClient:
         state: str = "open",
     ) -> list[dict]:
         """Return issues matching labels, as plain dicts."""
+        await self._fresh()
         kwargs: dict[str, Any] = {"state": state}
         if labels:
             kwargs["labels"] = labels
@@ -66,6 +87,7 @@ class GitHubClient:
 
     async def get_issue(self, number: int) -> dict | None:
         """Return one issue as a dict, or None if it does not exist."""
+        await self._fresh()
         try:
             issue: Issue = await self._run(self._repo.get_issue, number)
         except Exception:
@@ -82,6 +104,7 @@ class GitHubClient:
         labels: list[str] | None = None,
         assignees: list[str] | None = None,
     ) -> dict:
+        await self._fresh()
         issue = await self._run(
             self._repo.create_issue,
             title=title,
@@ -92,15 +115,18 @@ class GitHubClient:
         return _issue_to_dict(issue)
 
     async def add_comment(self, issue_number: int, body: str) -> None:
+        await self._fresh()
         issue = await self._run(self._repo.get_issue, issue_number)
         await self._run(issue.create_comment, body)
 
     async def add_labels(self, issue_number: int, labels: list[str]) -> None:
+        await self._fresh()
         issue = await self._run(self._repo.get_issue, issue_number)
         for label in labels:
             await self._run(issue.add_to_labels, label)
 
     async def remove_label(self, issue_number: int, label: str) -> None:
+        await self._fresh()
         issue = await self._run(self._repo.get_issue, issue_number)
         try:
             await self._run(issue.remove_from_labels, label)
@@ -110,6 +136,7 @@ class GitHubClient:
     # ── Branches ────────────────────────────────────────────────────────
 
     async def create_branch(self, branch_name: str, from_branch: str = "main") -> None:
+        await self._fresh()
         ref = await self._run(self._repo.get_git_ref, f"heads/{from_branch}")
         await self._run(
             self._repo.create_git_ref,
@@ -126,6 +153,7 @@ class GitHubClient:
         title: str,
         body: str = "",
     ) -> dict:
+        await self._fresh()
         pr = await self._run(
             self._repo.create_pull,
             title=title,
@@ -136,6 +164,7 @@ class GitHubClient:
         return _pr_to_dict(pr)
 
     async def get_open_prs(self) -> list[dict]:
+        await self._fresh()
         prs: list[PullRequest] = await self._run(
             lambda: list(self._repo.get_pulls(state="open"))
         )
@@ -143,6 +172,7 @@ class GitHubClient:
 
     async def get_pr_files(self, pr_number: int) -> list[dict]:
         """Return the list of changed files in a PR with patch diffs."""
+        await self._fresh()
         pr = await self._run(self._repo.get_pull, pr_number)
         files = await self._run(lambda: list(pr.get_files()))
         return [
@@ -163,25 +193,30 @@ class GitHubClient:
         event: str = "COMMENT",  # APPROVE | REQUEST_CHANGES | COMMENT
     ) -> None:
         """Submit a review on a PR."""
+        await self._fresh()
         pr = await self._run(self._repo.get_pull, pr_number)
         await self._run(pr.create_review, body=body, event=event)
 
     async def create_pr_comment(self, pr_number: int, body: str) -> None:
         """Post a comment on a PR (issue comment, not review)."""
+        await self._fresh()
         issue = await self._run(self._repo.get_issue, pr_number)
         await self._run(issue.create_comment, body)
 
     async def merge_pr(self, pr_number: int, merge_method: str = "squash") -> None:
+        await self._fresh()
         pr = await self._run(self._repo.get_pull, pr_number)
         await self._run(pr.merge, merge_method=merge_method)
 
     async def close_pr(self, pr_number: int) -> None:
         """Close a PR without merging."""
+        await self._fresh()
         pr = await self._run(self._repo.get_pull, pr_number)
         await self._run(pr.edit, state="closed")
 
     async def delete_branch(self, branch_name: str) -> None:
         """Delete a remote branch after merge."""
+        await self._fresh()
         try:
             ref = await self._run(self._repo.get_git_ref, f"heads/{branch_name}")
             await self._run(ref.delete)
@@ -192,6 +227,7 @@ class GitHubClient:
         self, branch: str = "main", required_reviews: int = 0,
     ) -> None:
         """Set up branch protection rules if not already configured."""
+        await self._fresh()
         try:
             branch_obj = await self._run(self._repo.get_branch, branch)
             if branch_obj.protected:
@@ -213,6 +249,7 @@ class GitHubClient:
     # ── Files ───────────────────────────────────────────────────────────
 
     async def get_file_content(self, path: str, ref: str = "main") -> str:
+        await self._fresh()
         content_file = await self._run(self._repo.get_contents, path, ref=ref)
         return content_file.decoded_content.decode()
 
@@ -223,6 +260,7 @@ class GitHubClient:
         branch: str,
         commit_message: str,
     ) -> None:
+        await self._fresh()
         try:
             existing = await self._run(self._repo.get_contents, path, ref=branch)
             await self._run(

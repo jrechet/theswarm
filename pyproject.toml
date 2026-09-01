@@ -29,6 +29,7 @@ dependencies = [
     # with "No module named 'playwright'". The browser binary is installed
     # separately in the Dockerfile.
     "playwright>=1.58.0",
+    "pyjwt>=2.8",
 ]
 
 [dependency-groups]
