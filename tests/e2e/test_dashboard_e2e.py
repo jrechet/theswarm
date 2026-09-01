@@ -30,6 +30,8 @@ SEEDED_VIDEO_REL_PATH = "e2e-seed-cycle-video/video/demo.webm"
 
 def _run_server(db_path: str, artifact_dir: str = ""):
     """Start the TheSwarm server in a subprocess using an isolated DB."""
+    import os
+    os.environ.setdefault("SWARM_AUTH_DISABLED", "1")
     import asyncio
     from theswarm.presentation.web.server import start_server
     asyncio.run(start_server(

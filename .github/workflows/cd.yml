@@ -90,6 +90,8 @@ jobs:
           seq_api_key: ${{ secrets.SEQ_API_KEY }}
           swarm_vault_master_key: ${{ secrets.SWARM_VAULT_MASTER_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          swarm_access_key: ${{ secrets.SWARM_ACCESS_KEY }}
+          swarm_session_secret: ${{ secrets.SWARM_SESSION_SECRET }}
       - name: Deploy
         run: |
           export TS_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -157,6 +159,8 @@ jobs:
           seq_api_key: ${{ secrets.SEQ_API_KEY }}
           swarm_vault_master_key: ${{ secrets.SWARM_VAULT_MASTER_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          swarm_access_key: ${{ secrets.SWARM_ACCESS_KEY }}
+          swarm_session_secret: ${{ secrets.SWARM_SESSION_SECRET }}
       - name: Redeploy (latest)
         run: |
           export TS_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
