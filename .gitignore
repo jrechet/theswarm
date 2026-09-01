@@ -14,3 +14,4 @@ test.db*
 *.db-journal
 coverage.json
 .coverage
+static/v2/app.css

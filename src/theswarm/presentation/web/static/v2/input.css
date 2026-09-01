@@ -1,0 +1,110 @@
+/* TheSwarm V2 — design tokens + Tailwind v4.
+ *
+ * Direction: "atelier" — warm paper, cool ink, honey as the working signal
+ * (the swarm at work), IBM Plex Sans/Mono (vendored, no CDN at runtime).
+ * Semantic colors (moss/rust) are separate from the accent.
+ * Compiled by the standalone Tailwind binary: scripts/build-css.sh locally,
+ * the `css` Docker stage in prod. Output: static/v2/app.css (never
+ * committed).
+ */
+
+@import "tailwindcss";
+@source "../../templates/v2";
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("fonts/plex-sans-var.woff2") format("woff2");
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/plex-mono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/plex-mono-500.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/plex-mono-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+/* Theme-dual tokens: components reference these through Tailwind's
+ * inline theme, so light/dark needs no per-class dark: variants. */
+:root {
+  --paper: #FAF8F4;
+  --panel: #FFFFFF;
+  --wash: #F1EEE6;
+  --ink: #20242A;
+  --soft: #5C636B;
+  --faint: #8A9199;
+  --rule: #E4E1D8;
+  --honey: #B8720A;
+  --honey-deep: #8F5606;
+  --honey-wash: #F6EAD3;
+  --moss: #3F7A46;
+  --moss-wash: #E4EFE3;
+  --rust: #B0402A;
+  --rust-wash: #F6E3DD;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #15181C;
+    --panel: #1D2126;
+    --wash: #23282E;
+    --ink: #E8E6E1;
+    --soft: #A6ACB3;
+    --faint: #767D85;
+    --rule: #32383F;
+    --honey: #E3A536;
+    --honey-deep: #F0BC5E;
+    --honey-wash: #2E2617;
+    --moss: #7FB984;
+    --moss-wash: #1F2C20;
+    --rust: #E07B5F;
+    --rust-wash: #33201B;
+  }
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-paper: var(--paper);
+  --color-panel: var(--panel);
+  --color-wash: var(--wash);
+  --color-ink: var(--ink);
+  --color-soft: var(--soft);
+  --color-faint: var(--faint);
+  --color-rule: var(--rule);
+  --color-honey: var(--honey);
+  --color-honey-deep: var(--honey-deep);
+  --color-honey-wash: var(--honey-wash);
+  --color-moss: var(--moss);
+  --color-moss-wash: var(--moss-wash);
+  --color-rust: var(--rust);
+  --color-rust-wash: var(--rust-wash);
+  --color-white: #fff;
+
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* The one animated signal: the swarm is working. */
+@keyframes swarm-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.swarm-working {
+  animation: swarm-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .swarm-working { animation: none; }
+}

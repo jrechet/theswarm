@@ -51,16 +51,15 @@ def test_advanced_group_is_collapsed_by_default():
 # ── Landing page ───────────────────────────────────────────────────────
 
 
-async def test_root_redirects_to_projects():
-    from types import SimpleNamespace
+def test_root_belongs_to_the_v2_flow():
+    """`/` is the V2 picker now (tests/presentation/test_v2_flow.py); the
+    dashboard module must no longer claim it."""
+    source = Path("src/theswarm/presentation/web/routes/dashboard.py").read_text()
+    assert '@router.get("/"' not in source
 
-    from theswarm.presentation.web.routes.dashboard import home
-
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(base_path="/swarm")))
-    response = await home(request)
-
-    assert response.status_code == 307
-    assert response.headers["location"] == "/swarm/projects/"
+    app_source = Path("src/theswarm/presentation/web/app.py").read_text()
+    assert app_source.index("app.include_router(v2.router)") < \
+        app_source.index("app.include_router(dashboard.router)")
 
 
 def test_dashboard_stays_reachable_at_its_own_path():
