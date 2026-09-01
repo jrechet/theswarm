@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}TheSwarm{% endblock %}</title>
+  <link rel="stylesheet" href="{{ base }}/static/v2/app.css?v={{ asset_v }}">
+</head>
+<body class="bg-paper text-ink font-sans antialiased min-h-screen flex flex-col">
+  <header class="border-b border-rule">
+    <div class="mx-auto w-full max-w-4xl px-5 h-14 flex items-center justify-between">
+      <a href="{{ base }}/" class="text-[17px] font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-honey focus-visible:outline-offset-4">
+        the<span class="text-honey">swarm</span>
+      </a>
+      <nav class="flex items-center gap-6 text-sm text-soft">
+        {% block nav_extra %}{% endblock %}
+        <a href="{{ base }}/dashboard" class="hover:text-ink focus-visible:outline-2 focus-visible:outline-honey">Legacy</a>
+        <form method="post" action="{{ base }}/logout">
+          <button type="submit" class="hover:text-ink cursor-pointer focus-visible:outline-2 focus-visible:outline-honey">Sign out</button>
+        </form>
+      </nav>
+    </div>
+  </header>
+  <main class="mx-auto w-full max-w-4xl px-5 py-10 flex-1">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

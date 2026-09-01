@@ -57,7 +57,7 @@ from theswarm.domain.cycles.events import (
 )
 from theswarm.presentation.web.routes import analyst, api, architect, artifacts, autonomy_config, chat, chief_of_staff, cycles, dashboard, demos, designer, dev_rigour, features, fragments, health, hitl, metrics, product, projects, prompt_library, qa, refactor_programs, release, reports, scout, security, semantic_memory, settings as settings_route, sre, team, techlead, webhooks, writer
 from theswarm.presentation.web.auth import AuthWallMiddleware
-from theswarm.presentation.web.routes import auth_routes, github_setup
+from theswarm.presentation.web.routes import auth_routes, github_setup, v2
 from theswarm.presentation.web.sse import SSEHub
 
 _HERE = Path(__file__).parent
@@ -957,6 +957,7 @@ def create_web_app(
         app.state.delete_schedule_handler = DeleteScheduleHandler(schedule_repo)
 
     # Routes
+    app.include_router(v2.router)  # owns `/` — the V2 flow is the front door
     app.include_router(dashboard.router)
     app.include_router(projects.router)
     app.include_router(cycles.router)

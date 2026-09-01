@@ -16,6 +16,17 @@ COPY theswarm.yaml* ./
 COPY docs/ docs/
 RUN uv sync --no-dev
 
+# Stage: compile the V2 stylesheet with the standalone Tailwind binary
+# (no node in any image; version pinned to match scripts/build-css.sh)
+FROM debian:bookworm-slim AS css
+WORKDIR /css
+ADD https://github.com/tailwindlabs/tailwindcss/releases/download/v4.3.3/tailwindcss-linux-x64 /usr/local/bin/tailwindcss
+RUN chmod +x /usr/local/bin/tailwindcss
+COPY src/theswarm/presentation/web/templates/ templates/
+COPY src/theswarm/presentation/web/static/v2/ static/v2/
+# input.css resolves @source ../../templates/v2 relative to itself
+RUN tailwindcss -i static/v2/input.css -o app.css --minify
+
 # Stage 2: Runtime image (no uv, no build deps)
 FROM python:3.12-slim AS runner
 
@@ -40,6 +51,7 @@ COPY --from=builder --chown=botuser:botuser /app/.venv /app/.venv
 COPY --from=builder --chown=botuser:botuser /app/src /app/src
 COPY --from=builder --chown=botuser:botuser /app/docs /app/docs
 COPY --from=builder --chown=botuser:botuser /app/theswarm.yaml* /app/
+COPY --from=css --chown=botuser:botuser /css/app.css /app/src/theswarm/presentation/web/static/v2/app.css
 
 # Chromium's shared libraries, for the QA agent's screenshot and video
 # capture. Needs root, so it runs before the USER switch; the browser itself

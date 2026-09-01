@@ -1,0 +1,65 @@
+{% extends "v2/base.html" %}
+{% block title %}TheSwarm — Repositories{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-8">
+
+  <div>
+    <p class="font-mono text-[11px] uppercase tracking-[0.14em] text-faint mb-2">Repositories</p>
+    <h1 class="text-[26px] font-semibold tracking-tight text-balance">Pick a repository, tell the swarm what to build.</h1>
+  </div>
+
+  {% if not app_configured %}
+  <div class="border border-rule rounded-lg bg-panel p-6 flex flex-col gap-3 max-w-xl">
+    <h2 class="font-semibold">Connect GitHub</h2>
+    <p class="text-sm text-soft leading-relaxed">One click creates your GitHub App; you then choose exactly which
+      repositories the swarm may touch. Credentials go straight from GitHub to this server, encrypted.</p>
+    <a href="{{ base }}/setup/github-app"
+       class="self-start bg-ink text-paper text-sm font-semibold rounded-md px-4 py-2 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-honey focus-visible:outline-offset-2">
+      Connect GitHub</a>
+  </div>
+  {% elif not repos %}
+  <div class="border border-rule rounded-lg bg-panel p-6 flex flex-col gap-3 max-w-xl">
+    <h2 class="font-semibold">No repositories yet</h2>
+    <p class="text-sm text-soft leading-relaxed">The app is connected but not installed anywhere. Choose the
+      repositories you trust the swarm with — you can change the list any time.</p>
+    {% if install_url %}
+    <a href="{{ install_url }}"
+       class="self-start bg-ink text-paper text-sm font-semibold rounded-md px-4 py-2 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-honey focus-visible:outline-offset-2">
+      Choose repositories on GitHub</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if repos %}
+  <ul class="divide-y divide-rule border-y border-rule" data-testid="repo-list">
+    {% for repo in repos %}
+    <li>
+      <a href="{{ base }}/r/{{ repo.full_name }}"
+         class="group flex items-center justify-between gap-6 py-5 px-1 hover:bg-honey-wash/60 transition-colors focus-visible:outline-2 focus-visible:outline-honey focus-visible:-outline-offset-2">
+        <div class="min-w-0">
+          <p class="text-[17px] leading-snug">
+            <span class="text-faint">{{ repo.owner }}/</span><span class="font-semibold">{{ repo.name }}</span>
+          </p>
+          {% if repo.description %}
+          <p class="text-sm text-soft mt-1 truncate">{{ repo.description }}</p>
+          {% endif %}
+        </div>
+        <div class="flex items-center gap-4 shrink-0 font-mono text-[11px] text-faint">
+          {% if repo.private %}<span class="border border-rule rounded px-1.5 py-0.5">private</span>{% endif %}
+          {% if repo.language %}<span>{{ repo.language }}</span>{% endif %}
+          <span class="text-soft group-hover:text-honey-deep group-hover:translate-x-0.5 transition-transform text-base" aria-hidden="true">→</span>
+        </div>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if install_url %}
+  <p class="text-sm text-soft">
+    <a href="{{ install_url }}" class="text-honey-deep hover:underline focus-visible:outline-2 focus-visible:outline-honey">Add or remove repositories</a>
+    <span class="text-faint">— managed on GitHub.</span>
+  </p>
+  {% endif %}
+  {% endif %}
+
+</div>
+{% endblock %}

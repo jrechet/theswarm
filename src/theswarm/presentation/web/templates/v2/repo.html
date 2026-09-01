@@ -1,0 +1,84 @@
+{% extends "v2/base.html" %}
+{% block title %}{{ repo_name }} — TheSwarm{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-8">
+
+  <div class="flex items-end justify-between gap-4">
+    <div class="min-w-0">
+      <a href="{{ base }}/" class="font-mono text-[11px] uppercase tracking-[0.14em] text-faint hover:text-soft focus-visible:outline-2 focus-visible:outline-honey">← Repositories</a>
+      <h1 class="text-[26px] font-semibold tracking-tight mt-2">
+        <span class="text-faint font-normal">{{ owner }}/</span>{{ repo_name }}
+      </h1>
+    </div>
+    <a href="https://github.com/{{ owner }}/{{ repo_name }}" class="font-mono text-[11px] text-faint hover:text-soft shrink-0 focus-visible:outline-2 focus-visible:outline-honey">GitHub ↗</a>
+  </div>
+
+  {% if running_cycle %}
+  <a href="{{ base }}/cycles/{{ running_cycle.id }}" data-testid="running-banner"
+     class="flex items-center gap-3 border border-honey/40 bg-honey-wash rounded-lg px-5 py-4 hover:border-honey focus-visible:outline-2 focus-visible:outline-honey">
+    <span class="w-2 h-2 rounded-full bg-honey swarm-working" aria-hidden="true"></span>
+    <span class="text-sm font-medium">
+      The swarm is building{% if running_cycle.issue_number %} <span class="font-mono">#{{ running_cycle.issue_number }}</span>{% endif %}
+    </span>
+    <span class="ml-auto text-sm text-honey-deep font-semibold">Follow →</span>
+  </a>
+  {% endif %}
+
+  <form method="post" action="{{ base }}/r/{{ owner }}/{{ repo_name }}/issues"
+        class="border border-rule rounded-lg bg-panel p-5 flex flex-col gap-3" data-testid="composer">
+    <label for="composer-body" class="font-mono text-[11px] uppercase tracking-[0.14em] text-faint">New feature</label>
+    <textarea id="composer-body" name="body" rows="3" required
+      placeholder="Describe what you want built — first line becomes the issue title."
+      class="w-full resize-y bg-transparent text-[15px] leading-relaxed placeholder:text-faint focus:outline-none"></textarea>
+    <div class="flex items-center justify-between gap-4">
+      <p class="text-[13px] text-faint">Creates a GitHub issue. Press Play when you want the swarm on it.</p>
+      <button type="submit"
+        class="bg-ink text-paper text-sm font-semibold rounded-md px-4 py-2 hover:opacity-90 shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-honey focus-visible:outline-offset-2">
+        Create issue</button>
+    </div>
+  </form>
+
+  {% if issues_error %}
+  <p class="text-sm text-rust border border-rust/30 bg-rust-wash rounded-lg px-4 py-3">
+    GitHub didn't answer: {{ issues_error }}</p>
+  {% endif %}
+
+  <div class="flex flex-col gap-7" data-testid="issue-board">
+    {% for group in groups %}
+    {% if group.issues %}
+    <section aria-labelledby="group-{{ group.key }}">
+      <h2 id="group-{{ group.key }}" class="flex items-baseline gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-faint mb-2">
+        {{ group.label }} <span class="text-soft">{{ group.issues | length }}</span>
+      </h2>
+      <ul class="divide-y divide-rule border-y border-rule">
+        {% for issue in group.issues %}
+        <li class="flex items-center gap-4 py-3.5 px-1">
+          <span class="font-mono text-[13px] text-faint shrink-0 w-12">#{{ issue.number }}</span>
+          <p class="text-[15px] min-w-0 truncate flex-1">{{ issue.title }}</p>
+          {% if issue.building %}
+          <a href="{{ base }}/cycles/{{ issue.cycle_id }}" class="flex items-center gap-2 text-[13px] font-semibold text-honey-deep shrink-0 focus-visible:outline-2 focus-visible:outline-honey">
+            <span class="w-1.5 h-1.5 rounded-full bg-honey swarm-working" aria-hidden="true"></span>Follow →
+          </a>
+          {% else %}
+          <form method="post" action="{{ base }}/r/{{ owner }}/{{ repo_name }}/issues/{{ issue.number }}/play" class="shrink-0">
+            <button type="submit" title="Build #{{ issue.number }}"
+              class="flex items-center gap-1.5 text-[13px] font-semibold border border-rule rounded-md px-3 py-1.5 hover:border-honey hover:text-honey-deep hover:bg-honey-wash/60 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-honey">
+              <span aria-hidden="true">▶</span> Play
+            </button>
+          </form>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+    {% endfor %}
+
+    {% if not has_issues and not issues_error %}
+    <p class="text-sm text-faint py-6 text-center border border-dashed border-rule rounded-lg">
+      No open issues — describe the first feature above.</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
