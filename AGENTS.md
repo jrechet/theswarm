@@ -2,8 +2,10 @@
 
 TheSwarm is an autonomous AI dev team: four agents (PO, TechLead, Dev, QA) built as
 LangGraph state graphs run a full development cycle — plan, implement, review, test,
-report — against a registered GitHub repo. A FastAPI + HTMX dashboard, a CLI, and a
-Mattermost persona drive it.
+report — against a registered GitHub repo. A FastAPI dashboard, a CLI, and a
+Mattermost persona drive it. The front door is the V2 flow (sign in → pick a
+repo → write a feature → ▶ Play → watch the four agents in the theater); the
+older V1 surfaces stay reachable under "Legacy".
 
 ## Build & test
 
@@ -27,10 +29,26 @@ Two packages in `src/`: `theswarm` (agents, cycle, web) and `theswarm_common`
 - `domain/` — frozen dataclasses, value objects, Protocol ports
 - `application/` — CQRS commands/queries, EventBus, services
 - `infrastructure/` — SQLite (aiosqlite) repos, Playwright recorder, scheduler, webhooks
-- `presentation/` — CLI (argparse), web (FastAPI + HTMX + SSE), TUI (Textual)
+- `presentation/` — CLI (argparse), web (FastAPI + Jinja + SSE), TUI (Textual)
+
+Two UI generations coexist in `presentation/web/`:
+- **V2** — `routes/v2.py` + `templates/v2/` on Tailwind tokens (`static/v2/input.css`,
+  Plex fonts vendored, no CDN). Owns `/` (repo picker fed by the GitHub App
+  installation plus legacy registered projects), `/r/{owner}/{name}` (composer →
+  GitHub issue, issue board, ▶ Play), `/c/{cycle_id}` (the theater: agent rail from
+  `ProgressBridge` live messages, pinned issue breakdown via
+  `application/services/pinned_issue.py`, feed from the cycle event store; the
+  page polls `/c/{id}/stage` every 3 s and only swaps the DOM on change).
+- **V1** — everything else (`/dashboard`, `/projects/`, `/cycles/`, HTMX
+  fragments, the 14 role surfaces). Demoted, not deleted; the theater sends
+  cycles the in-memory tracker no longer knows to `/cycles/{id}` (archive view).
+
+`presentation/web/auth.py` is the wall (pure ASGI, fail-safe closed); doors are
+`routes/auth_routes.py` (access key + GitHub OAuth) and the GitHub App setup in
+`routes/github_setup.py`.
 
 Original pipeline modules, bridged into the web app: `cycle.py` (orchestration,
-`PHASE_TIMEOUTS`), `agents/{po,techlead,dev,qa}.py`, `tools/{claude,github,git}.py`,
+`PHASE_TIMEOUTS`), `agents/{po,techlead,dev,qa}.py`, `tools/{claude,github,git,github_app}.py`,
 `api.py` (cycle tracker + whole-cycle hard timeout), `persona.py` (Mattermost NLU).
 Full details: `docs/ARCHITECTURE-V2.md`, `docs/ROLES-OVERVIEW.md`.
 
@@ -42,9 +60,17 @@ Full details: `docs/ARCHITECTURE-V2.md`, `docs/ROLES-OVERVIEW.md`.
   make no API calls. Tests rely on it.
 - pytest `asyncio_mode = "auto"`; `respx` for HTTP mocking; tests organized by layer
   under `tests/{domain,application,infrastructure,presentation,integration,e2e}`.
-- 2200+ tests, all green. Any key an agent node returns MUST be declared in
+- 2300+ tests, all green. Any key an agent node returns MUST be declared in
   `AgentState` (`config.py`) — LangGraph silently drops undeclared keys
   (guarded by `tests/test_agent_state_schema.py`).
+- GitHub identity: `tools/github_app.ensure_github_token()` exports the freshest
+  token (1 h installation token when the App is configured, else the static
+  `GITHUB_TOKEN`) as `GITHUB_TOKEN`; every `GitHubClient` method calls `_fresh()`
+  first so a 3 h cycle survives token rotation. Without App credentials the
+  static token passes straight through — that is the rollback path.
+- Play → cycle is the `issue_number` → `CycleConfig.target_issue` mechanic: the
+  Dev agent takes the pinned issue if it carries `role:dev`, else its
+  `Parent: #N` children in `status:ready`.
 
 ## Environment
 
@@ -59,7 +85,12 @@ injected per git command — never written to `.git/config`), `SWARM_GITHUB_REPO
 `{{ base }}`), `SEQ_URL`/`SEQ_API_KEY` (log aggregation), `SWARM_ACCESS_KEY`/`SWARM_SESSION_SECRET`
 (dashboard auth wall — fail-safe closed; `SWARM_AUTH_DISABLED=1` opens it for
 local dev/tests only; the access key also works as `Authorization: Bearer` on
-`/api/*`).
+`/api/*`), `SWARM_OWNER_LOGIN` (the only GitHub login OAuth admits; default
+`jrechet`). GitHub App credentials live in the Fernet vault under project id
+`__github_app__` (written by the manifest callback); `GITHUB_APP_ID` +
+`GITHUB_APP_PRIVATE_KEY` (+ `_CLIENT_ID`/`_CLIENT_SECRET`) are the env fallback
+for CLI/dev contexts without a vault. Prod env flows repo secrets →
+`.github/actions/write-env` → `.env` → `env_file` — a new variable needs all three.
 
 ## Deployment
 
@@ -87,3 +118,13 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   the backlog drains with nothing shipped.
 - `commit_all` uses `git add -A` in the target workspace: runtime artifacts
   (test.db*, coverage) must be excluded before commit — known gap.
+- The cycle tracker is in-memory: a container restart forgets running cycles
+  (issue #5), and the theater can only show cycles it still knows.
+- **Open blocker:** creating the GitHub App via the manifest flow ends with
+  GitHub redirecting to our callback with a code it does not recognise
+  (`POST /app-manifest/{code}/conversions` → 404) and no app on the account.
+  What is proven, what to try next, in order, is in
+  `docs/handoffs/2026-09-06-github-app-manifest-conversion-404.md` — read it
+  before touching `routes/github_setup.py`.
+- `static/v2/app.css` is generated: never commit it (it once slipped in via
+  `git add -A` and was un-indexed in #42).
