@@ -26,6 +26,7 @@ import jwt
 
 GITHUB_API = "https://api.github.com"
 VAULT_PROJECT_ID = "__github_app__"
+VAULT_OAUTH_PROJECT_ID = "__github_oauth__"
 _VAULT_KEYS = (
     "app_id", "private_key_pem", "client_id", "client_secret",
     "webhook_secret", "slug", "html_url",
@@ -223,3 +224,67 @@ async def list_installation_repositories() -> list[dict]:
             repos.extend(payload.get("repositories", []))
             url = resp.links.get("next", {}).get("url", "")
     return repos
+
+
+# ── The owner's own repositories (no App needed) ───────────────────────
+
+
+async def list_user_repositories() -> list[dict]:
+    """Every repo the configured token's user can see, most recently pushed
+    first. This is what "tous mes projets" means in practice: GET /user/repos
+    with the owner's token — owned, collaborator and org repos, private
+    included. Empty when no token is configured."""
+    token = await ensure_github_token()
+    if not token:
+        return []
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+    }
+    repos: list[dict] = []
+    url = (
+        f"{GITHUB_API}/user/repos?per_page=100&sort=pushed"
+        "&affiliation=owner,collaborator,organization_member"
+    )
+    async with httpx.AsyncClient(timeout=20) as client:
+        while url:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            repos.extend(resp.json())
+            url = resp.links.get("next", {}).get("url", "")
+    return repos
+
+
+# ── OAuth client for "Sign in with GitHub" ─────────────────────────────
+#
+# Authorize/token/user endpoints are identical for a GitHub App and a plain
+# OAuth App, so the login works with whichever client exists: the App's
+# (vault __github_app__), a plain OAuth App saved from /setup/github-oauth
+# (vault __github_oauth__), or env GITHUB_OAUTH_CLIENT_ID/_SECRET.
+
+
+async def store_oauth_client(client_id: str, client_secret: str) -> None:
+    if _vault is None:
+        raise RuntimeError("github_app.configure(vault) was never called")
+    await _vault.set(VAULT_OAUTH_PROJECT_ID, "client_id", client_id.strip())
+    await _vault.set(VAULT_OAUTH_PROJECT_ID, "client_secret", client_secret.strip())
+
+
+async def oauth_client() -> tuple[str, str] | None:
+    """(client_id, client_secret) from the first configured source, or None."""
+    creds = await load_credentials()
+    if creds is not None and creds.client_id and creds.client_secret:
+        return creds.client_id, creds.client_secret
+    if _vault is not None:
+        try:
+            cid = await _vault.get(VAULT_OAUTH_PROJECT_ID, "client_id")
+            sec = await _vault.get(VAULT_OAUTH_PROJECT_ID, "client_secret")
+            if cid and sec:
+                return cid, sec
+        except Exception:  # vault locked → fall through to env
+            pass
+    cid = os.environ.get("GITHUB_OAUTH_CLIENT_ID", "").strip()
+    sec = os.environ.get("GITHUB_OAUTH_CLIENT_SECRET", "").strip()
+    if cid and sec:
+        return cid, sec
+    return None

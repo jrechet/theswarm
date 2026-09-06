@@ -35,6 +35,24 @@ def _auth_open_for_tests(monkeypatch):
         monkeypatch.setenv("SWARM_AUTH_DISABLED", "1")
 
 
+@pytest.fixture(autouse=True)
+def _github_identity_is_not_shared_state():
+    """ensure_github_token() exports the freshest token into os.environ by
+    design (both git and PyGitHub read it there). Outside monkeypatch that
+    export outlives the test that caused it: a home-page test with a cached
+    installation token left GITHUB_TOKEN=ghs_x behind, and every later
+    GitHubClient test hit the real API. Restore env + module state per test."""
+    from theswarm.tools import github_app
+
+    before = os.environ.get("GITHUB_TOKEN")
+    yield
+    if before is None:
+        os.environ.pop("GITHUB_TOKEN", None)
+    else:
+        os.environ["GITHUB_TOKEN"] = before
+    github_app.reset_state()
+
+
 @pytest.fixture()
 def mock_settings():
     """Return a SwarmSettings-like object without importing pydantic models."""

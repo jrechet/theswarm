@@ -16,7 +16,7 @@ import json
 import logging
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from theswarm.tools import github_app
@@ -117,3 +117,41 @@ async def github_app_callback(request: Request, code: str = ""):
     return RedirectResponse(
         f"{base}/setup/github-app?created=1", status_code=303,
     )
+
+
+# ── Plain OAuth App (Sign in with GitHub without the manifest flow) ────
+#
+# GitHub has no API to mint an OAuth client, so the owner creates the OAuth
+# App once on GitHub (three fields, shown on the page) and pastes the client
+# id + secret here; they go straight into the Fernet vault.
+
+
+def _oauth_page(request: Request, saved: bool = False, error: str = "") -> HTMLResponse:
+    templates = request.app.state.templates
+    ext = external_base(request)
+    return templates.TemplateResponse("github_oauth_setup.html", {
+        "homepage_url": ext,
+        "callback_url": f"{ext}/auth/github/callback",
+        "saved": saved,
+        "error": error,
+    })
+
+
+@router.get("/github-oauth", response_class=HTMLResponse)
+async def github_oauth_setup(request: Request) -> HTMLResponse:
+    page = _oauth_page(request, saved=request.query_params.get("saved") == "1")
+    return page
+
+
+@router.post("/github-oauth")
+async def github_oauth_save(
+    request: Request,
+    client_id: str = Form(default=""),
+    client_secret: str = Form(default=""),
+):
+    base = request.app.state.base_path
+    if not client_id.strip() or not client_secret.strip():
+        return _oauth_page(request, error="Both the client ID and the client secret are needed.")
+    await github_app.store_oauth_client(client_id, client_secret)
+    log.info("GitHub OAuth client saved (client id %s…)", client_id.strip()[:6])
+    return RedirectResponse(f"{base}/setup/github-oauth?saved=1", status_code=303)

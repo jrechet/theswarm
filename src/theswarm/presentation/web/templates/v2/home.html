@@ -8,7 +8,7 @@
     <h1 class="text-[26px] font-semibold tracking-tight text-balance">Pick a repository, tell the swarm what to build.</h1>
   </div>
 
-  {% if not app_configured %}
+  {% if not repos and not app_configured %}
   <div class="border border-rule rounded-lg bg-panel p-6 flex flex-col gap-3 max-w-xl">
     <h2 class="font-semibold">Connect GitHub</h2>
     <p class="text-sm text-soft leading-relaxed">One click creates your GitHub App; you then choose exactly which
@@ -53,12 +53,16 @@
     </li>
     {% endfor %}
   </ul>
-  {% if install_url %}
-  <p class="text-sm text-soft">
-    <a href="{{ install_url }}" class="text-honey-deep hover:underline focus-visible:outline-2 focus-visible:outline-honey">Add or remove repositories</a>
-    <span class="text-faint">— managed on GitHub.</span>
+  <p class="text-sm text-faint">{{ repos | length }} repositories, most recently pushed first.
+    {% if install_url %}<a href="{{ install_url }}" class="text-honey-deep hover:underline focus-visible:outline-2 focus-visible:outline-honey">Manage the app's repositories</a>{% endif %}
   </p>
   {% endif %}
+
+  {% if not oauth_ready %}
+  <p class="text-sm text-faint border-t border-rule pt-4">
+    Sign-in with GitHub isn't set up yet —
+    <a href="{{ base }}/setup/github-oauth" class="text-honey-deep hover:underline focus-visible:outline-2 focus-visible:outline-honey">one-time setup</a>.
+  </p>
   {% endif %}
 
 </div>

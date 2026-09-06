@@ -55,11 +55,10 @@ def _set_session_cookie(response: RedirectResponse, request: Request) -> None:
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, next: str = "") -> HTMLResponse:
     templates = request.app.state.templates
-    creds = await github_app.load_credentials()
     return templates.TemplateResponse("login.html", {
         "next": next,
         "error": request.query_params.get("error", ""),
-        "github_login": creds is not None and bool(creds.client_id),
+        "github_login": (await github_app.oauth_client()) is not None,
     })
 
 
@@ -109,19 +108,21 @@ async def logout(request: Request) -> RedirectResponse:
 @router.get("/auth/github")
 async def github_oauth_start(request: Request):
     base = request.app.state.base_path
-    creds = await github_app.load_credentials()
-    if creds is None or not creds.client_id:
+    client = await github_app.oauth_client()
+    if client is None:
         return RedirectResponse(
             f"{base}/login?error=GitHub+login+is+not+configured+yet",
             status_code=303,
         )
+    client_id, _ = client
     from theswarm.presentation.web.routes.github_setup import external_base
     state = auth.mint_session(
         "oauth-state", ttl_seconds=_OAUTH_STATE_TTL_SECONDS,
     )
     params = urlencode({
-        "client_id": creds.client_id,
+        "client_id": client_id,
         "redirect_uri": f"{external_base(request)}/auth/github/callback",
+        "scope": "read:user",  # identity only; repos come from the server token
         "state": state,
     })
     return RedirectResponse(
@@ -138,16 +139,17 @@ async def github_oauth_callback(
         return RedirectResponse(
             f"{base}/login?error=Sign-in+expired+—+try+again", status_code=303,
         )
-    creds = await github_app.load_credentials()
-    if creds is None or not code:
+    oauth = await github_app.oauth_client()
+    if oauth is None or not code:
         return RedirectResponse(f"{base}/login", status_code=303)
+    client_id, client_secret = oauth
 
     async with httpx.AsyncClient(timeout=20) as client:
         token_resp = await client.post(
             "https://github.com/login/oauth/access_token",
             data={
-                "client_id": creds.client_id,
-                "client_secret": creds.client_secret,
+                "client_id": client_id,
+                "client_secret": client_secret,
                 "code": code,
             },
             headers={"Accept": "application/json"},
