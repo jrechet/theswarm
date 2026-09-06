@@ -126,5 +126,6 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   What is proven, what to try next, in order, is in
   `docs/handoffs/2026-09-06-github-app-manifest-conversion-404.md` — read it
   before touching `routes/github_setup.py`.
-- `static/v2/app.css` is generated: never commit it (it once slipped in via
-  `git add -A` and was un-indexed in #42).
+- `static/v2/app.css` is generated: never commit it. It slipped in twice —
+  the `.gitignore` pattern had no leading `**/`, so a mid-path `/` anchored it
+  to the repo root and `git add -A` kept re-adding the file.

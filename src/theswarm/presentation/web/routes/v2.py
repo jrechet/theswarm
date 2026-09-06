@@ -50,10 +50,29 @@ async def home(request: Request) -> HTMLResponse:
                     "description": r.get("description") or "",
                     "private": bool(r.get("private")),
                     "language": r.get("language") or "",
+                    "pushed_at": r.get("pushed_at") or "",
                 })
                 seen.add(full_name)
         except Exception:  # noqa: BLE001 — GitHub down ≠ no home page
             log.exception("Listing installation repositories failed")
+
+    # "Tous mes projets": everything the owner's token can see, App or not.
+    try:
+        for r in await github_app.list_user_repositories():
+            full_name = r.get("full_name", "")
+            if not full_name or full_name in seen:
+                continue
+            owner, _, name = full_name.partition("/")
+            repos.append({
+                "full_name": full_name, "owner": owner, "name": name,
+                "description": r.get("description") or "",
+                "private": bool(r.get("private")),
+                "language": r.get("language") or "",
+                "pushed_at": r.get("pushed_at") or "",
+            })
+            seen.add(full_name)
+    except Exception:  # noqa: BLE001
+        log.exception("Listing the owner's repositories failed")
 
     # Registered projects that predate the App (or exist without it) stay
     # reachable — the flip to V2 must not orphan them.
@@ -65,7 +84,9 @@ async def home(request: Request) -> HTMLResponse:
         repos.append({
             "full_name": full_name, "owner": owner, "name": name,
             "description": "", "private": False, "language": "",
+            "pushed_at": "",
         })
+    repos.sort(key=lambda r: r["pushed_at"], reverse=True)
 
     install_url = ""
     if creds is not None and creds.html_url:
@@ -75,6 +96,7 @@ async def home(request: Request) -> HTMLResponse:
         "repos": repos,
         "app_configured": creds is not None,
         "install_url": install_url,
+        "oauth_ready": (await github_app.oauth_client()) is not None,
     })
 
 
