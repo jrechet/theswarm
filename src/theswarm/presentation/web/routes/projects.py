@@ -109,12 +109,24 @@ async def project_issues(request: Request, project_id: str) -> HTMLResponse:
 
     columns: dict[str, list[dict]] = {name: [] for name in _STATUS_COLUMNS}
     error = ""
+    credential_error = False
     try:
-        from theswarm.tools.github import GitHubClient
+        from theswarm.tools.github import GitHubAccessError, GitHubClient, verify_access
 
+        await verify_access(str(project.repo))
         issues = await GitHubClient(str(project.repo)).get_issues()
         for issue in issues:
             columns[_issue_status(issue)].append(issue)
+    except GitHubAccessError as exc:
+        # A precondition failure (no token) or an access rejection (bad/
+        # insufficient token) — name the repo and the credential problem
+        # instead of surfacing whatever raw error PyGitHub would have given.
+        log.warning(
+            "No GitHub access for project %s (repo=%s): %s",
+            project_id, exc.repo_name, exc.reason,
+        )
+        error = f"No usable GitHub token for '{project.repo}': {exc}"
+        credential_error = True
     except Exception as exc:  # noqa: BLE001 — surfaced in the panel, not fatal
         log.exception("Failed to list issues for project %s", project_id)
         error = str(exc)[:200]
@@ -128,6 +140,7 @@ async def project_issues(request: Request, project_id: str) -> HTMLResponse:
             "columns": columns,
             "column_names": _STATUS_COLUMNS,
             "error": error,
+            "credential_error": credential_error,
         },
     )
 

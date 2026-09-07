@@ -17,7 +17,11 @@
   </header>
 
   {% if error %}
-    <p class="po-empty" data-testid="issues-error">Could not read issues: {{ error }}</p>
+    {% if credential_error %}
+      <p class="po-empty stat-danger" data-testid="issues-credential-error">Could not read issues: {{ error }}</p>
+    {% else %}
+      <p class="po-empty" data-testid="issues-error">Could not read issues: {{ error }}</p>
+    {% endif %}
   {% elif not columns.values()|map('length')|sum %}
     <p class="po-empty">No open issues. Use the sprint composer above to have the PO draft some.</p>
   {% else %}
