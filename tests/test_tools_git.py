@@ -82,15 +82,19 @@ async def test_create_branch(mock_subprocess):
     await create_branch("/tmp/repo", "feat/new", base="main")
     import asyncio
     calls = asyncio.create_subprocess_exec.call_args_list
-    # Expect: checkout main, pull, checkout -b feat/new
-    assert len(calls) == 3
-    assert calls[0].args[1] == "checkout"
-    assert calls[0].args[2] == "main"
+    # Expect: reset --hard, clean -fd, checkout main, pull, checkout -B feat/new.
+    # The reset+clean pair leads because a previous iteration's leftovers make
+    # `checkout main` refuse outright (see test_dev_workspace_recovery.py).
+    assert len(calls) == 5
+    assert calls[0].args[1] == "reset"
+    assert calls[1].args[1] == "clean"
     assert calls[2].args[1] == "checkout"
+    assert calls[2].args[2] == "main"
+    assert calls[4].args[1] == "checkout"
     # -B, not -b: the workspace is reused across dev iterations, so a retried
     # task derives the same branch name and -b would fail rc=128.
-    assert calls[2].args[2] == "-B"
-    assert calls[2].args[3] == "feat/new"
+    assert calls[4].args[2] == "-B"
+    assert calls[4].args[3] == "feat/new"
 
 
 # ── commit_all ─────────────────────────────────────────────────────────
