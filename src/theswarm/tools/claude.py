@@ -235,7 +235,9 @@ class ClaudeCLI:
             return await self._run_api(prompt, workdir=workdir, timeout=timeout)
 
         try:
-            return await self._run_cli(prompt, workdir=workdir, timeout=timeout)
+            return await self._cli_with_auth_recovery(
+                prompt, workdir=workdir, timeout=timeout,
+            )
         except _CLIUnavailable as exc:
             first_error = exc
 
@@ -245,23 +247,6 @@ class ClaudeCLI:
         quota = _quota_exhausted(first_error)
         if quota is not None:
             raise ClaudeFatalError(f"Claude subscription exhausted: {quota}")
-
-        # A stale CLAUDE_CODE_OAUTH_TOKEN outranks the session on disk, so it
-        # breaks every call while ~/.claude still holds valid, self-refreshing
-        # credentials — which is exactly what took prod down twice. Drop the
-        # env token and try again before treating this as a real outage.
-        if _is_auth_failure(first_error) and os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
-            log.warning(
-                "Claude CLI auth failed (%s) — retrying without the "
-                "CLAUDE_CODE_OAUTH_TOKEN env override",
-                first_error,
-            )
-            try:
-                return await self._run_cli(
-                    prompt, workdir=workdir, timeout=timeout, drop_oauth_env=True,
-                )
-            except _CLIUnavailable as exc2:
-                first_error = exc2
 
         if backend == "cli":
             raise RuntimeError(
@@ -279,7 +264,7 @@ class ClaudeCLI:
                 first_error,
             )
             try:
-                return await self._run_cli(
+                return await self._cli_with_auth_recovery(
                     prompt, workdir=workdir,
                     timeout=self._retry_timeout(timeout, first_error),
                 )
@@ -292,6 +277,32 @@ class ClaudeCLI:
 
         log.warning("Claude CLI unavailable (%s) — falling back to API", first_error)
         return await self._run_api(prompt, workdir=workdir, timeout=timeout)
+
+    async def _cli_with_auth_recovery(
+        self, prompt: str, *, workdir: str | None, timeout: int | None,
+    ) -> ClaudeResult:
+        """Run the CLI, recovering from a stale env token on any attempt.
+
+        A stale CLAUDE_CODE_OAUTH_TOKEN outranks the session on disk, so it
+        breaks every call while ~/.claude still holds valid, self-refreshing
+        credentials — which took prod down twice. The recovery used to guard
+        only the first attempt, so an auth error surfacing on the *retry* went
+        unhandled: prod cycle c3ab6da6f5d9 timed out, earned its grown retry,
+        and that retry died on an expired token with no second chance.
+        """
+        try:
+            return await self._run_cli(prompt, workdir=workdir, timeout=timeout)
+        except _CLIUnavailable as exc:
+            if not (_is_auth_failure(exc)
+                    and os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")):
+                raise
+            log.warning(
+                "Claude CLI auth failed (%s) — retrying without the "
+                "CLAUDE_CODE_OAUTH_TOKEN env override", exc,
+            )
+            return await self._run_cli(
+                prompt, workdir=workdir, timeout=timeout, drop_oauth_env=True,
+            )
 
     def _retry_timeout(self, timeout: int | None, error: Exception) -> int:
         """Give a retry more room than the attempt that ran out of it.
