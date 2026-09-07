@@ -123,7 +123,7 @@ async def project_issues(request: Request, project_id: str) -> HTMLResponse:
         # instead of surfacing whatever raw error PyGitHub would have given.
         log.warning(
             "No GitHub access for project %s (repo=%s): %s",
-            project_id, exc.repo_name, exc.reason,
+            project_id, exc.repo, exc.reason,
         )
         error = f"No usable GitHub token for '{project.repo}': {exc}"
         credential_error = True
