@@ -36,6 +36,19 @@ def _auth_open_for_tests(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _github_token_for_tests(monkeypatch):
+    """Give every test a usable GitHub credential by default.
+
+    ``run_api_cycle`` rejects a cycle start when no GitHub token is
+    configured (issue #64); most tests exercise unrelated behavior and never
+    meant to depend on that precondition. Tests that check the rejection
+    itself clear it with ``monkeypatch.delenv("GITHUB_TOKEN", raising=False)``.
+    """
+    if "GITHUB_TOKEN" not in os.environ:
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp_test_token_for_suite")
+
+
+@pytest.fixture(autouse=True)
 def _github_identity_is_not_shared_state():
     """ensure_github_token() exports the freshest token into os.environ by
     design (both git and PyGitHub read it there). Outside monkeypatch that

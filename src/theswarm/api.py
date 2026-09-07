@@ -228,6 +228,7 @@ async def run_api_cycle(
     """Execute a cycle initiated via the API."""
     from theswarm.cycle import run_daily_cycle
     from theswarm.config import CycleConfig
+    from theswarm.tools.github import GitHubAccessError, verify_access
 
     tracker = get_cycle_tracker()
 
@@ -236,6 +237,20 @@ async def run_api_cycle(
         tracker.update_status(
             cycle_id, CycleStatus.FAILED,
             error=f"Repo '{repo}' not in allowed list: {allowed_repos}",
+            completed_at=datetime.now().isoformat(timespec="seconds"),
+        )
+        return
+
+    # Reject early when there is no usable GitHub credential for the repo —
+    # without this, a cycle triggered against a repo with no/invalid token
+    # ran RUNNING for a while before failing deep inside
+    # run_daily_cycle/agent execution with an opaque error.
+    try:
+        await verify_access(repo)
+    except GitHubAccessError as exc:
+        tracker.update_status(
+            cycle_id, CycleStatus.FAILED,
+            error=str(exc),
             completed_at=datetime.now().isoformat(timespec="seconds"),
         )
         return

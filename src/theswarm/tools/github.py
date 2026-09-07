@@ -24,6 +24,29 @@ from theswarm.infrastructure.resilience import CircuitBreaker
 from theswarm.tools import github_app
 
 
+class GitHubAccessError(RuntimeError):
+    """Raised when no usable GitHub credential is configured for a repo."""
+
+    def __init__(self, repo: str, reason: str) -> None:
+        super().__init__(f"GitHub access to '{repo}' failed: {reason}")
+        self.repo = repo
+        self.reason = reason
+
+
+async def verify_access(repo: str) -> None:
+    """Cheap precondition check before a cycle starts.
+
+    No network round trip — just "is there a credential to try at all".
+    ``GitHubClient`` still does the real API call once the cycle is
+    underway; this only catches the common case (no token configured) early
+    enough to fail a cycle in seconds instead of deep inside agent
+    execution.
+    """
+    token = await github_app.ensure_github_token()
+    if not token:
+        raise GitHubAccessError(repo, "no GitHub token configured")
+
+
 @dataclass
 class GitHubClient:
     """Thin async wrapper around PyGitHub for a single repo."""
@@ -54,6 +77,14 @@ class GitHubClient:
         credentials the token never changes and this is a cheap no-op.
         """
         token = await github_app.ensure_github_token()
+        # Only an App *installation* token rotates (1h lifetime); a static
+        # GITHUB_TOKEN is fixed for the process. Without App credentials
+        # there is nothing to refresh, and rebuilding on a mere difference
+        # would replace a client someone else constructed deliberately —
+        # which is how a token in the environment made every GitHubClient
+        # test bypass its mock and call the real API.
+        if await github_app.load_credentials() is None:
+            return
         if token and token != self._token:
             self._token = token
             self._gh = Github(token)

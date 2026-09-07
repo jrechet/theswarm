@@ -58,7 +58,7 @@ async def test_clone_repo_existing(mock_subprocess, mocker):
     # Should not have called git clone — only checkout + pull
     import asyncio
     calls = asyncio.create_subprocess_exec.call_args_list
-    git_cmds = [c.args[1] for c in calls]
+    git_cmds = [a for c in calls for a in c.args]
     assert "clone" not in git_cmds
     assert "checkout" in git_cmds
     assert "pull" in git_cmds
@@ -71,7 +71,7 @@ async def test_clone_repo_fresh(mock_subprocess, mocker):
     assert result == "/tmp/repo"
     import asyncio
     calls = asyncio.create_subprocess_exec.call_args_list
-    git_cmds = [c.args[1] for c in calls]
+    git_cmds = [a for c in calls for a in c.args]
     assert "clone" in git_cmds
 
 
@@ -346,8 +346,12 @@ async def test_commit_all_real_repo_without_identity(tmp_path, monkeypatch):
 async def test_push_branch(mock_subprocess):
     await push_branch("/tmp/repo", "feat/new")
     import asyncio
-    call = asyncio.create_subprocess_exec.call_args
-    assert call.args == ("git", "push", "-u", "origin", "feat/new")
+    args = asyncio.create_subprocess_exec.call_args.args
+    # Assert the operation, not argv positions: _auth_args() prepends
+    # `-c http.…extraheader=…` whenever GITHUB_TOKEN is set, so an
+    # index-based assertion silently depended on the suite's environment.
+    assert args[0] == "git"
+    assert args[-4:] == ("push", "-u", "origin", "feat/new")
 
 
 # ── get_diff_stat ──────────────────────────────────────────────────────
