@@ -40,6 +40,22 @@ _RETRYABLE_ERRORS: tuple[type[BaseException], ...] = (
 # malformed prompt): every subsequent call in the cycle will fail the same way.
 _FATAL_BAD_REQUEST_MARKERS = ("credit balance", "billing", "plans & billing")
 
+# The CLI reports an exhausted subscription window as a plain exit-1 message.
+# It is a wall with a clock on it, not a hiccup: retrying cannot help until
+# the stated reset. Prod cycle 980dc1e098bc burned its last two Dev
+# iterations and the whole QA phase against it in 30 seconds, then reported
+# a generic "CLI failed twice" that said nothing about quota.
+_QUOTA_MARKERS = ("session limit", "usage limit", "quota exceeded")
+
+
+def _quota_exhausted(error: Exception) -> str | None:
+    """Return the CLI's own wording (which carries the reset time), else None."""
+    message = str(error)
+    lowered = message.lower()
+    if any(marker in lowered for marker in _QUOTA_MARKERS):
+        return message
+    return None
+
 
 class ClaudeFatalError(Exception):
     """Non-retryable Claude failure: billing, auth, or invalid credentials.
@@ -222,6 +238,13 @@ class ClaudeCLI:
             return await self._run_cli(prompt, workdir=workdir, timeout=timeout)
         except _CLIUnavailable as exc:
             first_error = exc
+
+        # Out of subscription window: every later call fails identically until
+        # the reset the CLI names. Abort the cycle now, keeping its wording so
+        # the failure says when work can resume.
+        quota = _quota_exhausted(first_error)
+        if quota is not None:
+            raise ClaudeFatalError(f"Claude subscription exhausted: {quota}")
 
         # A stale CLAUDE_CODE_OAUTH_TOKEN outranks the session on disk, so it
         # breaks every call while ~/.claude still holds valid, self-refreshing
