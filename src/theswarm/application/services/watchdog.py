@@ -2,7 +2,8 @@
 
 Detects stalled agents by tracking heartbeats emitted from the progress
 callback.  Wire into the cycle by calling ``heartbeat()`` from the
-``_progress()`` bridge and ``start()``/``stop()`` around the cycle run.
+``_progress()`` bridge, ``retire()`` when a phase/agent finishes, and
+``start()``/``stop()`` around the cycle run.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ class AgentHeartbeat:
     last_activity: float = field(default_factory=time.monotonic)
     last_message: str = ""
     idle_warnings: int = 0
+    timed_out: bool = False
 
 
 @dataclass(frozen=True)
@@ -38,8 +40,9 @@ IdleCallback = Callable[[WatchdogEvent], Coroutine[None, None, None]]
 class AgentWatchdog:
     """Monitors agent activity and detects idle/stalled agents.
 
-    Wire into the cycle by calling ``heartbeat()`` from the progress callback
-    and ``start()``/``stop()`` around the cycle run.
+    Wire into the cycle by calling ``heartbeat()`` from the progress callback,
+    ``retire()`` when an agent's phase finishes, and ``start()``/``stop()``
+    around the cycle run.
     """
 
     def __init__(
@@ -73,6 +76,18 @@ class AgentWatchdog:
             hb.last_activity = time.monotonic()
             hb.last_message = message
             hb.idle_warnings = 0
+            hb.timed_out = False
+
+    def retire(self, role: str) -> None:
+        """Stop monitoring an agent whose phase has finished.
+
+        Without this, a finished agent's last heartbeat goes stale forever
+        and the watchdog keeps reporting it idle/timed-out on every check
+        (prod cycle bc1b1e6abb82: PO kept getting logged as timed out every
+        30s long after it had actually finished, because the watchdog never
+        learned the PO phase had ended).
+        """
+        self._agents.pop(role, None)
 
     async def start(self) -> None:
         """Start the watchdog monitor loop."""
@@ -128,6 +143,13 @@ class AgentWatchdog:
                 )
 
                 if hb.idle_warnings >= self._max_warnings:
+                    if hb.timed_out:
+                        # Already reported the timeout for this idle episode;
+                        # without this guard on_timeout fires again on every
+                        # subsequent check_interval for as long as the agent
+                        # stays idle (the bc1b1e6abb82 symptom).
+                        continue
+                    hb.timed_out = True
                     log.error(
                         "Agent '%s' timed out after %d warnings (idle %.0fs)",
                         hb.role,
