@@ -101,6 +101,10 @@ def _estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     return inp + out
 
 
+def _is_timeout(error: Exception) -> bool:
+    return "timed out after" in str(error).lower()
+
+
 _AUTH_FAILURE_MARKERS = (
     "oauth", "authenticate", "401", "not logged in", "invalid api key",
 )
@@ -252,7 +256,10 @@ class ClaudeCLI:
                 first_error,
             )
             try:
-                return await self._run_cli(prompt, workdir=workdir, timeout=timeout)
+                return await self._run_cli(
+                    prompt, workdir=workdir,
+                    timeout=self._retry_timeout(timeout, first_error),
+                )
             except _CLIUnavailable as retry_error:
                 raise RuntimeError(
                     "Claude CLI failed twice and no usable API credential is "
@@ -262,6 +269,24 @@ class ClaudeCLI:
 
         log.warning("Claude CLI unavailable (%s) — falling back to API", first_error)
         return await self._run_api(prompt, workdir=workdir, timeout=timeout)
+
+    def _retry_timeout(self, timeout: int | None, error: Exception) -> int:
+        """Give a retry more room than the attempt that ran out of it.
+
+        Retrying a timeout with the same budget cannot succeed: the second
+        attempt does the same work under the same clock. Prod cycle
+        11e5fe09535f died exactly that way — the TechLead breakdown hit its
+        120s twice in a row and the cycle failed with no useful diagnosis.
+        Only timeouts grow; a crash or an auth failure keeps its budget.
+        """
+        effective = timeout or self.timeout
+        if not _is_timeout(error):
+            return effective
+        grown = int(effective * self.timeout_growth)
+        log.warning(
+            "Claude CLI timed out at %ds — retrying with %ds", effective, grown,
+        )
+        return grown
 
     async def _run_cli(
         self,

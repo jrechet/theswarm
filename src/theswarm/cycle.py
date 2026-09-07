@@ -29,8 +29,11 @@ MAX_DAILY_STORIES = 3  # imported by PO but defined here for reference
 # The old 8-minute cap was sized for the 180s-per-call era and killed every
 # substantial task mid-flight during the endurance run.
 PHASE_TIMEOUTS = {
-    "po_morning": 5 * 60,
-    "techlead_breakdown": 5 * 60,
+    # Each budget must hold one Claude call plus its grown retry (a retried
+    # timeout gets timeout_growth× more room), otherwise the phase timeout
+    # fires first and hides the real cause.
+    "po_morning": 8 * 60,
+    "techlead_breakdown": 10 * 60,
     "dev_iter": 25 * 60,
     "techlead_review": 5 * 60,
     "qa": 15 * 60,
