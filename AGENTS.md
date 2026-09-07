@@ -120,12 +120,37 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   (test.db*, coverage) must be excluded before commit — known gap.
 - The cycle tracker is in-memory: a container restart forgets running cycles
   (issue #5), and the theater can only show cycles it still knows.
-- **Open blocker:** creating the GitHub App via the manifest flow ends with
-  GitHub redirecting to our callback with a code it does not recognise
-  (`POST /app-manifest/{code}/conversions` → 404) and no app on the account.
-  What is proven, what to try next, in order, is in
-  `docs/handoffs/2026-09-06-github-app-manifest-conversion-404.md` — read it
-  before touching `routes/github_setup.py`.
+- The GitHub App manifest flow is broken (GitHub returns a code it does not
+  recognise, no app is created) and **is not needed**: repos come from
+  `github_app.list_user_repositories()` with the owner's `GITHUB_TOKEN`, and
+  "Sign in with GitHub" runs on a plain OAuth App
+  (`/setup/github-oauth`, vault `__github_oauth__`). Do not sink time into
+  the manifest flow; the investigation is in
+  `docs/handoffs/2026-09-06-github-app-manifest-conversion-404.md`.
+- **Anything that commits to `main` of a repo a cycle is running against
+  redeploys the service and kills that cycle** — the tracker is in-memory
+  (#5). The PO's daily plan did exactly that until `docs/daily-plans/**` was
+  excluded from the CI trigger. Adding a new agent write-to-main path means
+  adding it to that `paths-ignore` too.
+- Waiting for a deploy: check the **running container's** image
+  (`docker inspect $(docker ps -q -f name=theswarm_theswarm)`), not the
+  service spec — the spec updates when the rollout *starts*, and `/health`
+  is answered by the old container throughout. Acting on the spec means
+  talking to a container that is about to die.
+- Claude CLI failure modes are three, and they need different handling:
+  a **timeout** must be retried with more room (`_retry_timeout`), an
+  **auth** failure retries once without `CLAUDE_CODE_OAUTH_TOKEN`
+  (`_cli_with_auth_recovery`, on *every* attempt), and an exhausted
+  **subscription window** is fatal — retrying it burns the remaining
+  iterations in seconds against a wall and reports a credential error that
+  sends the reader hunting for a bug that does not exist.
+- `GitHubClient._fresh()` rebinds only when App credentials exist. A static
+  `GITHUB_TOKEN` never rotates, and rebuilding on a mere difference replaces
+  clients built deliberately with a mock — that is how a token in the
+  environment made 13 tests call the live API.
+- Tests must not assert git argv **by position**: `_auth_args()` prepends
+  credential flags whenever `GITHUB_TOKEN` is set, so index-based assertions
+  silently depend on the suite's environment.
 - `static/v2/app.css` is generated: never commit it. It slipped in twice —
   the `.gitignore` pattern had no leading `**/`, so a mid-path `/` anchored it
   to the repo root and `git add -A` kept re-adding the file.
