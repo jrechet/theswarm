@@ -166,3 +166,36 @@ async def test_dropping_the_override_removes_it_from_the_child_env(monkeypatch):
     env = spawn.call_args.kwargs["env"]
     assert "CLAUDE_CODE_OAUTH_TOKEN" not in env
     assert "ANTHROPIC_API_KEY" not in env  # long-standing rule, still enforced
+
+
+# ── The recovery must guard the retry too ──────────────────────────────
+
+
+async def test_auth_failure_on_the_grown_retry_still_recovers(monkeypatch):
+    """Prod cycle c3ab6da6f5d9: the first attempt timed out, earned its grown
+    retry, and that retry died on an expired token. The recovery guarded only
+    the first attempt, so the cycle had no second chance."""
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-stale")
+    monkeypatch.delenv("SWARM_CLAUDE_BACKEND", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    attempts: list[tuple[int | None, bool]] = []
+
+    async def flaky(prompt, *, workdir, timeout, drop_oauth_env=False):
+        attempts.append((timeout, drop_oauth_env))
+        if len(attempts) == 1:
+            raise _CLIUnavailable("CLI timed out after 240s")
+        if not drop_oauth_env:
+            raise _CLIUnavailable(
+                "exit 1: Failed to authenticate. API Error: 401 "
+                "OAuth access token has expired.",
+            )
+        return ClaudeResult(text="recovered", backend="cli")
+
+    cli = ClaudeCLI(model="haiku", timeout=240)
+    with patch.object(cli, "_run_cli", side_effect=flaky):
+        result = await cli.run("hi", timeout=240)
+
+    assert result.text == "recovered"
+    # timed out at 240 → retry at 312 → auth error → same 312 without the token
+    assert attempts == [(240, False), (312, False), (312, True)]
