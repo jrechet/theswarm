@@ -77,6 +77,14 @@ class GitHubClient:
         credentials the token never changes and this is a cheap no-op.
         """
         token = await github_app.ensure_github_token()
+        # Only an App *installation* token rotates (1h lifetime); a static
+        # GITHUB_TOKEN is fixed for the process. Without App credentials
+        # there is nothing to refresh, and rebuilding on a mere difference
+        # would replace a client someone else constructed deliberately —
+        # which is how a token in the environment made every GitHubClient
+        # test bypass its mock and call the real API.
+        if await github_app.load_credentials() is None:
+            return
         if token and token != self._token:
             self._token = token
             self._gh = Github(token)

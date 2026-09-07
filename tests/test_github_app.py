@@ -209,3 +209,57 @@ async def test_installation_repositories_are_listed(creds, respx_mock):
     assert [r["full_name"] for r in repos] == [
         "jrechet/concert-tour-app", "jrechet/theswarm",
     ]
+
+
+# ── _fresh() must not replace a deliberately-built client ──────────────
+
+
+async def test_fresh_is_a_noop_without_app_credentials(monkeypatch):
+    """A static GITHUB_TOKEN never rotates, so there is nothing to refresh.
+
+    The GitHubClient test fixture builds a client with a mocked PyGitHub and
+    an empty _token. When a token was present in the environment, _fresh()
+    saw a difference, rebuilt with a real Github() and called the live API —
+    16 tests failed with 401 Bad credentials.
+    """
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_static")
+    from unittest.mock import MagicMock, patch as _patch
+
+    from theswarm.tools.github import GitHubClient
+
+    with _patch.object(GitHubClient, "__post_init__"):
+        client = GitHubClient.__new__(GitHubClient)
+        client.repo_name = "owner/repo"
+        sentinel_repo, sentinel_gh = MagicMock(), MagicMock()
+        client._repo, client._gh = sentinel_repo, sentinel_gh
+        client._token = ""
+
+    await client._fresh()
+
+    assert client._repo is sentinel_repo
+    assert client._gh is sentinel_gh
+
+
+@respx.mock
+async def test_fresh_still_rebinds_when_an_app_token_rotates(creds, respx_mock, monkeypatch):
+    """The rotation it exists for must keep working."""
+    _mock_github(respx_mock, token="ghs_rotated")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_old")
+    github_app._credentials = creds
+    github_app._credentials_loaded = True
+
+    from unittest.mock import MagicMock, patch as _patch
+
+    from theswarm.tools.github import GitHubClient
+
+    with _patch.object(GitHubClient, "__post_init__"):
+        client = GitHubClient.__new__(GitHubClient)
+        client.repo_name = "owner/repo"
+        client._repo, client._gh = MagicMock(), MagicMock()
+        client._token = "ghp_old"
+
+    with _patch("theswarm.tools.github.Github") as gh_class:
+        await client._fresh()
+
+    gh_class.assert_called_once_with("ghs_rotated")
+    assert client._token == "ghs_rotated"
