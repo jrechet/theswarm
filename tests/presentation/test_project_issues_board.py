@@ -39,6 +39,17 @@ def _isolate_cycle_tracker():
         tracker._cycles.pop(cycle_id, None)
 
 
+@pytest.fixture(autouse=True)
+def _github_token_by_default(monkeypatch):
+    """The board now runs a credential precheck (theswarm#63) before it asks
+    GitHub for issues. Give every test in this module a token so tests about
+    the issue listing itself aren't accidentally short-circuited by that
+    precheck; the tests that exercise the precheck clear it themselves."""
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_test_token_for_suite")
+    monkeypatch.delenv("GITHUB_APP_ID", raising=False)
+    monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY", raising=False)
+
+
 class _FakeGitHub:
     def __init__(self, repo: str) -> None:
         self.repo = repo
@@ -131,12 +142,58 @@ async def test_board_surfaces_github_errors_without_failing():
 
     assert resp.status_code == 200  # panel degrades, page still renders
     assert "bad credentials" in resp.text
+    assert 'data-testid="issues-error"' in resp.text
+    assert 'data-testid="issues-credential-error"' not in resp.text
 
 
 async def test_board_404s_for_an_unknown_project():
     app = _app(project=None)
     async with _client(app) as client:
         assert (await client.get("/projects/nope/issues")).status_code == 404
+
+
+# ── GitHub credential precheck (theswarm#63) ────────────────────────────
+
+
+async def test_board_reports_missing_github_token(monkeypatch):
+    """No GITHUB_TOKEN (and no App creds): name the repo and say so, instead
+    of a cryptic PyGitHub error or a silent empty board."""
+    from theswarm.tools import github_app
+
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_APP_ID", raising=False)
+    monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY", raising=False)
+    github_app.reset_state()
+
+    async with _client(_app()) as client:
+        resp = await client.get("/projects/p1/issues")
+
+    assert resp.status_code == 200
+    body = resp.text
+    assert "owner/repo" in body
+    assert "token" in body.lower()
+    assert (
+        'data-testid="issues-error"' in body
+        or 'data-testid="issues-credential-error"' in body
+    )
+
+
+async def test_board_distinguishes_no_access_from_missing_token():
+    """A rejected-but-present credential (reason='no_access') must read
+    differently from a missing token, not repeat the same wording."""
+    from theswarm.tools.github import GitHubAccessError
+
+    async def _no_access(repo_name):
+        raise GitHubAccessError(repo_name, "no_access")
+
+    with patch("theswarm.tools.github.verify_access", _no_access):
+        async with _client(_app()) as client:
+            resp = await client.get("/projects/p1/issues")
+
+    assert resp.status_code == 200
+    assert "access" in resp.text
+    assert "no GitHub token configured" not in resp.text
+    assert 'data-testid="issues-credential-error"' in resp.text
 
 
 # ── Play action ────────────────────────────────────────────────────────
