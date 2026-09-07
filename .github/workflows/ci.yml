@@ -3,6 +3,15 @@ name: CI
 on:
   push:
     branches: [main]
+    # The PO agent commits docs/daily-plans/<date>.md straight to main every
+    # morning. That push used to redeploy the service, replacing the
+    # container and wiping the in-memory cycle tracker — so a cycle running
+    # against theswarm itself killed itself the moment its own PO phase
+    # wrote the plan (observed 2026-09-07: cycle e80598e4bc4a died 40s into
+    # the TechLead phase). A daily plan changes no behaviour: nothing to
+    # test, nothing to deploy.
+    paths-ignore:
+      - 'docs/daily-plans/**'
   pull_request:
     branches: [main]
 
