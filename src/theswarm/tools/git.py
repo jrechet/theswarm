@@ -125,6 +125,17 @@ async def create_branch(workdir: str, branch_name: str, base: str = "main") -> N
     off base anyway, which is exactly what resetting gives.
     """
     await github_app.ensure_github_token()
+    # The workspace is reused across iterations, so a half-finished attempt
+    # leaves modified files behind and `git checkout main` then refuses with
+    # "Your local changes would be overwritten". That is not recoverable on
+    # its own: every later iteration hits the same wall, so one bad attempt
+    # burned the whole Dev phase and the cycle opened no PR at all (prod
+    # cycle 6ecb297eae40 — five iterations, five identical failures).
+    # Discarding is safe precisely because the next line resets the branch to
+    # `base`: anything uncommitted here is either already pushed or is debris.
+    # `clean -fd` honours .gitignore, so the venv and caches survive.
+    await _run_git("reset", "--hard", cwd=workdir, check=False)
+    await _run_git("clean", "-fd", cwd=workdir, check=False)
     await _run_git("checkout", base, cwd=workdir)
     await _run_git(*_auth_args(), "pull", "--ff-only", cwd=workdir, check=False)
     await _run_git("checkout", "-B", branch_name, cwd=workdir)
