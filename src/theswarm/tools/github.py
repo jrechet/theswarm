@@ -24,6 +24,29 @@ from theswarm.infrastructure.resilience import CircuitBreaker
 from theswarm.tools import github_app
 
 
+class GitHubAccessError(RuntimeError):
+    """Raised when no usable GitHub credential is configured for a repo."""
+
+    def __init__(self, repo: str, reason: str) -> None:
+        super().__init__(f"GitHub access to '{repo}' failed: {reason}")
+        self.repo = repo
+        self.reason = reason
+
+
+async def verify_access(repo: str) -> None:
+    """Cheap precondition check before a cycle starts.
+
+    No network round trip — just "is there a credential to try at all".
+    ``GitHubClient`` still does the real API call once the cycle is
+    underway; this only catches the common case (no token configured) early
+    enough to fail a cycle in seconds instead of deep inside agent
+    execution.
+    """
+    token = await github_app.ensure_github_token()
+    if not token:
+        raise GitHubAccessError(repo, "no GitHub token configured")
+
+
 @dataclass
 class GitHubClient:
     """Thin async wrapper around PyGitHub for a single repo."""

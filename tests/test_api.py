@@ -14,6 +14,7 @@ from theswarm.api import (
     CycleStatus,
     CycleTracker,
     get_cycle_tracker,
+    run_api_cycle,
 )
 from theswarm.application.events.bus import EventBus
 from theswarm.infrastructure.persistence.sqlite_repos import (
@@ -173,3 +174,62 @@ async def test_cancel_completed_cycle(client):
 
     resp = await client.post(f"/api/cycle/{record.id}/cancel")
     assert resp.status_code == 409
+
+
+# ── run_api_cycle: GitHub credential precheck (issue #64) ────────────
+
+
+async def test_run_api_cycle_rejects_missing_github_token(monkeypatch):
+    """No GITHUB_TOKEN (and no GitHub App creds) -> reject before running."""
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_APP_ID", raising=False)
+    monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY", raising=False)
+
+    tracker = get_cycle_tracker()
+    record = tracker.create(CycleRequest(repo="owner/no-token-repo"))
+
+    with patch("theswarm.cycle.run_daily_cycle") as mock_run_daily_cycle:
+        await run_api_cycle(
+            cycle_id=record.id,
+            repo="owner/no-token-repo",
+            description="",
+            callback_url="",
+            allowed_repos=[],
+        )
+
+    mock_run_daily_cycle.assert_not_called()
+
+    final = tracker.get(record.id)
+    assert final is not None
+    assert final.status == CycleStatus.FAILED
+    assert final.error is not None
+    assert "owner/no-token-repo" in final.error
+    assert "token" in final.error.lower()
+    assert final.completed_at  # record is concluded, not left running
+
+
+async def test_run_api_cycle_proceeds_with_valid_token(monkeypatch):
+    """A configured token is unaffected: the cycle proceeds to RUNNING/COMPLETED."""
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_valid_token_for_test")
+
+    async def quick(*_a, **_kw):
+        return {"date": "2026-09-07", "cost_usd": 0.0, "prs": [], "reviews": []}
+
+    tracker = get_cycle_tracker()
+    record = tracker.create(CycleRequest(repo="owner/repo"))
+
+    with patch("theswarm.cycle.run_daily_cycle", side_effect=quick) as mock_run_daily_cycle:
+        await run_api_cycle(
+            cycle_id=record.id,
+            repo="owner/repo",
+            description="",
+            callback_url="",
+            allowed_repos=[],
+        )
+
+    mock_run_daily_cycle.assert_called_once()
+
+    final = tracker.get(record.id)
+    assert final is not None
+    assert final.status == CycleStatus.COMPLETED
+    assert final.started_at  # RUNNING transition happened before completion
