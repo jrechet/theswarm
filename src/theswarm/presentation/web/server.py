@@ -469,10 +469,18 @@ async def start_server(
     bus = EventBus()
 
     # Reap orphan cycles left in 'running' state by a previous container's
-    # background task that died on restart. Marks anything older than 2h
-    # as failed so the dashboard list reflects reality.
+    # background task that died on restart.
+    #
+    # No age cutoff here, deliberately. A cycle is 'running' only while its
+    # in-process task is alive, and at startup no task exists yet — so every
+    # such row belongs to a process that is already dead, whatever its age.
+    # The old 2h cutoff spared exactly the ones that matter: a cycle killed
+    # seconds ago by this very restart kept claiming to run (prod cycle
+    # fc6609d29b32 still said 'running' an hour after the deploy that ended
+    # it). The periodic loop below keeps its cutoff — it runs while cycles
+    # are legitimately in flight.
     try:
-        reaped = await cycle_repo.reap_orphans(max_age_seconds=7200)
+        reaped = await cycle_repo.reap_orphans(max_age_seconds=0)
         if reaped:
             log.info("Reaped %d orphan running cycle(s) on startup", reaped)
     except Exception:
