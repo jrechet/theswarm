@@ -16,6 +16,12 @@ from theswarm.config import AgentState, Role
 
 log = logging.getLogger(__name__)
 
+# Breaking a feature into sub-issues reads the repo and reasons about it;
+# 120s was sized for sonnet and is not enough on opus, which is what the
+# CLI actually runs here. Fits inside PHASE_TIMEOUTS["techlead_breakdown"]
+# together with one grown retry.
+BREAKDOWN_TIMEOUT_SECONDS = 240
+
 
 # ── Prompts ─────────────────────────────────────────────────────────────
 
@@ -167,7 +173,7 @@ async def breakdown_stories(state: AgentState) -> dict:
             issue_body=issue.get("body", "(no description)"),
         )
 
-        result = await claude.run(prompt, timeout=120)
+        result = await claude.run(prompt, timeout=BREAKDOWN_TIMEOUT_SECONDS)
         total_tokens += result.total_tokens
         total_cost += result.cost_usd
 

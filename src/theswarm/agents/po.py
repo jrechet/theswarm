@@ -17,6 +17,9 @@ from theswarm.config import AgentState, Phase, Role
 
 log = logging.getLogger(__name__)
 
+# Same reason as the TechLead breakdown: sized for sonnet, run on opus.
+PLANNING_TIMEOUT_SECONDS = 180
+
 MAX_DAILY_STORIES = 3  # pick at most 3 US per day
 
 
@@ -114,7 +117,7 @@ async def select_daily_issues(state: AgentState) -> dict:
         max_stories=MAX_DAILY_STORIES,
     )
 
-    result = await claude.run(prompt, workdir=state.get("workspace"), timeout=120)
+    result = await claude.run(prompt, workdir=state.get("workspace"), timeout=PLANNING_TIMEOUT_SECONDS)
 
     # Parse Claude's response
     selected = []
@@ -202,7 +205,7 @@ async def validate_demo(state: AgentState) -> dict:
         demo_report=report_text,
     )
 
-    result = await claude.run(prompt, workdir=state.get("workspace"), timeout=120)
+    result = await claude.run(prompt, workdir=state.get("workspace"), timeout=PLANNING_TIMEOUT_SECONDS)
 
     return {
         "daily_report": result.text,
