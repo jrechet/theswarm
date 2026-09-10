@@ -435,6 +435,35 @@ class GatewayBridge:
 
 # ── Main startup ─────────────────────────────────────────────────────
 
+async def _launch_resume(app, plan, allowed_repos, bus, cycle_repo, project_repo) -> None:
+    """Start a fresh cycle that continues an interrupted one."""
+    from theswarm.api import CycleRequest, get_cycle_tracker, run_api_cycle
+
+    try:
+        tracker = get_cycle_tracker()
+        record = tracker.create(CycleRequest(
+            repo=plan.repo, description=plan.description,
+        ))
+        task = asyncio.create_task(run_api_cycle(
+            record.id, plan.repo, plan.description, "",
+            allowed_repos,
+            event_bus=bus,
+            report_repo=getattr(app.state, "report_repo", None),
+            base_path=getattr(app.state, "base_path", ""),
+            project_repo=project_repo,
+            cycle_repo=cycle_repo,
+            project_id=plan.repo,
+            resume_from=plan.resume_from,
+        ))
+        tracker.set_task(record.id, task)
+        log.info(
+            "Resumed cycle %s as %s from phase %s",
+            plan.cycle_id, record.id, plan.resume_from,
+        )
+    except Exception:
+        log.exception("Failed to resume cycle %s", plan.cycle_id)
+
+
 async def start_server(
     host: str = "0.0.0.0",
     port: int = 8091,
@@ -479,6 +508,19 @@ async def start_server(
     # fc6609d29b32 still said 'running' an hour after the deploy that ended
     # it). The periodic loop below keeps its cutoff — it runs while cycles
     # are legitimately in flight.
+    # Read the interrupted cycles *before* reaping, which flips them to
+    # 'failed'; they are relaunched further down, once the app is wired.
+    interrupted: list[dict] = []
+    try:
+        from theswarm.application.services.cycle_resumer import collect_interrupted
+        from theswarm.infrastructure.persistence.sqlite_repos import (
+            SQLiteCheckpointRepository as _CheckpointRepo,
+        )
+
+        interrupted = await collect_interrupted(cycle_repo, _CheckpointRepo(conn))
+    except Exception:
+        log.exception("Collecting interrupted cycles failed (continuing startup)")
+
     try:
         reaped = await cycle_repo.reap_orphans(max_age_seconds=0)
         if reaped:
@@ -640,6 +682,20 @@ async def start_server(
 
     # Store allowed repos on app.state for headless API
     app.state.allowed_repos = github_repos
+
+    # A deploy used to throw away whatever a running cycle had achieved.
+    # Continue it from the last phase that completed, under the guards in
+    # cycle_resumer (one automatic resume per cycle, a few per boot).
+    if interrupted:
+        from theswarm.application.services.cycle_resumer import plan_resumes
+
+        plans = plan_resumes(interrupted)
+        log.info(
+            "Startup: %d interrupted cycle(s), resuming %d",
+            len(interrupted), len(plans),
+        )
+        for plan in plans:
+            await _launch_resume(app, plan, github_repos, bus, cycle_repo, project_repo)
 
     # ── WS listener for DMs ──────────────────────────────────────
     if swarm_po_chat:
