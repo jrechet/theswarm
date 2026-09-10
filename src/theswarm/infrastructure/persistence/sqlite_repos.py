@@ -276,6 +276,18 @@ class SQLiteCycleRepository:
         rows = await cursor.fetchall()
         return [self._row_to_cycle(r) for r in rows]
 
+    async def list_running(self) -> list[Cycle]:
+        """Cycles the DB still calls 'running'.
+
+        At startup these all belong to a dead process. Read them before
+        reap_orphans(), which flips them to 'failed'.
+        """
+        cursor = await self._db.execute(
+            "SELECT * FROM cycles WHERE status = ? ORDER BY started_at", ("running",),
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_cycle(row) for row in rows]
+
     async def reap_orphans(self, *, max_age_seconds: int = 7200) -> int:
         """Mark stale 'running' cycles as 'failed'.
 

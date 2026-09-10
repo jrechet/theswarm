@@ -22,6 +22,7 @@ class AgentHeartbeat:
     last_activity: float = field(default_factory=time.monotonic)
     last_message: str = ""
     idle_warnings: int = 0
+    timed_out: bool = False
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,18 @@ class AgentWatchdog:
             hb.last_message = message
             hb.idle_warnings = 0
 
+    def retire(self, role: str) -> None:
+        """Stop monitoring a role whose phase is over.
+
+        An agent is registered on its first heartbeat and used to stay
+        registered for the life of the cycle. Once its phase ended it stopped
+        sending heartbeats, so it looked idle forever: prod cycle
+        bc1b1e6abb82 logged "Agent 'PO' timed out after 77 warnings
+        (idle 3028s)" every 30s for the whole run — long after the PO had
+        finished successfully. That noise buries the failures worth reading.
+        """
+        self._agents.pop(role, None)
+
     async def start(self) -> None:
         """Start the watchdog monitor loop."""
         if self._running:
@@ -115,6 +128,11 @@ class AgentWatchdog:
             now = time.monotonic()
 
             for hb in list(self._agents.values()):
+                # Report a stalled role once. Roles that emit progress without
+                # owning a phase (System, Memory) are never retired, so
+                # without this they re-fire the same timeout every interval.
+                if hb.timed_out:
+                    continue
                 idle_seconds = now - hb.last_activity
                 if idle_seconds < self._idle_threshold:
                     continue
@@ -128,6 +146,7 @@ class AgentWatchdog:
                 )
 
                 if hb.idle_warnings >= self._max_warnings:
+                    hb.timed_out = True
                     log.error(
                         "Agent '%s' timed out after %d warnings (idle %.0fs)",
                         hb.role,

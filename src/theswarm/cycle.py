@@ -243,6 +243,12 @@ async def run_daily_cycle(
             log.error("Phase %s exceeded %ds — aborting", phase_key, timeout)
             await _progress(role, f"⏱  Phase {phase_key} timed out after {timeout}s — aborting")
             raise PhaseTimeout(phase_key, timeout) from exc
+        finally:
+            # The phase is over either way: this role owes no further
+            # heartbeat, so it must stop being judged idle. A later phase for
+            # the same role (Dev runs one per iteration) re-registers it on
+            # its next heartbeat.
+            watchdog.retire(role)
 
     from theswarm.domain.cycles.checkpoint import PHASE_ORDER
 
