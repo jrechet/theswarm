@@ -129,9 +129,13 @@ def main() -> int:
             verdict = "RED"
         else:
             verdict = "green"
-        state = _gh("pr", "view", str(pr), "--repo", args.repo,
-                    "--json", "state", "--jq", ".state")
-        print(f"    #{pr}: {state.lower()}, CI {verdict}")
+        # Not `state`: that name holds the *cycle* result the verdict below
+        # depends on. Shadowing it made a passing run print
+        # "FAIL — stopped at: MERGED" (cycle d4aad3415e99, which had in fact
+        # completed and merged its PR).
+        pr_state = _gh("pr", "view", str(pr), "--repo", args.repo,
+                       "--json", "state", "--jq", ".state")
+        print(f"    #{pr}: {pr_state.lower()}, CI {verdict}")
 
     if state == "completed" and new_prs:
         print("\nPASS — a feature was asked for, and a pull request came out.")
