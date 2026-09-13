@@ -423,6 +423,49 @@ def build_techlead_graph() -> StateGraph:
 # ── Helpers ─────────────────────────────────────────────────────────────
 
 
+def _salvage_objects(text: str) -> list[dict]:
+    """Return every complete JSON object in `text`, ignoring the rest.
+
+    Scans for balanced braces at depth 1 while respecting strings and
+    escapes, so a half-written trailing object is simply dropped.
+    """
+    objects: list[dict] = []
+    depth = 0
+    start = -1
+    in_string = False
+    escaped = False
+
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0 and start >= 0:
+                try:
+                    parsed = json.loads(text[start:index + 1])
+                except json.JSONDecodeError:
+                    pass
+                else:
+                    if isinstance(parsed, dict):
+                        objects.append(parsed)
+                start = -1
+            elif depth < 0:
+                depth = 0
+    return objects
+
+
 def _parse_tasks_json(text: str) -> list[dict]:
     """Parse Claude's task breakdown JSON array."""
     import re
@@ -450,6 +493,19 @@ def _parse_tasks_json(text: str) -> list[dict]:
                 return result
         except json.JSONDecodeError:
             pass
+
+    # A truncated array is the common failure: the model is cut mid-object by
+    # max_tokens and the closing bracket never arrives, so json.loads rejects
+    # the whole thing. Prod cycle 8f7b4d6ec17f lost a perfectly good
+    # three-task breakdown that way and did nothing at all for five minutes.
+    # The objects that did arrive complete are still usable work.
+    salvaged = _salvage_objects(clean)
+    if salvaged:
+        log.warning(
+            "Tasks JSON was truncated — salvaged %d complete task(s)",
+            len(salvaged),
+        )
+        return salvaged
 
     log.warning("Could not parse tasks JSON: %s", clean[:200])
     return []
