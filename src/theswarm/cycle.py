@@ -174,6 +174,41 @@ async def _ensure_workspace(config: CycleConfig) -> None:
     await clone_repo(config.repo_clone_url, config.workspace_dir)
 
 
+async def _requeue_unfinished(config) -> list[int]:
+    """Return this cycle's claimed-but-unfinished tasks to the ready queue.
+
+    A task the Dev started carries status:in-progress. If the loop ends
+    before finishing it, that label survives and misrepresents the work as
+    under way. Putting it back to status:ready is both honest and what lets
+    the next cycle pick it up from a clean state.
+
+    Scoped to the pinned issue's children: an untargeted cycle has no claim
+    over what other cycles may be holding.
+    """
+    target = getattr(config, "target_issue", None)
+    if not target:
+        return []
+    from theswarm.tools.github import GitHubClient
+
+    try:
+        github = GitHubClient(config.github_repo)
+        marker = f"Parent: #{target}"
+        children = await github.get_issues(labels=["role:dev", "status:in-progress"])
+        requeued: list[int] = []
+        for child in children:
+            if marker not in (child.get("body") or ""):
+                continue
+            number = child["number"]
+            await github.add_labels(number, ["status:ready"])
+            await github.remove_label(number, "status:in-progress")
+            requeued.append(number)
+            log.info("Handed back task #%d — claimed but not finished", number)
+        return requeued
+    except Exception:  # noqa: BLE001 — tidying must never fail the cycle
+        log.exception("Could not hand back unfinished tasks")
+        return []
+
+
 async def _pull_latest(config: CycleConfig) -> None:
     """Pull latest main into the workspace (after a merge)."""
     if not config.is_real_mode:
@@ -435,11 +470,27 @@ async def run_daily_cycle(
                 await _pull_latest(config)
 
         if _dev_loop_ran:
+            # Hand back anything still marked in-progress. The loop can end
+            # with work claimed but unfinished — the iteration cap, a task
+            # that produced nothing twice, a timeout — and a task left
+            # in-progress reads as "someone is on it" when nobody is. Prod
+            # cycle 751202be0c3a delivered #216 and #219 and left #217 and
+            # #218 exactly there, then reported itself completed.
+            requeued = await _requeue_unfinished(config)
+            if requeued:
+                await _progress(
+                    "Dev",
+                    "Handing back "
+                    + ", ".join(f"#{n}" for n in requeued)
+                    + " — claimed but not finished",
+                )
+
             await _checkpoint(
                 "dev_loop", True,
                 {
                     "prs_opened": [p.get("number") for p in all_prs if isinstance(p, dict)],
                     "reviews": len(all_reviews),
+                    "requeued": requeued,
                 },
             )
 
