@@ -58,6 +58,24 @@ def create_issue(repo: str, feature: str) -> int:
     return number
 
 
+def unfinished_children(repo: str, parent: int) -> list[int]:
+    """Sub-tasks of `parent` still open and not in review.
+
+    A cycle that delivers two of four sub-tasks has not implemented the
+    feature, however cleanly it reports `completed` — so the harness must
+    look at the breakdown, not just at the cycle's own verdict.
+    """
+    raw = _gh("issue", "list", "--repo", repo, "--state", "open",
+              "--limit", "60", "--json", "number,body,labels")
+    open_issues = json.loads(raw or "[]")
+    marker = f"Parent: #{parent}"
+    return sorted(
+        i["number"] for i in open_issues
+        if marker in (i.get("body") or "")
+        and "status:review" not in {l["name"] for l in i.get("labels", [])}
+    )
+
+
 def prs_before(repo: str) -> set[int]:
     raw = _gh("pr", "list", "--repo", repo, "--state", "all", "--limit", "60",
               "--json", "number")
@@ -137,11 +155,22 @@ def main() -> int:
                        "--json", "state", "--jq", ".state")
         print(f"    #{pr}: {pr_state.lower()}, CI {verdict}")
 
-    if state == "completed" and new_prs:
-        print("\nPASS — a feature was asked for, and a pull request came out.")
+    left = unfinished_children(args.repo, issue)
+    if left:
+        print(f"  unfinished : {', '.join(f'#{n}' for n in left)}")
+
+    if state == "completed" and new_prs and not left:
+        print("\nPASS — a feature was asked for, and the whole of it was built.")
         return 0
-    print(f"\nFAIL — stopped at: {state}"
-          + ("" if new_prs else ", no pull request produced"))
+
+    reasons = []
+    if state != "completed":
+        reasons.append(f"cycle {state}")
+    if not new_prs:
+        reasons.append("no pull request produced")
+    if left:
+        reasons.append(f"{len(left)} sub-task(s) left unbuilt")
+    print("\nFAIL — " + "; ".join(reasons))
     return 1
 
 
