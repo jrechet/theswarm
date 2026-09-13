@@ -325,6 +325,10 @@ async def start_cycle(request: Request) -> JSONResponse:
             project_id=project_id,
             role_assignment_service=role_assignment_service,
             issue_number=req.issue_number,
+            # Without this the cycle writes no checkpoints, so a restart
+            # can never resume it — and these are the cycles people
+            # actually start.
+            checkpoint_repo=getattr(request.app.state, "checkpoint_repo", None),
         )
     )
     tracker.set_task(record.id, task)
@@ -701,6 +705,10 @@ async def api_trigger_cycle_for_project(request: Request, project_id: str) -> JS
             project_repo=project_repo, cycle_repo=cycle_repo,
             project_id=project_id,
             role_assignment_service=role_assignment_service,
+            # Without this the cycle writes no checkpoints, so a restart
+            # can never resume it — and these are the cycles people
+            # actually start.
+            checkpoint_repo=getattr(request.app.state, "checkpoint_repo", None),
         ),
     )
     tracker.set_task(record.id, task)
