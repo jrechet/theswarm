@@ -20,8 +20,7 @@ import os
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
+import httpx
 
 BASE = os.environ.get("SWARM_BASE", "https://bots.jrec.fr/swarm")
 KEY = os.environ.get("SWARM_ACCESS_KEY", "")
@@ -29,17 +28,18 @@ TERMINAL = {"completed", "failed", "cancelled"}
 
 
 def _api(path: str, payload: dict | None = None) -> tuple[int, dict]:
-    url = f"{BASE}{path}"
-    data = json.dumps(payload).encode() if payload is not None else None
-    req = urllib.request.Request(url, data=data, method="POST" if data else "GET")
-    req.add_header("Authorization", f"Bearer {KEY}")
-    req.add_header("Content-Type", "application/json")
+    """httpx rather than urllib: it ships its own CA bundle, so the harness
+    runs the same on a laptop whose system Python has no certificates."""
+    headers = {"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            body = resp.read().decode()
-            return resp.status, (json.loads(body) if body.strip() else {})
-    except urllib.error.HTTPError as exc:
-        return exc.code, {"error": exc.read().decode()[:300]}
+        with httpx.Client(timeout=60, follow_redirects=False) as client:
+            resp = (client.post(f"{BASE}{path}", json=payload, headers=headers)
+                    if payload is not None
+                    else client.get(f"{BASE}{path}", headers=headers))
+        body = resp.text
+        return resp.status_code, (json.loads(body) if body.strip() else {})
+    except Exception as exc:  # noqa: BLE001 — the harness reports, never raises
+        return 0, {"error": str(exc)[:300]}
 
 
 def _gh(*args: str) -> str:
@@ -120,8 +120,18 @@ def main() -> int:
 
     for pr in new_prs:
         checks = _gh("pr", "checks", str(pr), "--repo", args.repo)
-        verdict = "green" if checks and "fail" not in checks else "red/pending"
-        print(f"    #{pr}: CI {verdict}")
+        if not checks:
+            # A repo with no CI configured reports nothing. Reading that as a
+            # failure made the first green run look red: concert-tour-app has
+            # no workflows, yet both PRs were sound and merged.
+            verdict = "no CI configured"
+        elif "fail" in checks:
+            verdict = "RED"
+        else:
+            verdict = "green"
+        state = _gh("pr", "view", str(pr), "--repo", args.repo,
+                    "--json", "state", "--jq", ".state")
+        print(f"    #{pr}: {state.lower()}, CI {verdict}")
 
     if state == "completed" and new_prs:
         print("\nPASS — a feature was asked for, and a pull request came out.")
