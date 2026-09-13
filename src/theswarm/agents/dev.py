@@ -125,11 +125,37 @@ async def _pick_targeted(github, target_issue: int) -> dict | None:
         # its status label says (backlog, ready, or orphaned in-progress).
         return target
 
-    ready = await github.get_issues(labels=["role:dev", "status:ready"])
+    # Children follow the same rule as the target above: role:dev and not
+    # already in review, whatever the status label says.
+    #
+    # Querying status:ready alone stranded any child the Dev had started and
+    # not finished. Such a child keeps status:in-progress and becomes
+    # invisible — to the rest of this loop, and to every later cycle. Prod
+    # cycle d4aad3415e99 ended on "no more ready tasks" with #207 and #208
+    # sitting exactly there, then reported itself completed having delivered
+    # one third of the feature.
+    #
+    # Ready children come first (a clean start beats resuming someone else's
+    # half-done work); in-progress ones are the recovery path.
     parent_marker = f"Parent: #{target_issue}"
-    for child in ready:
-        if parent_marker in (child.get("body") or ""):
-            return child
+    candidates = await github.get_issues(labels=["role:dev"])
+    # The label and state filters are re-applied here rather than trusted to
+    # the query: what makes a child workable is a property of the child, not
+    # of how it was fetched.
+    mine = [
+        child for child in candidates
+        if parent_marker in (child.get("body") or "")
+        and child.get("state") != "closed"
+        and "role:dev" in _label_names(child)
+        and "status:review" not in _label_names(child)
+    ]
+    for wanted in ("status:ready", None):
+        for child in mine:
+            labels_of = _label_names(child)
+            if wanted is None or wanted in labels_of:
+                if wanted is None and "status:ready" in labels_of:
+                    continue  # already offered in the first pass
+                return child
 
     log.info("Target #%s has no workable task (state=%s, labels=%s)",
              target_issue, target.get("state"), sorted(labels))
