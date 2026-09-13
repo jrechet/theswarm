@@ -293,7 +293,13 @@ class ClaudeCLI:
         try:
             return await self._run_cli(prompt, workdir=workdir, timeout=timeout)
         except _CLIUnavailable as exc:
-            if not (_is_auth_failure(exc)
+            # A stale env token does not always fail loudly. In prod it made
+            # the CLI *hang*: `claude -p` returned rc=124 after 90s with the
+            # token set and rc=0 instantly without it. Recovery keyed only on
+            # auth *errors* never fired, so every call burned its full
+            # timeout, retried, hung again, and the cycle died slowly. Treat
+            # a timeout as a candidate too whenever the override is present.
+            if not ((_is_auth_failure(exc) or _is_timeout(exc))
                     and os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")):
                 raise
             log.warning(
