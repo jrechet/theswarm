@@ -228,6 +228,7 @@ async def play(
             cycle_repo=getattr(state, "cycle_repo", None),
             project_id=project_id,
             role_assignment_service=getattr(state, "role_assignment_service", None),
+            checkpoint_repo=getattr(state, "checkpoint_repo", None),
             issue_number=issue_number,
         ),
     )

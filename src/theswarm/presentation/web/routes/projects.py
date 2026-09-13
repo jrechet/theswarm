@@ -175,6 +175,10 @@ async def play_issue(
             project_id=project_id,
             role_assignment_service=getattr(state, "role_assignment_service", None),
             issue_number=issue_number,
+            # Without this the cycle writes no checkpoints, so a restart
+            # can never resume it — and these are the cycles people
+            # actually start.
+            checkpoint_repo=getattr(state, "checkpoint_repo", None),
         )
     )
     tracker.set_task(record.id, task)
