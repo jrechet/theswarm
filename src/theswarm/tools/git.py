@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import base64
 import logging
@@ -142,6 +143,27 @@ async def create_branch(workdir: str, branch_name: str, base: str = "main") -> N
     log.info("Created branch %s from %s", branch_name, base)
 
 
+class BrokenSyntax(RuntimeError):
+    """A staged file does not parse. Committing it would ship a broken tree."""
+
+
+def _python_syntax_errors(workdir: str, rel_paths: list[str]) -> list[str]:
+    """Parse every staged Python file; return one message per broken file."""
+    errors: list[str] = []
+    for rel in rel_paths:
+        if not rel.endswith(".py"):
+            continue
+        full = os.path.join(workdir, rel)
+        if not os.path.isfile(full):
+            continue  # deleted or renamed away
+        try:
+            source = open(full, encoding="utf-8", errors="replace").read()
+            ast.parse(source, filename=rel)
+        except SyntaxError as exc:
+            errors.append(f"{rel}:{exc.lineno or '?'}: {exc.msg}")
+    return errors
+
+
 async def commit_all(workdir: str, message: str) -> bool:
     """Stage all changes and commit. Returns True if there was something to commit."""
     await _run_git("add", "-A", cwd=workdir)
@@ -151,6 +173,23 @@ async def commit_all(workdir: str, message: str) -> bool:
     if not status:
         log.info("Nothing to commit")
         return False
+
+    # Refuse to commit a tree that does not parse. The Dev agent writes whole
+    # files, and a truncated write is silent: asked only to add a test, it
+    # rewrote agents/dev.py as +1 -381 with an unterminated string literal
+    # (theswarm PR #74). Thirteen test modules stopped collecting and only CI
+    # caught it — and when the agent is editing its own source, the file it
+    # breaks is the one doing the writing. Raising here requeues the task, so
+    # the next attempt starts from a clean checkout instead of building on
+    # top of the damage.
+    staged = await _run_git("diff", "--cached", "--name-only", cwd=workdir)
+    broken = _python_syntax_errors(workdir, staged.splitlines())
+    if broken:
+        raise BrokenSyntax(
+            "refusing to commit: "
+            + "; ".join(broken[:5])
+            + (f" (+{len(broken) - 5} more)" if len(broken) > 5 else "")
+        )
 
     try:
         await _run_git(*_identity_args(), "commit", "-m", message, cwd=workdir)

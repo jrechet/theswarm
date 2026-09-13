@@ -119,9 +119,12 @@ async def test_commit_all_with_changes(mocker):
     mocker.patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess)
     result = await commit_all("/tmp/repo", "test commit")
     assert result is True
-    # 3 calls: add -A, status --porcelain, commit -m
+    # 4 calls: add -A, status --porcelain, diff --cached --name-only, commit -m.
+    # The diff lists the staged files the syntax gate parses before committing
+    # (see test_commit_syntax_gate.py); here it returns empty, so nothing to
+    # parse and the commit proceeds.
     import asyncio
-    assert asyncio.create_subprocess_exec.call_count == 3
+    assert asyncio.create_subprocess_exec.call_count == 4
 
 
 async def test_commit_all_sets_identity_fallback_on_rc128(mocker):
