@@ -106,7 +106,11 @@ async def test_auth_failure_retries_without_the_env_token(monkeypatch):
 
 
 async def test_transient_failure_does_not_drop_the_env_token(monkeypatch):
-    """Only auth failures warrant discarding the configured credential."""
+    """Only auth failures and hangs warrant discarding the credential.
+
+    A timeout *is* a drop trigger now (a stale token hangs rather than
+    erroring), so this exercises a failure that is neither.
+    """
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-fine")
     monkeypatch.delenv("SWARM_CLAUDE_BACKEND", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -115,7 +119,7 @@ async def test_transient_failure_does_not_drop_the_env_token(monkeypatch):
 
     async def always_transient(prompt, *, workdir, timeout, drop_oauth_env=False):
         calls.append(drop_oauth_env)
-        raise _CLIUnavailable("CLI timed out after 180s")
+        raise _CLIUnavailable("connection reset by peer")
 
     cli = ClaudeCLI(model="haiku")
     with patch.object(cli, "_run_cli", side_effect=always_transient):
@@ -183,19 +187,77 @@ async def test_auth_failure_on_the_grown_retry_still_recovers(monkeypatch):
 
     async def flaky(prompt, *, workdir, timeout, drop_oauth_env=False):
         attempts.append((timeout, drop_oauth_env))
-        if len(attempts) == 1:
-            raise _CLIUnavailable("CLI timed out after 240s")
-        if not drop_oauth_env:
-            raise _CLIUnavailable(
-                "exit 1: Failed to authenticate. API Error: 401 "
-                "OAuth access token has expired.",
-            )
-        return ClaudeResult(text="recovered", backend="cli")
+        if drop_oauth_env:
+            return ClaudeResult(text="recovered", backend="cli")
+        raise _CLIUnavailable(
+            "exit 1: Failed to authenticate. API Error: 401 "
+            "OAuth access token has expired.",
+        )
 
     cli = ClaudeCLI(model="haiku", timeout=240)
     with patch.object(cli, "_run_cli", side_effect=flaky):
         result = await cli.run("hi", timeout=240)
 
     assert result.text == "recovered"
-    # timed out at 240 → retry at 312 → auth error → same 312 without the token
-    assert attempts == [(240, False), (312, False), (312, True)]
+    # The override is dropped on the first failure, at the same budget —
+    # growing the clock is for slowness, not for a credential that is wrong.
+    assert attempts == [(240, False), (240, True)]
+
+
+# ── A stale override can hang instead of erroring ──────────────────────
+
+
+async def test_a_hang_with_the_override_set_drops_it_and_retries(monkeypatch):
+    """In prod the stale token made `claude -p` hang, not fail: rc=124 after
+    90s with it set, rc=0 instantly without. Recovery keyed only on auth
+    errors never fired, so every call burned its timeout and the cycle died
+    slowly with a message about credentials that were never the problem."""
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-stale")
+    monkeypatch.delenv("SWARM_CLAUDE_BACKEND", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    attempts: list[bool] = []
+
+    async def hangs_with_the_token(prompt, *, workdir, timeout, drop_oauth_env=False):
+        attempts.append(drop_oauth_env)
+        if not drop_oauth_env:
+            raise _CLIUnavailable("CLI timed out after 240s")
+        return ClaudeResult(text="recovered", backend="cli")
+
+    cli = ClaudeCLI(model="haiku", timeout=240)
+    with patch.object(cli, "_run_cli", side_effect=hangs_with_the_token):
+        result = await cli.run("hi")
+
+    assert result.text == "recovered"
+    assert attempts == [False, True]
+
+
+async def test_a_hang_without_the_override_is_still_just_a_timeout(monkeypatch):
+    """Without the override there is nothing to drop: keep the normal retry."""
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    monkeypatch.delenv("SWARM_CLAUDE_BACKEND", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    attempts: list[bool] = []
+
+    async def always_hangs(prompt, *, workdir, timeout, drop_oauth_env=False):
+        attempts.append(drop_oauth_env)
+        raise _CLIUnavailable("CLI timed out after 240s")
+
+    cli = ClaudeCLI(model="haiku", timeout=240)
+    with patch.object(cli, "_run_cli", side_effect=always_hangs):
+        with pytest.raises(RuntimeError):
+            await cli.run("hi")
+
+    assert True not in attempts
+
+
+def test_the_deploy_no_longer_ships_the_override():
+    """The token is removed at the source: prod runs on the mounted,
+    self-refreshing ~/.claude session, which tested rc=0 while the override
+    hung. Keeping both means the broken one wins."""
+    from pathlib import Path
+
+    for f in (".github/actions/write-env/action.yml", ".github/workflows/cd.yml"):
+        assert "CLAUDE_CODE_OAUTH_TOKEN" not in Path(f).read_text()
+        assert "claude_code_oauth_token" not in Path(f).read_text()
