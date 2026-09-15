@@ -192,3 +192,41 @@ async def test_merge_approved_prs_stub():
     result = await merge_approved_prs({"github": None, "reviews": []})
     assert result["tokens_used"] == 0
     assert "[STUB]" in result["result"]
+
+
+# ── The verdict survives a non-JSON answer ─────────────────────────────
+#
+# PR #104 came back as "**Decision: APPROVE** — I cross-checked the diff
+# against the pre-PR source…" and was filed as COMMENT: the one word the
+# whole call existed to produce, thrown away for its shape.
+
+
+def test_markdown_decision_is_salvaged():
+    text = "**Decision: APPROVE**\n\nI cross-checked the diff against the actual pre-PR source."
+    result = _parse_review_json(text)
+    assert result["decision"] == "APPROVE"
+    assert "cross-checked" in result["summary"]
+
+
+def test_request_changes_is_salvaged_too():
+    text = "Decision: REQUEST_CHANGES\n\nThe migration drops a column."
+    assert _parse_review_json(text)["decision"] == "REQUEST_CHANGES"
+
+
+def test_a_bare_verdict_on_its_own_line_counts():
+    assert _parse_review_json("Looks solid.\n\nAPPROVE\n")["decision"] == "APPROVE"
+
+
+def test_verdict_with_dash_and_lowercase():
+    assert _parse_review_json("verdict — approve")["decision"] == "APPROVE"
+
+
+def test_prose_without_an_explicit_verdict_stays_a_comment():
+    """A friendly tone is not a sign-off."""
+    text = "This looks good overall and I approve of the direction, nice work."
+    assert _parse_review_json(text)["decision"] == "COMMENT"
+
+
+def test_json_still_wins_over_prose():
+    text = 'Decision: REQUEST_CHANGES\n{"decision": "APPROVE", "summary": "ok", "issues": []}'
+    assert _parse_review_json(text)["decision"] == "APPROVE"
