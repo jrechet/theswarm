@@ -11,6 +11,7 @@ from theswarm.agents.po import build_po_graph
 from theswarm.agents.qa import build_qa_graph
 from theswarm.agents.techlead import build_techlead_graph
 from theswarm.config import CycleConfig, Phase, Role
+from theswarm.domain.cycles.value_objects import PHASE_ROLE
 from theswarm.token_counter import TokenTracker
 from theswarm.tools.claude import ClaudeFatalError
 
@@ -332,8 +333,25 @@ async def run_daily_cycle(
     # failed checkpoint if it crashes before completing.
     _current_phase = {"name": "po_morning"}
 
-    def _enter(phase: str) -> None:
+    async def _announce(phase: str) -> None:
+        """Tell the theater which phase runs now.
+
+        Not a heartbeat and not a log line: a typed channel (role PHASE_ROLE)
+        the bridge turns into the real PhaseChanged, so the graph on
+        /c/{id} follows the cycle instead of guessing from whoever spoke
+        last. Sub-phases (dev_iter, techlead_review) go through here too;
+        checkpoints know nothing about them and must not.
+        """
+        if on_progress is None:
+            return
+        try:
+            await on_progress(PHASE_ROLE, phase)
+        except Exception:
+            pass
+
+    async def _enter(phase: str) -> None:
         _current_phase["name"] = phase
+        await _announce(phase)
 
     print(f"\n{'=' * 60}")
     print(f"SWARM CYCLE — {today}")
@@ -351,7 +369,7 @@ async def run_daily_cycle(
 
         # --- MORNING: PO daily planning ---
         if not _skip("po_morning"):
-            _enter("po_morning")
+            await _enter("po_morning")
             await _progress("PO", "Starting daily planning…")
             po = build_po_graph()
             po_state = await _run_phase(
@@ -369,7 +387,7 @@ async def run_daily_cycle(
 
         # --- MORNING: Tech Lead story breakdown ---
         if not _skip("techlead_breakdown"):
-            _enter("techlead_breakdown")
+            await _enter("techlead_breakdown")
             await _progress("TechLead", "Breaking down stories into tasks…")
             tl = build_techlead_graph()
             tl_state = await _run_phase(
@@ -394,11 +412,12 @@ async def run_daily_cycle(
         attempted_tasks: list[int] = []
         _dev_loop_ran = not _skip("dev_loop")
         if _dev_loop_ran:
-            _enter("dev_loop")
+            await _enter("dev_loop")
             await _progress("Dev", "Starting development loop…")
         for iteration in range(1, MAX_DEV_ITERATIONS + 1):
             if not _dev_loop_ran:
                 break
+            await _announce("dev_iter")
             await _progress("Dev", f"Iteration {iteration}/{MAX_DEV_ITERATIONS} — picking next task…")
             dev = build_dev_graph()
             # Phase 4.1 — one retry on transient errors (git, network, etc).
@@ -477,6 +496,7 @@ async def run_daily_cycle(
                 await _progress("Dev", f"No PR produced for task #{number}")
 
             # TechLead reviews and merges
+            await _announce("techlead_review")
             await _progress("TechLead", "Reviewing open PRs…")
             tl_review = build_techlead_graph()
             try:
@@ -540,7 +560,7 @@ async def run_daily_cycle(
         # --- DEMO: QA generates demo ---
         qa_state: dict = {}
         if not _skip("qa"):
-            _enter("qa")
+            await _enter("qa")
             await _progress("QA", "Running tests + security scan…")
             qa = build_qa_graph()
             try:
@@ -562,7 +582,7 @@ async def run_daily_cycle(
         # --- EVENING: PO validates + reports ---
         po_ev_state: dict = {}
         if not _skip("po_evening"):
-            _enter("po_evening")
+            await _enter("po_evening")
             await _progress("PO", "Generating daily report…")
             po_evening = build_po_graph()
             try:

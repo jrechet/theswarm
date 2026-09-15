@@ -24,7 +24,7 @@ from theswarm.domain.cycles.events import (
     CycleFailed,
     PhaseChanged,
 )
-from theswarm.domain.cycles.value_objects import CycleId
+from theswarm.domain.cycles.value_objects import PHASE_ROLE, CycleId
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +65,44 @@ def get_live_progress(cycle_id: str) -> list[dict]:
     return rows
 
 
+# ── The phase channel ──────────────────────────────────────────────────
+#
+# cycle.py announces every phase it enters as on_progress(PHASE_ROLE, name).
+# The theater draws its graph from this history, and once the bridge has
+# heard one real phase it stops guessing phase changes from role switches —
+# a guess that called the first sentence of every agent a "phase".
+PHASE_OWNER: dict[str, str] = {
+    "po_morning": "po",
+    "techlead_breakdown": "techlead",
+    "dev_loop": "dev",
+    "dev_iter": "dev",
+    "techlead_review": "techlead",
+    "qa": "qa",
+    "po_evening": "po",
+}
+
+_PHASE_HISTORY: "OrderedDict[str, list[dict]]" = OrderedDict()
+_PHASE_HISTORY_MAX = 100  # cycles, not entries — a cycle announces ~15
+
+
+def record_phase(cycle_id: str, phase: str) -> None:
+    """Append a phase to the cycle's history, oldest first."""
+    history = _PHASE_HISTORY.get(cycle_id)
+    if history is None:
+        history = _PHASE_HISTORY[cycle_id] = []
+    else:
+        _PHASE_HISTORY.move_to_end(cycle_id)
+    history.append({"phase": phase, "ts": time.time()})
+    while len(_PHASE_HISTORY) > _PHASE_HISTORY_MAX:
+        _PHASE_HISTORY.popitem(last=False)
+
+
+def get_phase_history(cycle_id: str) -> list[dict]:
+    """Every phase the cycle announced, in order. Empty for cycles that
+    never announced one (the CLI, or cycles older than the channel)."""
+    return list(_PHASE_HISTORY.get(cycle_id, ()))
+
+
 class ProgressBridge:
     """Translate ``on_progress(role, message)`` into domain events."""
 
@@ -80,9 +118,27 @@ class ProgressBridge:
         self._project_id = project_id
         self._dashboard_state = dashboard_state
         self._current_agent: str = ""
+        # Set by the first real phase announcement; silences the role-switch
+        # heuristic below for the rest of the cycle.
+        self._heard_phase = False
 
     async def __call__(self, role: str, message: str) -> None:
         """Handle an on_progress callback from cycle.py."""
+        if role == PHASE_ROLE:
+            # A phase, not a message: it goes to the phase history and out as
+            # the real PhaseChanged, and nowhere near the live-progress panel.
+            record_phase(str(self._cycle_id), message)
+            self._heard_phase = True
+            await self._event_bus.publish(
+                PhaseChanged(
+                    cycle_id=self._cycle_id,
+                    project_id=self._project_id,
+                    phase=message,
+                    agent=PHASE_OWNER.get(message, message),
+                )
+            )
+            return
+
         # Stash for the live-progress panel.
         record_live_progress(str(self._cycle_id), role, message)
 
@@ -94,8 +150,10 @@ class ProgressBridge:
             if hasattr(ds, "push_event"):
                 ds.push_event(role, message)  # type: ignore[attr-defined]
 
-        # Detect phase changes (new agent starting work)
-        if role != self._current_agent:
+        # Detect phase changes (new agent starting work). Only until a real
+        # phase has been announced: after that, an agent's first sentence is
+        # activity like any other, not a phase.
+        if not self._heard_phase and role != self._current_agent:
             self._current_agent = role
             await self._event_bus.publish(
                 PhaseChanged(
