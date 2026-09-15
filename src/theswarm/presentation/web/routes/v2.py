@@ -137,6 +137,54 @@ def _running_for_repo(full_name: str) -> object | None:
     return None
 
 
+async def _latest_demo(state, full_name: str) -> dict | None:
+    """The last demo the swarm recorded for this repository, if any.
+
+    "Open the project and watch the demos": the report the QA phase writes
+    after every cycle, surfaced where the owner starts from instead of
+    three clicks into the legacy pages. Degrades to nothing — never to an
+    error page — when the store is missing or unwell.
+    """
+    report_repo = getattr(state, "report_repo", None)
+    if report_repo is None:
+        return None
+    try:
+        reports = await report_repo.list_by_project(full_name, limit=1)
+    except Exception:  # noqa: BLE001 — the page stays, the card degrades
+        log.exception("V2: reading demo reports for %s failed", full_name)
+        return None
+    if not reports:
+        return None
+    report = reports[0]
+    base = state.base_path
+
+    def art(path: str) -> str:
+        return f"{base}/artifacts/{path}"
+
+    screenshots = [a.path for a in report.artifacts if a.type.value == "screenshot" and a.path]
+    videos = [a.path for a in report.artifacts if a.type.value == "video" and a.path]
+    for story in report.stories:
+        screenshots += [a.path for a in (*story.screenshots_after, *story.screenshots_before) if a.path]
+        if story.video and story.video.path:
+            videos.append(story.video.path)
+    thumb = report.thumbnail_path
+    return {
+        "id": report.id,
+        "cycle_id": str(report.cycle_id),
+        "created_at": report.created_at,
+        "play_url": f"{base}/demos/{report.id}/play",
+        "thumbnail_url": art(thumb) if thumb else "",
+        "video_url": art(videos[0]) if videos else "",
+        "screenshots": [art(path) for path in screenshots[:4]],
+        "screenshot_count": report.screenshot_count,
+        "video_count": report.video_count,
+        "prs_merged": report.summary.prs_merged,
+        "stories_completed": report.summary.stories_completed,
+        "stories_total": report.summary.stories_total,
+        "cost_usd": report.summary.cost_usd,
+    }
+
+
 @router.get("/r/{owner}/{name}", response_class=HTMLResponse)
 async def repo_page(request: Request, owner: str, name: str) -> HTMLResponse:
     state = request.app.state
@@ -175,6 +223,7 @@ async def repo_page(request: Request, owner: str, name: str) -> HTMLResponse:
         "has_issues": bool(issues),
         "issues_error": issues_error,
         "running_cycle": running,
+        "latest_demo": await _latest_demo(state, full_name),
     })
 
 

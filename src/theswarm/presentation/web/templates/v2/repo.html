@@ -24,6 +24,47 @@
   </a>
   {% endif %}
 
+  {% if latest_demo %}
+  <section aria-labelledby="latest-demo-title" data-testid="latest-demo"
+     class="border border-rule rounded-lg bg-panel p-4 flex gap-5 items-start flex-col sm:flex-row">
+    <a href="{{ latest_demo.play_url }}" class="block shrink-0 w-full sm:w-48 rounded-md overflow-hidden border border-rule bg-wash focus-visible:outline-2 focus-visible:outline-honey" aria-label="Watch the latest demo">
+      {% if latest_demo.video_url %}
+      <video class="block w-full aspect-video object-cover" preload="none" muted playsinline
+        {% if latest_demo.thumbnail_url %}poster="{{ latest_demo.thumbnail_url }}"{% endif %}>
+        <source src="{{ latest_demo.video_url }}" type="video/webm">
+      </video>
+      {% elif latest_demo.thumbnail_url %}
+      <img class="block w-full aspect-video object-cover" src="{{ latest_demo.thumbnail_url }}" alt="" loading="lazy" width="384" height="216">
+      {% else %}
+      <span class="block w-full aspect-video"></span>
+      {% endif %}
+    </a>
+    <div class="min-w-0 flex-1 flex flex-col gap-2">
+      <div class="flex items-baseline justify-between gap-3 flex-wrap">
+        <h2 id="latest-demo-title" class="font-mono text-[11px] uppercase tracking-[0.14em] text-faint">
+          Latest demo <span class="normal-case tracking-normal text-soft">· {{ latest_demo.created_at.strftime("%-d %b %H:%M") }}</span>
+        </h2>
+        <a href="{{ latest_demo.play_url }}" class="text-[13px] font-semibold text-honey-deep focus-visible:outline-2 focus-visible:outline-honey">Watch →</a>
+      </div>
+      <p class="text-[14px] text-soft">
+        {{ latest_demo.prs_merged }} PR{{ 's' if latest_demo.prs_merged != 1 }} merged
+        {%- if latest_demo.stories_total %} · {{ latest_demo.stories_completed }}/{{ latest_demo.stories_total }} stories{% endif %}
+        {%- if latest_demo.screenshot_count %} · {{ latest_demo.screenshot_count }} screenshot{{ 's' if latest_demo.screenshot_count != 1 }}{% endif %}
+        {%- if latest_demo.video_count %} · {{ latest_demo.video_count }} video{{ 's' if latest_demo.video_count != 1 }}{% endif %}
+        {%- if latest_demo.cost_usd %} · ${{ "%.2f" | format(latest_demo.cost_usd) }}{% endif %}
+      </p>
+      {% if latest_demo.screenshots %}
+      <ul class="flex gap-2 mt-1" aria-label="Screenshots">
+        {% for shot in latest_demo.screenshots %}
+        <li><img src="{{ shot }}" alt="" loading="lazy" class="h-12 w-auto rounded border border-rule bg-wash" width="96" height="48"></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <a href="{{ base }}/cycles/{{ latest_demo.cycle_id }}" class="font-mono text-[11px] text-faint hover:text-soft focus-visible:outline-2 focus-visible:outline-honey">cycle {{ latest_demo.cycle_id[:8] }} ↗</a>
+    </div>
+  </section>
+  {% endif %}
+
   <form method="post" action="{{ base }}/r/{{ owner }}/{{ repo_name }}/issues"
         class="border border-rule rounded-lg bg-panel p-5 flex flex-col gap-3" data-testid="composer">
     <label for="composer-body" class="font-mono text-[11px] uppercase tracking-[0.14em] text-faint">New feature</label>
