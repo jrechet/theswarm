@@ -366,6 +366,11 @@ async def run_daily_cycle(
 
         # --- DEVELOPMENT: Dev implements → TechLead reviews → repeat ---
         attempted_without_pr: set[int] = set()
+        # Every task this loop hands to the Dev, in order, repeats included.
+        # Passed by reference so `pick_task` can record an attempt that the
+        # iteration never returns from — the picker reads it to put a task
+        # that already failed behind the ones nobody has tried.
+        attempted_tasks: list[int] = []
         _dev_loop_ran = not _skip("dev_loop")
         if _dev_loop_ran:
             _enter("dev_loop")
@@ -382,7 +387,11 @@ async def run_daily_cycle(
             try:
                 dev_state = await _run_phase(
                     "dev_iter", "Dev",
-                    dev.ainvoke({**base_state, "phase": Phase.DEVELOPMENT.value}),
+                    dev.ainvoke({
+                        **base_state,
+                        "phase": Phase.DEVELOPMENT.value,
+                        "attempted_tasks": attempted_tasks,
+                    }),
                 )
             except PhaseTimeout:
                 await _progress("Dev", f"Iteration {iteration} timed out — moving on")
@@ -398,9 +407,11 @@ async def run_daily_cycle(
                 try:
                     dev_state = await _run_phase(
                         "dev_iter", "Dev",
-                        build_dev_graph().ainvoke(
-                            {**base_state, "phase": Phase.DEVELOPMENT.value},
-                        ),
+                        build_dev_graph().ainvoke({
+                            **base_state,
+                            "phase": Phase.DEVELOPMENT.value,
+                            "attempted_tasks": attempted_tasks,
+                        }),
                     )
                 except PhaseTimeout:
                     await _progress("Dev", f"Iteration {iteration} retry timed out — moving on")

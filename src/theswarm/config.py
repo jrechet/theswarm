@@ -36,6 +36,10 @@ class AgentState(TypedDict, total=False):
     workspace: Any     # str — local clone path
     # Pipeline data
     task: dict | None
+    # Task numbers already tried in this cycle, newest last. Owned by the
+    # dev loop and mutated in place, so it survives an iteration that raises
+    # rather than returning state — which is exactly the case that matters.
+    attempted_tasks: list[int]
     branch: str | None
     context: str
     result: str | None

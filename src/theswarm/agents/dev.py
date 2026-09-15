@@ -106,13 +106,21 @@ async def _mark_in_progress(github, task: dict) -> None:
     )
 
 
-async def _pick_targeted(github, target_issue: int) -> dict | None:
+async def _pick_targeted(
+    github, target_issue: int, attempted: list[int] | None = None,
+) -> dict | None:
     """Issue-driven flow (P1): resolve the pinned issue to a workable task.
 
     Order: the target itself when it is directly implementable (open,
     ``role:dev``, not already in review), otherwise its ``Parent: #N``
     children created by the TechLead breakdown. Never falls back to
     unrelated backlog — a targeted cycle implements this issue or nothing.
+
+    Children already tried in this cycle go last. GitHub returns them newest
+    first, so the heaviest sub-task — an end-to-end test, usually written
+    last and listed first — was re-picked every iteration while the small
+    ones sat ready and untouched. Cycle c865170a1c4d spent all five
+    iterations on #89 and delivered none of #86, #87, #88.
     """
     target = await github.get_issue(target_issue)
     if target is None or target.get("state") == "closed":
@@ -149,6 +157,9 @@ async def _pick_targeted(github, target_issue: int) -> dict | None:
         and "role:dev" in _label_names(child)
         and "status:review" not in _label_names(child)
     ]
+    # Never-tried children first; among the tried, least-tried first.
+    tried = attempted or []
+    mine.sort(key=lambda child: tried.count(child["number"]))
     for wanted in ("status:ready", None):
         for child in mine:
             labels_of = _label_names(child)
@@ -171,9 +182,16 @@ async def pick_task(state: AgentState) -> dict:
 
     target_issue = state.get("target_issue")
     if target_issue:
-        task = await _pick_targeted(github, target_issue)
+        attempted = state.get("attempted_tasks")
+        task = await _pick_targeted(github, target_issue, attempted)
         if task is None:
             return {"task": None, "tokens_used": 0}
+        # Recorded before the work starts, not after: an iteration that dies
+        # mid-implementation is precisely the one that must not be repeated
+        # ahead of everything else. The list is the dev loop's own, mutated
+        # in place so it outlives a graph invocation that raises.
+        if attempted is not None:
+            attempted.append(task["number"])
         log.info("Picked targeted task: #%d %s", task["number"], task["title"])
         await _mark_in_progress(github, task)
         return {"task": task, "tokens_used": 0}

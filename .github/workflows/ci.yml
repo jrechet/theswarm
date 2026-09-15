@@ -29,7 +29,12 @@ env:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The suite runs 9-12 min on a healthy shared runner and grows with every
+    # feature. At 15 min there was no headroom left: a slow runner pushed PR
+    # #93 to 43% at the cap, and GitHub reports a job that runs out of time
+    # as "cancelled" — which reads as somebody hitting stop, not as a limit
+    # being hit. 30 min still fails fast on a genuine hang.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
