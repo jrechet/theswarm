@@ -62,9 +62,17 @@ async def serve_artifact(request: Request, path: str) -> Response:
     if not full_path.is_file():
         return JSONResponse({"error": "Not found"}, status_code=404)
 
+    # The recorder writes JPEG thumbnails and GIF previews next to the
+    # webm; served as octet-stream they still rendered in <img>, by browser
+    # sniffing, but not as a <video> poster everywhere and never inline
+    # from a link.
     mime_map = {
         ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
         ".webm": "video/webm",
+        ".mp4": "video/mp4",
         ".diff": "text/plain",
         ".log": "text/plain",
     }

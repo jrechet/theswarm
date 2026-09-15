@@ -116,6 +116,25 @@ def get_cycle_tracker() -> CycleTracker:
     return _tracker
 
 
+def _pr_numbers(result: dict[str, Any]) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """(opened, merged) PR numbers from a cycle result, each number once.
+
+    Reviews repeat: a PR opened in iteration 1 is reviewed again in
+    iteration 2, and both approvals were counted. The project page then
+    read "3/2 stories" — three approvals of two PRs.
+    """
+    opened = sorted({
+        int(p.get("number", 0)) if isinstance(p, dict) else int(p)
+        for p in result.get("prs", []) if p is not None
+    } - {0})
+    merged = sorted({
+        int(r.get("pr_number", 0))
+        for r in result.get("reviews", [])
+        if isinstance(r, dict) and r.get("decision") == "APPROVE"
+    } - {0})
+    return tuple(opened), tuple(merged)
+
+
 async def _emit_demo_ready(
     *,
     event_bus: object,
@@ -136,21 +155,14 @@ async def _emit_demo_ready(
         from theswarm.domain.cycles.value_objects import CycleId, CycleStatus
         from theswarm.domain.reporting.events import DemoReady
 
+        opened, merged = _pr_numbers(result)
         cycle = Cycle(
             id=CycleId(cycle_id),
             project_id=repo,
             status=CycleStatus.COMPLETED,
             total_cost_usd=result.get("cost_usd", 0.0),
-            prs_opened=tuple(
-                p.get("number", 0) if isinstance(p, dict) else int(p)
-                for p in result.get("prs", [])
-                if p is not None
-            ),
-            prs_merged=tuple(
-                r.get("pr_number", 0)
-                for r in result.get("reviews", [])
-                if isinstance(r, dict) and r.get("decision") == "APPROVE"
-            ),
+            prs_opened=opened,
+            prs_merged=merged,
         )
 
         thumb_rel_preview = ""
