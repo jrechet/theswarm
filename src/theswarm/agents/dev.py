@@ -318,31 +318,44 @@ async def run_quality_gates(state: AgentState) -> dict:
     # installed" flag is wrong too: a retry that adds a missing dependency
     # needs it installed, which is how cycle 8170b32ca48f kept failing on a
     # module the retry had just declared.
-    req_file = os.path.join(workspace, "requirements.txt")
-    fingerprint = _requirements_fingerprint(req_file)
+    commands, fingerprint = _install_plan(workspace, python)
     if fingerprint and fingerprint != state.get("deps_fingerprint", ""):
-        install_result = await claude.run_tests(
-            workspace,
-            [python, "-m", "pip", "install", "-q", "-r", "requirements.txt"],
-            # A cold install of a typical FastAPI stack measured 145s in the
-            # deploy container, so the old 120s cap always expired.
-            timeout=DEP_INSTALL_TIMEOUT_SECONDS,
-        )
-        if not install_result["passed"]:
-            log.warning("pip install failed:\n%s", install_result["output"][-1000:])
+        for command in commands:
+            install_result = await claude.run_tests(
+                workspace, command,
+                # A cold install of a typical FastAPI stack measured 145s in
+                # the deploy container, so the old 120s cap always expired.
+                timeout=DEP_INSTALL_TIMEOUT_SECONDS,
+            )
+            if not install_result["passed"]:
+                log.warning("dependency install failed:\n%s", install_result["output"][-1000:])
 
     # Run pytest if available
     test_result = await claude.run_tests(
-        workspace, [python, "-m", "pytest", "tests/", "-v", "--tb=short"], timeout=120,
+        workspace, [python, "-m", "pytest", "tests/", "-v", "--tb=short"],
+        timeout=TEST_RUN_TIMEOUT_SECONDS,
     )
 
-    if test_result["passed"]:
+    unavailable = _test_runner_missing(test_result["output"])
+    if not unavailable and test_result["exit_code"] == -1:
+        unavailable = (
+            f"the test suite did not finish within {TEST_RUN_TIMEOUT_SECONDS}s "
+            "in the workspace"
+        )
+    passed = test_result["passed"]
+    if unavailable:
+        log.error("Tests could not run: %s", unavailable)
+    elif test_result["exit_code"] == _PYTEST_NO_TESTS:
+        passed = True
+        log.info("Tests: none collected — nothing to fail")
+    elif passed:
         log.info("Tests PASSED")
     else:
         log.warning("Tests FAILED:\n%s", test_result["output"][-2000:])
 
     return {
-        "tests_passed": test_result["passed"],
+        "tests_passed": passed,
+        "tests_unavailable": unavailable,
         "test_output": test_result["output"][-2000:],
         "deps_fingerprint": fingerprint,
         "tokens_used": 0,
@@ -368,7 +381,16 @@ async def open_pull_request(state: AgentState) -> dict:
     # Build PR body
     tests_passed = state.get("tests_passed", False)
     diff_stat = state.get("diff_stat", "")
-    test_status = "All tests pass" if tests_passed else "Some tests failing — needs review"
+    unavailable = state.get("tests_unavailable", "")
+    if unavailable:
+        # Say what happened, not what it looks like: nothing ran here, and
+        # the repository's CI is the judge. "Some tests failing" would send
+        # the reviewer hunting for a red test that does not exist.
+        test_status = f"Tests could not run in the workspace ({unavailable}) — CI decides"
+    elif tests_passed:
+        test_status = "All tests pass"
+    else:
+        test_status = "Some tests failing — needs review"
 
     pr_body = (
         f"## Summary\n\n"
@@ -423,6 +445,11 @@ def _should_open_pr(state: AgentState) -> str:
 def _should_retry(state: AgentState) -> str:
     """Ralph Loop: retry implementation if quality gates failed and retries remain."""
     if state.get("tests_passed", False):
+        return "check_pr"
+    if state.get("tests_unavailable"):
+        # Nothing ran, so there is nothing for a retry to fix. The PR goes
+        # up as it is and the repository's own CI is the judge.
+        log.warning("Ralph Loop: skipped — %s", state["tests_unavailable"])
         return "check_pr"
     retry_count = state.get("retry_count", 0)
     max_retries = state.get("max_dev_retries", 2)
@@ -574,6 +601,83 @@ async def _requeue_task(github, task: dict) -> None:
     await github.add_labels(number, ["status:ready"])
     await github.remove_label(number, "status:in-progress")
     log.info("Requeued task #%d after failed implementation", number)
+
+
+# The test runner reporting its own absence. Not a test failure: nothing
+# ran. Asking Claude to "fix the failing tests" here produced two repair
+# rounds against a phantom, the second of which broke the syntax of the
+# very file being edited (cycle f12107432167, #88).
+_RUNNER_MISSING = ("No module named pytest", "No module named 'pytest'")
+
+# pytest's own exit code for "collected nothing": the suite is empty, not red.
+_PYTEST_NO_TESTS = 5
+
+# How long the target's suite may run inside a dev iteration. Enough for a
+# small application; TheSwarm's own 2600 tests need three minutes locally
+# and ten on CI, and the phase budget cannot hold that next to two
+# implementation calls. A suite that does not finish here is reported as
+# such — not as red — and the repository's CI runs it in full.
+TEST_RUN_TIMEOUT_SECONDS = 120
+
+
+def _test_runner_missing(output: str) -> str:
+    """The reason the tests could not run at all, or "" when they did."""
+    for marker in _RUNNER_MISSING:
+        if marker in output:
+            return "pytest is not installed for the target interpreter"
+    return ""
+
+
+def _dev_dependencies(pyproject: dict) -> list[str]:
+    """Dev/test requirement strings a pyproject declares.
+
+    PEP 735 dependency groups first (what `uv sync --dev` reads), then the
+    older optional-dependencies extras named dev/test. Only plain strings —
+    a group may `{include-group = ...}` another, which pip cannot take."""
+    found: list[str] = []
+    groups = pyproject.get("dependency-groups", {}) or {}
+    for name in ("dev", "test", "tests"):
+        found += [d for d in groups.get(name, []) or [] if isinstance(d, str)]
+    extras = (pyproject.get("project", {}) or {}).get("optional-dependencies", {}) or {}
+    for name in ("dev", "test", "tests"):
+        found += [d for d in extras.get(name, []) or [] if isinstance(d, str)]
+    return list(dict.fromkeys(found))
+
+
+def _install_plan(workspace: str, python: str) -> tuple[list[list[str]], str]:
+    """(pip commands to run, fingerprint of what they depend on).
+
+    requirements.txt wins when present: the path every target so far took.
+    A pyproject project — TheSwarm itself is one — gets installed editable
+    with its dev group, so `python -m pytest` finds both the package and
+    the runner. Neither file: nothing to install, empty fingerprint.
+    """
+    req_file = os.path.join(workspace, "requirements.txt")
+    if os.path.isfile(req_file):
+        return (
+            [[python, "-m", "pip", "install", "-q", "-r", "requirements.txt"]],
+            _requirements_fingerprint(req_file),
+        )
+    pyproject_file = os.path.join(workspace, "pyproject.toml")
+    if not os.path.isfile(pyproject_file):
+        return [], ""
+    import tomllib
+
+    digest = hashlib.sha256()
+    try:
+        with open(pyproject_file, "rb") as handle:
+            raw = handle.read()
+        digest.update(raw)
+        pyproject = tomllib.loads(raw.decode("utf-8", errors="replace"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        log.warning("pyproject.toml unreadable (%s) — installing nothing", exc)
+        return [], ""
+    lock = os.path.join(workspace, "uv.lock")
+    if os.path.isfile(lock):
+        with open(lock, "rb") as handle:
+            digest.update(handle.read())
+    command = [python, "-m", "pip", "install", "-q", "-e", ".", *_dev_dependencies(pyproject)]
+    return [command], digest.hexdigest()
 
 
 def _requirements_fingerprint(req_file: str) -> str:
