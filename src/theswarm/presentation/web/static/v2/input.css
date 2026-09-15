@@ -105,6 +105,44 @@
 .swarm-working {
   animation: swarm-pulse 1.6s ease-in-out infinite;
 }
+/* The flow: hand-offs between agents. Dashes travel along an edge while a
+   hand-off is in flight (honey), settle to a solid line once it has landed
+   (moss), and rest as faint dashes when nothing has crossed yet. */
+@keyframes flow-dash {
+  to { background-position: 24px 0; }
+}
+@keyframes flow-stroke {
+  to { stroke-dashoffset: -24; }
+}
+.flow-line {
+  height: 2px;
+  background-image: linear-gradient(90deg, var(--rule) 0 6px, transparent 6px 12px);
+  background-size: 12px 2px;
+  background-repeat: repeat-x;
+}
+.flow-line[data-flow="flowing"] {
+  background-image: linear-gradient(90deg, var(--honey) 0 6px, transparent 6px 12px);
+  animation: flow-dash 0.9s linear infinite;
+}
+.flow-line[data-flow="done"] {
+  background-image: none;
+  background-color: var(--moss);
+}
+.flow-arc {
+  fill: none;
+  stroke: var(--rule);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  vector-effect: non-scaling-stroke;
+}
+.flow-arc[data-flow="flowing"] {
+  stroke: var(--honey);
+  animation: flow-stroke 0.9s linear infinite;
+}
+.flow-arc[data-flow="done"] {
+  stroke: var(--moss);
+  stroke-dasharray: none;
+}
 @media (prefers-reduced-motion: reduce) {
-  .swarm-working { animation: none; }
+  .swarm-working, .flow-line, .flow-arc { animation: none; }
 }

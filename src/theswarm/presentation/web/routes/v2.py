@@ -241,6 +241,8 @@ async def play(
 
 # ── The theater: watch the swarm build ─────────────────────────────────
 
+from theswarm.application.services.progress_bridge import PHASE_OWNER  # noqa: E402
+
 _STATIONS = (
     ("po", "PO", "Product Owner"),
     ("techlead", "TL", "Tech Lead"),
@@ -312,11 +314,103 @@ def _stations(record, progress: list[dict]) -> list[dict]:
     return stations
 
 
+# What each phase reads as on the node that owns it.
+_PHASE_LABEL = {
+    "po_morning": "planning",
+    "techlead_breakdown": "breaking down",
+    "dev_loop": "building",
+    "dev_iter": "building",
+    "techlead_review": "reviewing",
+    "qa": "testing & demo",
+    "po_evening": "reporting",
+}
+
+# The hand-offs, in the order work travels. Labels name what crosses.
+_EDGES = (
+    ("po", "techlead", "stories"),
+    ("techlead", "dev", "tasks"),
+    ("dev", "techlead", "review"),
+    ("techlead", "qa", "merged"),
+    ("qa", "po", "report"),
+)
+
+
+def _edge_counts(pinned) -> dict[tuple[str, str], int | None]:
+    """What the pinned issue can tell about the edges: how many tasks the
+    TechLead handed the Dev, how many came back for review."""
+    children = getattr(pinned, "children", None) or []
+    done = getattr(pinned, "done", 0) or 0
+    return {
+        ("techlead", "dev"): len(children) or None,
+        ("dev", "techlead"): done or None,
+    }
+
+
+def _graph(record, phases: list[dict], progress: list[dict], pinned=None) -> dict:
+    """Nodes and edges of the flow, from the phases the cycle announced.
+
+    The rail used to guess: whoever spoke last was "active", everyone
+    before them "done". Wrong as soon as the TechLead comes back to review
+    or the Dev iterates. With the phase history the owner of the current
+    phase is active, whoever owned an earlier phase is done, and an edge
+    is in flight exactly when its source is done and its target active.
+
+    A cycle that never announced a phase — the CLI, or one older than the
+    channel — keeps the guess, so nothing goes dark.
+    """
+    stations = _stations(record, progress)
+    by_key = {node["key"]: node for node in stations}
+    status = record.status.value
+    seen = [p["phase"] for p in phases if p.get("phase") in PHASE_OWNER]
+    for node in stations:
+        node["phase"] = ""
+    if seen:
+        current = seen[-1]
+        owner_now = PHASE_OWNER[current]
+        ran = {PHASE_OWNER[p] for p in seen}
+        for key, node in by_key.items():
+            if status == "completed":
+                state = "done" if key in ran else "waiting"
+            elif status in ("failed", "cancelled"):
+                if key == owner_now:
+                    state = "failed"
+                else:
+                    state = "done" if key in ran else "waiting"
+            else:
+                if key == owner_now:
+                    state = "active"
+                else:
+                    state = "done" if key in ran else "waiting"
+            node["state"] = state
+            if key == owner_now and state == "active":
+                node["phase"] = _PHASE_LABEL.get(current, current)
+
+    counts = _edge_counts(pinned)
+    edges: dict[str, dict] = {}
+    for src, dst, label in _EDGES:
+        s_state, d_state = by_key[src]["state"], by_key[dst]["state"]
+        if d_state == "active" and s_state == "done":
+            flow = "flowing"
+        elif s_state == "done" and d_state in ("done", "failed"):
+            flow = "done"
+        else:
+            flow = "idle"
+        edges[f"{src}-{dst}"] = {
+            "from": src, "to": dst, "label": label, "flow": flow,
+            "count": counts.get((src, dst)),
+        }
+    return {"nodes": stations, "edge": edges}
+
+
 async def _stage_context(request: Request, record) -> dict:
     from theswarm.application.services.pinned_issue import load_pinned_issue
-    from theswarm.application.services.progress_bridge import get_live_progress
+    from theswarm.application.services.progress_bridge import (
+        get_live_progress,
+        get_phase_history,
+    )
 
     progress = get_live_progress(record.id)
+    phases = get_phase_history(record.id)
 
     feed: list[dict] = []
     thoughts_query = getattr(request.app.state, "get_agent_thoughts_query", None)
@@ -338,9 +432,11 @@ async def _stage_context(request: Request, record) -> dict:
             })
 
     pinned = await load_pinned_issue(record.repo, record.issue_number)
+    graph = _graph(record, phases, progress, pinned)
     return {
         "record": record,
-        "stations": _stations(record, progress),
+        "stations": graph["nodes"],
+        "graph": graph,
         "pinned": pinned,
         "feed": feed,
     }

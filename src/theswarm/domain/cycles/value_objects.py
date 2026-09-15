@@ -7,6 +7,13 @@ from enum import Enum
 from uuid import uuid4
 
 
+# The role name reserved for phase announcements on the on_progress channel:
+# cycle.py sends (PHASE_ROLE, phase_name) when it enters a phase, and the
+# ProgressBridge turns that into the real PhaseChanged. No agent is called
+# this, so nothing else can collide with it.
+PHASE_ROLE = "phase"
+
+
 class CycleStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"

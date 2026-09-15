@@ -2,34 +2,76 @@
    by the page's poll loop; data-status lets the client stop polling. #}
 <div id="stage-inner" data-status="{{ record.status.value }}">
 
-  {# ── The agent rail ─────────────────────────────────────────────── #}
-  <ol class="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="agent-rail">
-    {% for s in stations %}
-    <li>
-      <button type="button" data-role="{{ s.key }}" data-state="{{ s.state }}"
-        class="station w-full text-left border rounded-lg p-4 flex flex-col gap-2 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-honey
-        {% if s.state == 'active' %}border-honey bg-honey-wash/50
-        {% elif s.state == 'failed' %}border-rust bg-rust-wash/40
-        {% elif s.state == 'done' %}border-rule bg-panel
-        {% else %}border-rule bg-panel opacity-55{% endif %}">
-        <span class="flex items-center justify-between">
-          <span class="font-mono text-[11px] tracking-[0.12em] {% if s.state == 'active' %}text-honey-deep{% else %}text-faint{% endif %}">{{ s.glyph }}</span>
-          {% if s.state == 'active' %}
-          <span class="w-2 h-2 rounded-full bg-honey swarm-working" aria-hidden="true"></span>
-          {% elif s.state == 'done' %}
-          <span class="text-moss text-[13px]" aria-label="done">✓</span>
-          {% elif s.state == 'failed' %}
-          <span class="text-rust text-[13px]" aria-label="failed">✕</span>
-          {% endif %}
-        </span>
-        <span class="text-[15px] font-semibold leading-tight">{{ s.name }}</span>
-        <span class="text-[12.5px] text-soft leading-snug line-clamp-2 min-h-[2.4em]">
-          {%- if s.message %}{{ s.message }}{% elif s.state == 'waiting' %}Waiting…{% elif s.state == 'done' %}Done.{% endif -%}
-        </span>
-      </button>
-    </li>
-    {% endfor %}
-  </ol>
+  {# ── The flow ───────────────────────────────────────────────────── #}
+  {# Four agents and the hand-offs between them. Node states come from the
+     phases the cycle announced; an edge carries dashes while a hand-off is
+     in flight. The arcs are drawn only where there is room for them. #}
+  <div class="relative" data-testid="flow">
+    <div class="relative hidden md:block h-10" aria-hidden="true">
+      <svg class="absolute inset-0 w-full h-full" viewBox="0 0 1000 40" preserveAspectRatio="none">
+        <path class="flow-arc" data-edge="techlead-qa" data-flow="{{ graph.edge['techlead-qa'].flow }}"
+          d="M 375 40 C 375 -6, 875 -6, 875 40"/>
+        <path class="flow-arc" data-edge="dev-techlead" data-flow="{{ graph.edge['dev-techlead'].flow }}"
+          d="M 625 40 C 625 14, 375 14, 375 40"/>
+      </svg>
+      <span class="absolute left-[62.5%] -translate-x-1/2 top-0 font-mono text-[10px] tracking-[0.1em] uppercase
+        {% if graph.edge['techlead-qa'].flow == 'flowing' %}text-honey-deep{% elif graph.edge['techlead-qa'].flow == 'done' %}text-moss{% else %}text-faint{% endif %}">
+        {{ graph.edge['techlead-qa'].label }}</span>
+      <span class="absolute left-1/2 -translate-x-1/2 top-4 font-mono text-[10px] tracking-[0.1em] uppercase
+        {% if graph.edge['dev-techlead'].flow == 'flowing' %}text-honey-deep{% elif graph.edge['dev-techlead'].flow == 'done' %}text-moss{% else %}text-faint{% endif %}">
+        {{ graph.edge['dev-techlead'].label }}{% if graph.edge['dev-techlead'].count %} · {{ graph.edge['dev-techlead'].count }}{% endif %}</span>
+    </div>
+
+    <ol class="grid grid-cols-1 md:grid-cols-[1fr_28px_1fr_28px_1fr_28px_1fr] md:items-stretch gap-y-3 md:gap-y-0" data-testid="agent-rail">
+      {% for s in graph.nodes %}
+      {% if not loop.first %}
+      {% set key = graph.nodes[loop.index0 - 1].key ~ '-' ~ s.key %}
+      {% set e = graph.edge.get(key) %}
+      <li class="hidden md:flex items-center px-1" aria-hidden="true">
+        {% if e %}
+        <span class="flow-line w-full" data-edge="{{ key }}" data-flow="{{ e.flow }}"
+          {% if e.count %}title="{{ e.count }} {{ e.label }}"{% endif %}></span>
+        {% endif %}
+      </li>
+      {% endif %}
+      <li>
+        <button type="button" data-role="{{ s.key }}" data-state="{{ s.state }}"
+          class="station w-full h-full text-left border rounded-lg p-4 flex flex-col gap-2 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-honey
+          {% if s.state == 'active' %}border-honey bg-honey-wash/50
+          {% elif s.state == 'failed' %}border-rust bg-rust-wash/40
+          {% elif s.state == 'done' %}border-rule bg-panel
+          {% else %}border-rule bg-panel opacity-55{% endif %}">
+          <span class="flex items-center justify-between">
+            <span class="font-mono text-[11px] tracking-[0.12em] {% if s.state == 'active' %}text-honey-deep{% else %}text-faint{% endif %}">{{ s.glyph }}</span>
+            {% if s.state == 'active' %}
+            <span class="w-2 h-2 rounded-full bg-honey swarm-working" aria-hidden="true"></span>
+            {% elif s.state == 'done' %}
+            <span class="text-moss text-[13px]" aria-label="done">✓</span>
+            {% elif s.state == 'failed' %}
+            <span class="text-rust text-[13px]" aria-label="failed">✕</span>
+            {% endif %}
+          </span>
+          <span class="text-[15px] font-semibold leading-tight">{{ s.name }}
+            {% if s.phase %}<span class="font-mono text-[11px] font-normal text-honey-deep ml-1" data-testid="node-phase">{{ s.phase }}</span>{% endif %}
+          </span>
+          <span class="text-[12.5px] text-soft leading-snug line-clamp-2 min-h-[2.4em]">
+            {%- if s.message %}{{ s.message }}{% elif s.state == 'waiting' %}Waiting…{% elif s.state == 'done' %}Done.{% endif -%}
+          </span>
+        </button>
+      </li>
+      {% endfor %}
+    </ol>
+
+    <div class="relative hidden md:block h-8" aria-hidden="true">
+      <svg class="absolute inset-0 w-full h-full" viewBox="0 0 1000 32" preserveAspectRatio="none">
+        <path class="flow-arc" data-edge="qa-po" data-flow="{{ graph.edge['qa-po'].flow }}"
+          d="M 875 0 C 875 38, 125 38, 125 0"/>
+      </svg>
+      <span class="absolute left-1/2 -translate-x-1/2 bottom-0 font-mono text-[10px] tracking-[0.1em] uppercase
+        {% if graph.edge['qa-po'].flow == 'flowing' %}text-honey-deep{% elif graph.edge['qa-po'].flow == 'done' %}text-moss{% else %}text-faint{% endif %}">
+        {{ graph.edge['qa-po'].label }}</span>
+    </div>
+  </div>
 
   {# ── What is being built ────────────────────────────────────────── #}
   {% if pinned.issue %}
