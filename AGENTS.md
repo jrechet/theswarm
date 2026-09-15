@@ -177,3 +177,12 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
 - CI reports a `tests` job that hits `timeout-minutes` as **"cancelled"** —
   it is neither a failure nor a person hitting stop. The cap is 30 min; the
   suite runs 9–12 on a healthy shared runner.
+- **The quality gate reads the target's toolchain.** `requirements.txt` when
+  present; otherwise `pyproject.toml` installed editable with its PEP 735
+  `dev` group (what `uv sync --dev` reads) — TheSwarm itself is that case,
+  and installed nothing until #103, so `pytest` was missing and no PR ever
+  came out of a self-cycle. A runner that reports its own absence, and a
+  suite that outruns `TEST_RUN_TIMEOUT_SECONDS` (120s; TheSwarm's takes 3
+  min locally), are `tests_unavailable`: no Ralph rounds, the PR opens
+  with the reason in its body, and the repository's CI is the judge.
+  Installing TheSwarm into the container's system python takes ~63s cold.
