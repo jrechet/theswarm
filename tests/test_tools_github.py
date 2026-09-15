@@ -175,6 +175,24 @@ async def test_remove_label_not_present(github_client):
     await github_client.remove_label(1, "nonexistent")
 
 
+async def test_close_issue_with_comment(github_client):
+    mock_issue = MagicMock()
+    github_client._repo.get_issue.return_value = mock_issue
+
+    await github_client.close_issue(1, comment="Already handled by #42")
+    mock_issue.create_comment.assert_called_once_with("Already handled by #42")
+    mock_issue.edit.assert_called_once_with(state="closed")
+
+
+async def test_close_issue_without_comment(github_client):
+    mock_issue = MagicMock()
+    github_client._repo.get_issue.return_value = mock_issue
+
+    await github_client.close_issue(1)
+    mock_issue.create_comment.assert_not_called()
+    mock_issue.edit.assert_called_once_with(state="closed")
+
+
 async def test_get_open_prs(github_client):
     pr1 = _make_mock_pr(number=10)
     pr2 = _make_mock_pr(number=11)

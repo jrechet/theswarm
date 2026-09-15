@@ -164,6 +164,14 @@ class GitHubClient:
         except GithubException:
             pass  # label not present
 
+    async def close_issue(self, issue_number: int, comment: str | None = None) -> None:
+        """Optionally comment, then close an issue (not a PR)."""
+        await self._fresh()
+        if comment:
+            await self.add_comment(issue_number, comment)
+        issue = await self._run(self._repo.get_issue, issue_number)
+        await self._run(issue.edit, state="closed")
+
     # ── Branches ────────────────────────────────────────────────────────
 
     async def create_branch(self, branch_name: str, from_branch: str = "main") -> None:
