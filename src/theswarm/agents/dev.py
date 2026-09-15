@@ -85,6 +85,17 @@ Rules:
 - Keep it simple — prefer the most straightforward solution
 - Include a requirements.txt if new dependencies are needed
 
+If, after reading the existing code, you are CONFIDENT the acceptance criteria
+described in the task are already fully met and no file needs to change,
+output exactly one line instead of any `--- FILE: ... ---` blocks:
+
+ALREADY_SATISFIED: <path/to/file.py> — <one-sentence explanation of where/how the criteria are already met>
+
+Use this marker ONLY when you are confident the criteria are met by reading
+the code — never as a fallback when you are unsure, blocked, or the task is
+only partially done. If you are unsure, behave as usual: attempt the change,
+or output nothing.
+
 Focus on correctness and simplicity. Ship working code.
 """
 
@@ -275,12 +286,15 @@ async def implement_task(state: AgentState) -> dict:
         raise
 
     if not committed:
-        log.warning("Claude produced no file changes for task #%d", task["number"])
+        already_satisfied = _extract_already_satisfied(result.text)
+        log.warning("Claude produced no file changes for task #%d (already_satisfied=%s)",
+                    task["number"], already_satisfied)
         return {
             "result": "no changes produced",
             "tokens_used": result.total_tokens,
             "cost_usd": result.cost_usd,
             "branch": branch_name,
+            "already_satisfied": already_satisfied,
         }
 
     diff_stat = await git_ops.get_diff_stat(workspace)
@@ -593,6 +607,28 @@ def _extract_files_from_response(text: str, workspace: str) -> int:
         log.info("Wrote file: %s", filepath)
 
     return files_written
+
+
+_ALREADY_SATISFIED_RE = re.compile(r"^ALREADY_SATISFIED:\s*(.*)$", re.MULTILINE)
+_FILE_BLOCK_RE = re.compile(r"---\s*FILE:\s*.+?\s*---")
+
+
+def _extract_already_satisfied(text: str) -> str | None:
+    """Return the ALREADY_SATISFIED evidence line, or None.
+
+    Fails closed: if the response also contains --- FILE: --- blocks
+    (partial/ambiguous work), or the marker line has no content after
+    the colon, this returns None rather than guessing.
+    """
+    if _FILE_BLOCK_RE.search(text):
+        return None
+
+    match = _ALREADY_SATISFIED_RE.search(text)
+    if match is None:
+        return None
+
+    evidence = match.group(1).strip()
+    return evidence or None
 
 
 async def _requeue_task(github, task: dict) -> None:

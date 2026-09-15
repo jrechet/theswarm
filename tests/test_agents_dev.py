@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from theswarm.agents.dev import (
+    _extract_already_satisfied,
     _extract_us_id,
     _make_branch_name,
     _should_open_pr,
@@ -154,3 +157,86 @@ async def test_open_pull_request_stub():
     result = await open_pull_request(state)
     assert result["tokens_used"] == 0
     assert "[STUB]" in result["result"]
+
+
+# ── _extract_already_satisfied ─────────────────────────────────────────
+
+
+def test_extract_already_satisfied_returns_evidence_when_marker_alone():
+    text = (
+        "ALREADY_SATISFIED: src/theswarm/agents/dev.py — the retry cap is "
+        "already enforced at line 42."
+    )
+    assert _extract_already_satisfied(text) == (
+        "src/theswarm/agents/dev.py — the retry cap is already enforced at line 42."
+    )
+
+
+def test_extract_already_satisfied_returns_none_when_marker_absent():
+    assert _extract_already_satisfied("I could not find anything to change.") is None
+    assert _extract_already_satisfied("") is None
+
+
+def test_extract_already_satisfied_returns_none_alongside_file_blocks():
+    text = (
+        "--- FILE: src/foo.py ---\n"
+        "```python\nprint('hi')\n```\n"
+        "ALREADY_SATISFIED: src/foo.py — already handled.\n"
+    )
+    assert _extract_already_satisfied(text) is None
+
+
+def test_extract_already_satisfied_returns_none_when_empty_content():
+    assert _extract_already_satisfied("ALREADY_SATISFIED:   ") is None
+    assert _extract_already_satisfied("ALREADY_SATISFIED:") is None
+
+
+# ── implement_task (already_satisfied wiring) ──────────────────────────
+
+
+async def _git_workspace(tmp_path) -> str:
+    """implement_task branches off main first — give it a real repo."""
+    from theswarm.tools.git import _identity_args, _run_git
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    await _run_git("init", "-q", "-b", "main", cwd=str(repo))
+    (repo / "README.md").write_text("x\n")
+    await _run_git("add", "-A", cwd=str(repo))
+    await _run_git(*_identity_args(), "commit", "-qm", "init", cwd=str(repo))
+    return str(repo)
+
+
+def _implement_state(workspace, claude):
+    return {
+        "task": {"number": 42, "title": "Add retry cap", "body": "..."},
+        "claude": claude,
+        "workspace": workspace,
+        "github": None,
+        "context": "",
+    }
+
+
+async def test_implement_task_reports_already_satisfied_evidence(tmp_path):
+    claude = AsyncMock()
+    claude.run.return_value = AsyncMock(
+        text="ALREADY_SATISFIED: src/foo.py — the cap is already enforced.",
+        total_tokens=5,
+        cost_usd=0.01,
+    )
+
+    result = await implement_task(_implement_state(await _git_workspace(tmp_path), claude))
+
+    assert result["result"] == "no changes produced"
+    assert result["already_satisfied"] == "src/foo.py — the cap is already enforced."
+
+
+async def test_implement_task_reports_none_when_no_evidence_given(tmp_path):
+    claude = AsyncMock()
+    claude.run.return_value = AsyncMock(text="I made no changes.", total_tokens=5, cost_usd=0.01)
+
+    result = await implement_task(_implement_state(await _git_workspace(tmp_path), claude))
+
+    assert result["result"] == "no changes produced"
+    assert result["already_satisfied"] is None
+

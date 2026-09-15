@@ -51,6 +51,10 @@ class AgentState(TypedDict, total=False):
     branch: str | None
     context: str
     result: str | None
+    # Set only when implement_task produces no commit: the ALREADY_SATISFIED
+    # evidence line from Claude, or None when it gave no such evidence — the
+    # caller's way to tell a genuine failure from an already-shipped feature.
+    already_satisfied: str | None
     tokens_used: int
     cost_usd: float
     tests_passed: bool
