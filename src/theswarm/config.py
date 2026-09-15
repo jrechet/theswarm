@@ -55,6 +55,9 @@ class AgentState(TypedDict, total=False):
     cost_usd: float
     tests_passed: bool
     test_output: str
+    # Why the tests could not run at all (runner missing), "" when they ran.
+    # Distinct from tests_passed=False: nothing to repair, nothing to hide.
+    tests_unavailable: str
     diff_stat: str
     # Ralph Loop retry accounting. LangGraph drops keys absent from this
     # schema, so omitting these pinned retry_count at 0 and the dev loop
