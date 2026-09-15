@@ -332,6 +332,11 @@ async def run_daily_cycle(
     # Sprint G1 — tracks the phase currently executing so we can emit a
     # failed checkpoint if it crashes before completing.
     _current_phase = {"name": "po_morning"}
+    # True from the first Dev claim until the loop has handed back what it
+    # did not finish. A cancelled or crashed cycle skips that hand-back, and
+    # every sub-task it claimed stays `in-progress` for the next cycle to
+    # trip over (0793e29ce7c7 found #86, #87 and #88 exactly there).
+    dev_claims_open = False
 
     async def _announce(phase: str) -> None:
         """Tell the theater which phase runs now.
@@ -413,6 +418,7 @@ async def run_daily_cycle(
         _dev_loop_ran = not _skip("dev_loop")
         if _dev_loop_ran:
             await _enter("dev_loop")
+            dev_claims_open = True
             await _progress("Dev", "Starting development loop…")
         for iteration in range(1, MAX_DEV_ITERATIONS + 1):
             if not _dev_loop_ran:
@@ -540,6 +546,7 @@ async def run_daily_cycle(
             # cycle 751202be0c3a delivered #216 and #219 and left #217 and
             # #218 exactly there, then reported itself completed.
             requeued = await _requeue_unfinished(config)
+            dev_claims_open = False
             if requeued:
                 await _progress(
                     "Dev",
@@ -645,6 +652,11 @@ async def run_daily_cycle(
         raise
     finally:
         await watchdog.stop()
+        if dev_claims_open:
+            # Cancelled or crashed mid-loop: give back what was claimed.
+            # _requeue_unfinished never raises; a hand-back that fails is
+            # logged, not fatal, and the next cycle's picker copes.
+            await _requeue_unfinished(config)
         # Cleanup workspace even on failure
         if config.is_real_mode:
             from theswarm.tools.git import cleanup_workspace

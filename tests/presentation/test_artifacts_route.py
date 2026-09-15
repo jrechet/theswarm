@@ -65,3 +65,33 @@ class TestListArtifacts:
         resp = await client.get("/artifacts/list?cycle_id=unknown")
         assert resp.status_code == 200
         assert resp.json()["count"] == 0
+
+
+class TestMediaTypes:
+    """The recorder writes JPEG thumbnails and GIF previews next to the
+    webm. Served as octet-stream they rendered in <img> only by browser
+    sniffing, and not as a <video> poster everywhere."""
+
+    @pytest.mark.parametrize("name, media_type", [
+        ("thumb.jpg", "image/jpeg"),
+        ("thumb.jpeg", "image/jpeg"),
+        ("preview.gif", "image/gif"),
+        ("clip.mp4", "video/mp4"),
+        ("clip.webm", "video/webm"),
+    ])
+    async def test_served_with_its_real_media_type(self, client, artifact_dir, name, media_type):
+        (artifact_dir / "cycle-001" / "video").mkdir(parents=True, exist_ok=True)
+        (artifact_dir / "cycle-001" / "video" / name).write_bytes(b"x")
+
+        resp = await client.get(f"/artifacts/cycle-001/video/{name}")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == media_type
+
+    async def test_unknown_extensions_stay_opaque(self, client, artifact_dir):
+        (artifact_dir / "cycle-001" / "misc").mkdir(parents=True, exist_ok=True)
+        (artifact_dir / "cycle-001" / "misc" / "blob.bin").write_bytes(b"x")
+
+        resp = await client.get("/artifacts/cycle-001/misc/blob.bin")
+
+        assert resp.headers["content-type"] == "application/octet-stream"

@@ -95,17 +95,52 @@ class TestRotation:
 
 
 class TestRotationRespectsExistingRules:
-    async def test_ready_still_beats_in_progress(self):
-        """Rotation orders within a tier; it must not promote across tiers."""
+    async def test_with_equal_attempts_ready_beats_in_progress(self):
+        """A clean start still beats resuming someone else's half-done work
+        — as long as neither has been tried here."""
         children = [
             _child(89, status="status:in-progress"),
             _child(88, status="status:ready"),
         ]
         gh = _github(_story(), children)
 
-        picked = await _pick_targeted(gh, 85, [88])
+        picked = await _pick_targeted(gh, 85, [])
 
         assert picked["number"] == 88
+
+    async def test_an_untried_in_progress_sibling_beats_a_failed_ready_task(self):
+        """The trap: a task that fails is requeued to `ready`; its siblings,
+        left in-progress by a cancelled cycle, sat one tier down. "Ready
+        first" then re-picked the failed task every iteration (cycle
+        0793e29ce7c7 on #89, with #86, #87, #88 untried)."""
+        children = [
+            _child(89, status="status:ready"),          # just failed, requeued
+            _child(88, status="status:in-progress"),
+            _child(87, status="status:in-progress"),
+        ]
+        gh = _github(_story(), children)
+
+        picked = await _pick_targeted(gh, 85, [89])
+
+        assert picked["number"] == 88
+
+    async def test_the_production_trap_over_five_iterations(self):
+        """Every sibling in-progress, the failing one bouncing back to ready
+        after each attempt: the other three must still all get their turn."""
+        gh = _github(_story(), [
+            _child(89, status="status:ready"),
+            _child(88, status="status:in-progress"),
+            _child(87, status="status:in-progress"),
+            _child(86, status="status:in-progress"),
+        ])
+        attempted: list[int] = []
+        order = []
+        for _ in range(5):
+            task = await _pick_targeted(gh, 85, attempted)
+            attempted.append(task["number"])
+            order.append(task["number"])
+
+        assert order[:4] == [89, 88, 87, 86]
 
     async def test_a_child_in_review_is_never_picked(self):
         children = [_child(89, status="status:review"), _child(88)]
