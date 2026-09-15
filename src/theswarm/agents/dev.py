@@ -85,6 +85,12 @@ Rules:
 - Keep it simple — prefer the most straightforward solution
 - Include a requirements.txt if new dependencies are needed
 
+If the behavior this task asks for is already implemented (e.g. a sibling
+task delivered it first), do not re-write the file. Output no --- FILE:
+blocks and instead a single line:
+
+ALREADY_SATISFIED: path/to/file.py - one-line reason
+
 Focus on correctness and simplicity. Ship working code.
 """
 
@@ -97,6 +103,26 @@ def _label_names(issue: dict) -> set[str]:
         label if isinstance(label, str) else label.get("name", "")
         for label in issue.get("labels", [])
     }
+
+
+# A targeted child can turn out to be redundant: a sibling task, picked
+# earlier in the same breakdown, already implements the behavior. Claude is
+# asked to say so instead of re-writing the same file — see DEV_TASK_PROMPT
+# expectations upstream in the TechLead breakdown. No --- FILE: block means
+# nothing to commit, and without this the issue just sat in status:in-progress
+# until _requeue_unfinished put it back to status:ready for another cycle to
+# trip over the same way (story #85).
+ALREADY_SATISFIED_RE = re.compile(
+    r"ALREADY_SATISFIED:\s*(?P<file>\S+)\s*[—-]\s*(?P<reason>.+)"
+)
+
+
+def _extract_already_satisfied(text: str) -> tuple[str, str] | None:
+    """Return (file, reason) if Claude reported the task as already done."""
+    match = ALREADY_SATISFIED_RE.search(text)
+    if not match:
+        return None
+    return match.group("file"), match.group("reason").strip()
 
 
 async def _mark_in_progress(github, task: dict) -> None:
@@ -259,6 +285,26 @@ async def implement_task(state: AgentState) -> dict:
         # Extract files from Claude's response and write them to workspace
         files_written = _extract_files_from_response(result.text, workspace)
         log.info("Extracted %d files from Claude's response", files_written)
+
+        if files_written == 0:
+            already_satisfied = _extract_already_satisfied(result.text)
+            if already_satisfied:
+                satisfied_file, reason = already_satisfied
+                comment = "Already satisfied: `" + satisfied_file + "` " + chr(8212) + " " + reason
+                if github is not None:
+                    await github.close_issue(task["number"], comment=comment)
+                    await github.remove_label(task["number"], "status:in-progress")
+                log.info(
+                    "Task #%d already satisfied: %s " + chr(8212) + " %s",
+                    task["number"], satisfied_file, reason,
+                )
+                return {
+                    "result": "already satisfied: " + satisfied_file + " " + chr(8212) + " " + reason,
+                    "already_satisfied": True,
+                    "tokens_used": result.total_tokens,
+                    "cost_usd": result.cost_usd,
+                    "branch": branch_name,
+                }
 
         # Commit all changes
         committed = await git_ops.commit_all(
@@ -430,6 +476,18 @@ def _should_skip(state: AgentState) -> str:
     return "implement"
 
 
+def _should_run_gates(state: AgentState) -> str:
+    """Skip quality gates and PR when the task was already satisfied.
+
+    implement_task already closed the issue in that case—running tests
+    against unchanged code and then routing check_pr straight to end is
+    wasted phase budget, not a safety net.
+    """
+    if state.get("already_satisfied"):
+        return "end"
+    return "quality_gates"
+
+
 async def _noop(state: AgentState) -> dict:
     """Routing-only node: carries the graph to the open-PR decision."""
     return {}
@@ -528,7 +586,14 @@ def build_dev_graph() -> StateGraph:
     })
     graph.add_node("check_pr", _noop)
 
-    graph.add_edge("implement", "quality_gates")
+    # A targeted child can turn out to already be satisfied by a sibling
+    # task (story #85): implement_task closes the issue itself and sets
+    # already_satisfied, so this routes straight to end instead of running
+    # tests against code nothing changed.
+    graph.add_conditional_edges("implement", _should_run_gates, {
+        "quality_gates": "quality_gates",
+        "end": END,
+    })
     # Ralph Loop: retry if tests fail, otherwise consider opening a PR
     graph.add_conditional_edges("quality_gates", _should_retry, {
         "retry": "retry_implement",
