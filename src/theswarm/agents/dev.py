@@ -157,16 +157,21 @@ async def _pick_targeted(
         and "role:dev" in _label_names(child)
         and "status:review" not in _label_names(child)
     ]
-    # Never-tried children first; among the tried, least-tried first.
+    # Least-tried first; among equals, ready before in-progress. The order
+    # of those two keys matters: a task that failed here is requeued to
+    # `ready`, and when its siblings sit in `in-progress` — left there by a
+    # cancelled cycle — "ready first" made the failed task the only
+    # candidate of the first tier. Cycle 0793e29ce7c7 re-picked #89 after
+    # its own timeout while #86, #87 and #88 waited, untried, one tier down.
+    # A sibling nobody has tried is a better bet than one that just failed,
+    # whatever its label says.
     tried = attempted or []
-    mine.sort(key=lambda child: tried.count(child["number"]))
-    for wanted in ("status:ready", None):
-        for child in mine:
-            labels_of = _label_names(child)
-            if wanted is None or wanted in labels_of:
-                if wanted is None and "status:ready" in labels_of:
-                    continue  # already offered in the first pass
-                return child
+    mine.sort(key=lambda child: (
+        tried.count(child["number"]),
+        0 if "status:ready" in _label_names(child) else 1,
+    ))
+    if mine:
+        return mine[0]
 
     log.info("Target #%s has no workable task (state=%s, labels=%s)",
              target_issue, target.get("state"), sorted(labels))
