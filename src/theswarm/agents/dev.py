@@ -332,10 +332,16 @@ async def run_quality_gates(state: AgentState) -> dict:
 
     # Run pytest if available
     test_result = await claude.run_tests(
-        workspace, [python, "-m", "pytest", "tests/", "-v", "--tb=short"], timeout=120,
+        workspace, [python, "-m", "pytest", "tests/", "-v", "--tb=short"],
+        timeout=TEST_RUN_TIMEOUT_SECONDS,
     )
 
     unavailable = _test_runner_missing(test_result["output"])
+    if not unavailable and test_result["exit_code"] == -1:
+        unavailable = (
+            f"the test suite did not finish within {TEST_RUN_TIMEOUT_SECONDS}s "
+            "in the workspace"
+        )
     passed = test_result["passed"]
     if unavailable:
         log.error("Tests could not run: %s", unavailable)
@@ -605,6 +611,13 @@ _RUNNER_MISSING = ("No module named pytest", "No module named 'pytest'")
 
 # pytest's own exit code for "collected nothing": the suite is empty, not red.
 _PYTEST_NO_TESTS = 5
+
+# How long the target's suite may run inside a dev iteration. Enough for a
+# small application; TheSwarm's own 2600 tests need three minutes locally
+# and ten on CI, and the phase budget cannot hold that next to two
+# implementation calls. A suite that does not finish here is reported as
+# such — not as red — and the repository's CI runs it in full.
+TEST_RUN_TIMEOUT_SECONDS = 120
 
 
 def _test_runner_missing(output: str) -> str:

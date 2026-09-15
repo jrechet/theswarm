@@ -12,6 +12,7 @@ own repository, and the reason was never on screen.
 from __future__ import annotations
 
 from theswarm.agents.dev import (
+    TEST_RUN_TIMEOUT_SECONDS,
     _dev_dependencies,
     _install_plan,
     _should_retry,
@@ -203,3 +204,45 @@ class TestNoTestsCollected:
 
         assert result["tests_passed"] is True
         assert result["tests_unavailable"] == ""
+
+
+class TestSuiteTooLongForTheWorkspace:
+    """TheSwarm's own suite outruns the iteration's test budget. That is a
+    fact about the suite, not a red test — CI runs it in full."""
+
+    async def test_a_timeout_is_reported_as_unavailable_not_failed(self, tmp_path):
+        claude = _FakeClaude(
+            test_output=f"Timed out after {TEST_RUN_TIMEOUT_SECONDS}s", exit_code=-1,
+        )
+
+        result = await run_quality_gates(
+            {"task": {"number": 88}, "workspace": str(tmp_path), "claude": claude},
+        )
+
+        assert result["tests_passed"] is False
+        assert "did not finish" in result["tests_unavailable"]
+        assert str(TEST_RUN_TIMEOUT_SECONDS) in result["tests_unavailable"]
+
+    def test_no_repair_rounds_after_a_timeout(self):
+        state = {
+            "tests_passed": False,
+            "tests_unavailable": "the test suite did not finish within 120s in the workspace",
+            "retry_count": 0, "max_dev_retries": 2,
+        }
+
+        assert _should_retry(state) == "check_pr"
+
+    async def test_the_gate_uses_the_named_budget(self, tmp_path):
+        seen = {}
+
+        class _Claude:
+            async def run_tests(self, workdir, command, *, timeout=300):
+                if "pytest" in command:
+                    seen["timeout"] = timeout
+                return {"passed": True, "output": "ok", "exit_code": 0}
+
+        await run_quality_gates(
+            {"task": {"number": 1}, "workspace": str(tmp_path), "claude": _Claude()},
+        )
+
+        assert seen["timeout"] == TEST_RUN_TIMEOUT_SECONDS
