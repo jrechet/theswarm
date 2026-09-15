@@ -344,8 +344,11 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
     # Format the review body
     body = _format_review_body(summary, issues)
 
-    # Submit the review
-    event = "APPROVE" if decision == "APPROVE" else "REQUEST_CHANGES"
+    # Submit the review. A comment is a comment: mapping it to
+    # REQUEST_CHANGES put "(REQUEST_CHANGES)" above a body that said
+    # "Decision: APPROVE" on PR #104 — and GitHub refuses REQUEST_CHANGES on
+    # one's own PR anyway, where it accepts COMMENT.
+    event = decision if decision in ("APPROVE", "REQUEST_CHANGES") else "COMMENT"
     review_submitted = False
     try:
         await github.create_pr_review(pr_number, body=body, event=event)
@@ -596,8 +599,34 @@ def _parse_review_json(text: str) -> dict:
                 return json.loads(clean[start:end])
             except json.JSONDecodeError:
                 pass
-        log.warning("Could not parse review JSON: %s", clean[:200])
-        return {"decision": "COMMENT", "summary": clean[:500], "issues": []}
+        # Not JSON — but the verdict is usually right there in the prose.
+        # PR #104 came back as "**Decision: APPROVE** — I cross-checked the
+        # diff against the pre-PR source…" and was filed as COMMENT: the one
+        # word the whole call existed to produce, thrown away for its shape.
+        decision = _salvage_decision(clean)
+        log.warning("Could not parse review JSON (decision read as %s): %s",
+                    decision, clean[:200])
+        return {"decision": decision, "summary": clean[:500], "issues": []}
+
+
+_DECISION_RE = re.compile(
+    r"(?:decision|verdict)\s*[:\-—]\s*\**\s*(APPROVE|REQUEST_CHANGES)\b"
+    r"|^\s*\**\s*(APPROVE|REQUEST_CHANGES)\s*\**\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _salvage_decision(text: str) -> str:
+    """The reviewer's verdict from free text, or COMMENT when there is none.
+
+    Accepts "Decision: APPROVE" in any markdown dress, or the bare word on a
+    line of its own. Anything less explicit stays a comment — guessing an
+    approval from a friendly tone would merge code nobody signed off on.
+    """
+    match = _DECISION_RE.search(text)
+    if not match:
+        return "COMMENT"
+    return (match.group(1) or match.group(2)).upper()
 
 
 def _format_review_body(summary: str, issues: list[dict]) -> str:

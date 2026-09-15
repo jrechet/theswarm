@@ -10,8 +10,13 @@ on:
     # wrote the plan (observed 2026-09-07: cycle e80598e4bc4a died 40s into
     # the TechLead phase). A daily plan changes no behaviour: nothing to
     # test, nothing to deploy.
+    # Same trap, same fix: every cycle ends by appending a line to
+    # docs/cycle-history.jsonl on the target's main. On the swarm's own
+    # repository that commit redeployed the service at the very end of
+    # the cycle that wrote it (336a73c, 2026-09-15).
     paths-ignore:
       - 'docs/daily-plans/**'
+      - 'docs/cycle-history.jsonl'
   pull_request:
     branches: [main]
 
