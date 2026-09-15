@@ -154,3 +154,26 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
 - `static/v2/app.css` is generated: never commit it. It slipped in twice —
   the `.gitignore` pattern had no leading `**/`, so a mid-path `/` anchored it
   to the repo root and `git add -A` kept re-adding the file.
+- **One cycle per repository at a time** — `cycle.repo_lock`, held by the
+  API wrapper, the Mattermost gateway and the autonomous loop; a second
+  cycle shows `queued`. Two cycles on one repo share one workspace and erase
+  each other's branches (`16f3b8af2cca` vs `2878898cc504`: two commits, no PR).
+- **Cancel is persisted** (`CycleCancelled` → cycles table). The resumer
+  reads `list_running()` at boot; before #96 a cancelled cycle came back
+  after every deploy, on top of whatever had replaced it.
+- **On `SELF_REPO` the TechLead approves but never merges** — a merge to
+  main redeploys this service and kills the cycle mid-review. Approved PRs
+  come back as `held_prs`; a person merges them between cycles.
+- **Phases are announced**, not guessed: `cycle.py` sends
+  `on_progress(PHASE_ROLE, name)` through `_announce`, the bridge turns it
+  into the real `PhaseChanged` and the theater's graph reads that history.
+  A new phase or sub-phase needs an `_announce` call and a `PHASE_OWNER`
+  entry, or the graph will not know who owns it.
+- `ClaudeCLI` **remembers the largest budget that already expired** and
+  never offers it again within a cycle (`_timeout_floor`, ceiling 780s —
+  `dev_iter` is 30 min so one call plus its retry fit). The task picker
+  puts an already-tried sub-task behind the untried ones; without that the
+  heaviest task starved the rest for five iterations.
+- CI reports a `tests` job that hits `timeout-minutes` as **"cancelled"** —
+  it is neither a failure nor a person hitting stop. The cap is 30 min; the
+  suite runs 9–12 on a healthy shared runner.
