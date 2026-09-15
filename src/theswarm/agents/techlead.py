@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from langgraph.graph import END, StateGraph
 
@@ -124,10 +125,37 @@ Rules:
 # ── Node functions ──────────────────────────────────────────────────────
 
 
+def _is_task(issue: dict) -> bool:
+    """True when the issue is itself a dev task rather than a story."""
+    return any(
+        (label if isinstance(label, str) else label.get("name", "")) == "role:dev"
+        for label in issue.get("labels", [])
+    )
+
+
+_PARENT_RE = re.compile(r"Parent:\s*#(\d+)")
+
+
+async def _already_broken_down(github) -> set[int]:
+    """Issue numbers that already have sub-tasks, in one API call.
+
+    Sub-tasks carry `Parent: #N` in their body and the `role:dev` label, and
+    they are the only record that a breakdown happened — the parent itself is
+    never marked. Closed ones count: a finished breakdown must not be redone.
+
+    One call, not one per candidate: listing issues one at a time is the cost
+    that cb2e572 removed from this codebase already.
+    """
+    children = await github.get_issues(labels=["role:dev"], state="all")
+    return {
+        int(match.group(1))
+        for child in children
+        for match in _PARENT_RE.finditer(child.get("body") or "")
+    }
+
+
 async def breakdown_stories(state: AgentState) -> dict:
     """Read status:ready issues, call Claude to break them into dev tasks."""
-    import re
-
     github = state.get("github")
     claude = state.get("claude")
 
@@ -148,11 +176,17 @@ async def breakdown_stories(state: AgentState) -> dict:
     else:
         # Fetch issues that PO marked as ready but haven't been broken down yet
         ready_issues = await github.get_issues(labels=["status:ready"])
-    # Filter out issues that already have sub-tasks (role:dev label)
-    ready_issues = [i for i in ready_issues if not any(
-        (l if isinstance(l, str) else l.get("name", "")) == "role:dev"
-        for l in i.get("labels", [])
-    )]
+    # Two different things must not be broken down, and only the first was
+    # being checked. An issue carrying `role:dev` IS a task — breaking it down
+    # again would split a leaf into leaves.
+    ready_issues = [i for i in ready_issues if not _is_task(i)]
+    # And an issue whose sub-tasks already exist has been split once already.
+    # Nothing tested that: re-running a cycle on the same issue (a retry, a
+    # resume after a deploy, a second ▶ Play) created a fresh copy of the
+    # whole breakdown. Found re-running theswarm#85 after cancelling its
+    # first cycle — four sub-tasks were about to become eight.
+    broken_down = await _already_broken_down(github)
+    ready_issues = [i for i in ready_issues if i["number"] not in broken_down]
 
     if not ready_issues:
         log.info("TechLead: no issues to break down")
