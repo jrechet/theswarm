@@ -66,6 +66,9 @@ class AgentState(TypedDict, total=False):
     max_dev_retries: int
     target_issue: int | None  # issue-driven flow: pin the cycle to one GH issue
     deps_fingerprint: str  # hash of requirements.txt last installed
+    # A targeted child whose behavior already exists (implemented by a
+    # sibling task) is closed instead of merged — nothing to test or PR.
+    already_satisfied: bool
     blockers: list[dict]
     pr: dict | None
     # TechLead-specific
