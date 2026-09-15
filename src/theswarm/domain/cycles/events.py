@@ -74,6 +74,20 @@ class CycleFailed(DomainEvent):
 
 
 @dataclass(frozen=True)
+class CycleCancelled(DomainEvent):
+    """Somebody stopped the cycle on purpose.
+
+    Unlike CycleFailed nothing went wrong, and unlike a crash it must never
+    be resumed: cancelling used to touch only the in-memory tracker, so the
+    next restart read the row still 'running' and brought the cycle back on
+    top of the one that had replaced it (c865170a1c4d → 16f3b8af2cca).
+    """
+    cycle_id: CycleId = field(default_factory=CycleId.generate)
+    project_id: str = ""
+    reason: str = ""
+
+
+@dataclass(frozen=True)
 class BudgetExceeded(DomainEvent):
     cycle_id: CycleId = field(default_factory=CycleId.generate)
     project_id: str = ""

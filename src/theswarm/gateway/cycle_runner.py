@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 async def run_swarm_cycle(gw: SwarmGateway, user_id: str, repo_name: str = "") -> None:
     """Run a full SWARM dev cycle with progress updates to Mattermost."""
-    from theswarm.cycle import run_daily_cycle
+    from theswarm.cycle import repo_lock, run_daily_cycle
     from theswarm.config import CycleConfig
 
     chat = gw._swarm_po_chat
@@ -67,7 +67,8 @@ async def run_swarm_cycle(gw: SwarmGateway, user_id: str, repo_name: str = "") -
         for attempt in range(1, max_retries + 1):
             try:
                 cycle_config = CycleConfig(github_repo=github_repo)
-                result = await run_daily_cycle(cycle_config, on_progress=on_progress)
+                async with repo_lock(github_repo):
+                    result = await run_daily_cycle(cycle_config, on_progress=on_progress)
 
                 dash.cost_so_far = result.get("cost_usd", 0.0)
 

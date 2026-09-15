@@ -185,6 +185,21 @@ class Cycle:
             prs_merged=self.prs_merged,
         )
 
+    def cancel(self) -> Cycle:
+        return Cycle(
+            id=self.id,
+            project_id=self.project_id,
+            status=CycleStatus.CANCELLED,
+            triggered_by=self.triggered_by,
+            started_at=self.started_at,
+            completed_at=datetime.now(timezone.utc),
+            phases=self.phases,
+            budgets=self.budgets,
+            total_cost_usd=self.total_cost_usd,
+            prs_opened=self.prs_opened,
+            prs_merged=self.prs_merged,
+        )
+
     def get_budget(self, role: str) -> Budget | None:
         for b in self.budgets:
             if b.role == role:

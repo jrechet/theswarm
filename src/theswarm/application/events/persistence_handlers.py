@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from theswarm.domain.cycles.entities import Cycle, PhaseExecution
 from theswarm.domain.cycles.events import (
     AgentActivity,
+    CycleCancelled,
     CycleCompleted,
     CycleFailed,
     CycleStarted,
@@ -38,6 +39,8 @@ class CyclePersistenceHandler:
             await self._on_completed(event)
         elif isinstance(event, CycleFailed):
             await self._on_failed(event)
+        elif isinstance(event, CycleCancelled):
+            await self._on_cancelled(event)
 
     async def _on_started(self, event: CycleStarted) -> None:
         try:
@@ -139,6 +142,34 @@ class CyclePersistenceHandler:
             await self._cycle_repo.save(cycle)
         except Exception:
             log.exception("Failed to persist CycleFailed %s", event.cycle_id)
+
+    async def _on_cancelled(self, event: CycleCancelled) -> None:
+        """Write the cancellation down, so a restart cannot resume it."""
+        try:
+            cycle = await self._cycle_repo.get(event.cycle_id)
+            if cycle is None:
+                return
+            phases = list(cycle.phases)
+            if phases and phases[-1].status == PhaseStatus.RUNNING:
+                phases[-1] = phases[-1].fail(
+                    summary=f"Cancelled: {event.reason}"[:200] if event.reason else "Cancelled",
+                )
+            cycle = Cycle(
+                id=cycle.id,
+                project_id=cycle.project_id,
+                status=CycleStatus.CANCELLED,
+                triggered_by=cycle.triggered_by,
+                started_at=cycle.started_at,
+                completed_at=event.occurred_at,
+                phases=tuple(phases),
+                budgets=cycle.budgets,
+                total_cost_usd=cycle.total_cost_usd,
+                prs_opened=cycle.prs_opened,
+                prs_merged=cycle.prs_merged,
+            )
+            await self._cycle_repo.save(cycle)
+        except Exception:
+            log.exception("Failed to persist CycleCancelled %s", event.cycle_id)
 
 
 class ActivityPersistenceHandler:

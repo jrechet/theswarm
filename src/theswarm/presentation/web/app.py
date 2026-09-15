@@ -52,6 +52,7 @@ from theswarm.domain.cycles.events import (
     BudgetExceeded,
     CycleCompleted,
     CycleFailed,
+    CycleCancelled,
     CycleStarted,
     PhaseChanged,
 )
@@ -191,7 +192,7 @@ def create_web_app(
 
     # Persistence event handlers — store cycles and activities in SQLite
     cycle_persistence = CyclePersistenceHandler(cycle_repo)
-    for evt_type in (CycleStarted, PhaseChanged, CycleCompleted, CycleFailed):
+    for evt_type in (CycleStarted, PhaseChanged, CycleCompleted, CycleFailed, CycleCancelled):
         event_bus.subscribe(evt_type, cycle_persistence.handle)
     if activity_repo is not None:
         activity_persistence = ActivityPersistenceHandler(activity_repo)
@@ -209,6 +210,7 @@ def create_web_app(
             AgentStep,
             CycleCompleted,
             CycleFailed,
+            CycleCancelled,
             BudgetExceeded,
         ):
             event_bus.subscribe(evt_type, cycle_event_persistence.handle)
