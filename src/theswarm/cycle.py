@@ -34,7 +34,11 @@ PHASE_TIMEOUTS = {
     # fires first and hides the real cause.
     "po_morning": 8 * 60,
     "techlead_breakdown": 10 * 60,
-    "dev_iter": 25 * 60,
+    # 30 min holds one implementation call at ClaudeCLI's 780s ceiling plus
+    # its retry (1560s) and still leaves room for the dependency install, the
+    # test run and the commit. 25 min capped the usable budget below 520s,
+    # which is under what TheSwarm's own repo needs to be read at all.
+    "dev_iter": 30 * 60,
     "techlead_review": 5 * 60,
     "qa": 15 * 60,
     "po_evening": 5 * 60,

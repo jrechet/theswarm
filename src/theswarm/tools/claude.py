@@ -190,9 +190,29 @@ class ClaudeCLI:
     max_retries: int = 2
     retry_base_ms: int = 1000
     timeout_growth: float = 1.3
+    # Ceiling on the learned floor below. `dev_iter` budgets 30 min and must
+    # still hold one call plus its retry, so 2 × 780s = 1560s leaves ~4 min
+    # for the dependency install, the test run and the commit around them.
+    timeout_ceiling: int = 780
+    # The largest budget already proven insufficient, learned across calls.
+    # Not a tuning knob: it only ever moves up, and only after a real timeout.
+    _timeout_floor: int = field(default=0, repr=False)
     # Injected so tests can stub. Not repr-ed.
     _sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep, repr=False)
     _rng: random.Random = field(default_factory=random.Random, repr=False)
+
+    def _effective_timeout(self, timeout: int | None) -> int:
+        """The budget to actually use: never one that has already expired.
+
+        `_retry_timeout` grows a budget *within* a single `run()`. That alone
+        cannot escape a repo where the work simply needs more room than the
+        caller's constant: the next dev iteration starts back at the original
+        budget, dies at exactly the same point, and pays the same tuition
+        again. TheSwarm asked to work on its own source did that five times
+        over — 420s then 546s, 16 minutes an iteration, no progress and no
+        new information (cycle be8e68aaef9d, issue #85).
+        """
+        return max(timeout or self.timeout, self._timeout_floor)
 
     def _resolve_model(self) -> str:
         return _MODEL_MAP.get(self.model, self.model)
@@ -204,12 +224,16 @@ class ClaudeCLI:
                 model=self.model, timeout=self.timeout, max_tokens=self.max_tokens,
                 max_retries=self.max_retries, retry_base_ms=self.retry_base_ms,
                 timeout_growth=self.timeout_growth,
+                timeout_ceiling=self.timeout_ceiling,
+                _timeout_floor=self._timeout_floor,
             )
         model = routing.get(task_category, self.model)
         return ClaudeCLI(
             model=model, timeout=self.timeout, max_tokens=self.max_tokens,
             max_retries=self.max_retries, retry_base_ms=self.retry_base_ms,
             timeout_growth=self.timeout_growth,
+            timeout_ceiling=self.timeout_ceiling,
+            _timeout_floor=self._timeout_floor,
         )
 
     def _compute_backoff_ms(self, attempt: int) -> int:
@@ -319,12 +343,17 @@ class ClaudeCLI:
         120s twice in a row and the cycle failed with no useful diagnosis.
         Only timeouts grow; a crash or an auth failure keeps its budget.
         """
-        effective = timeout or self.timeout
+        effective = self._effective_timeout(timeout)
         if not _is_timeout(error):
             return effective
-        grown = int(effective * self.timeout_growth)
+        grown = min(int(effective * self.timeout_growth), self.timeout_ceiling)
+        # Remember it, so the next call starts here instead of relearning that
+        # `effective` is too small. Capped: a budget that keeps growing turns a
+        # hung call into a phase timeout with no diagnosis attached.
+        self._timeout_floor = grown
         log.warning(
-            "Claude CLI timed out at %ds — retrying with %ds", effective, grown,
+            "Claude CLI timed out at %ds — retrying with %ds "
+            "(floor for later calls in this cycle)", effective, grown,
         )
         return grown
 
@@ -344,7 +373,7 @@ class ClaudeCLI:
         if binary is None:
             raise _CLIUnavailable("claude binary not on PATH")
 
-        effective_timeout = timeout or self.timeout
+        effective_timeout = self._effective_timeout(timeout)
         model_id = self._resolve_model()
 
         cmd = [
@@ -457,7 +486,7 @@ class ClaudeCLI:
         timeout: int | None,
     ) -> ClaudeResult:
         """Anthropic Messages API path with adaptive retry/backoff."""
-        effective_timeout = timeout or self.timeout
+        effective_timeout = self._effective_timeout(timeout)
         model_id = self._resolve_model()
 
         system_parts = []
