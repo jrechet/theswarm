@@ -7,6 +7,7 @@ This module only contains the in-memory models used by cycle execution.
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 import os
@@ -208,7 +209,7 @@ async def send_callback(url: str, payload: dict) -> None:
         log.exception("Failed to send callback to %s", url)
 
 
-async def run_api_cycle(
+async def _run_api_cycle(
     cycle_id: str,
     repo: str,
     description: str,
@@ -437,6 +438,17 @@ async def run_api_cycle(
             cycle_id, CycleStatus.CANCELLED,
             completed_at=datetime.now().isoformat(timespec="seconds"),
         )
+        # The tracker is memory; the cycles table is what a restart reads.
+        # Without this row update the resumer took a cancelled cycle for an
+        # interrupted one and relaunched it.
+        if event_bus is not None:
+            from theswarm.domain.cycles.events import CycleCancelled
+            from theswarm.domain.cycles.value_objects import CycleId
+            await event_bus.publish(CycleCancelled(
+                cycle_id=CycleId(cycle_id),
+                project_id=repo,
+                reason="cancelled by request",
+            ))
     except Exception as e:
         error_msg = f"{type(e).__name__}: {e}"
         log.exception("API cycle %s failed", cycle_id)
@@ -462,3 +474,32 @@ async def run_api_cycle(
             })
     finally:
         dash.end_cycle()
+
+
+@functools.wraps(_run_api_cycle)
+async def run_api_cycle(cycle_id: str, repo: str, *args, **kwargs) -> None:
+    """Run one cycle — after any other cycle on the same repository.
+
+    Two cycles on one repo share one workspace, and each resets, cleans and
+    deletes it as if it were alone. The morning a deploy resumed a cycle
+    while a fresh one started on the same repo, both committed real work
+    and neither opened a PR: each erased the other's branch in turn.
+
+    While waiting, the record stays 'queued' — which is what it is.
+    Cancelling a waiting cycle is honoured immediately: nothing has started,
+    so there is nothing to persist beyond the status.
+    """
+    from theswarm.cycle import repo_lock
+
+    tracker = get_cycle_tracker()
+    lock = repo_lock(repo)
+    if lock.locked():
+        log.info("Cycle %s queued: another cycle is running on %s", cycle_id, repo)
+    try:
+        async with lock:
+            await _run_api_cycle(cycle_id, repo, *args, **kwargs)
+    except asyncio.CancelledError:
+        tracker.update_status(
+            cycle_id, CycleStatus.CANCELLED,
+            completed_at=datetime.now().isoformat(timespec="seconds"),
+        )

@@ -20,6 +20,27 @@ MAX_DEV_ITERATIONS = 5  # safety cap per cycle
 MAX_AUTONOMOUS_CYCLES = 10  # safety cap for autonomous mode
 MAX_DAILY_STORIES = 3  # imported by PO but defined here for reference
 
+# One cycle per repository at a time, whatever started it — the API, the
+# Mattermost gateway, the autonomous loop or the resumer after a deploy.
+# The workspace is one directory per repo, and a cycle treats it as its own:
+# `git reset --hard`, `clean -fd`, `checkout -B`, and rm -rf at the end.
+_repo_locks: dict[str, tuple[asyncio.AbstractEventLoop, asyncio.Lock]] = {}
+
+
+def repo_lock(repo: str) -> asyncio.Lock:
+    """The lock every cycle on `repo` must hold while it runs.
+
+    Call it from a coroutine. An asyncio.Lock binds to the loop that first
+    waits on it, so a lock left over from a loop that no longer runs is
+    replaced rather than reused — nothing on a dead loop can be holding it.
+    """
+    loop = asyncio.get_running_loop()
+    entry = _repo_locks.get(repo)
+    if entry is None or entry[0] is not loop:
+        entry = _repo_locks[repo] = (loop, asyncio.Lock())
+    return entry[1]
+
+
 # Per-phase hard timeouts (seconds). Beyond this we abort the phase rather
 # than letting it hang indefinitely.
 #
@@ -479,6 +500,13 @@ async def run_daily_cycle(
                 await _progress("TechLead", f"PR #{r['pr_number']}: {r['decision']}")
             if merged:
                 await _progress("TechLead", f"Merged: {merged}")
+            held = tl_state.get("held_prs", [])
+            if held:
+                await _progress(
+                    "TechLead",
+                    f"Approved, not merged: {held} — merging {config.github_repo} "
+                    "redeploys the swarm and would end this cycle mid-flight",
+                )
 
             # Pull latest into workspace so next iteration builds on merged code
             if merged:
@@ -749,7 +777,8 @@ async def run_autonomous(
             print(f"Remaining work: {status}")
 
         try:
-            result = await run_daily_cycle(config, on_progress=on_progress)
+            async with repo_lock(config.github_repo):
+                result = await run_daily_cycle(config, on_progress=on_progress)
             cycle_results.append(result)
             total_cost += result.get("cost_usd", 0.0)
             total_tokens += result.get("tokens", 0)

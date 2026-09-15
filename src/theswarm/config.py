@@ -22,6 +22,14 @@ class Phase(str, enum.Enum):
     EVENING = "evening"          # PO validates demo + writes report
 
 
+# The repository this very service is deployed from. A cycle running against
+# it is the swarm working on itself, and one thing must not happen there: a
+# merge to main redeploys the service, and the redeploy kills the cycle that
+# just merged. The TechLead reviews and approves; merging is left to a person
+# — or to me, between two cycles.
+SELF_REPO = "jrechet/theswarm"
+
+
 class AgentState(TypedDict, total=False):
     """State flowing through every agent graph."""
     team_id: str
@@ -60,6 +68,7 @@ class AgentState(TypedDict, total=False):
     # TechLead-specific
     reviews: list[dict]
     merged_prs: list[int]
+    held_prs: list[int]  # approved, deliberately left unmerged (SELF_REPO)
     # QA-specific
     test_counts: dict
     e2e_passed: bool

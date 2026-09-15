@@ -13,7 +13,7 @@ import re
 from langgraph.graph import END, StateGraph
 
 from theswarm.agents.base import load_context, stub_result
-from theswarm.config import AgentState, Role
+from theswarm.config import SELF_REPO, AgentState, Role
 
 log = logging.getLogger(__name__)
 
@@ -377,6 +377,22 @@ async def merge_approved_prs(state: AgentState) -> dict:
         return stub_result(Role.TECHLEAD, "merge_approved_prs",
                            "merge all approved PRs into main")
 
+    # On its own repository the swarm reviews but does not merge: a merge to
+    # main redeploys this service, and the redeploy ends the cycle that just
+    # merged — halfway through its own review phase, before QA ever runs.
+    if state.get("github_repo") == SELF_REPO:
+        held = [r["pr_number"] for r in reviews if r.get("decision") == "APPROVE"]
+        if held:
+            log.info("Holding approved PRs %s on %s: merging would redeploy "
+                     "this service mid-cycle", held, SELF_REPO)
+        return {
+            "result": (f"Approved, held for a human to merge: {held}"
+                       if held else "No PRs to process"),
+            "merged_prs": [],
+            "held_prs": held,
+            "tokens_used": 0,
+        }
+
     merged = []
     rejected = []
     for review in reviews:
@@ -417,6 +433,7 @@ async def merge_approved_prs(state: AgentState) -> dict:
     return {
         "result": " | ".join(summary) if summary else "No PRs to process",
         "merged_prs": merged,
+        "held_prs": [],
         "tokens_used": 0,
     }
 
