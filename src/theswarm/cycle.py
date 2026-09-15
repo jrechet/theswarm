@@ -200,6 +200,22 @@ async def _ensure_workspace(config: CycleConfig) -> None:
     await clone_repo(config.repo_clone_url, config.workspace_dir)
 
 
+async def _close_already_satisfied(github, task: dict, evidence: str) -> None:
+    """Close a sub-task Claude found already implemented by a sibling task.
+
+    Story #85: a no-PR outcome with evidence of prior work is not a failure
+    to retry — re-running it just re-discovers the same fact. Closing it
+    here (instead of leaving it status:in-progress for the "twice without a
+    PR" path to catch) is also what keeps it out of `_requeue_unfinished`'s
+    scan below: that query only ever sees open issues, and a closed issue is
+    not "claimed but unfinished".
+    """
+    number = task["number"]
+    await github.remove_label(number, "status:in-progress")
+    comment = f"Already satisfied — {evidence}"
+    await github.close_issue(number, comment=comment)
+
+
 async def _requeue_unfinished(config) -> list[int]:
     """Return this cycle's claimed-but-unfinished tasks to the ready queue.
 
@@ -219,6 +235,9 @@ async def _requeue_unfinished(config) -> list[int]:
     try:
         github = GitHubClient(config.github_repo)
         marker = f"Parent: #{target}"
+        # get_issues defaults to state="open" — a task _close_already_satisfied
+        # already closed never shows up here, so it can't be handed back to
+        # status:ready by this pass.
         children = await github.get_issues(labels=["role:dev", "status:in-progress"])
         requeued: list[int] = []
         for child in children:
@@ -485,13 +504,26 @@ async def run_daily_cycle(
                 if task is None:
                     await _progress("Dev", "No more ready tasks — ending dev loop")
                     break
+                number = task["number"]
+                # A sub-task Claude reports as already implemented (by a
+                # sibling task) is not a failed attempt: close it and move on
+                # to the next ready task instead of burning the "twice
+                # without a PR" allowance re-discovering the same fact
+                # (story #85).
+                evidence = dev_state.get("already_satisfied")
+                if evidence:
+                    await _close_already_satisfied(base_state.get("github"), task, evidence)
+                    await _progress(
+                        "Dev",
+                        f"Task #{number} already satisfied — closed ({evidence[:80]})",
+                    )
+                    continue
                 # A task that yields no PR twice yields none at all: a
                 # verification story with nothing to change, or work the
                 # model cannot complete. Without this the loop re-picks it
                 # every iteration — harmless before targeting (each iteration
                 # took a different issue), a guaranteed five-times-nothing
                 # once the cycle is pinned to one issue.
-                number = task["number"]
                 if number in attempted_without_pr:
                     await _progress(
                         "Dev",
