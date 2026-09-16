@@ -196,6 +196,18 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   end in `commit_all`, whose answer decides. The container's Bash
   allowlist is the host's `~/.claude/settings.json` mounted in — do not
   rely on it.
+- **A PR is reviewed once per cycle, at a given head** (`reviewed_prs`,
+  the cycle's own list, threaded into every `techlead_review` pass). The
+  review node runs after every Dev iteration; a held (SELF_REPO) or
+  commented PR is still open next time and nothing about it changed —
+  cycle 5f8f0f63f58c read #124 three times and the 300s phase timed out
+  on the pass that mattered. A new push changes the key and earns a new
+  review.
+- **The verdict is read wherever the reviewer put it.** Prose, then a
+  fenced ```json block, is a common shape; the parser takes the first
+  object that carries a `decision`, fenced or bare, and steps over braces
+  in prose (`{id}`) and example payloads. Slicing first-`{`-to-last-`}`
+  filed an APPROVE with three issues as COMMENT (#126).
 - **A failed attempt leaves a trace on the issue** (`ATTEMPT_MARKER` comment,
   `agents/dev._note_failed_attempt`), and the picker reads those back: a
   sub-task that failed in an earlier cycle goes behind its untried siblings

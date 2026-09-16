@@ -404,6 +404,7 @@ def _pr_to_dict(pr: PullRequest) -> dict:
         "body": pr.body or "",
         "state": pr.state,
         "head": pr.head.ref,
+        "head_sha": pr.head.sha,
         "base": pr.base.ref,
         "mergeable": pr.mergeable,
         "url": pr.html_url,
