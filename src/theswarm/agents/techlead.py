@@ -318,7 +318,7 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
              pr_number, result.total_tokens, result.cost_usd)
 
     # Parse the review
-    review_data = _parse_review_json(result.text)
+    review_data, salvaged = _parse_review(result.text)
     decision = review_data.get("decision", "COMMENT")
     summary = review_data.get("summary", "Review completed.")
     issues = review_data.get("issues", [])
@@ -327,7 +327,6 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
     # and reviews PRs, so GitHub blocks REQUEST_CHANGES (422).  Only truly
     # critical issues (security vulnerabilities, data loss) should block.
     # "major" style/quality issues are acceptable for autonomous mode.
-    salvaged = bool(review_data.get("salvaged"))
     if decision == "REQUEST_CHANGES" and salvaged:
         # The verdict came out of prose: its reasons are in the summary, not
         # in a list this override can weigh. PR #117 asked for changes and
@@ -588,7 +587,14 @@ def _format_files_diff(files: list[dict]) -> str:
 
 
 def _parse_review_json(text: str) -> dict:
-    """Parse Claude's review JSON, with fallback."""
+    """Parse Claude's review JSON, with fallback (the review dict alone)."""
+    return _parse_review(text)[0]
+
+
+def _parse_review(text: str) -> tuple[dict, bool]:
+    """(review, salvaged): the review dict, and whether its verdict had to be
+    read out of prose because no JSON was found. Kept apart from the dict
+    — the schema guard reads every returned dict key in agents/ as state."""
     # Strip markdown fences if present
     clean = text.strip()
     if clean.startswith("```"):
@@ -598,14 +604,14 @@ def _parse_review_json(text: str) -> dict:
         ).strip()
 
     try:
-        return json.loads(clean)
+        return json.loads(clean), False
     except json.JSONDecodeError:
         # Try to find JSON in the text
         start = clean.find("{")
         end = clean.rfind("}") + 1
         if start >= 0 and end > start:
             try:
-                return json.loads(clean[start:end])
+                return json.loads(clean[start:end]), False
             except json.JSONDecodeError:
                 pass
         # Not JSON — but the verdict is usually right there in the prose.
@@ -615,10 +621,9 @@ def _parse_review_json(text: str) -> dict:
         decision = _salvage_decision(clean)
         log.warning("Could not parse review JSON (decision read as %s): %s",
                     decision, clean[:200])
-        # `salvaged`: the issues list is empty because the answer had no
-        # structure, not because the reviewer found nothing — the override
-        # below must not read it as a clean bill of health.
-        return {"decision": decision, "summary": clean[:4000], "issues": [], "salvaged": True}
+        # Salvaged: the issues list is empty because the answer had no
+        # structure, not because the reviewer found nothing.
+        return {"decision": decision, "summary": clean[:4000], "issues": []}, True
 
 
 _DECISION_RE = re.compile(
