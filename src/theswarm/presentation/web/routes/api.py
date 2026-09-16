@@ -50,8 +50,8 @@ async def api_dashboard(request: Request) -> JSONResponse:
     query: GetDashboardQuery = request.app.state.get_dashboard_query
     dto = await query.execute()
     return JSONResponse({
-        "active_cycles": [_cycle_dto_to_json(c) for c in dto.active_cycles],
-        "recent_cycles": [_cycle_dto_to_json(c) for c in dto.recent_cycles],
+        "active_cycles": [_cycle_dto_to_unified_json(c) for c in dto.active_cycles],
+        "recent_cycles": [_cycle_dto_to_unified_json(c) for c in dto.recent_cycles],
         "recent_activities": [
             {
                 "timestamp": a.timestamp,
@@ -276,12 +276,10 @@ async def api_cycle(request: Request, cycle_id: str) -> JSONResponse:
 
 
 @router.get("/cycles")
-async def api_list_cycles(limit: int = 20) -> JSONResponse:
-    """List recent cycles from the in-memory tracker."""
-    from theswarm.api import get_cycle_tracker
-    tracker = get_cycle_tracker()
-    records = tracker.list_recent(limit=min(limit, 100))
-    return JSONResponse({"cycles": [r.model_dump() for r in records]})
+async def api_list_cycles(request: Request, limit: int = 20) -> JSONResponse:
+    """List recent cycles, merged from the v2 SQLite repo and the in-memory tracker."""
+    cycles = await _list_merged_cycles(request, "", limit)
+    return JSONResponse({"cycles": cycles})
 
 
 @router.post("/cycle")
@@ -471,7 +469,7 @@ def _phase_dto_to_json(p) -> dict:
     }
 
 
-def _cycle_dto_to_json(c) -> dict:
+def _cycle_dto_to_unified_json(c) -> dict:
     # `phases` may be either PhaseDTO instances or SimpleNamespace tracker adapters.
     phases_out = []
     for p in c.phases:
@@ -490,6 +488,52 @@ def _cycle_dto_to_json(c) -> dict:
         "prs_merged": list(c.prs_merged),
         "phases": phases_out,
     }
+
+
+def _tracker_record_to_unified_json(record) -> dict:
+    """Shape an in-memory `CycleRecord` like `_cycle_dto_to_unified_json` so merged listings are uniform."""
+    result = record.result or {}
+    return {
+        "id": record.id,
+        "project_id": record.repo,
+        "status": record.status.value,
+        "triggered_by": "web",
+        "started_at": record.started_at or None,
+        "completed_at": record.completed_at or None,
+        "total_tokens": result.get("total_tokens", 0),
+        "total_cost_usd": result.get("cost_usd", 0.0),
+        "prs_opened": result.get("prs_opened", []),
+        "prs_merged": result.get("prs_merged", []),
+        "phases": [],
+    }
+
+
+async def _list_merged_cycles(request: Request, project_id: str, limit: int) -> list[dict]:
+    """Merge persisted (SQLite) cycles with the in-memory tracker, deduped and sorted.
+
+    A cycle present in both stores keeps its SQLite version — the tracker
+    copy of an already-persisted cycle carries no information the durable
+    record doesn't, and SQLite is what survives a container restart.
+    """
+    from theswarm.api import get_cycle_tracker
+    from theswarm.application.queries.list_cycles import ListCyclesQuery
+
+    limit = min(limit, 100)
+    query: ListCyclesQuery = request.app.state.list_cycles_query
+    v2_cycles = await query.execute(project_id, limit=limit)
+    v2_ids = {c.id for c in v2_cycles}
+
+    entries = [(c.started_at or "", _cycle_dto_to_unified_json(c)) for c in v2_cycles]
+    for record in get_cycle_tracker().list_recent(limit=limit):
+        if record.id in v2_ids:
+            continue
+        if project_id and record.repo != project_id:
+            continue
+        sort_key = record.started_at or record.created_at
+        entries.append((sort_key, _tracker_record_to_unified_json(record)))
+
+    entries.sort(key=lambda pair: pair[0], reverse=True)
+    return [entry for _, entry in entries[:limit]]
 
 
 def _artifact_to_json(a) -> dict:
@@ -633,34 +677,7 @@ async def api_cycles_all(
     limit: int = 30,
 ) -> JSONResponse:
     """List cycles across v2 repo AND in-memory tracker, optionally filtered by project."""
-    from theswarm.application.queries.list_cycles import ListCyclesQuery
-    from theswarm.api import get_cycle_tracker
-
-    query: ListCyclesQuery = request.app.state.list_cycles_query
-    v2_cycles = await query.execute(project_id, limit=min(limit, 100))
-    v2_ids = {c.id for c in v2_cycles}
-
-    tracker_cycles = []
-    for record in get_cycle_tracker().list_recent(limit=min(limit, 100)):
-        if record.id in v2_ids:
-            continue
-        if project_id and record.repo != project_id:
-            continue
-        tracker_cycles.append({
-            "id": record.id,
-            "project_id": record.repo,
-            "status": record.status.value,
-            "triggered_by": "web",
-            "started_at": record.started_at,
-            "completed_at": record.completed_at,
-            "total_tokens": record.result.get("total_tokens", 0) if record.result else 0,
-            "total_cost_usd": record.result.get("cost_usd", 0.0) if record.result else 0.0,
-            "prs_opened": record.result.get("prs_opened", []) if record.result else [],
-            "prs_merged": record.result.get("prs_merged", []) if record.result else [],
-            "phases": [],
-        })
-
-    merged = [_cycle_dto_to_json(c) for c in v2_cycles] + tracker_cycles
+    merged = await _list_merged_cycles(request, project_id, limit)
     return JSONResponse({"cycles": merged, "count": len(merged)})
 
 
