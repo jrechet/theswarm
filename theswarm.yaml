@@ -17,3 +17,14 @@ agents:
     default_repo: "jrechet/concert-tour-app"
     team_channel: "swarm-team"
     channel: "swarm-bots-logs"
+
+# How the swarm demos itself. QA starts a target with `demo.command` when it
+# declares one, instead of the FastAPI default (uvicorn src.main:app).
+# Placeholders: {python} — the target's interpreter, {port}, {tmp} — a fresh
+# directory. The environment is scrubbed: only demo.env reaches the process,
+# so this second instance never holds the real GitHub or Mattermost tokens.
+demo:
+  command: "{python} -m theswarm serve --host 127.0.0.1 --port {port} --db {tmp}/demo.db"
+  env:
+    SWARM_AUTH_DISABLED: "1"
+    BASE_PATH: ""

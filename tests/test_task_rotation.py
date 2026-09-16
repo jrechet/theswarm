@@ -26,10 +26,16 @@ def _child(number: int, *, parent: int = 85, status: str = "status:ready") -> di
     }
 
 
-def _github(target: dict, children: list[dict]) -> AsyncMock:
+def _github(target: dict, children: list[dict], failures: dict[int, int] | None = None) -> AsyncMock:
     gh = AsyncMock()
     gh.get_issue = AsyncMock(return_value=target)
     gh.get_issues = AsyncMock(return_value=children)
+    marker = "<!-- swarm:attempt failed -->\n⏱ Attempt failed — CLI timed out after 546s"
+
+    async def comments(number: int) -> list[dict]:
+        return [{"body": marker}] * (failures or {}).get(number, 0)
+
+    gh.get_issue_comments = AsyncMock(side_effect=comments)
     return gh
 
 
@@ -249,3 +255,56 @@ class TestTheProductionScenario:
 
         counts = [tried.count(n) for n in pool]
         assert max(counts) - min(counts) <= 1
+
+
+class TestEarlierCyclesCount:
+    """What earlier cycles left on the issue orders the very first pick.
+
+    Every self-cycle started with #89 — the heavy end-to-end task that had
+    timed out in the cycle before, and the one before that — and lost the
+    first sixteen minutes rediscovering it (#99)."""
+
+    async def test_a_task_that_failed_last_cycle_goes_behind_fresh_siblings(self):
+        gh = _github(_story(), list(NEWEST_FIRST), failures={89: 2})
+
+        picked = await _pick_targeted(gh, 85, [])
+
+        assert picked["number"] == 88
+
+    async def test_this_cycles_attempts_still_come_first(self):
+        """A sibling untried today beats one tried today, whatever history says."""
+        gh = _github(_story(), list(NEWEST_FIRST), failures={88: 3})
+
+        picked = await _pick_targeted(gh, 85, [89, 87, 86])
+
+        assert picked["number"] == 88
+
+    async def test_fewer_past_failures_first(self):
+        gh = _github(_story(), list(NEWEST_FIRST), failures={89: 3, 88: 1, 87: 2})
+
+        picked = await _pick_targeted(gh, 85, [])
+
+        assert picked["number"] == 86
+
+    async def test_history_comes_back_last_not_never(self):
+        gh = _github(_story(), [_child(89)], failures={89: 4})
+
+        picked = await _pick_targeted(gh, 85, [])
+
+        assert picked["number"] == 89
+
+    async def test_a_comments_api_failure_changes_nothing(self):
+        gh = _github(_story(), list(NEWEST_FIRST))
+        gh.get_issue_comments = AsyncMock(side_effect=RuntimeError("503"))
+
+        picked = await _pick_targeted(gh, 85, [])
+
+        assert picked["number"] == 89
+
+    async def test_a_surprising_payload_changes_nothing(self):
+        gh = _github(_story(), list(NEWEST_FIRST))
+        gh.get_issue_comments = AsyncMock(return_value=None)
+
+        picked = await _pick_targeted(gh, 85, [])
+
+        assert picked["number"] == 89

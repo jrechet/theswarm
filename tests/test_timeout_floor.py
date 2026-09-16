@@ -142,3 +142,65 @@ class TestDefaultsUnchangedWhenNothingTimesOut:
     @pytest.mark.parametrize("asked", [30, 180, 420, 780])
     def test_no_floor_means_no_change(self, asked):
         assert ClaudeCLI()._effective_timeout(asked) == asked
+
+
+# ── The floor outlives the instance, per workspace ─────────────────────
+#
+# A cycle's instance learned 420 → 546 → 709 on TheSwarm's own repo and took
+# it to the grave; the next cycle paid the same sixteen minutes to learn it
+# again (#99).
+
+
+@pytest.fixture(autouse=True)
+def _clean_repo_floors():
+    from theswarm.tools import claude as claude_mod
+
+    claude_mod._REPO_FLOORS.clear()
+    yield
+    claude_mod._REPO_FLOORS.clear()
+
+
+class TestRepoFloorSurvivesTheInstance:
+    def test_a_fresh_instance_starts_where_the_last_one_stopped(self):
+        first = ClaudeCLI()
+        first._retry_timeout(420, _timeout(420), workdir="/ws/theswarm")
+
+        second = ClaudeCLI()
+
+        assert second._effective_timeout(420, "/ws/theswarm") == 546
+
+    def test_workspaces_do_not_share_a_floor(self):
+        ClaudeCLI()._retry_timeout(420, _timeout(420), workdir="/ws/theswarm")
+
+        assert ClaudeCLI()._effective_timeout(420, "/ws/concert-tour-app") == 420
+
+    def test_the_repo_floor_only_moves_up(self):
+        claude = ClaudeCLI()
+        claude._retry_timeout(420, _timeout(420), workdir="/ws/x")   # 546
+        claude._retry_timeout(420, _timeout(546), workdir="/ws/x")   # 709
+
+        from theswarm.tools import claude as claude_mod
+        assert claude_mod._REPO_FLOORS["/ws/x"] == 709
+
+    def test_escalation_continues_across_instances(self):
+        ClaudeCLI()._retry_timeout(420, _timeout(420), workdir="/ws/x")   # 546
+
+        grown = ClaudeCLI()._retry_timeout(420, _timeout(546), workdir="/ws/x")
+
+        assert grown == 709
+
+    def test_no_workdir_no_repo_floor(self):
+        claude = ClaudeCLI()
+        claude._retry_timeout(420, _timeout(420))
+
+        from theswarm.tools import claude as claude_mod
+        assert claude_mod._REPO_FLOORS == {}
+        assert claude._timeout_floor == 546  # the instance still learns
+
+    def test_the_ceiling_bounds_the_repo_floor_too(self):
+        claude = ClaudeCLI(timeout_ceiling=600)
+        for _ in range(6):
+            claude._retry_timeout(500, _timeout(500), workdir="/ws/x")
+
+        from theswarm.tools import claude as claude_mod
+        assert claude_mod._REPO_FLOORS["/ws/x"] == 600

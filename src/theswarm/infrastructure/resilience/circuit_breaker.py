@@ -57,6 +57,12 @@ class CircuitBreaker:
     failure_threshold: int = 5
     reset_seconds: float = 60.0
     immediate_trip_errors: tuple[type[BaseException], ...] = ()
+    # Errors that say something about the *request*, not about the service:
+    # re-raised untouched, counted as neither success nor failure. Four
+    # expected 422s in a row ("cannot review your own pull request") opened
+    # the GitHub breaker on 2026-09-15 and blocked the memory save that
+    # followed — a legitimate call refused for a wall that was never there.
+    ignored_errors: Callable[[BaseException], bool] | None = None
     clock: Callable[[], float] = field(default=time.monotonic)
 
     state: CircuitState = field(default=CircuitState.CLOSED, init=False)
@@ -73,6 +79,8 @@ class CircuitBreaker:
             await self._trip(reason=f"immediate: {type(exc).__name__}")
             raise
         except BaseException as exc:
+            if self.ignored_errors is not None and self.ignored_errors(exc):
+                raise
             await self._on_failure(exc)
             raise
         else:

@@ -120,3 +120,81 @@ async def test_success_resets_failure_counter():
     with pytest.raises(ValueError):
         await cb.call(_boom)
     assert cb.state is CircuitState.OPEN
+
+
+# ── Errors that say something about the request, not the service ───────
+#
+# Four expected 422s ("cannot review your own pull request") opened the
+# GitHub breaker on 2026-09-15 and blocked the memory save that followed.
+
+
+class _ClientError(Exception):
+    pass
+
+
+class _Outage(Exception):
+    pass
+
+
+def _ignoring_client_errors() -> CircuitBreaker:
+    return CircuitBreaker(
+        name="t", failure_threshold=2,
+        ignored_errors=lambda exc: isinstance(exc, _ClientError),
+    )
+
+
+async def test_an_ignored_error_is_re_raised_but_not_counted():
+    breaker = _ignoring_client_errors()
+
+    async def refuse():
+        raise _ClientError("422")
+
+    for _ in range(5):
+        with pytest.raises(_ClientError):
+            await breaker.call(refuse)
+
+    assert breaker.state is CircuitState.CLOSED
+
+
+async def test_an_ignored_error_does_not_reset_the_count_either():
+    breaker = _ignoring_client_errors()
+
+    async def outage():
+        raise _Outage("502")
+
+    async def refuse():
+        raise _ClientError("422")
+
+    with pytest.raises(_Outage):
+        await breaker.call(outage)
+    with pytest.raises(_ClientError):
+        await breaker.call(refuse)
+    with pytest.raises(_Outage):
+        await breaker.call(outage)
+
+    assert breaker.state is CircuitState.OPEN  # two real failures, threshold 2
+
+
+async def test_real_failures_still_open_the_breaker():
+    breaker = _ignoring_client_errors()
+
+    async def outage():
+        raise _Outage("502")
+
+    for _ in range(2):
+        with pytest.raises(_Outage):
+            await breaker.call(outage)
+
+    assert breaker.state is CircuitState.OPEN
+
+
+async def test_without_a_predicate_every_error_counts():
+    breaker = CircuitBreaker(name="t", failure_threshold=1)
+
+    async def refuse():
+        raise _ClientError("422")
+
+    with pytest.raises(_ClientError):
+        await breaker.call(refuse)
+
+    assert breaker.state is CircuitState.OPEN

@@ -85,7 +85,7 @@ Rules:
 - Keep it simple — prefer the most straightforward solution
 - Include a requirements.txt if new dependencies are needed
 
-If the behavior this task asks for is already implemented (e.g. a sibling
+{siblings}If the behavior this task asks for is already implemented (e.g. a sibling
 task delivered it first), do not re-write the file. Output no --- FILE:
 blocks and instead a single line:
 
@@ -123,6 +123,85 @@ def _extract_already_satisfied(text: str) -> tuple[str, str] | None:
     if not match:
         return None
     return match.group("file"), match.group("reason").strip()
+
+
+# Left on an issue by an attempt that failed. The picker reads these back
+# across cycles: a sub-task that failed yesterday goes behind its untried
+# siblings from the very first iteration today, instead of costing every
+# cycle the same sixteen minutes to rediscover it (#99). A person can read
+# it too.
+ATTEMPT_MARKER = "<!-- swarm:attempt failed -->"
+
+_PARENT_RE = re.compile(r"Parent:\s*#(\d+)")
+_PR_TASK_RE = re.compile(r"^\[#(\d+)\]")
+
+
+async def _note_failed_attempt(github, task: dict, reason: str) -> None:
+    """Record on the issue that this attempt failed, and why."""
+    if github is None:
+        return
+    body = f"{ATTEMPT_MARKER}\n⏱ Attempt failed — {reason[:300]}"
+    try:
+        await github.add_comment(task["number"], body)
+    except Exception:
+        log.warning("Could not note the failed attempt on #%s", task.get("number"))
+
+
+async def _prior_failures(github, issue_number: int) -> int:
+    """How many earlier attempts, in any cycle, failed on this issue."""
+    try:
+        comments = await github.get_issue_comments(issue_number)
+        return sum(1 for c in comments if ATTEMPT_MARKER in (c.get("body") or ""))
+    except Exception:
+        return 0
+
+
+async def _sibling_prs(github, task: dict) -> str:
+    """A prompt section listing the open PRs of this task's siblings, or "".
+
+    Four sub-tasks of one story, built in parallel off the same main, each
+    re-implemented what the others had already put in a PR (#104, #105,
+    #108, #109 — one feature, four times). The sibling branches are not in
+    this checkout, but the Dev can at least be told they exist and what
+    they touch, and say ALREADY_SATISFIED instead of writing it a fifth time.
+    """
+    if github is None:
+        return ""
+    match = _PARENT_RE.search(task.get("body") or "")
+    if not match:
+        return ""
+    parent = int(match.group(1))
+    try:
+        children = await github.get_issues(labels=["role:dev"], state="all")
+        siblings = {
+            c["number"] for c in children
+            if f"Parent: #{parent}" in (c.get("body") or "") and c["number"] != task["number"]
+        }
+        if not siblings:
+            return ""
+        lines = []
+        for pr in await github.get_open_prs():
+            found = _PR_TASK_RE.match(pr.get("title") or "")
+            if not found or int(found.group(1)) not in siblings:
+                continue
+            files = await github.get_pr_files(pr["number"])
+            paths = ", ".join(
+                str(f.get("filename") or f.get("path") or "") for f in files[:12]
+            )
+            lines.append(f"- PR #{pr['number']} {pr['title']} — files: {paths}")
+    except Exception:
+        log.warning("Could not list sibling PRs for #%s", task.get("number"))
+        return ""
+    if not lines:
+        return ""
+    return (
+        "## Sibling pull requests already open for this story\n\n"
+        "They are not merged yet, so their code is not in this checkout — but it "
+        "exists. Do not re-implement what they contain. If they already satisfy "
+        "this task's acceptance criteria, say so with ALREADY_SATISFIED (below) "
+        "instead of writing the same code again under another name.\n\n"
+        + "\n".join(lines) + "\n\n"
+    )
 
 
 async def _mark_in_progress(github, task: dict) -> None:
@@ -192,8 +271,12 @@ async def _pick_targeted(
     # A sibling nobody has tried is a better bet than one that just failed,
     # whatever its label says.
     tried = attempted or []
+    # Between this cycle's attempts and the label tier: what earlier cycles
+    # left on the issue. One comments call per candidate — a handful.
+    prior = {child["number"]: await _prior_failures(github, child["number"]) for child in mine}
     mine.sort(key=lambda child: (
         tried.count(child["number"]),
+        prior.get(child["number"], 0),
         0 if "status:ready" in _label_names(child) else 1,
     ))
     if mine:
@@ -273,6 +356,7 @@ async def implement_task(state: AgentState) -> dict:
             task_title=task["title"],
             task_body=task["body"],
             context=context,
+            siblings=await _sibling_prs(github, task),
         )
 
         # Run Claude in the workspace
@@ -312,16 +396,20 @@ async def implement_task(state: AgentState) -> dict:
             f"feat: {task['title']}\n\nCloses #{task['number']}\n\n"
             f"Co-Authored-By: swarm-dev-agent <agent@swarm-bots.local>",
         )
-    except BaseException:
+    except BaseException as exc:
         if github is not None:
             try:
                 await asyncio.shield(_requeue_task(github, task))
+                await asyncio.shield(_note_failed_attempt(
+                    github, task, f"{type(exc).__name__}: {exc}",
+                ))
             except Exception:
                 log.exception("Failed to requeue task #%s", task.get("number"))
         raise
 
     if not committed:
         log.warning("Claude produced no file changes for task #%d", task["number"])
+        await _note_failed_attempt(github, task, "no file changes produced")
         return {
             "result": "no changes produced",
             "tokens_used": result.total_tokens,
