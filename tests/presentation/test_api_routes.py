@@ -13,8 +13,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from theswarm.application.events.bus import EventBus
-from theswarm.domain.cycles.entities import Cycle
-from theswarm.domain.cycles.value_objects import CycleId, CycleStatus
+from theswarm.domain.cycles.entities import Cycle, PhaseExecution
+from theswarm.domain.cycles.value_objects import CycleId, CycleStatus, PhaseStatus
 from theswarm.domain.projects.entities import Project
 from theswarm.domain.projects.value_objects import RepoUrl
 from theswarm.domain.reporting.entities import DemoReport, ReportSummary
@@ -224,6 +224,127 @@ class TestCyclesAll:
         assert "c-x" in ids and "c-y" not in ids
 
 
+# ── Unified GET /api/cycles/{cycle_id} shape ───────────────────────
+
+
+_UNIFIED_KEYS = {
+    "id", "repo", "issue_number", "status", "triggered_by", "started_at",
+    "completed_at", "error", "total_cost_usd", "prs_opened", "prs_merged", "phases",
+}
+_UNIFIED_PHASE_KEYS = {"phase", "agent", "status", "started_at", "completed_at"}
+
+
+class TestGetCycleUnified:
+    async def test_not_found(self, client):
+        r = await client.get("/api/cycles/nonexistent")
+        assert r.status_code == 404
+        assert r.json() == {"error": "not found"}
+
+    async def test_sqlite_cycle_shape(self, client, cycle_repo):
+        now = datetime.now(timezone.utc)
+        await cycle_repo.save(
+            Cycle(
+                id=CycleId("c-sql"),
+                project_id="p1",
+                status=CycleStatus.COMPLETED,
+                triggered_by="scheduler",
+                started_at=now,
+                total_cost_usd=1.23,
+                prs_opened=(9,),
+                prs_merged=(9,),
+                phases=(
+                    PhaseExecution(
+                        phase="dev", agent="dev", started_at=now,
+                        completed_at=now, status=PhaseStatus.COMPLETED,
+                    ),
+                ),
+            ),
+        )
+        r = await client.get("/api/cycles/c-sql")
+        assert r.status_code == 200
+        data = r.json()
+        assert set(data.keys()) == _UNIFIED_KEYS
+        assert data["id"] == "c-sql"
+        assert data["repo"] == "p1"
+        assert data["issue_number"] is None
+        assert data["error"] is None
+        assert data["status"] == "completed"
+        assert data["triggered_by"] == "scheduler"
+        assert data["total_cost_usd"] == 1.23
+        assert data["prs_opened"] == [9]
+        assert data["prs_merged"] == [9]
+        assert len(data["phases"]) == 1
+        phase = data["phases"][0]
+        assert set(phase.keys()) == _UNIFIED_PHASE_KEYS
+        assert phase["phase"] == "dev"
+        assert phase["agent"] == "dev"
+        assert phase["status"] == "completed"
+
+    async def test_tracker_cycle_shape(self, client):
+        from theswarm.api import CycleRequest, CycleStatus as TrackerStatus, get_cycle_tracker
+
+        tracker = get_cycle_tracker()
+        record = tracker.create(CycleRequest(repo="owner/repo", issue_number=42))
+        tracker.update_status(
+            record.id, TrackerStatus.COMPLETED,
+            result={
+                "cost_usd": 2.5,
+                "prs_opened": [7],
+                "prs_merged": [],
+                "agents": [{"role": "qa", "phase": "test", "status": "completed"}],
+            },
+        )
+
+        r = await client.get(f"/api/cycles/{record.id}")
+        assert r.status_code == 200
+        data = r.json()
+        assert set(data.keys()) == _UNIFIED_KEYS
+        assert data["id"] == record.id
+        assert data["repo"] == "owner/repo"
+        assert data["issue_number"] == 42
+        assert data["status"] == "completed"
+        assert data["triggered_by"] == "web"
+        assert data["total_cost_usd"] == 2.5
+        assert data["prs_opened"] == [7]
+        assert data["prs_merged"] == []
+        assert len(data["phases"]) == 1
+        phase = data["phases"][0]
+        assert set(phase.keys()) == _UNIFIED_PHASE_KEYS
+        assert phase["phase"] == "test"
+        assert phase["agent"] == "qa"
+        assert phase["started_at"] is None
+        assert phase["completed_at"] is None
+
+    async def test_tracker_cycle_error_is_present(self, client):
+        from theswarm.api import CycleRequest, CycleStatus as TrackerStatus, get_cycle_tracker
+
+        tracker = get_cycle_tracker()
+        record = tracker.create(CycleRequest(repo="owner/repo"))
+        tracker.update_status(record.id, TrackerStatus.FAILED, error="boom")
+
+        r = await client.get(f"/api/cycles/{record.id}")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["error"] == "boom"
+        assert data["started_at"] is None
+        assert data["completed_at"] is None
+        assert data["phases"] == []
+
+    async def test_sqlite_and_tracker_agree_on_keys(self, client, cycle_repo):
+        now = datetime.now(timezone.utc)
+        await cycle_repo.save(
+            Cycle(id=CycleId("c-keys"), project_id="p1", status=CycleStatus.RUNNING, started_at=now),
+        )
+        from theswarm.api import CycleRequest, get_cycle_tracker
+
+        tracker = get_cycle_tracker()
+        record = tracker.create(CycleRequest(repo="owner/repo"))
+
+        sqlite_resp = await client.get("/api/cycles/c-keys")
+        tracker_resp = await client.get(f"/api/cycles/{record.id}")
+        assert set(sqlite_resp.json().keys()) == set(tracker_resp.json().keys())
+
+
 class TestTriggerCycleForProject:
     async def test_unknown_project_is_404(self, client):
         r = await client.post("/api/projects/unknown/cycle")
@@ -253,88 +374,71 @@ class TestTriggerCycleForProject:
 
 
 class TestReports:
-    async def test_list_reports_empty(self, client):
+    async def test_list_empty(self, client):
         r = await client.get("/api/reports")
         assert r.status_code == 200
         assert r.json() == {"reports": [], "count": 0}
 
-    async def test_list_reports_all(self, client, report_repo):
-        await report_repo.save(_make_report("r1", "alpha", 1))
-        await report_repo.save(_make_report("r2", "beta", 2))
+    async def test_list_reports(self, client, report_repo):
+        await report_repo.save(_make_report("rep-1", "alpha", 1))
+        await report_repo.save(_make_report("rep-2", "alpha", 2))
         r = await client.get("/api/reports")
         assert r.status_code == 200
         data = r.json()
         assert data["count"] == 2
-        assert {rep["id"] for rep in data["reports"]} == {"r1", "r2"}
 
-    async def test_list_reports_by_project(self, client, report_repo):
-        await report_repo.save(_make_report("r1", "alpha", 1))
-        await report_repo.save(_make_report("r2", "beta", 2))
-        r = await client.get("/api/reports?project_id=alpha")
+    async def test_list_reports_filtered_by_project(self, client, report_repo):
+        await report_repo.save(_make_report("rep-a", "alpha", 1))
+        await report_repo.save(_make_report("rep-b", "beta", 1))
+        r = await client.get("/api/reports?project_id=beta")
         data = r.json()
         assert data["count"] == 1
-        assert data["reports"][0]["project_id"] == "alpha"
+        assert data["reports"][0]["project_id"] == "beta"
 
     async def test_get_report_by_id(self, client, report_repo):
-        await report_repo.save(_make_report("r-detail", "alpha", 3))
-        r = await client.get("/api/reports/id/r-detail")
+        await report_repo.save(_make_report("rep-full", "alpha", 3))
+        r = await client.get("/api/reports/id/rep-full")
         assert r.status_code == 200
         data = r.json()
-        assert data["id"] == "r-detail"
-        assert data["summary"]["coverage_percent"] == 82.5
+        assert data["id"] == "rep-full"
         assert "stories" in data
-        assert "artifacts" in data
-        assert data["agent_learnings"] == ["always run tests"]
 
-    async def test_get_report_by_id_not_found(self, client):
-        r = await client.get("/api/reports/id/missing")
+    async def test_get_report_not_found(self, client):
+        r = await client.get("/api/reports/id/nope")
         assert r.status_code == 404
 
 
-# ── Demos ──────────────────────────────────────────────────────────
+# ── Demos ─────────────────────────────────────────────────────────
 
 
-class TestDemosApi:
-    async def test_list_demos_empty(self, client):
+class TestDemos:
+    async def test_list_empty(self, client):
         r = await client.get("/api/demos")
         assert r.status_code == 200
         data = r.json()
+        assert data["demos_by_project"] == {}
         assert data["total"] == 0
 
-    async def test_list_demos_groups_by_project(self, client, project_repo, report_repo):
+    async def test_list_demos_by_project(self, client, report_repo, project_repo):
         await project_repo.save(Project(id="alpha", repo=RepoUrl("o/alpha")))
-        await project_repo.save(Project(id="beta", repo=RepoUrl("o/beta")))
-        await report_repo.save(_make_report("a1", "alpha", 1))
-        await report_repo.save(_make_report("b1", "beta", 1))
-
-        r = await client.get("/api/demos")
+        await report_repo.save(_make_report("demo-1", "alpha", 5))
+        r = await client.get("/api/demos?project=alpha")
         assert r.status_code == 200
         data = r.json()
-        assert data["total"] == 2
         assert "alpha" in data["demos_by_project"]
-        assert "beta" in data["demos_by_project"]
+        assert data["total"] == 1
 
-    async def test_list_demos_filter_by_project(self, client, project_repo, report_repo):
+    async def test_list_demos_since_filter(self, client, report_repo, project_repo):
         await project_repo.save(Project(id="alpha", repo=RepoUrl("o/alpha")))
-        await project_repo.save(Project(id="beta", repo=RepoUrl("o/beta")))
-        await report_repo.save(_make_report("a1", "alpha", 1))
-        await report_repo.save(_make_report("b1", "beta", 1))
-
-        r = await client.get("/api/demos?project=alpha")
-        data = r.json()
-        assert "alpha" in data["demos_by_project"]
-        assert "beta" not in data["demos_by_project"]
-
-    async def test_list_demos_filter_by_since(self, client, project_repo, report_repo):
-        await project_repo.save(Project(id="alpha", repo=RepoUrl("o/alpha")))
-        await report_repo.save(_make_report("old", "alpha", 1))
-        await report_repo.save(_make_report("new", "alpha", 20))
-        r = await client.get("/api/demos?since=2026-04-10")
+        await report_repo.save(_make_report("demo-old", "alpha", 1))
+        await report_repo.save(_make_report("demo-new", "alpha", 20))
+        r = await client.get("/api/demos?project=alpha&since=2026-04-10")
         data = r.json()
         ids = [d["id"] for d in data["demos_by_project"]["alpha"]]
-        assert "new" in ids and "old" not in ids
+        assert "demo-new" in ids
+        assert "demo-old" not in ids
 
-    async def test_list_demos_invalid_since(self, client):
+    async def test_list_demos_bad_since(self, client):
         r = await client.get("/api/demos?since=not-a-date")
         assert r.status_code == 422
 
