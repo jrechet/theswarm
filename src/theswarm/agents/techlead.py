@@ -327,7 +327,13 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
     # and reviews PRs, so GitHub blocks REQUEST_CHANGES (422).  Only truly
     # critical issues (security vulnerabilities, data loss) should block.
     # "major" style/quality issues are acceptable for autonomous mode.
-    if decision == "REQUEST_CHANGES" and issues:
+    salvaged = bool(review_data.get("salvaged"))
+    if decision == "REQUEST_CHANGES" and salvaged:
+        # The verdict came out of prose: its reasons are in the summary, not
+        # in a list this override can weigh. PR #117 asked for changes and
+        # was approved because "no issues listed".
+        log.info("PR #%d: keeping REQUEST_CHANGES — verdict salvaged from prose", pr_number)
+    elif decision == "REQUEST_CHANGES" and issues:
         severities = {i.get("severity", "").lower() for i in issues}
         has_critical = "critical" in severities
         if not has_critical:
@@ -341,8 +347,11 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
         log.info("PR #%d: overriding REQUEST_CHANGES → APPROVE (no issues listed)", pr_number)
         decision = "APPROVE"
 
-    # Format the review body
-    body = _format_review_body(summary, issues)
+    # Format the review body. A salvaged review *is* its prose: wrapping it
+    # in the template cut it at 500 characters and signed off with "No issues
+    # found. Code looks good." under a paragraph that asked for changes
+    # (PR #117).
+    body = summary if salvaged else _format_review_body(summary, issues)
 
     # Submit the review. A comment is a comment: mapping it to
     # REQUEST_CHANGES put "(REQUEST_CHANGES)" above a body that said
@@ -606,7 +615,10 @@ def _parse_review_json(text: str) -> dict:
         decision = _salvage_decision(clean)
         log.warning("Could not parse review JSON (decision read as %s): %s",
                     decision, clean[:200])
-        return {"decision": decision, "summary": clean[:500], "issues": []}
+        # `salvaged`: the issues list is empty because the answer had no
+        # structure, not because the reviewer found nothing — the override
+        # below must not read it as a clean bill of health.
+        return {"decision": decision, "summary": clean[:4000], "issues": [], "salvaged": True}
 
 
 _DECISION_RE = re.compile(

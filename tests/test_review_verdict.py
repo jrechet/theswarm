@@ -78,3 +78,41 @@ async def test_json_reviews_are_unchanged():
 
     assert review["decision"] == "APPROVE"
     assert gh.create_pr_review.await_args.kwargs["event"] == "APPROVE"
+
+
+async def test_a_change_request_salvaged_from_prose_is_not_overridden_to_approve():
+    """PR #117: the prose said REQUEST_CHANGES, the structured issue list was
+    empty because prose has none, and the MVP override approved it."""
+    gh = _github()
+
+    review = await _review_single_pr(
+        gh, _claude("**Decision: REQUEST_CHANGES**\n\nThe list route drops the limit."), PR, "",
+    )
+
+    assert review["decision"] == "REQUEST_CHANGES"
+    assert gh.create_pr_review.await_args.kwargs["event"] == "REQUEST_CHANGES"
+
+
+async def test_a_json_change_request_without_issues_still_gets_the_mvp_override():
+    gh = _github()
+
+    review = await _review_single_pr(
+        gh, _claude('{"decision": "REQUEST_CHANGES", "summary": "meh", "issues": []}'), PR, "",
+    )
+
+    assert review["decision"] == "APPROVE"
+
+
+async def test_a_salvaged_review_is_posted_as_its_own_prose():
+    """Not the template: that cut the reasoning at 500 characters and signed
+    off "No issues found. Code looks good." under a change request."""
+    gh = _github(refuse_reviews=True)
+    prose = "**Decision: REQUEST_CHANGES**\n\nThe merge sort compares timestamps " \
+            "from two sources with inconsistent timezone semantics." + " More detail." * 60
+
+    await _review_single_pr(gh, _claude(prose), PR, "")
+
+    body = gh.add_comment.await_args.args[1]
+    assert "No issues found" not in body
+    assert "inconsistent timezone semantics" in body
+    assert body.count("More detail.") == 60  # not truncated at 500
