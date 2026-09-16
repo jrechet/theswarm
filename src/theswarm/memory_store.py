@@ -11,6 +11,7 @@ Migration: reads legacy AGENT_MEMORY.md on first load, converts to JSONL entries
 from __future__ import annotations
 
 import json
+import asyncio
 import logging
 import uuid
 from datetime import datetime
@@ -18,6 +19,8 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
+# A little over the breaker's 60s cool-down: the retry lands as its probe.
+CIRCUIT_RETRY_DELAY_SECONDS = 65
 MEMORY_JSONL_PATH = "AGENT_MEMORY.jsonl"
 LEGACY_MEMORY_PATH = "AGENT_MEMORY.md"
 
@@ -168,19 +171,34 @@ async def save_entries(
     branch: str = "main",
     message: str = "chore: update agent memory",
 ) -> bool:
-    """Write all entries to AGENT_MEMORY.jsonl in the repo."""
-    try:
-        content = _entries_to_jsonl(entries)
-        await github.update_file(
-            MEMORY_JSONL_PATH,
-            content,
-            branch=branch,
-            commit_message=message,
-        )
-        return True
-    except Exception:
-        log.exception("Memory: failed to save entries")
-        return False
+    """Write all entries to AGENT_MEMORY.jsonl in the repo.
+
+    The last GitHub call of a cycle. If the breaker is open — it was, on
+    2026-09-15, after four expected 422s from reviews — wait out its probe
+    window once rather than throw the cycle's learnings away.
+    """
+    from theswarm.infrastructure.resilience.circuit_breaker import CircuitOpenError
+
+    content = _entries_to_jsonl(entries)
+    for attempt in (1, 2):
+        try:
+            await github.update_file(
+                MEMORY_JSONL_PATH,
+                content,
+                branch=branch,
+                commit_message=message,
+            )
+            return True
+        except CircuitOpenError as exc:
+            if attempt == 2:
+                log.error("Memory: GitHub circuit still open — entries not saved (%s)", exc)
+                return False
+            log.warning("Memory: GitHub circuit open (%s) — waiting for its probe window", exc)
+            await asyncio.sleep(CIRCUIT_RETRY_DELAY_SECONDS)
+        except Exception:
+            log.exception("Memory: failed to save entries")
+            return False
+    return False
 
 
 async def append_entries(

@@ -172,6 +172,13 @@ def _api_backend_viable() -> bool:
     return bool(key) and not key.startswith("sk-ant-oat")
 
 
+# The learned floor also outlives the ClaudeCLI instance, per workspace. A
+# cycle's instance learned 420 → 546 → 709 on TheSwarm's own repo and took
+# it to the grave; the next cycle paid the same sixteen minutes to learn it
+# again (#99). Keyed by workdir: what needs the room is the repository.
+_REPO_FLOORS: dict[str, int] = {}
+
+
 @dataclass
 class ClaudeCLI:
     """Runs a prompt through Claude Code CLI first, Anthropic API as fallback.
@@ -201,7 +208,7 @@ class ClaudeCLI:
     _sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep, repr=False)
     _rng: random.Random = field(default_factory=random.Random, repr=False)
 
-    def _effective_timeout(self, timeout: int | None) -> int:
+    def _effective_timeout(self, timeout: int | None, workdir: str | None = None) -> int:
         """The budget to actually use: never one that has already expired.
 
         `_retry_timeout` grows a budget *within* a single `run()`. That alone
@@ -212,7 +219,11 @@ class ClaudeCLI:
         over — 420s then 546s, 16 minutes an iteration, no progress and no
         new information (cycle be8e68aaef9d, issue #85).
         """
-        return max(timeout or self.timeout, self._timeout_floor)
+        return max(
+            timeout or self.timeout,
+            self._timeout_floor,
+            _REPO_FLOORS.get(workdir or "", 0),
+        )
 
     def _resolve_model(self) -> str:
         return _MODEL_MAP.get(self.model, self.model)
@@ -290,7 +301,7 @@ class ClaudeCLI:
             try:
                 return await self._cli_with_auth_recovery(
                     prompt, workdir=workdir,
-                    timeout=self._retry_timeout(timeout, first_error),
+                    timeout=self._retry_timeout(timeout, first_error, workdir=workdir),
                 )
             except _CLIUnavailable as retry_error:
                 raise RuntimeError(
@@ -334,7 +345,9 @@ class ClaudeCLI:
                 prompt, workdir=workdir, timeout=timeout, drop_oauth_env=True,
             )
 
-    def _retry_timeout(self, timeout: int | None, error: Exception) -> int:
+    def _retry_timeout(
+        self, timeout: int | None, error: Exception, workdir: str | None = None,
+    ) -> int:
         """Give a retry more room than the attempt that ran out of it.
 
         Retrying a timeout with the same budget cannot succeed: the second
@@ -343,7 +356,7 @@ class ClaudeCLI:
         120s twice in a row and the cycle failed with no useful diagnosis.
         Only timeouts grow; a crash or an auth failure keeps its budget.
         """
-        effective = self._effective_timeout(timeout)
+        effective = self._effective_timeout(timeout, workdir)
         if not _is_timeout(error):
             return effective
         grown = min(int(effective * self.timeout_growth), self.timeout_ceiling)
@@ -351,6 +364,8 @@ class ClaudeCLI:
         # `effective` is too small. Capped: a budget that keeps growing turns a
         # hung call into a phase timeout with no diagnosis attached.
         self._timeout_floor = grown
+        if workdir:
+            _REPO_FLOORS[workdir] = max(_REPO_FLOORS.get(workdir, 0), grown)
         log.warning(
             "Claude CLI timed out at %ds — retrying with %ds "
             "(floor for later calls in this cycle)", effective, grown,
@@ -373,7 +388,7 @@ class ClaudeCLI:
         if binary is None:
             raise _CLIUnavailable("claude binary not on PATH")
 
-        effective_timeout = self._effective_timeout(timeout)
+        effective_timeout = self._effective_timeout(timeout, workdir)
         model_id = self._resolve_model()
 
         cmd = [
@@ -486,7 +501,7 @@ class ClaudeCLI:
         timeout: int | None,
     ) -> ClaudeResult:
         """Anthropic Messages API path with adaptive retry/backoff."""
-        effective_timeout = self._effective_timeout(timeout)
+        effective_timeout = self._effective_timeout(timeout, workdir)
         model_id = self._resolve_model()
 
         system_parts = []

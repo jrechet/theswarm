@@ -186,3 +186,25 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   min locally), are `tests_unavailable`: no Ralph rounds, the PR opens
   with the reason in its body, and the repository's CI is the judge.
   Installing TheSwarm into the container's system python takes ~63s cold.
+- **A failed attempt leaves a trace on the issue** (`ATTEMPT_MARKER` comment,
+  `agents/dev._note_failed_attempt`), and the picker reads those back: a
+  sub-task that failed in an earlier cycle goes behind its untried siblings
+  from the first iteration. The learned CLI timeout floor is also kept per
+  workspace across cycles (`tools/claude._REPO_FLOORS`). Before both, every
+  self-cycle spent its first sixteen minutes re-timing-out on #89 (#99).
+- **The Dev is told about its siblings' open PRs** (`_sibling_prs`: title +
+  files, in the prompt above the `ALREADY_SATISFIED` rule). Four sub-tasks
+  of one story built in parallel each re-implemented the others' work
+  (#104/#105/#108/#109). Their branches are still not in the checkout — the
+  human who merges must still pick the complete one and close the rest.
+- **QA starts a target the way it declares** — `demo.command` / `demo.env`
+  in the target's `theswarm.yaml` (`agents/qa._demo_launch`), in a scrubbed
+  environment: only `PATH`/`HOME`/… plus `demo.env` reach the process, never
+  this instance's tokens. Without a declaration: `uvicorn src.main:app` with
+  the environment it always had. TheSwarm declares `python -m theswarm serve
+  --port {port} --db {tmp}/demo.db` with `SWARM_AUTH_DISABLED=1` (#110).
+- **The GitHub circuit breaker ignores 4xx** (`tools/github._is_client_error`):
+  a 422 "cannot review your own pull request" is a fact about the request,
+  not an outage. Four of them opened the breaker and blocked the memory save
+  at the end of the first self-cycle (#111); the save now also waits out an
+  open circuit once (`memory_store.CIRCUIT_RETRY_DELAY_SECONDS`).

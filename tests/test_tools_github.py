@@ -5,9 +5,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-from github import GithubException
+from github import RateLimitExceededException, GithubException
 
-from theswarm.tools.github import GitHubClient, _issue_to_dict, _pr_to_dict
+from theswarm.tools.github import GitHubClient, _issue_to_dict, _pr_to_dict, _is_client_error
 
 
 # ── Helper function tests ─────────────────────────────────────────────
@@ -257,3 +257,90 @@ async def test_ensure_branch_protection_not_protected(github_client):
         dismiss_stale_reviews=True,
         require_code_owner_reviews=False,
     )
+
+
+# ── A 4xx is a fact about the request, not an outage ───────────────────
+
+
+def _github_exc(status: int, message: str = "") -> GithubException:
+    return GithubException(status, {"message": message}, None)
+
+
+def test_a_422_on_ones_own_pull_request_is_a_client_error():
+    exc = _github_exc(422, "Review Can not request changes on your own pull request")
+    assert _is_client_error(exc) is True
+
+
+def test_a_404_is_a_client_error():
+    assert _is_client_error(_github_exc(404, "Not Found")) is True
+
+
+def test_a_502_is_an_outage():
+    assert _is_client_error(_github_exc(502, "Bad Gateway")) is False
+
+
+def test_a_rate_limit_403_still_counts():
+    assert _is_client_error(_github_exc(403, "API rate limit exceeded for user")) is False
+
+
+def test_a_plain_403_is_a_client_error():
+    assert _is_client_error(_github_exc(403, "Resource not accessible by integration")) is True
+
+
+def test_429_and_the_rate_limit_exception_are_not_ignored():
+    assert _is_client_error(_github_exc(429, "too many requests")) is False
+    assert _is_client_error(RateLimitExceededException(403, {"message": "x"}, None)) is False
+
+
+def test_non_github_errors_are_not_ignored():
+    assert _is_client_error(RuntimeError("connection reset")) is False
+
+
+async def test_the_client_breaker_ignores_client_errors(github_client):
+    """Through the real breaker: five 422s in a row leave it closed."""
+    from theswarm.infrastructure.resilience import CircuitBreaker
+    from theswarm.tools.github import _is_client_error as predicate
+
+    github_client._breaker = CircuitBreaker(
+        name="t", failure_threshold=2, ignored_errors=predicate,
+    )
+    pr = MagicMock()
+    pr.create_review.side_effect = _github_exc(422, "Can not approve your own pull request")
+    github_client._repo.get_pull.return_value = pr
+
+    for _ in range(5):
+        with pytest.raises(GithubException):
+            await github_client.create_pr_review(1, body="x", event="APPROVE")
+
+    assert github_client._breaker.state.value == "closed"
+
+
+# ── Issue comments ─────────────────────────────────────────────────────
+
+
+async def test_get_issue_comments_returns_plain_dicts(github_client):
+    from datetime import datetime, timezone
+
+    comment = MagicMock()
+    comment.body = "<!-- swarm:attempt failed -->\n⏱ Attempt failed — timed out"
+    comment.created_at = datetime(2026, 9, 15, 16, 24, tzinfo=timezone.utc)
+    comment.user.login = "jrechet"
+    issue = MagicMock()
+    issue.get_comments.return_value = [comment]
+    github_client._repo.get_issue.return_value = issue
+
+    rows = await github_client.get_issue_comments(89)
+
+    assert rows == [{
+        "body": comment.body,
+        "created_at": "2026-09-15T16:24:00+00:00",
+        "user": "jrechet",
+    }]
+
+
+async def test_get_issue_comments_on_a_silent_issue(github_client):
+    issue = MagicMock()
+    issue.get_comments.return_value = []
+    github_client._repo.get_issue.return_value = issue
+
+    assert await github_client.get_issue_comments(1) == []

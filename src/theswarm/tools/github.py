@@ -47,6 +47,26 @@ async def verify_access(repo: str) -> None:
         raise GitHubAccessError(repo, "no GitHub token configured")
 
 
+def _is_client_error(exc: BaseException) -> bool:
+    """A 4xx answer is a fact about the request, not an outage.
+
+    Rate limiting is the exception: it arrives as RateLimitExceededException
+    (trips the breaker at once) or as a plain 403 naming the limit (counts).
+    Everything else in the 4xx range — 404 on a missing issue, 422 on a
+    review of one's own PR — must not push the breaker toward open.
+    """
+    if isinstance(exc, RateLimitExceededException):
+        return False
+    if not isinstance(exc, GithubException):
+        return False
+    status = getattr(exc, "status", 0) or 0
+    if not 400 <= status < 500 or status == 429:
+        return False
+    if status == 403 and "rate limit" in str(exc).lower():
+        return False
+    return True
+
+
 @dataclass
 class GitHubClient:
     """Thin async wrapper around PyGitHub for a single repo."""
@@ -66,6 +86,7 @@ class GitHubClient:
             failure_threshold=5,
             reset_seconds=60.0,
             immediate_trip_errors=(RateLimitExceededException,),
+            ignored_errors=_is_client_error,
         )
 
     async def _fresh(self) -> None:
@@ -149,6 +170,20 @@ class GitHubClient:
         await self._fresh()
         issue = await self._run(self._repo.get_issue, issue_number)
         await self._run(issue.create_comment, body)
+
+    async def get_issue_comments(self, issue_number: int) -> list[dict]:
+        """Comments on an issue, oldest first, as plain dicts."""
+        await self._fresh()
+        issue = await self._run(self._repo.get_issue, issue_number)
+        comments = await self._run(lambda: list(issue.get_comments()))
+        return [
+            {
+                "body": getattr(c, "body", "") or "",
+                "created_at": c.created_at.isoformat() if getattr(c, "created_at", None) else "",
+                "user": getattr(getattr(c, "user", None), "login", "") or "",
+            }
+            for c in comments
+        ]
 
     async def add_labels(self, issue_number: int, labels: list[str]) -> None:
         await self._fresh()

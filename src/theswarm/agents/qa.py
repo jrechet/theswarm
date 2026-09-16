@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
+import tempfile
+import shlex
+import os
 import re
 from datetime import datetime
 
@@ -242,12 +245,13 @@ async def run_e2e_tests(state: AgentState) -> dict:
 
     # Start the FastAPI app
     port = E2E_PORT
+    command, env = _demo_launch(workspace, python, port)
     server_proc = await asyncio.create_subprocess_exec(
-        python, "-m", "uvicorn", "src.main:app",
-        "--host", "127.0.0.1", "--port", str(port),
+        *command,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
         cwd=workspace,
+        env=env,
     )
 
     # Sprint G4 — wait for the server to become ready instead of a blind sleep
@@ -417,12 +421,13 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
     artifacts: list[tuple] = []
 
     # Start the FastAPI app
+    command, env = _demo_launch(workspace, python, port)
     server_proc = await asyncio.create_subprocess_exec(
-        python, "-m", "uvicorn", "src.main:app",
-        "--host", "127.0.0.1", "--port", str(port),
+        *command,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
         cwd=workspace,
+        env=env,
     )
 
     # Sprint G4 — wait for readiness instead of blind sleep
@@ -559,12 +564,13 @@ async def record_demo_video(state: AgentState) -> dict:
     video_artifacts: list[tuple] = []
 
     # Start the FastAPI app
+    command, env = _demo_launch(workspace, python, port)
     server_proc = await asyncio.create_subprocess_exec(
-        python, "-m", "uvicorn", "src.main:app",
-        "--host", "127.0.0.1", "--port", str(port),
+        *command,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
         cwd=workspace,
+        env=env,
     )
 
     # Sprint G4 — wait for readiness instead of blind sleep
@@ -992,6 +998,54 @@ async def _log_readiness_failure(label: str, server_proc, exc: Exception) -> Non
         label, exc, server_proc.returncode,
         f"\n--- server output ---\n{output}" if output else " (no output captured)",
     )
+
+
+# What the target's own environment may see when QA starts it for a demo
+# it declared. Nothing else from this process: the swarm demoing itself
+# would otherwise boot a second instance holding the real GitHub and
+# Mattermost tokens (#110).
+_DEMO_ENV_KEEP = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "PYTHONPATH")
+_DEFAULT_DEMO_MODULE = "src.main:app"
+
+
+def _demo_spec(workspace: str) -> dict:
+    """The `demo:` section of the target's theswarm.yaml, or {}."""
+    path = os.path.join(workspace, "theswarm.yaml")
+    if not os.path.isfile(path):
+        return {}
+    try:
+        import yaml
+
+        with open(path, encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+    except Exception as exc:  # noqa: BLE001 — a bad manifest is not fatal
+        log.warning("QA: theswarm.yaml unreadable (%s) — using the default launch", exc)
+        return {}
+    spec = data.get("demo") if isinstance(data, dict) else None
+    return spec if isinstance(spec, dict) else {}
+
+
+def _demo_launch(workspace: str, python: str, port: int) -> tuple[list[str], dict[str, str]]:
+    """How to start the target for its demo, and the environment to do it in.
+
+    A target that declares `demo.command` in its theswarm.yaml is started
+    that way — `{python}`, `{port}` and `{tmp}` filled in — with a scrubbed
+    environment plus whatever `demo.env` adds. Everything else keeps the
+    FastAPI convention, `src.main:app` on uvicorn, with the environment it
+    always had. TheSwarm is the first target of the first kind: `python -m
+    theswarm serve` on a throwaway database, auth wall down.
+    """
+    spec = _demo_spec(workspace)
+    command_template = str(spec.get("command") or "").strip()
+    if command_template:
+        tmp = tempfile.mkdtemp(prefix="swarm-demo-")
+        command = shlex.split(command_template.format(python=python, port=port, tmp=tmp))
+        env = {key: value for key, value in os.environ.items() if key in _DEMO_ENV_KEEP}
+        env.update({str(key): str(value) for key, value in (spec.get("env") or {}).items()})
+        log.info("QA: starting the target as declared: %s", " ".join(command))
+        return command, env
+    command = [python, "-m", "uvicorn", _DEFAULT_DEMO_MODULE, "--host", "127.0.0.1", "--port", str(port)]
+    return command, os.environ.copy()
 
 
 def _find_system_python() -> str:
