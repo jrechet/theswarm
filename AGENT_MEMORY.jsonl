@@ -1,0 +1,2 @@
+{"id": "18e65fa8f36a", "timestamp": "2026-09-16T21:21:14", "category": "errors", "agent": "feedback", "content": "Quality gate 'e2e_tests' failed — {\"total\": 141, \"passed\": 0, \"failed\": 9, \"status\": \"fail\"}", "confidence": 0.7, "cycle_date": "2026-09-16", "supersedes": null}
+{"id": "30b56e945929", "timestamp": "2026-09-16T21:21:14", "category": "errors", "agent": "feedback", "content": "Quality gate 'coverage' failed — {\"percent\": 0.0, \"threshold\": 70, \"status\": \"fail\"}", "confidence": 0.7, "cycle_date": "2026-09-16", "supersedes": null}
