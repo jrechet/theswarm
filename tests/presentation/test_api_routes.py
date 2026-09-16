@@ -224,6 +224,82 @@ class TestCyclesAll:
         assert "c-x" in ids and "c-y" not in ids
 
 
+class TestListCyclesMerged:
+    """GET /api/cycles merges v2 SQLite cycles with in-memory tracker cycles."""
+
+    async def test_merges_sqlite_and_tracker(self, client, cycle_repo):
+        from theswarm.api import CycleRequest, get_cycle_tracker
+
+        now = datetime.now(timezone.utc)
+        await cycle_repo.save(
+            Cycle(id=CycleId("sql-1"), project_id="p1", status=CycleStatus.COMPLETED, started_at=now),
+        )
+        get_cycle_tracker().create(CycleRequest(repo="owner/repo"))
+
+        r = await client.get("/api/cycles")
+        assert r.status_code == 200
+        ids = [c["id"] for c in r.json()["cycles"]]
+        assert "sql-1" in ids
+        assert len(ids) == 2
+
+    async def test_dedup_prefers_sqlite_version(self, client, cycle_repo):
+        from theswarm.api import CycleRecord
+        from theswarm.api import CycleStatus as TrackerStatus
+        from theswarm.api import get_cycle_tracker
+
+        now = datetime.now(timezone.utc)
+        await cycle_repo.save(
+            Cycle(
+                id=CycleId("dup-1"),
+                project_id="p1",
+                status=CycleStatus.COMPLETED,
+                started_at=now,
+                total_cost_usd=9.99,
+            ),
+        )
+        tracker = get_cycle_tracker()
+        tracker._cycles["dup-1"] = CycleRecord(
+            id="dup-1",
+            repo="owner/repo",
+            description="",
+            callback_url="",
+            status=TrackerStatus.RUNNING,
+            created_at=now.isoformat(),
+        )
+
+        r = await client.get("/api/cycles")
+        data = r.json()
+        matches = [c for c in data["cycles"] if c["id"] == "dup-1"]
+        assert len(matches) == 1
+        assert matches[0]["total_cost_usd"] == 9.99
+        assert matches[0]["status"] == "completed"
+
+    async def test_limit_bounds_merged_result(self, client):
+        from theswarm.api import CycleRequest, get_cycle_tracker
+
+        tracker = get_cycle_tracker()
+        for i in range(5):
+            tracker.create(CycleRequest(repo=f"owner/repo{i}"))
+
+        r = await client.get("/api/cycles?limit=2")
+        assert r.status_code == 200
+        assert len(r.json()["cycles"]) == 2
+
+    async def test_sorted_most_recent_first(self, client, cycle_repo):
+        old = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        new = datetime(2026, 6, 1, tzinfo=timezone.utc)
+        await cycle_repo.save(
+            Cycle(id=CycleId("old-1"), project_id="p1", status=CycleStatus.COMPLETED, started_at=old),
+        )
+        await cycle_repo.save(
+            Cycle(id=CycleId("new-1"), project_id="p1", status=CycleStatus.COMPLETED, started_at=new),
+        )
+
+        r = await client.get("/api/cycles")
+        ids = [c["id"] for c in r.json()["cycles"]]
+        assert ids.index("new-1") < ids.index("old-1")
+
+
 class TestTriggerCycleForProject:
     async def test_unknown_project_is_404(self, client):
         r = await client.post("/api/projects/unknown/cycle")
