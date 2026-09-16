@@ -50,7 +50,7 @@ async def test_quota_aborts_immediately_without_retrying():
     cli = ClaudeCLI(model="haiku")
     attempts = 0
 
-    async def out_of_quota(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def out_of_quota(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         nonlocal attempts
         attempts += 1
         raise _CLIUnavailable(
@@ -68,7 +68,7 @@ async def test_the_reset_time_survives_into_the_message():
     """The failure must tell the operator when work can resume."""
     cli = ClaudeCLI(model="haiku")
 
-    async def out_of_quota(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def out_of_quota(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         raise _CLIUnavailable(
             "exit 1: You've hit your session limit · resets 9:50am (UTC)",
         )
@@ -83,7 +83,7 @@ async def test_a_timeout_still_gets_its_retry():
     cli = ClaudeCLI(model="haiku", timeout=120)
     attempts = 0
 
-    async def timing_out(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def timing_out(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         nonlocal attempts
         attempts += 1
         raise _CLIUnavailable("CLI timed out after 120s")
