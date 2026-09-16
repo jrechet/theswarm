@@ -253,25 +253,23 @@ async def live_history() -> JSONResponse:
 
 @router.get("/cycles/{cycle_id}")
 async def api_cycle(request: Request, cycle_id: str) -> JSONResponse:
-    """Get cycle status — checks v2 SQLite first, falls back to in-memory tracker."""
+    """Get cycle status — checks v2 SQLite first, falls back to in-memory tracker.
+
+    Both branches return the same unified shape (see `_cycle_dto_to_unified_json`
+    / `_tracker_record_to_unified_json`) so callers don't need to know which
+    store answered.
+    """
     # Try v2 repo first
     query: GetCycleStatusQuery = request.app.state.get_cycle_status_query
     cycle = await query.execute(cycle_id)
     if cycle is not None:
-        return JSONResponse({
-            "id": cycle.id,
-            "project_id": cycle.project_id,
-            "status": cycle.status,
-            "triggered_by": cycle.triggered_by,
-            "total_cost_usd": cycle.total_cost_usd,
-            "phases": len(cycle.phases),
-        })
+        return JSONResponse(_cycle_dto_to_unified_json(cycle))
     # Fall back to in-memory tracker
     from theswarm.api import get_cycle_tracker
     tracker = get_cycle_tracker()
     record = tracker.get(cycle_id)
     if record:
-        return JSONResponse(record.model_dump())
+        return JSONResponse(_tracker_record_to_unified_json(record))
     return JSONResponse({"error": "not found"}, status_code=404)
 
 
@@ -478,6 +476,7 @@ def _cycle_dto_to_unified_json(c) -> dict:
     return {
         "id": c.id,
         "project_id": c.project_id,
+        "repo": c.project_id,
         "status": c.status,
         "triggered_by": c.triggered_by,
         "started_at": c.started_at,
@@ -487,6 +486,10 @@ def _cycle_dto_to_unified_json(c) -> dict:
         "prs_opened": list(c.prs_opened),
         "prs_merged": list(c.prs_merged),
         "phases": phases_out,
+        # The SQLite `Cycle`/`CycleDTO` carries neither field — only cycles
+        # started through the headless tracker (`CycleRecord`) have them.
+        "issue_number": None,
+        "error": None,
     }
 
 
@@ -496,6 +499,7 @@ def _tracker_record_to_unified_json(record) -> dict:
     return {
         "id": record.id,
         "project_id": record.repo,
+        "repo": record.repo,
         "status": record.status.value,
         "triggered_by": "web",
         "started_at": record.started_at or None,
@@ -505,6 +509,8 @@ def _tracker_record_to_unified_json(record) -> dict:
         "prs_opened": result.get("prs_opened", []),
         "prs_merged": result.get("prs_merged", []),
         "phases": [],
+        "issue_number": record.issue_number,
+        "error": record.error,
     }
 
 
