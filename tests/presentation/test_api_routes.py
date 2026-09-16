@@ -224,6 +224,57 @@ class TestCyclesAll:
         assert "c-x" in ids and "c-y" not in ids
 
 
+class TestCycleDetailUnifiedShape:
+    """GET /api/cycles/{id} returns the same top-level shape from either store."""
+
+    _KEYS = {
+        "id", "repo", "issue_number", "status", "triggered_by", "started_at",
+        "completed_at", "error", "total_cost_usd", "prs_opened", "prs_merged",
+        "phases",
+    }
+
+    async def test_sqlite_cycle_shape(self, client, cycle_repo):
+        now = datetime.now(timezone.utc)
+        await cycle_repo.save(
+            Cycle(
+                id=CycleId("sql-detail"),
+                project_id="p1",
+                status=CycleStatus.COMPLETED,
+                started_at=now,
+                total_cost_usd=1.5,
+            ),
+        )
+        r = await client.get("/api/cycles/sql-detail")
+        assert r.status_code == 200
+        data = r.json()
+        assert set(data.keys()) == self._KEYS
+        assert data["repo"] == "p1"
+        assert data["issue_number"] is None
+        assert data["error"] is None
+        assert isinstance(data["phases"], list)
+
+    async def test_tracker_cycle_shape(self, client):
+        from theswarm.api import CycleRequest, get_cycle_tracker
+
+        tracker = get_cycle_tracker()
+        record = tracker.create(CycleRequest(repo="owner/repo", issue_number=7))
+
+        r = await client.get(f"/api/cycles/{record.id}")
+        assert r.status_code == 200
+        data = r.json()
+        assert set(data.keys()) == self._KEYS
+        assert data["repo"] == "owner/repo"
+        assert data["issue_number"] == 7
+        assert data["total_cost_usd"] == 0.0
+        assert data["prs_opened"] == []
+        assert data["phases"] == []
+
+    async def test_unknown_cycle_is_404(self, client):
+        r = await client.get("/api/cycles/does-not-exist")
+        assert r.status_code == 404
+        assert r.json() == {"error": "not found"}
+
+
 class TestListCyclesMerged:
     """GET /api/cycles merges v2 SQLite cycles with in-memory tracker cycles."""
 

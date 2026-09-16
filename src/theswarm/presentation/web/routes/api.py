@@ -253,25 +253,23 @@ async def live_history() -> JSONResponse:
 
 @router.get("/cycles/{cycle_id}")
 async def api_cycle(request: Request, cycle_id: str) -> JSONResponse:
-    """Get cycle status — checks v2 SQLite first, falls back to in-memory tracker."""
+    """Get cycle status — checks v2 SQLite first, falls back to in-memory tracker.
+
+    Both branches return the same shape via `_cycle_dto_to_detail_json` /
+    `_tracker_record_to_detail_json` so callers don't need to know which
+    store served the cycle.
+    """
     # Try v2 repo first
     query: GetCycleStatusQuery = request.app.state.get_cycle_status_query
     cycle = await query.execute(cycle_id)
     if cycle is not None:
-        return JSONResponse({
-            "id": cycle.id,
-            "project_id": cycle.project_id,
-            "status": cycle.status,
-            "triggered_by": cycle.triggered_by,
-            "total_cost_usd": cycle.total_cost_usd,
-            "phases": len(cycle.phases),
-        })
+        return JSONResponse(_cycle_dto_to_detail_json(cycle))
     # Fall back to in-memory tracker
     from theswarm.api import get_cycle_tracker
     tracker = get_cycle_tracker()
     record = tracker.get(cycle_id)
     if record:
-        return JSONResponse(record.model_dump())
+        return JSONResponse(_tracker_record_to_detail_json(record))
     return JSONResponse({"error": "not found"}, status_code=404)
 
 
@@ -505,6 +503,70 @@ def _tracker_record_to_unified_json(record) -> dict:
         "prs_opened": result.get("prs_opened", []),
         "prs_merged": result.get("prs_merged", []),
         "phases": [],
+    }
+
+
+def _cycle_dto_to_detail_json(cycle) -> dict:
+    """Unified single-cycle shape for GET /api/cycles/{id} — same keys whether
+    the cycle came from SQLite (`CycleDTO`) or the in-memory tracker below.
+    `issue_number`/`error` are always null here: neither `Cycle` nor `CycleDTO`
+    carry them.
+    """
+    return {
+        "id": cycle.id,
+        "repo": cycle.project_id,
+        "issue_number": None,
+        "status": cycle.status,
+        "triggered_by": cycle.triggered_by,
+        "started_at": cycle.started_at,
+        "completed_at": cycle.completed_at,
+        "error": None,
+        "total_cost_usd": cycle.total_cost_usd,
+        "prs_opened": list(cycle.prs_opened),
+        "prs_merged": list(cycle.prs_merged),
+        "phases": [
+            {
+                "phase": p.phase,
+                "agent": p.agent,
+                "status": p.status,
+                "started_at": p.started_at,
+                "completed_at": p.completed_at,
+            }
+            for p in cycle.phases
+        ],
+    }
+
+
+def _tracker_record_to_detail_json(record) -> dict:
+    """Unified single-cycle shape for GET /api/cycles/{id}, tracker side.
+
+    The tracker doesn't record per-phase timestamps, so each phase's
+    `started_at`/`completed_at` is null here (matches `_cycle_dto_to_detail_json`'s
+    key set without inventing tracking that doesn't exist yet).
+    """
+    result = record.result or {}
+    return {
+        "id": record.id,
+        "repo": record.repo,
+        "issue_number": record.issue_number,
+        "status": record.status.value,
+        "triggered_by": "web",
+        "started_at": record.started_at or None,
+        "completed_at": record.completed_at or None,
+        "error": record.error,
+        "total_cost_usd": result.get("cost_usd", 0.0),
+        "prs_opened": result.get("prs_opened", []),
+        "prs_merged": result.get("prs_merged", []),
+        "phases": [
+            {
+                "phase": agent_result.get("phase", ""),
+                "agent": agent_result.get("role", "unknown"),
+                "status": agent_result.get("status", "completed"),
+                "started_at": None,
+                "completed_at": None,
+            }
+            for agent_result in result.get("agents", [])
+        ],
     }
 
 
