@@ -62,7 +62,7 @@ PHASE_TIMEOUTS = {
     # which is under what TheSwarm's own repo needs to be read at all.
     "dev_iter": 30 * 60,
     "techlead_review": 5 * 60,
-    "qa": 15 * 60,
+    "qa": 30 * 60,
     "po_evening": 5 * 60,
     "retrospective": 5 * 60,
 }
