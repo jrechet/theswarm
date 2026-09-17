@@ -48,6 +48,7 @@
       </div>
       <p class="text-[14px] text-soft">
         {{ latest_demo.prs_merged }} PR{{ 's' if latest_demo.prs_merged != 1 }} merged
+        {%- if latest_demo.prs_held %} · {{ latest_demo.prs_held }} held for review{% endif %}
         {%- if latest_demo.stories_total %} · {{ latest_demo.stories_completed }}/{{ latest_demo.stories_total }} stories{% endif %}
         {%- if latest_demo.screenshot_count %} · {{ latest_demo.screenshot_count }} screenshot{{ 's' if latest_demo.screenshot_count != 1 }}{% endif %}
         {%- if latest_demo.video_count %} · {{ latest_demo.video_count }} video{{ 's' if latest_demo.video_count != 1 }}{% endif %}

@@ -222,12 +222,23 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   of one story built in parallel each re-implemented the others' work
   (#104/#105/#108/#109). Their branches are still not in the checkout — the
   human who merges must still pick the complete one and close the rest.
-- **QA starts a target the way it declares** — `demo.command` / `demo.env`
-  in the target's `theswarm.yaml` (`agents/qa._demo_launch`), in a scrubbed
-  environment: only `PATH`/`HOME`/… plus `demo.env` reach the process, never
-  this instance's tokens. Without a declaration: `uvicorn src.main:app` with
-  the environment it always had. TheSwarm declares `python -m theswarm serve
-  --port {port} --db {tmp}/demo.db` with `SWARM_AUTH_DISABLED=1` (#110).
+- **QA starts a target the way it declares**, all under one `demo:` key in
+  the target's `theswarm.yaml` (`agents/qa.py`): `command` / `env` — how to
+  launch it and the scrubbed environment (only `PATH`/`HOME`/… plus `env`
+  reach the process, never this instance's tokens) (`_demo_launch`, #110);
+  `ready_seconds` — the readiness wait, in place of the 30s default
+  (`_demo_ready_seconds`); `pages` — the paths walked for screenshots and the
+  video, in place of the guessed `/`, `/docs`, `/health` (+ discovered
+  routers) (`_pages_to_capture`); `setup` — shell commands run once per
+  workspace before the first launch, each on its own 300s budget, same
+  scrubbed environment, a failing one logged and skipped (`_run_demo_setup`).
+  Without a declaration: `uvicorn src.main:app`, the guessed page walk, no
+  setup. TheSwarm declares `python -m theswarm serve --port {port} --db
+  {tmp}/demo.db` with `SWARM_AUTH_DISABLED=1`, `ready_seconds: 90`,
+  `pages: ["/", "/r/jrechet/theswarm"]` (its own `/docs` 404s, #144), and
+  `setup: ["bash scripts/build-css.sh"]` — the QA workspace is a plain clone
+  and `static/v2/app.css` is generated, not checked in, so V2 pages rendered
+  unstyled (Times, blue links) until this ran first.
 - **The GitHub circuit breaker ignores 4xx** (`tools/github._is_client_error`):
   a 422 "cannot review your own pull request" is a fact about the request,
   not an outage. Four of them opened the breaker and blocked the memory save

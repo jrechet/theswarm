@@ -268,6 +268,7 @@ async def run_e2e_tests(state: AgentState) -> dict:
 
     # Start the FastAPI app
     port = E2E_PORT
+    await _run_demo_setup(workspace)
     command, env = _demo_launch(workspace, python, port)
     server_proc = await asyncio.create_subprocess_exec(
         *command,
@@ -458,6 +459,7 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
     artifacts: list[tuple] = []
 
     # Start the FastAPI app
+    await _run_demo_setup(workspace)
     command, env = _demo_launch(workspace, python, port)
     server_proc = await asyncio.create_subprocess_exec(
         *command,
@@ -498,21 +500,14 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
     base_url = f"http://127.0.0.1:{port}"
 
     try:
-        # Discover routes from the app's source files
-        pages_to_capture = [("", "homepage")]
-        routers_dir = os.path.join(workspace, "src", "routers")
-        if os.path.isdir(routers_dir):
-            for fname in sorted(os.listdir(routers_dir)):
-                if fname.endswith(".py") and not fname.startswith("_"):
-                    name = fname.replace(".py", "")
-                    pages_to_capture.append((f"/api/v1/{name}/", f"api_{name}"))
-
-        # Also check for common web endpoints
-        for path, label in [("/docs", "openapi_docs"), ("/health", "health_check")]:
-            pages_to_capture.append((path, label))
+        pages_to_capture = _pages_to_capture(workspace)
 
         for path, label in pages_to_capture:
             url = f"{base_url}{path}"
+            status = await _page_status(url)
+            if status is not None and not (200 <= status < 300):
+                log.info("QA: skipped %s (%d)", path or "/", status)
+                continue
             try:
                 result = await recorder.screenshot(url, label)
                 artifacts.append(result)
@@ -621,6 +616,7 @@ async def record_demo_video(state: AgentState) -> dict:
     video_artifacts: list[tuple] = []
 
     # Start the FastAPI app
+    await _run_demo_setup(workspace)
     command, env = _demo_launch(workspace, python, port)
     server_proc = await asyncio.create_subprocess_exec(
         *command,
@@ -650,20 +646,16 @@ async def record_demo_video(state: AgentState) -> dict:
         page = recorder._recording_page
 
         # Walk through the app pages
-        pages_to_visit = [("", "homepage")]
-        routers_dir = os.path.join(workspace, "src", "routers")
-        if os.path.isdir(routers_dir):
-            for fname in sorted(os.listdir(routers_dir)):
-                if fname.endswith(".py") and not fname.startswith("_"):
-                    name = fname.replace(".py", "")
-                    pages_to_visit.append((f"/api/v1/{name}/", f"api_{name}"))
-
-        for path, label in [("/docs", "openapi_docs"), ("/health", "health_check")]:
-            pages_to_visit.append((path, label))
+        pages_to_visit = _pages_to_capture(workspace)
 
         for path, _label in pages_to_visit:
+            url = f"{base_url}{path}"
+            status = await _page_status(url)
+            if status is not None and not (200 <= status < 300):
+                log.info("QA: skipped %s (%d)", path or "/", status)
+                continue
             try:
-                await page.goto(f"{base_url}{path}", wait_until="networkidle", timeout=10000)
+                await page.goto(url, wait_until="networkidle", timeout=10000)
                 await page.wait_for_timeout(1500)  # pause on each page for the video
             except Exception as e:
                 log.warning("QA video: failed to navigate to %s: %s", path, e)
@@ -1077,6 +1069,12 @@ async def _log_readiness_failure(label: str, server_proc, exc: Exception) -> Non
 _DEMO_ENV_KEEP = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "PYTHONPATH")
 _DEFAULT_DEMO_MODULE = "src.main:app"
 
+# `demo.setup` commands run once per workspace, across every launch in the
+# QA graph (E2E, screenshots, video) — kept per workspace across cycles, the
+# same lifetime as `tools.claude._REPO_FLOORS`.
+_DEMO_SETUP_DONE: set[str] = set()
+DEMO_SETUP_TIMEOUT_SECONDS = 300
+
 
 def _demo_spec(workspace: str) -> dict:
     """The `demo:` section of the target's theswarm.yaml, or {}."""
@@ -1112,6 +1110,19 @@ def _demo_ready_seconds(workspace: str) -> float:
         return _DEFAULT_READY_SECONDS
 
 
+def _demo_scrubbed_env(workspace: str) -> dict[str, str]:
+    """The environment a declared demo — its launch or its setup — may see.
+
+    Only `_DEMO_ENV_KEEP` survives from this process, plus whatever
+    `demo.env` adds: a second instance of the swarm must never inherit the
+    real GitHub or Mattermost tokens (#110).
+    """
+    spec = _demo_spec(workspace)
+    env = {key: value for key, value in os.environ.items() if key in _DEMO_ENV_KEEP}
+    env.update({str(key): str(value) for key, value in (spec.get("env") or {}).items()})
+    return env
+
+
 def _demo_launch(workspace: str, python: str, port: int) -> tuple[list[str], dict[str, str]]:
     """How to start the target for its demo, and the environment to do it in.
 
@@ -1127,12 +1138,118 @@ def _demo_launch(workspace: str, python: str, port: int) -> tuple[list[str], dic
     if command_template:
         tmp = tempfile.mkdtemp(prefix="swarm-demo-")
         command = shlex.split(command_template.format(python=python, port=port, tmp=tmp))
-        env = {key: value for key, value in os.environ.items() if key in _DEMO_ENV_KEEP}
-        env.update({str(key): str(value) for key, value in (spec.get("env") or {}).items()})
+        env = _demo_scrubbed_env(workspace)
         log.info("QA: starting the target as declared: %s", " ".join(command))
         return command, env
     command = [python, "-m", "uvicorn", _DEFAULT_DEMO_MODULE, "--host", "127.0.0.1", "--port", str(port)]
     return command, os.environ.copy()
+
+
+async def _run_demo_setup(workspace: str) -> None:
+    """Run `demo.setup` shell commands once per workspace, before the first launch.
+
+    Each command gets its own `DEMO_SETUP_TIMEOUT_SECONDS` budget in the same
+    scrubbed environment as the launch itself. A failing command is logged
+    and the demo goes on without it — TheSwarm declares `bash
+    scripts/build-css.sh` so V2 pages render styled instead of the browser's
+    unstyled default (Times, blue links): the QA workspace is a plain clone,
+    and `static/v2/app.css` is generated, not checked in.
+    """
+    import asyncio
+
+    if workspace in _DEMO_SETUP_DONE:
+        return
+    _DEMO_SETUP_DONE.add(workspace)
+
+    commands = _demo_spec(workspace).get("setup")
+    if not isinstance(commands, list) or not commands:
+        return
+
+    env = _demo_scrubbed_env(workspace)
+
+    for command in commands:
+        command = str(command)
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                cwd=workspace,
+                env=env,
+            )
+            try:
+                stdout, _ = await asyncio.wait_for(
+                    proc.communicate(), timeout=DEMO_SETUP_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                proc.kill()
+                log.warning("QA: demo setup command timed out after %ds: %s",
+                            DEMO_SETUP_TIMEOUT_SECONDS, command)
+                continue
+            if proc.returncode != 0:
+                log.warning("QA: demo setup command failed (rc=%s): %s\n%s",
+                            proc.returncode, command, stdout.decode(errors="replace")[-1000:])
+            else:
+                log.info("QA: demo setup command succeeded: %s", command)
+        except Exception as e:
+            log.warning("QA: demo setup command errored (%s): %s", command, e)
+
+
+def _demo_pages(workspace: str) -> list[tuple[str, str]] | None:
+    """`demo.pages` from theswarm.yaml — replaces the guessed walk when set.
+
+    Declared paths are used as-is for both the screenshot pass and the video
+    walk. Returns None when undeclared so the caller falls back to guessing.
+    """
+    pages = _demo_spec(workspace).get("pages")
+    if not isinstance(pages, list) or not pages:
+        return None
+    return [(str(path), _label_for_path(str(path))) for path in pages]
+
+
+def _label_for_path(path: str) -> str:
+    """A filesystem/log-friendly label for a declared demo page."""
+    stripped = path.strip("/")
+    if not stripped:
+        return "homepage"
+    return re.sub(r"\W+", "_", stripped).strip("_") or "homepage"
+
+
+def _guessed_pages(workspace: str) -> list[tuple[str, str]]:
+    """The original guessed walk: homepage, each router, `/docs`, `/health`."""
+    pages = [("", "homepage")]
+    routers_dir = os.path.join(workspace, "src", "routers")
+    if os.path.isdir(routers_dir):
+        for fname in sorted(os.listdir(routers_dir)):
+            if fname.endswith(".py") and not fname.startswith("_"):
+                name = fname.replace(".py", "")
+                pages.append((f"/api/v1/{name}/", f"api_{name}"))
+    for path, label in [("/docs", "openapi_docs"), ("/health", "health_check")]:
+        pages.append((path, label))
+    return pages
+
+
+def _pages_to_capture(workspace: str) -> list[tuple[str, str]]:
+    """Pages for the screenshot pass and the video walk: declared, or guessed."""
+    declared = _demo_pages(workspace)
+    return declared if declared is not None else _guessed_pages(workspace)
+
+
+async def _page_status(url: str) -> int | None:
+    """GET `url` and return its status code, or None if the request itself failed.
+
+    None is treated as "don't skip" by callers — a network hiccup against an
+    already-ready server should fall through to the existing screenshot/video
+    error handling rather than silently dropping the page.
+    """
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url)
+            return resp.status_code
+    except Exception:
+        return None
 
 
 def _find_system_python() -> str:

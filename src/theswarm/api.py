@@ -116,23 +116,37 @@ def get_cycle_tracker() -> CycleTracker:
     return _tracker
 
 
-def _pr_numbers(result: dict[str, Any]) -> tuple[tuple[int, ...], tuple[int, ...]]:
-    """(opened, merged) PR numbers from a cycle result, each number once.
+def _pr_numbers(result: dict[str, Any]) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
+    """(opened, merged, held) PR numbers from a cycle result, each number once.
 
     Reviews repeat: a PR opened in iteration 1 is reviewed again in
     iteration 2, and both approvals were counted. The project page then
     read "3/2 stories" — three approvals of two PRs.
+
+    `merged_prs`/`held_prs` — accumulated by cycle.py from TechLead's actual
+    merge outcome each iteration — are authoritative when present: on
+    SELF_REPO an APPROVE is held for a human, not merged, and counting it as
+    a merge is what made cycle 05b7dceeea99 report "3 PRs merged" when none
+    were. Result dicts without those keys (older replays, hand-built test
+    fixtures) fall back to treating every APPROVE as a merge.
     """
     opened = sorted({
         int(p.get("number", 0)) if isinstance(p, dict) else int(p)
         for p in result.get("prs", []) if p is not None
     } - {0})
-    merged = sorted({
-        int(r.get("pr_number", 0))
-        for r in result.get("reviews", [])
-        if isinstance(r, dict) and r.get("decision") == "APPROVE"
-    } - {0})
-    return tuple(opened), tuple(merged)
+
+    if "merged_prs" in result or "held_prs" in result:
+        merged = sorted({int(n) for n in result.get("merged_prs", []) or [] if n})
+        held = sorted({int(n) for n in result.get("held_prs", []) or [] if n})
+    else:
+        merged = sorted({
+            int(r.get("pr_number", 0))
+            for r in result.get("reviews", [])
+            if isinstance(r, dict) and r.get("decision") == "APPROVE"
+        } - {0})
+        held = []
+
+    return tuple(opened), tuple(merged), tuple(held)
 
 
 async def _emit_demo_ready(
@@ -155,7 +169,7 @@ async def _emit_demo_ready(
         from theswarm.domain.cycles.value_objects import CycleId, CycleStatus
         from theswarm.domain.reporting.events import DemoReady
 
-        opened, merged = _pr_numbers(result)
+        opened, merged, held = _pr_numbers(result)
         cycle = Cycle(
             id=CycleId(cycle_id),
             project_id=repo,
@@ -167,10 +181,15 @@ async def _emit_demo_ready(
 
         thumb_rel_preview = ""
         demo_dict = result.get("demo_report") or {}
+        screenshots: list[dict] = []
         if isinstance(demo_dict, dict):
             thumb_rel_preview = demo_dict.get("thumbnail_path", "") or ""
+            screenshots = demo_dict.get("screenshots") or []
 
-        report = ReportGenerator().generate(cycle, thumbnail_rel_path=thumb_rel_preview)
+        report = ReportGenerator().generate(
+            cycle, thumbnail_rel_path=thumb_rel_preview,
+            screenshots=screenshots, held_prs=held,
+        )
 
         if report_repo is not None:
             try:
