@@ -185,7 +185,15 @@ async def write_e2e_tests(state: AgentState) -> dict:
 
 
 async def run_unit_tests(state: AgentState) -> dict:
-    """Run pytest unit tests in the workspace and parse the output."""
+    """Run pytest unit tests once, with coverage folded into the same run.
+
+    #135: this used to run twice — once here for the verdict, once more in
+    `run_security_scan` with `--cov` for the coverage figure — which on
+    TheSwarm's own ~4-minute suite could burn the whole `qa` phase budget
+    before the demo even started. One run now produces both: the pass/fail
+    counts and, when `pytest-cov` is importable in the target's toolchain,
+    `coverage.json`.
+    """
     claude = state.get("claude")
     workspace = state.get("workspace")
 
@@ -193,13 +201,27 @@ async def run_unit_tests(state: AgentState) -> dict:
         return stub_result(Role.QA, "run_unit_tests",
                            "run pytest unit tests")
 
+    python = _find_system_python()
+
+    # A target without pytest-cov must still get its verdict — the coverage
+    # flags are only added once the plugin actually imports, so a missing
+    # plugin doesn't turn a normal test run into an ImportError.
+    cov_check = await claude.run_tests(
+        workspace, [python, "-c", "import pytest_cov"], timeout=30,
+    )
+    cov_available = cov_check["passed"]
+
     # Run the whole test tree except tests/e2e — the generated E2E file needs
     # a live server and runs in its own node. Target repos rarely have a
     # tests/unit/ layout, and pointing pytest there reported unit=0 forever.
+    command = [python, "-m", "pytest", "tests/", "--ignore=tests/e2e",
+               "-v", "--tb=short"]
+    if cov_available:
+        command += ["--cov=src", "--cov-report=json"]
+
     result = await claude.run_tests(
         workspace,
-        [_find_system_python(), "-m", "pytest", "tests/", "--ignore=tests/e2e",
-         "-v", "--tb=short"],
+        command,
         timeout=QA_TEST_TIMEOUT_SECONDS,
     )
 
@@ -213,6 +235,11 @@ async def run_unit_tests(state: AgentState) -> dict:
             "test_output": output[-3000:],
             "test_counts": {"passed": 0, "failed": 0, "errors": 0, "total": 0},
             "unit_tests_not_run_reason": reason,
+            "security_scan": {
+                "coverage_pct": 0.0,
+                "coverage_status": "not_run",
+                "coverage_reason": reason,
+            },
             "tokens_used": 0,
         }
 
@@ -223,11 +250,32 @@ async def run_unit_tests(state: AgentState) -> dict:
              "PASSED" if passed else "FAILED",
              counts["passed"], counts["failed"], counts["errors"])
 
+    coverage_pct = 0.0
+    coverage_status = "not_run"
+    coverage_reason = "" if cov_available else "pytest-cov not installed"
+
+    if cov_available:
+        cov_json_path = os.path.join(workspace, "coverage.json")
+        if os.path.exists(cov_json_path):
+            with open(cov_json_path) as f:
+                cov_data = json.loads(f.read())
+            coverage_pct = cov_data.get("totals", {}).get("percent_covered", 0.0)
+            coverage_status = "pass" if coverage_pct >= 70 else "fail"
+            log.info("QA: coverage %.1f%%", coverage_pct)
+        else:
+            coverage_reason = "coverage.json not found"
+            log.warning("QA: coverage.json not found at %s", cov_json_path)
+
     return {
         "tests_passed": passed,
         "test_output": output[-3000:],
         "test_counts": counts,
         "unit_tests_not_run_reason": "",
+        "security_scan": {
+            "coverage_pct": round(coverage_pct, 1),
+            "coverage_status": coverage_status,
+            "coverage_reason": coverage_reason,
+        },
         "tokens_used": 0,
     }
 
@@ -328,22 +376,23 @@ async def run_e2e_tests(state: AgentState) -> dict:
 
 
 async def run_security_scan(state: AgentState) -> dict:
-    """Run semgrep OWASP scan and pytest coverage on the workspace."""
+    """Run semgrep OWASP scan on the workspace.
+
+    Coverage no longer runs here — #135: it used to re-run the whole pytest
+    suite with `--cov` just for the coverage figure, doubling the QA phase's
+    pytest time. `run_unit_tests` now produces the coverage figure as part
+    of its single run and stashes it on `security_scan`; this node only adds
+    the semgrep fields to that same dict.
+    """
     claude = state.get("claude")
     workspace = state.get("workspace")
 
     if claude is None or workspace is None:
         return stub_result(Role.QA, "run_security_scan",
-                           "run semgrep + coverage scan")
-
-    import asyncio
-    import os
+                           "run semgrep scan")
 
     semgrep_high = 0
     semgrep_status = "not_run"
-    coverage_pct = 0.0
-    coverage_status = "not_run"
-    coverage_reason = ""
 
     # Run semgrep OWASP top 10
     try:
@@ -375,45 +424,17 @@ async def run_security_scan(state: AgentState) -> dict:
     except Exception as e:
         log.warning("QA: semgrep failed to run: %s", e)
 
-    # Run pytest with coverage using system python (has pytest-cov installed)
-    try:
-        python = _find_system_python()
-        cov_result = await claude.run_tests(
-            workspace,
-            [python, "-m", "pytest", "tests/", "--ignore=tests/e2e",
-             "--cov=src", "--cov-report=json", "-q"],
-            timeout=QA_TEST_TIMEOUT_SECONDS,
-        )
-
-        if _is_test_timeout(cov_result):
-            coverage_status = "not_run"
-            coverage_reason = f"did not finish within {QA_TEST_TIMEOUT_SECONDS}s"
-            log.warning("QA: coverage run %s", coverage_reason)
-        else:
-            coverage_status = "pass" if cov_result["passed"] else "fail"
-
-            # Parse coverage JSON report
-            cov_json_path = os.path.join(workspace, "coverage.json")
-            if os.path.exists(cov_json_path):
-                with open(cov_json_path) as f:
-                    cov_data = json.loads(f.read())
-                coverage_pct = cov_data.get("totals", {}).get("percent_covered", 0.0)
-                log.info("QA: coverage %.1f%%", coverage_pct)
-                if coverage_pct < 70:
-                    coverage_status = "fail"
-            else:
-                log.warning("QA: coverage.json not found at %s", cov_json_path)
-    except Exception as e:
-        log.warning("QA: coverage run failed: %s", e)
+    # Coverage was computed upstream by run_unit_tests, off the one pytest
+    # run — carry it forward instead of re-running the suite.
+    security_scan = dict(state.get("security_scan", {}))
+    security_scan["semgrep_high"] = semgrep_high
+    security_scan["semgrep_status"] = semgrep_status
+    security_scan.setdefault("coverage_pct", 0.0)
+    security_scan.setdefault("coverage_status", "not_run")
+    security_scan.setdefault("coverage_reason", "")
 
     return {
-        "security_scan": {
-            "semgrep_high": semgrep_high,
-            "semgrep_status": semgrep_status,
-            "coverage_pct": round(coverage_pct, 1),
-            "coverage_status": coverage_status,
-            "coverage_reason": coverage_reason,
-        },
+        "security_scan": security_scan,
         "tokens_used": 0,
     }
 
