@@ -233,3 +233,19 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   not an outage. Four of them opened the breaker and blocked the memory save
   at the end of the first self-cycle (#111); the save now also waits out an
   open circuit once (`memory_store.CIRCUIT_RETRY_DELAY_SECONDS`).
+- **QA's budgets on the swarm's own repo.** The first self-cycle to reach QA
+  with the demo declaration (`5f8f0f63f58c`) produced a blank demo card and a
+  report of `unit=0(pass) e2e=141(fail)`: the unit-test run hit a hardcoded
+  120s cap and `_parse_pytest_summary` read the empty output as a vacuous
+  0/0 pass (`unit_tests_not_run_reason` now marks a timed-out run `not_run`
+  instead, on its own `QA_TEST_TIMEOUT_SECONDS` budget, 600s); the readiness
+  wait was a flat 30s against `theswarm serve`'s ~30s container boot, so
+  every screenshot attempt logged `ERR_CONNECTION_REFUSED` three times over
+  (`demo.ready_seconds` in `theswarm.yaml`, TheSwarm declares 90, and
+  `capture_demo_screenshots` returns no artifacts on one readiness failure
+  instead of trying anyway); and the E2E run picked up the target's own 132
+  Playwright tests instead of the file QA wrote (`run_e2e_tests` now scopes
+  to `tests/e2e/test_api_e2e.py` alone). The thumbnail was frame 0 — a blank
+  page mid-boot — because `make_thumbnail` seeked to a fixed 1s in; it now
+  seeks to the midpoint of the video's duration, or the last frame when the
+  duration can't be read (#132).

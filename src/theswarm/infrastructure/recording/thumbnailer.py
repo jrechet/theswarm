@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import shutil
 from pathlib import Path
 
@@ -63,14 +64,51 @@ async def _run_ffmpeg(args: list[str]) -> None:
         raise ThumbnailError(f"ffmpeg exited with code {proc.returncode}")
 
 
+_DURATION_RE = re.compile(rb"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)")
+
+
+async def _probe_duration(ffmpeg: str, video_path: Path) -> float | None:
+    """Read the container duration from ffmpeg's own stderr banner.
+
+    No output is requested, so ffmpeg exits non-zero after printing stream
+    info — only the banner text is used, the exit code is ignored.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        ffmpeg, "-i", str(video_path),
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    match = _DURATION_RE.search(stderr or b"")
+    if not match:
+        return None
+    hours, minutes, seconds = match.groups()
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+
+def _seek_args(duration: float | None) -> list[str]:
+    """ffmpeg input-seek flags: the midpoint of a known duration, or the
+    last frame when the duration can't be read.
+
+    A fixed early timestamp (the previous default, 1s in) landed on the
+    walkthrough's loading screen whenever the target was still booting —
+    prod cycle 5f8f0f63f58c's demo thumbnail was frame 0, a blank white page.
+    """
+    if duration and duration > 0:
+        return ["-ss", f"{duration / 2:.2f}"]
+    return ["-sseof", "-1"]
+
+
 async def make_thumbnail(
     video_path: Path,
     out_path: Path,
-    at_seconds: float = 1.0,
+    at_seconds: float | None = None,
 ) -> Path:
-    """Extract a single JPEG frame from ``video_path`` at ``at_seconds``.
+    """Extract a single JPEG frame from ``video_path``.
 
-    Creates the parent directory if needed. Returns the output path.
+    Seeks to ``at_seconds`` when given. Otherwise seeks to the midpoint of
+    the video's duration, or to the last frame when the duration can't be
+    read. Creates the parent directory if needed. Returns the output path.
     """
     video_path = Path(video_path)
     out_path = Path(out_path)
@@ -81,16 +119,14 @@ async def make_thumbnail(
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     ffmpeg = _resolve_ffmpeg()
-    # -y: overwrite · -ss: seek · -frames:v 1: single frame · -q:v 3: JPEG quality
-    args = [
-        ffmpeg,
-        "-y",
-        "-ss", f"{max(0.0, at_seconds):.2f}",
-        "-i", str(video_path),
-        "-frames:v", "1",
-        "-q:v", "3",
-        str(out_path),
-    ]
+
+    if at_seconds is not None:
+        seek = ["-ss", f"{max(0.0, at_seconds):.2f}"]
+    else:
+        seek = _seek_args(await _probe_duration(ffmpeg, video_path))
+
+    # -y: overwrite · -ss/-sseof: seek · -frames:v 1: single frame · -q:v 3: JPEG quality
+    args = [ffmpeg, "-y", *seek, "-i", str(video_path), "-frames:v", "1", "-q:v", "3", str(out_path)]
     await _run_ffmpeg(args)
 
     if not out_path.exists() or out_path.stat().st_size == 0:

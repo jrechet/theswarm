@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -127,3 +128,91 @@ async def test_concurrent_thumbnail_and_gif(tiny_webm: Path, tmp_path: Path):
     )
     assert thumb.exists() and thumb.stat().st_size > 0
     assert gif.exists() and gif.stat().st_size > 0
+
+
+# ── default seek: midpoint of the video, never frame 0 ──────────────────
+#
+# Prod cycle 5f8f0f63f58c's demo thumbnail was frame 0 — a blank white page
+# — because the previous default seeked to a fixed 1s in, which lands on
+# the walkthrough's loading screen whenever the target is still booting.
+
+
+def test_seek_args_midpoint_of_known_duration():
+    assert thumbnailer._seek_args(10.0) == ["-ss", "5.00"]
+
+
+def test_seek_args_last_frame_when_duration_unknown():
+    assert thumbnailer._seek_args(None) == ["-sseof", "-1"]
+
+
+def test_seek_args_last_frame_when_duration_is_zero():
+    assert thumbnailer._seek_args(0.0) == ["-sseof", "-1"]
+
+
+async def test_default_thumbnail_seeks_to_the_midpoint(tiny_webm: Path, tmp_path: Path, monkeypatch):
+    """No `at_seconds` given: ffmpeg is called with `-ss` at half the real
+    duration (the tiny_webm fixture is ~2s), never at 0."""
+    captured = {}
+
+    async def fake_run_ffmpeg(args):
+        captured["args"] = args
+        Path(args[-1]).write_bytes(b"\xff\xd8\xff\x00")  # satisfy the post-check
+
+    monkeypatch.setattr(thumbnailer, "_run_ffmpeg", fake_run_ffmpeg)
+
+    await make_thumbnail(tiny_webm, tmp_path / "thumb.jpg")
+
+    args = captured["args"]
+    assert "-ss" in args
+    seek_value = float(args[args.index("-ss") + 1])
+    assert 0.5 < seek_value < 1.5  # midpoint of ~2s, nowhere near frame 0
+
+
+async def test_thumbnail_falls_back_to_last_frame_when_duration_unreadable(tmp_path, monkeypatch):
+    monkeypatch.setattr(thumbnailer, "_probe_duration", AsyncMock(return_value=None))
+    captured = {}
+
+    async def fake_run_ffmpeg(args):
+        captured["args"] = args
+        Path(args[-1]).write_bytes(b"\xff\xd8\xff\x00")
+
+    monkeypatch.setattr(thumbnailer, "_run_ffmpeg", fake_run_ffmpeg)
+
+    video = tmp_path / "video.webm"
+    video.write_bytes(b"dummy")
+
+    await make_thumbnail(video, tmp_path / "thumb.jpg")
+
+    args = captured["args"]
+    assert "-sseof" in args
+    assert args[args.index("-sseof") + 1] == "-1"
+
+
+async def test_probe_duration_parses_ffmpeg_banner(monkeypatch):
+    banner = b"Duration: 00:01:02.50, start: 0.000000, bitrate: 128 kb/s"
+
+    class FakeProc:
+        async def communicate(self):
+            return b"", banner
+
+    async def fake_exec(*args, **kwargs):
+        return FakeProc()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    duration = await thumbnailer._probe_duration("ffmpeg", Path("whatever.webm"))
+    assert duration == 62.5
+
+
+async def test_probe_duration_returns_none_without_a_banner(monkeypatch):
+    class FakeProc:
+        async def communicate(self):
+            return b"", b"no duration line here"
+
+    async def fake_exec(*args, **kwargs):
+        return FakeProc()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    duration = await thumbnailer._probe_duration("ffmpeg", Path("whatever.webm"))
+    assert duration is None

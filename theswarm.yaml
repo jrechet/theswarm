@@ -23,8 +23,11 @@ agents:
 # Placeholders: {python} — the target's interpreter, {port}, {tmp} — a fresh
 # directory. The environment is scrubbed: only demo.env reaches the process,
 # so this second instance never holds the real GitHub or Mattermost tokens.
+# ready_seconds overrides QA's default 30s readiness wait — `theswarm serve`
+# takes ~30s to boot in the container, so the default window is too tight.
 demo:
   command: "{python} -m theswarm serve --host 127.0.0.1 --port {port} --db {tmp}/demo.db"
+  ready_seconds: 90
   env:
     SWARM_AUTH_DISABLED: "1"
     BASE_PATH: ""

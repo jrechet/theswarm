@@ -32,6 +32,16 @@ E2E_PORT = 8000  # port for the live server during E2E tests
 _MAX_SNIPPET_CHARS = 8_000  # per source file
 _MAX_SOURCE_CONTEXT_CHARS = 24_000  # total across all files
 
+# Fallback readiness window for a target that does not declare
+# `demo.ready_seconds` — unchanged from the original hardcoded value.
+_DEFAULT_READY_SECONDS = 30.0
+
+# The unit-test run and the coverage run get their own budget, separate from
+# the `qa` phase's 15 minutes: TheSwarm's own suite takes ~4 min in the
+# container, well past the 120s that used to be hardcoded here (prod cycle
+# 5f8f0f63f58c reported "0 passed, 0 failed" — the run never finished).
+QA_TEST_TIMEOUT_SECONDS = 600
+
 
 # ── Prompts ──────────────────────────────────────────────────────────────
 
@@ -190,10 +200,22 @@ async def run_unit_tests(state: AgentState) -> dict:
         workspace,
         [_find_system_python(), "-m", "pytest", "tests/", "--ignore=tests/e2e",
          "-v", "--tb=short"],
-        timeout=120,
+        timeout=QA_TEST_TIMEOUT_SECONDS,
     )
 
     output = result["output"]
+
+    if _is_test_timeout(result):
+        reason = f"did not finish within {QA_TEST_TIMEOUT_SECONDS}s"
+        log.warning("QA unit tests: %s", reason)
+        return {
+            "tests_passed": False,
+            "test_output": output[-3000:],
+            "test_counts": {"passed": 0, "failed": 0, "errors": 0, "total": 0},
+            "unit_tests_not_run_reason": reason,
+            "tokens_used": 0,
+        }
+
     passed = result["passed"]
     counts = _parse_pytest_summary(output)
 
@@ -205,6 +227,7 @@ async def run_unit_tests(state: AgentState) -> dict:
         "tests_passed": passed,
         "test_output": output[-3000:],
         "test_counts": counts,
+        "unit_tests_not_run_reason": "",
         "tokens_used": 0,
     }
 
@@ -257,17 +280,23 @@ async def run_e2e_tests(state: AgentState) -> dict:
     # Sprint G4 — wait for the server to become ready instead of a blind sleep
     from theswarm.infrastructure.resilience import ReadinessTimeout, wait_for_http_ready
     try:
-        await wait_for_http_ready(f"http://127.0.0.1:{port}/", timeout=30.0, interval=0.5)
+        await wait_for_http_ready(
+            f"http://127.0.0.1:{port}/",
+            timeout=_demo_ready_seconds(workspace),
+            interval=0.5,
+        )
     except ReadinessTimeout as exc:
         await _log_readiness_failure("QA E2E", server_proc, exc)
 
     e2e_output = ""
     e2e_passed = False
     try:
-        # Run E2E tests using the same python (system python with app deps)
+        # Run E2E tests using the same python (system python with app deps).
+        # Only the file QA itself wrote — a target's own Playwright suite
+        # (tests/e2e/ in full) belongs to the target's CI, not here.
         result = await claude.run_tests(
             workspace,
-            [python, "-m", "pytest", "tests/e2e/", "-v", "--tb=short"],
+            [python, "-m", "pytest", e2e_test_file, "-v", "--tb=short"],
             timeout=120,
         )
         e2e_output = result["output"]
@@ -313,6 +342,7 @@ async def run_security_scan(state: AgentState) -> dict:
     semgrep_status = "not_run"
     coverage_pct = 0.0
     coverage_status = "not_run"
+    coverage_reason = ""
 
     # Run semgrep OWASP top 10
     try:
@@ -351,21 +381,27 @@ async def run_security_scan(state: AgentState) -> dict:
             workspace,
             [python, "-m", "pytest", "tests/", "--ignore=tests/e2e",
              "--cov=src", "--cov-report=json", "-q"],
-            timeout=120,
+            timeout=QA_TEST_TIMEOUT_SECONDS,
         )
-        coverage_status = "pass" if cov_result["passed"] else "fail"
 
-        # Parse coverage JSON report
-        cov_json_path = os.path.join(workspace, "coverage.json")
-        if os.path.exists(cov_json_path):
-            with open(cov_json_path) as f:
-                cov_data = json.loads(f.read())
-            coverage_pct = cov_data.get("totals", {}).get("percent_covered", 0.0)
-            log.info("QA: coverage %.1f%%", coverage_pct)
-            if coverage_pct < 70:
-                coverage_status = "fail"
+        if _is_test_timeout(cov_result):
+            coverage_status = "not_run"
+            coverage_reason = f"did not finish within {QA_TEST_TIMEOUT_SECONDS}s"
+            log.warning("QA: coverage run %s", coverage_reason)
         else:
-            log.warning("QA: coverage.json not found at %s", cov_json_path)
+            coverage_status = "pass" if cov_result["passed"] else "fail"
+
+            # Parse coverage JSON report
+            cov_json_path = os.path.join(workspace, "coverage.json")
+            if os.path.exists(cov_json_path):
+                with open(cov_json_path) as f:
+                    cov_data = json.loads(f.read())
+                coverage_pct = cov_data.get("totals", {}).get("percent_covered", 0.0)
+                log.info("QA: coverage %.1f%%", coverage_pct)
+                if coverage_pct < 70:
+                    coverage_status = "fail"
+            else:
+                log.warning("QA: coverage.json not found at %s", cov_json_path)
     except Exception as e:
         log.warning("QA: coverage run failed: %s", e)
 
@@ -375,6 +411,7 @@ async def run_security_scan(state: AgentState) -> dict:
             "semgrep_status": semgrep_status,
             "coverage_pct": round(coverage_pct, 1),
             "coverage_status": coverage_status,
+            "coverage_reason": coverage_reason,
         },
         "tokens_used": 0,
     }
@@ -432,10 +469,30 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
 
     # Sprint G4 — wait for readiness instead of blind sleep
     from theswarm.infrastructure.resilience import ReadinessTimeout, wait_for_http_ready
+    ready = True
     try:
-        await wait_for_http_ready(f"http://127.0.0.1:{port}/", timeout=30.0, interval=0.5)
+        await wait_for_http_ready(
+            f"http://127.0.0.1:{port}/",
+            timeout=_demo_ready_seconds(workspace),
+            interval=0.5,
+        )
     except ReadinessTimeout as exc:
+        ready = False
         await _log_readiness_failure("QA screenshots", server_proc, exc)
+
+    if not ready:
+        # A server that never answered can only refuse every page.goto —
+        # don't spend three failed attempts logging what one warning already
+        # said (prod cycle 5f8f0f63f58c: three ERR_CONNECTION_REFUSED).
+        try:
+            server_proc.send_signal(signal.SIGTERM)
+            await asyncio.wait_for(server_proc.wait(), timeout=5)
+        except (ProcessLookupError, asyncio.TimeoutError):
+            try:
+                server_proc.kill()
+            except ProcessLookupError:
+                pass
+        return {"demo_artifacts": [], "tokens_used": 0}
 
     recorder = PlaywrightRecorder()
     base_url = f"http://127.0.0.1:{port}"
@@ -576,7 +633,11 @@ async def record_demo_video(state: AgentState) -> dict:
     # Sprint G4 — wait for readiness instead of blind sleep
     from theswarm.infrastructure.resilience import ReadinessTimeout, wait_for_http_ready
     try:
-        await wait_for_http_ready(f"http://127.0.0.1:{port}/", timeout=30.0, interval=0.5)
+        await wait_for_http_ready(
+            f"http://127.0.0.1:{port}/",
+            timeout=_demo_ready_seconds(workspace),
+            interval=0.5,
+        )
     except ReadinessTimeout as exc:
         await _log_readiness_failure("QA video", server_proc, exc)
 
@@ -704,6 +765,7 @@ async def generate_demo_report(state: AgentState) -> dict:
 
     test_counts = state.get("test_counts", {"passed": 0, "failed": 0, "errors": 0, "total": 0})
     tests_passed = state.get("tests_passed", False)
+    unit_not_run_reason = state.get("unit_tests_not_run_reason", "")
     e2e_counts = state.get("e2e_counts", {"passed": 0, "failed": 0, "errors": 0, "total": 0})
     e2e_passed = state.get("e2e_passed", False)
     issue_stats = state.get("issue_stats", {"open": 0, "closed_today": 0})
@@ -713,15 +775,20 @@ async def generate_demo_report(state: AgentState) -> dict:
     e2e_total = e2e_counts.get("total", 0)
     e2e_all_pass = e2e_counts.get("failed", 0) == 0 and e2e_counts.get("errors", 0) == 0
 
+    # A run that never finished is "not_run", not a vacuous pass from a
+    # 0/0 count — 5f8f0f63f58c reported "unit=0(pass)" off exactly that.
+    unit_status = "not_run" if unit_not_run_reason else ("pass" if unit_all_pass else "fail")
+
     security = state.get("security_scan", {})
     semgrep_high = security.get("semgrep_high", 0)
     semgrep_status = security.get("semgrep_status", "not_run")
     coverage_pct = security.get("coverage_pct", 0.0)
     coverage_status = security.get("coverage_status", "not_run")
+    coverage_reason = security.get("coverage_reason", "")
 
     # All quality gates must pass for green
     all_gates_pass = (
-        unit_all_pass and tests_passed
+        unit_status == "pass" and tests_passed
         and e2e_all_pass and e2e_total > 0
         and semgrep_high == 0 and semgrep_status != "not_run"
     )
@@ -746,7 +813,8 @@ async def generate_demo_report(state: AgentState) -> dict:
                 "total": unit_total,
                 "passed": test_counts.get("passed", 0),
                 "failed": test_counts.get("failed", 0),
-                "status": "pass" if unit_all_pass else "fail",
+                "status": unit_status,
+                "reason": unit_not_run_reason,
             },
             "e2e_tests": {
                 "total": e2e_total,
@@ -762,10 +830,11 @@ async def generate_demo_report(state: AgentState) -> dict:
                 "percent": coverage_pct,
                 "threshold": 70,
                 "status": coverage_status,
+                "reason": coverage_reason,
             },
         },
         "overall_status": "green" if all_gates_pass else
-                          "yellow" if (unit_all_pass and tests_passed) else "red",
+                          "yellow" if (unit_status == "pass" and tests_passed) else "red",
     }
 
     # Attach demo artifact paths to the report
@@ -921,8 +990,9 @@ async def generate_demo_report(state: AgentState) -> dict:
     else:
         demo_report["thumbnail_path"] = ""
 
-    log.info("QA report: unit=%d(%s) e2e=%d(%s) screenshots=%d videos=%d — status: %s",
-             unit_total, "pass" if unit_all_pass else "fail",
+    unit_summary = f"not_run({unit_not_run_reason})" if unit_not_run_reason else f"{unit_total}({unit_status})"
+    log.info("QA report: unit=%s e2e=%d(%s) screenshots=%d videos=%d — status: %s",
+             unit_summary,
              e2e_total, "pass" if e2e_all_pass else "fail",
              len(screenshot_paths), len(video_paths),
              demo_report["overall_status"])
@@ -1025,6 +1095,23 @@ def _demo_spec(workspace: str) -> dict:
     return spec if isinstance(spec, dict) else {}
 
 
+def _demo_ready_seconds(workspace: str) -> float:
+    """How long QA waits for a demo launch to answer, per `demo.ready_seconds`.
+
+    Undeclared targets keep the original 30s window. TheSwarm's own `serve`
+    takes ~30s to boot in the container — right at the old default, so any
+    variance in the container's own load timed it out (prod cycle
+    5f8f0f63f58c: 29.4s, >30s, 30.3s across three separate launches).
+    """
+    value = _demo_spec(workspace).get("ready_seconds")
+    if value is None:
+        return _DEFAULT_READY_SECONDS
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return _DEFAULT_READY_SECONDS
+
+
 def _demo_launch(workspace: str, python: str, port: int) -> tuple[list[str], dict[str, str]]:
     """How to start the target for its demo, and the environment to do it in.
 
@@ -1085,6 +1172,17 @@ def _extract_python_code(text: str) -> str | None:
             return "\n".join(lines[i:])
 
     return None
+
+
+def _is_test_timeout(result: dict) -> bool:
+    """True when `claude.run_tests` never got a pytest result to parse.
+
+    `ClaudeCLI.run_tests` reports a timeout as `exit_code=-1` with a
+    synthetic "Timed out after Ns" message in place of pytest's own output —
+    `_parse_pytest_summary` finds no numbers in that string and silently
+    returns all zeros, which reads as a vacuous pass rather than "unknown".
+    """
+    return result.get("exit_code") == -1 and str(result.get("output", "")).startswith("Timed out after")
 
 
 def _parse_pytest_summary(output: str) -> dict:
