@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import re
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -514,6 +515,25 @@ def _tracker_record_to_unified_json(record) -> dict:
     }
 
 
+def _cycle_sort_key(raw: str | None) -> datetime:
+    """Turn a cycle timestamp string into an aware UTC `datetime` for sorting.
+
+    SQLite cycles store timezone-aware UTC ISO strings; tracker `CycleRecord`
+    entries store naive local ISO strings (`datetime.now().isoformat(...)`).
+    Comparing the raw strings mixes both conventions incorrectly, so every
+    timestamp is normalised to aware UTC here before sorting.
+    """
+    if not raw:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None:
+        parsed = parsed.astimezone()
+    return parsed.astimezone(timezone.utc)
+
+
 async def _list_merged_cycles(request: Request, project_id: str, limit: int) -> list[dict]:
     """Merge persisted (SQLite) cycles with the in-memory tracker, deduped and sorted.
 
@@ -529,13 +549,13 @@ async def _list_merged_cycles(request: Request, project_id: str, limit: int) -> 
     v2_cycles = await query.execute(project_id, limit=limit)
     v2_ids = {c.id for c in v2_cycles}
 
-    entries = [(c.started_at or "", _cycle_dto_to_unified_json(c)) for c in v2_cycles]
+    entries = [(_cycle_sort_key(c.started_at), _cycle_dto_to_unified_json(c)) for c in v2_cycles]
     for record in get_cycle_tracker().list_recent(limit=limit):
         if record.id in v2_ids:
             continue
         if project_id and record.repo != project_id:
             continue
-        sort_key = record.started_at or record.created_at
+        sort_key = _cycle_sort_key(record.started_at or record.created_at)
         entries.append((sort_key, _tracker_record_to_unified_json(record)))
 
     entries.sort(key=lambda pair: pair[0], reverse=True)
