@@ -186,6 +186,16 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   min locally), are `tests_unavailable`: no Ralph rounds, the PR opens
   with the reason in its body, and the repository's CI is the judge.
   Installing TheSwarm into the container's system python takes ~63s cold.
+- **The Dev's working tree is the truth, not Claude's last message.**
+  `claude -p` grants nothing: an `Edit` in the workspace is refused, Claude
+  writes the files into an intermediate message and ends with a summary,
+  and `--output-format json` carries only that summary — a five-minute
+  implementation of #114 became "no file changes" (#125). Implementation
+  and Ralph-retry calls run with `--permission-mode acceptEdits`; the
+  `--- FILE:` blocks are the fallback for the *final* message; both paths
+  end in `commit_all`, whose answer decides. The container's Bash
+  allowlist is the host's `~/.claude/settings.json` mounted in — do not
+  rely on it.
 - **A failed attempt leaves a trace on the issue** (`ATTEMPT_MARKER` comment,
   `agents/dev._note_failed_attempt`), and the picker reads those back: a
   sub-task that failed in an earlier cycle goes behind its untried siblings

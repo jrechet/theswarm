@@ -91,7 +91,7 @@ async def test_auth_failure_retries_without_the_env_token(monkeypatch):
 
     calls: list[bool] = []
 
-    async def flaky(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def flaky(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         calls.append(drop_oauth_env)
         if not drop_oauth_env:
             raise _CLIUnavailable("exit 1: OAuth access token has expired.")
@@ -117,7 +117,7 @@ async def test_transient_failure_does_not_drop_the_env_token(monkeypatch):
 
     calls: list[bool] = []
 
-    async def always_transient(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def always_transient(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         calls.append(drop_oauth_env)
         raise _CLIUnavailable("connection reset by peer")
 
@@ -137,7 +137,7 @@ async def test_no_env_token_means_no_extra_attempt(monkeypatch):
 
     calls: list[bool] = []
 
-    async def failing(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def failing(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         calls.append(drop_oauth_env)
         raise _CLIUnavailable("exit 1: OAuth access token has expired.")
 
@@ -185,7 +185,7 @@ async def test_auth_failure_on_the_grown_retry_still_recovers(monkeypatch):
 
     attempts: list[tuple[int | None, bool]] = []
 
-    async def flaky(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def flaky(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         attempts.append((timeout, drop_oauth_env))
         if drop_oauth_env:
             return ClaudeResult(text="recovered", backend="cli")
@@ -218,7 +218,7 @@ async def test_a_hang_with_the_override_set_drops_it_and_retries(monkeypatch):
 
     attempts: list[bool] = []
 
-    async def hangs_with_the_token(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def hangs_with_the_token(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         attempts.append(drop_oauth_env)
         if not drop_oauth_env:
             raise _CLIUnavailable("CLI timed out after 240s")
@@ -240,7 +240,7 @@ async def test_a_hang_without_the_override_is_still_just_a_timeout(monkeypatch):
 
     attempts: list[bool] = []
 
-    async def always_hangs(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def always_hangs(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         attempts.append(drop_oauth_env)
         raise _CLIUnavailable("CLI timed out after 240s")
 

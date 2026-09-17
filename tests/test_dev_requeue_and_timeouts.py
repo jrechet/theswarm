@@ -14,7 +14,7 @@ issues drained in two cycles with zero PRs. Two compounding defects:
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -117,13 +117,15 @@ async def test_ralph_retry_gets_the_same_budget(tmp_path):
     claude = AsyncMock()
     claude.run.return_value = AsyncMock(text="", total_tokens=0, cost_usd=0.0)
 
-    await retry_implement({
-        "task": {"number": 159, "title": "t"},
-        "claude": claude,
-        "workspace": str(tmp_path),
-        "retry_count": 0,
-        "test_output": "boom",
-    })
+    # The retry commits whatever the tree says (#125); tmp_path is no repo.
+    with patch("theswarm.tools.git.commit_all", new=AsyncMock(return_value=False)):
+        await retry_implement({
+            "task": {"number": 159, "title": "t"},
+            "claude": claude,
+            "workspace": str(tmp_path),
+            "retry_count": 0,
+            "test_output": "boom",
+        })
 
     assert claude.run.call_args.kwargs["timeout"] == IMPLEMENT_TIMEOUT_SECONDS
 

@@ -36,7 +36,7 @@ async def test_a_timeout_retry_gets_more_room():
     cli = ClaudeCLI(model="haiku", timeout=120, timeout_growth=1.3)
     seen: list[int | None] = []
 
-    async def timing_out(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def timing_out(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         seen.append(timeout)
         if len(seen) == 1:
             raise _CLIUnavailable("CLI timed out after 120s")
@@ -54,7 +54,7 @@ async def test_an_explicit_call_budget_grows_from_that_budget():
     cli = ClaudeCLI(model="haiku", timeout=180, timeout_growth=1.3)
     seen: list[int | None] = []
 
-    async def timing_out(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def timing_out(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         seen.append(timeout)
         if len(seen) == 1:
             raise _CLIUnavailable("CLI timed out after 240s")
@@ -71,7 +71,7 @@ async def test_a_non_timeout_failure_keeps_its_budget():
     cli = ClaudeCLI(model="haiku", timeout=120)
     seen: list[int | None] = []
 
-    async def crashing(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def crashing(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         seen.append(timeout)
         raise _CLIUnavailable("JSON parse failed")
 
@@ -85,7 +85,7 @@ async def test_a_non_timeout_failure_keeps_its_budget():
 async def test_both_attempts_timing_out_still_reports_the_real_cause():
     cli = ClaudeCLI(model="haiku", timeout=120)
 
-    async def always_timeout(prompt, *, workdir, timeout, drop_oauth_env=False):
+    async def always_timeout(prompt, *, workdir, timeout, drop_oauth_env=False, permission_mode=None):
         raise _CLIUnavailable(f"CLI timed out after {timeout or 120}s")
 
     with patch.object(cli, "_run_cli", side_effect=always_timeout):

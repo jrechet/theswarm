@@ -31,6 +31,15 @@ DEP_INSTALL_TIMEOUT_SECONDS = 300
 # 'CLI timed out after 180s' while trivial ones passed.
 IMPLEMENT_TIMEOUT_SECONDS = 420
 
+# Print mode grants nothing: Claude's own `Edit` in the workspace is refused,
+# so it writes the files into a message instead — and `--output-format json`
+# keeps only the *last* message. Cycle 5f8f0f63f58c lost a five-minute
+# implementation of #114 that way: five FILE blocks in an intermediate
+# message, a summary at the end, nothing extracted, clean tree (#125). With
+# acceptEdits the edits inside the workspace go through and the working
+# tree, not the last message, is what gets committed.
+EDIT_PERMISSION_MODE = "acceptEdits"
+
 
 # ── Prompts ─────────────────────────────────────────────────────────────
 
@@ -69,7 +78,9 @@ DEV_TASK_PROMPT = """\
 
 Implement the task described above.
 
-You MUST output every file you create or modify using this exact format for EACH file:
+Edit the files in place in the working directory — your edits there are
+accepted. If you cannot edit a file in place, output it in your final message
+using this exact format for EACH such file (earlier messages are not read):
 
 --- FILE: path/to/file.py ---
 ```python
@@ -362,6 +373,7 @@ async def implement_task(state: AgentState) -> dict:
         # Run Claude in the workspace
         result = await claude.run(
             prompt, workdir=workspace, timeout=IMPLEMENT_TIMEOUT_SECONDS,
+            permission_mode=EDIT_PERMISSION_MODE,
         )
         log.info("Claude implementation done: %d tokens, $%.4f",
                  result.total_tokens, result.cost_usd)
@@ -408,7 +420,10 @@ async def implement_task(state: AgentState) -> dict:
         raise
 
     if not committed:
-        log.warning("Claude produced no file changes for task #%d", task["number"])
+        log.warning(
+            "Claude produced no file changes for task #%d — its answer began: %r",
+            task["number"], (result.text or "").strip()[:200],
+        )
         await _note_failed_attempt(github, task, "no file changes produced")
         return {
             "result": "no changes produced",
@@ -623,24 +638,28 @@ async def retry_implement(state: AgentState) -> dict:
         f"The previous implementation for '{task['title']}' failed quality gates.\n\n"
         f"## Test output\n\n```\n{test_output[-3000:]}\n```\n\n"
         f"## Instructions\n\n"
-        f"Fix the implementation to make all tests pass. "
-        f"Output the corrected files using the --- FILE: path --- format.\n"
+        f"Fix the implementation to make all tests pass. Edit the files in "
+        f"place; if you cannot, output the corrected files in your final "
+        f"message using the --- FILE: path --- format.\n"
     )
 
     result = await claude.run(
         prompt, workdir=workspace, timeout=IMPLEMENT_TIMEOUT_SECONDS,
+        permission_mode=EDIT_PERMISSION_MODE,
     )
 
     from theswarm.tools import git as git_ops
     files_written = _extract_files_from_response(result.text, workspace)
-    log.info("Ralph Loop retry: wrote %d files", files_written)
+    log.info("Ralph Loop retry: wrote %d files from the answer", files_written)
 
-    if files_written:
-        await git_ops.commit_all(
-            workspace,
-            f"fix: address test failures for #{task['number']} (retry {retry_count})\n\n"
-            f"Co-Authored-By: swarm-dev-agent <agent@swarm-bots.local>",
-        )
+    # The tree decides, not the extractor: an in-place fix leaves no FILE
+    # block, ran green in the gates, and used to stay out of the PR.
+    committed = await git_ops.commit_all(
+        workspace,
+        f"fix: address test failures for #{task['number']} (retry {retry_count})\n\n"
+        f"Co-Authored-By: swarm-dev-agent <agent@swarm-bots.local>",
+    )
+    if committed:
         diff_stat = await git_ops.get_diff_stat(workspace)
     else:
         diff_stat = state.get("diff_stat", "")

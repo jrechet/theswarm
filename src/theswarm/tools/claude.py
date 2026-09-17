@@ -259,10 +259,19 @@ class ClaudeCLI:
         *,
         workdir: str | None = None,
         timeout: int | None = None,
+        permission_mode: str | None = None,
     ) -> ClaudeResult:
         """Run a prompt. Tries CLI first, falls back to API on failure.
 
         Honors ``SWARM_CLAUDE_BACKEND`` (``auto`` | ``cli`` | ``api``).
+
+        ``permission_mode`` is the CLI's ``--permission-mode``. Print mode
+        grants nothing by itself: an ``Edit`` in the workspace is refused
+        and Claude falls back to describing the change — which is how a
+        five-minute implementation ended as "no file changes" (#125). The
+        Dev passes ``acceptEdits`` so edits inside ``workdir`` go through;
+        reviews and plans pass nothing. The API backend has no tools and
+        ignores it.
         """
         backend = _resolve_backend_mode()
 
@@ -272,6 +281,7 @@ class ClaudeCLI:
         try:
             return await self._cli_with_auth_recovery(
                 prompt, workdir=workdir, timeout=timeout,
+                permission_mode=permission_mode,
             )
         except _CLIUnavailable as exc:
             first_error = exc
@@ -302,6 +312,7 @@ class ClaudeCLI:
                 return await self._cli_with_auth_recovery(
                     prompt, workdir=workdir,
                     timeout=self._retry_timeout(timeout, first_error, workdir=workdir),
+                    permission_mode=permission_mode,
                 )
             except _CLIUnavailable as retry_error:
                 raise RuntimeError(
@@ -315,6 +326,7 @@ class ClaudeCLI:
 
     async def _cli_with_auth_recovery(
         self, prompt: str, *, workdir: str | None, timeout: int | None,
+        permission_mode: str | None = None,
     ) -> ClaudeResult:
         """Run the CLI, recovering from a stale env token on any attempt.
 
@@ -326,7 +338,10 @@ class ClaudeCLI:
         and that retry died on an expired token with no second chance.
         """
         try:
-            return await self._run_cli(prompt, workdir=workdir, timeout=timeout)
+            return await self._run_cli(
+                prompt, workdir=workdir, timeout=timeout,
+                permission_mode=permission_mode,
+            )
         except _CLIUnavailable as exc:
             # A stale env token does not always fail loudly. In prod it made
             # the CLI *hang*: `claude -p` returned rc=124 after 90s with the
@@ -343,6 +358,7 @@ class ClaudeCLI:
             )
             return await self._run_cli(
                 prompt, workdir=workdir, timeout=timeout, drop_oauth_env=True,
+                permission_mode=permission_mode,
             )
 
     def _retry_timeout(
@@ -379,6 +395,7 @@ class ClaudeCLI:
         workdir: str | None,
         timeout: int | None,
         drop_oauth_env: bool = False,
+        permission_mode: str | None = None,
     ) -> ClaudeResult:
         """Invoke ``claude -p`` and parse the JSON envelope.
 
@@ -396,6 +413,8 @@ class ClaudeCLI:
             "--model", model_id,
             "--output-format", "json",
         ]
+        if permission_mode:
+            cmd += ["--permission-mode", permission_mode]
 
         prompt_chars = len(prompt or "")
         log.info(
