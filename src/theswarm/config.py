@@ -78,6 +78,11 @@ class AgentState(TypedDict, total=False):
     reviewed_prs: list[str]  # "number@head_sha" reviewed this cycle — once, unless the head moves
     # QA-specific
     test_counts: dict
+    # Why the unit-test run did not produce a result at all (hit its own
+    # budget before pytest finished), "" when it ran to completion. Distinct
+    # from tests_passed=False: a 0/0 count from a timed-out run must not be
+    # read as a vacuous pass.
+    unit_tests_not_run_reason: str
     e2e_passed: bool
     e2e_output: str
     e2e_counts: dict

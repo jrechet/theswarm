@@ -158,6 +158,56 @@ async def test_generate_demo_report_no_tests():
     assert report["overall_status"] == "red"
 
 
+async def test_generate_demo_report_unit_tests_not_run():
+    """A run that hit its own budget is 'not_run', never a vacuous pass.
+
+    Prod cycle 5f8f0f63f58c's unit-test run timed out at 120s and
+    `_parse_pytest_summary` read the empty output as 0 passed / 0 failed —
+    which `unit_all_pass` (failed == 0 and errors == 0) treated as green.
+    """
+    state = {
+        "test_counts": {"passed": 0, "failed": 0, "errors": 0, "total": 0},
+        "tests_passed": False,
+        "unit_tests_not_run_reason": "did not finish within 600s",
+        "e2e_counts": {"passed": 5, "failed": 0, "errors": 0, "total": 5},
+        "e2e_passed": True,
+        "issue_stats": {"open": 0, "closed_today": 0},
+        "security_scan": {
+            "semgrep_high": 0,
+            "semgrep_status": "pass",
+            "coverage_pct": 0.0,
+            "coverage_status": "not_run",
+        },
+    }
+    result = await generate_demo_report(state)
+    report = result["demo_report"]
+
+    assert report["quality_gates"]["unit_tests"]["status"] == "not_run"
+    assert report["quality_gates"]["unit_tests"]["reason"] == "did not finish within 600s"
+    assert report["overall_status"] == "red"
+
+
+async def test_generate_demo_report_coverage_not_run_reason_is_carried():
+    state = {
+        "test_counts": {"passed": 5, "failed": 0, "errors": 0, "total": 5},
+        "tests_passed": True,
+        "e2e_counts": {"passed": 5, "failed": 0, "errors": 0, "total": 5},
+        "e2e_passed": True,
+        "security_scan": {
+            "semgrep_high": 0,
+            "semgrep_status": "pass",
+            "coverage_pct": 0.0,
+            "coverage_status": "not_run",
+            "coverage_reason": "did not finish within 600s",
+        },
+    }
+    result = await generate_demo_report(state)
+    report = result["demo_report"]
+
+    assert report["quality_gates"]["coverage"]["status"] == "not_run"
+    assert report["quality_gates"]["coverage"]["reason"] == "did not finish within 600s"
+
+
 # ── write_e2e_tests (stub) ───────────────────────────────────────────
 
 
