@@ -83,6 +83,54 @@ class TestGenerate:
         assert report.artifacts == ()
         assert report.thumbnail_path is None
 
+    def test_screenshots_are_attached_as_artifacts(self, generator):
+        cycle = _make_cycle()
+        screenshots = [
+            {"type": "screenshot", "label": "homepage", "path": "cyc/screenshot/homepage.png"},
+            {"type": "screenshot", "label": "health_check", "path": "cyc/screenshot/health_check.png"},
+        ]
+        report = generator.generate(cycle, screenshots=screenshots)
+
+        assert report.screenshot_count == 2
+        paths = {a.path for a in report.artifacts}
+        assert paths == {"cyc/screenshot/homepage.png", "cyc/screenshot/health_check.png"}
+
+    def test_thumbnail_comes_first_so_it_stays_the_cover_image(self, generator):
+        cycle = _make_cycle()
+        screenshots = [
+            {"type": "screenshot", "label": "homepage", "path": "cyc/screenshot/homepage.png"},
+        ]
+        report = generator.generate(
+            cycle, thumbnail_rel_path="cyc/thumbnail/video_frame.jpg", screenshots=screenshots,
+        )
+
+        assert report.thumbnail_path == "cyc/thumbnail/video_frame.jpg"
+        assert report.screenshot_count == 2
+
+    def test_a_screenshot_matching_the_thumbnail_path_is_not_duplicated(self, generator):
+        """No video: the thumbnail *is* the first screenshot's own path."""
+        cycle = _make_cycle()
+        screenshots = [
+            {"type": "screenshot", "label": "homepage", "path": "cyc/screenshot/homepage.png"},
+        ]
+        report = generator.generate(
+            cycle, thumbnail_rel_path="cyc/screenshot/homepage.png", screenshots=screenshots,
+        )
+
+        assert report.screenshot_count == 1
+
+    def test_held_prs_are_reported_separately_from_merged(self, generator):
+        cycle = _make_cycle(prs_opened=(124,), prs_merged=())
+        report = generator.generate(cycle, held_prs=(124,))
+
+        assert report.summary.prs_merged == 0
+        assert report.summary.prs_held == 1
+
+    def test_no_held_prs_defaults_to_zero(self, generator):
+        cycle = _make_cycle()
+        report = generator.generate(cycle)
+        assert report.summary.prs_held == 0
+
     def test_completed_cycle_gate_passes(self, generator):
         cycle = _make_cycle(status=CycleStatus.COMPLETED)
         report = generator.generate(cycle)

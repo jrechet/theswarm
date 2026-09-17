@@ -270,6 +270,8 @@ async def run_daily_cycle(
     total_cost = 0.0
     all_prs: list[dict] = []
     all_reviews: list[dict] = []
+    all_merged_prs: list[int] = []
+    all_held_prs: list[int] = []
 
     watchdog = AgentWatchdog(
         idle_threshold=config.watchdog_idle_threshold,
@@ -529,11 +531,13 @@ async def run_daily_cycle(
             reviews = tl_state.get("reviews", [])
             all_reviews.extend(reviews)
             merged = tl_state.get("merged_prs", [])
+            all_merged_prs.extend(merged)
             for r in reviews:
                 await _progress("TechLead", f"PR #{r['pr_number']}: {r['decision']}")
             if merged:
                 await _progress("TechLead", f"Merged: {merged}")
             held = tl_state.get("held_prs", [])
+            all_held_prs.extend(held)
             if held:
                 await _progress(
                     "TechLead",
@@ -625,7 +629,9 @@ async def run_daily_cycle(
         tracker.print_summary()
         print(f"\nClaude API cost: ${total_cost:.2f}")
         print(f"PRs opened: {len(all_prs)}")
-        print(f"PRs merged: {sum(1 for r in all_reviews if r.get('decision') == 'APPROVE')}")
+        print(f"PRs merged: {len(set(all_merged_prs))}")
+        if all_held_prs:
+            print(f"PRs held for a human to merge: {sorted(set(all_held_prs))}")
 
         await _progress("PO", "Cycle complete!")
 
@@ -635,6 +641,8 @@ async def run_daily_cycle(
             "cost_usd": total_cost,
             "prs": all_prs,
             "reviews": all_reviews,
+            "merged_prs": sorted(set(all_merged_prs)),
+            "held_prs": sorted(set(all_held_prs)),
             "demo_report": qa_state.get("demo_report"),
             "daily_report": po_ev_state.get("daily_report", ""),
         }

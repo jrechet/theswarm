@@ -25,9 +25,18 @@ agents:
 # so this second instance never holds the real GitHub or Mattermost tokens.
 # ready_seconds overrides QA's default 30s readiness wait — `theswarm serve`
 # takes ~30s to boot in the container, so the default window is too tight.
+# pages replaces the guessed screenshot/video walk (/, /docs, /health) with
+# pages that actually exist on this app — /docs 404s here (#144).
+# setup runs once in the workspace before the first launch: the QA workspace
+# is a plain clone, and static/v2/app.css is generated, not checked in.
 demo:
   command: "{python} -m theswarm serve --host 127.0.0.1 --port {port} --db {tmp}/demo.db"
   ready_seconds: 90
+  pages:
+    - "/"
+    - "/r/jrechet/theswarm"
+  setup:
+    - "bash scripts/build-css.sh"
   env:
     SWARM_AUTH_DISABLED: "1"
     BASE_PATH: ""

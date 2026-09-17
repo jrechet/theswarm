@@ -42,6 +42,7 @@ class ReportSummary:
     stories_completed: int = 0
     stories_total: int = 0
     prs_merged: int = 0
+    prs_held: int = 0  # approved on SELF_REPO, left for a human to merge
     tests_passing: int = 0
     tests_total: int = 0
     coverage_percent: float = 0.0

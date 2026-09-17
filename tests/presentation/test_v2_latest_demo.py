@@ -122,6 +122,46 @@ class TestTheCard:
         assert "1 video" in r.text
         assert "$4.70" in r.text
 
+    async def test_multiple_screenshots_all_show_in_the_gallery(self, web):
+        client, app = web
+        report = _report(with_video=False)
+        report = DemoReport(
+            id=report.id, cycle_id=report.cycle_id, project_id=report.project_id,
+            created_at=report.created_at, summary=report.summary,
+            artifacts=(
+                *report.artifacts,
+                Artifact(type=ArtifactType("screenshot"), label="openapi_docs",
+                          path="20260915/screenshot/openapi_docs.png"),
+                Artifact(type=ArtifactType("screenshot"), label="health_check",
+                          path="20260915/screenshot/health_check.png"),
+            ),
+        )
+        await app.state.report_repo.save(report)
+
+        r = await _page(client)
+
+        assert "3 screenshots" in r.text
+        assert 'src="/swarm/artifacts/20260915/screenshot/openapi_docs.png"' in r.text
+        assert 'src="/swarm/artifacts/20260915/screenshot/health_check.png"' in r.text
+
+    async def test_held_prs_show_alongside_merged(self, web):
+        client, app = web
+        report = _report()
+        report = DemoReport(
+            id=report.id, cycle_id=report.cycle_id, project_id=report.project_id,
+            created_at=report.created_at,
+            summary=ReportSummary(
+                stories_completed=2, stories_total=3, prs_merged=2, prs_held=1, cost_usd=4.7,
+            ),
+            artifacts=report.artifacts,
+        )
+        await app.state.report_repo.save(report)
+
+        r = await _page(client)
+
+        assert "2 PRs merged" in r.text
+        assert "1 held for review" in r.text
+
     async def test_it_links_to_the_cycle(self, web):
         client, app = web
         await app.state.report_repo.save(_report())

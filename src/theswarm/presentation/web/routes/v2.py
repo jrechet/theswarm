@@ -179,6 +179,7 @@ async def _latest_demo(state, full_name: str) -> dict | None:
         "screenshot_count": report.screenshot_count,
         "video_count": report.video_count,
         "prs_merged": report.summary.prs_merged,
+        "prs_held": report.summary.prs_held,
         "stories_completed": report.summary.stories_completed,
         "stories_total": report.summary.stories_total,
         "cost_usd": report.summary.cost_usd,
