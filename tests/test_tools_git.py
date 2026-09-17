@@ -354,7 +354,9 @@ async def test_push_branch(mock_subprocess):
     # `-c http.…extraheader=…` whenever GITHUB_TOKEN is set, so an
     # index-based assertion silently depended on the suite's environment.
     assert args[0] == "git"
-    assert args[-4:] == ("push", "-u", "origin", "feat/new")
+    # The last call is the push; the fetch that lets --force-with-lease see
+    # the remote branch comes first (#123).
+    assert args[-5:] == ("push", "-u", "--force-with-lease", "origin", "feat/new")
 
 
 # ── get_diff_stat ──────────────────────────────────────────────────────

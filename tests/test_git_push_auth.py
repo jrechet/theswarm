@@ -83,7 +83,7 @@ async def test_push_without_token_sends_no_auth_flag(mock_subprocess, monkeypatc
     await push_branch("/tmp/repo", "feat/x")
 
     assert asyncio.create_subprocess_exec.call_args.args == (
-        "git", "push", "-u", "origin", "feat/x",
+        "git", "push", "-u", "--force-with-lease", "origin", "feat/x",
     )
 
 

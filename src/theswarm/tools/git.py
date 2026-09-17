@@ -209,9 +209,25 @@ async def commit_all(workdir: str, message: str) -> bool:
 
 
 async def push_branch(workdir: str, branch_name: str) -> None:
-    """Push branch to origin."""
+    """Push the branch to origin, replacing a superseded attempt if one is there.
+
+    The branch name is derived from the task, so a retried task pushes the
+    same name as its previous attempt — whose PR was closed, but closing a
+    PR does not delete its branch. `create_branch` rebuilt ours from main,
+    the two share no history, and the push was refused: non-fast-forward,
+    on both retried tasks of cycle 5f8f0f63f58c, with the good work sitting
+    in a local commit nobody could see (#123).
+
+    Fetch first so the lease knows what the remote holds, then force with
+    the lease: a branch someone else moved since is still protected. A
+    branch that does not exist remotely fetches nothing and pushes as before.
+    """
     await github_app.ensure_github_token()
-    await _run_git(*_auth_args(), "push", "-u", "origin", branch_name, cwd=workdir)
+    await _run_git(*_auth_args(), "fetch", "origin", branch_name, cwd=workdir, check=False)
+    await _run_git(
+        *_auth_args(), "push", "-u", "--force-with-lease", "origin", branch_name,
+        cwd=workdir,
+    )
     log.info("Pushed branch %s", branch_name)
 
 
