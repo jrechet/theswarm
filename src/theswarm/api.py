@@ -12,7 +12,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -72,7 +72,7 @@ class CycleTracker:
             callback_url=req.callback_url,
             issue_number=req.issue_number,
             status=CycleStatus.QUEUED,
-            created_at=datetime.now().isoformat(timespec="seconds"),
+            created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
         self._cycles[cycle_id] = record
         # Cap at 100 records
@@ -250,7 +250,7 @@ async def _run_api_cycle(
         tracker.update_status(
             cycle_id, CycleStatus.FAILED,
             error=f"Repo '{repo}' not in allowed list: {allowed_repos}",
-            completed_at=datetime.now().isoformat(timespec="seconds"),
+            completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
         return
 
@@ -264,7 +264,7 @@ async def _run_api_cycle(
         tracker.update_status(
             cycle_id, CycleStatus.FAILED,
             error=str(exc),
-            completed_at=datetime.now().isoformat(timespec="seconds"),
+            completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
         return
 
@@ -272,7 +272,7 @@ async def _run_api_cycle(
     # the async BudgetGuard check below is resolving.
     tracker.update_status(
         cycle_id, CycleStatus.RUNNING,
-        started_at=datetime.now().isoformat(timespec="seconds"),
+        started_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
     )
 
     # Sprint B C4 — budget/pause gate.
@@ -291,7 +291,7 @@ async def _run_api_cycle(
                     tracker.update_status(
                         cycle_id, CycleStatus.FAILED,
                         error=f"blocked: {e.reason}",
-                        completed_at=datetime.now().isoformat(timespec="seconds"),
+                        completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     )
                     if event_bus is not None:
                         from theswarm.domain.cycles.events import CycleBlocked as BlockedEvent
@@ -410,7 +410,7 @@ async def _run_api_cycle(
         tracker.update_status(
             cycle_id, CycleStatus.COMPLETED,
             result=result,
-            completed_at=datetime.now().isoformat(timespec="seconds"),
+            completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
 
         # Publish CycleCompleted event
@@ -448,7 +448,7 @@ async def _run_api_cycle(
     except asyncio.CancelledError:
         tracker.update_status(
             cycle_id, CycleStatus.CANCELLED,
-            completed_at=datetime.now().isoformat(timespec="seconds"),
+            completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
         # The tracker is memory; the cycles table is what a restart reads.
         # Without this row update the resumer took a cancelled cycle for an
@@ -467,7 +467,7 @@ async def _run_api_cycle(
         tracker.update_status(
             cycle_id, CycleStatus.FAILED,
             error=error_msg,
-            completed_at=datetime.now().isoformat(timespec="seconds"),
+            completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
         # Publish CycleFailed event
         if event_bus is not None:
@@ -513,5 +513,5 @@ async def run_api_cycle(cycle_id: str, repo: str, *args, **kwargs) -> None:
     except asyncio.CancelledError:
         tracker.update_status(
             cycle_id, CycleStatus.CANCELLED,
-            completed_at=datetime.now().isoformat(timespec="seconds"),
+            completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
