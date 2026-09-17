@@ -16,7 +16,9 @@ on:
     # the cycle that wrote it (336a73c, 2026-09-15).
     paths-ignore:
       - 'docs/daily-plans/**'
+      - 'docs/daily-reports/**'
       - 'docs/cycle-history.jsonl'
+      - 'AGENT_MEMORY.jsonl'
   pull_request:
     branches: [main]
 

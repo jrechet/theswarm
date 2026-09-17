@@ -130,8 +130,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
 - **Anything that commits to `main` of a repo a cycle is running against
   redeploys the service and kills that cycle** — the tracker is in-memory
   (#5). The PO's daily plan did exactly that until `docs/daily-plans/**` was
-  excluded from the CI trigger. Adding a new agent write-to-main path means
-  adding it to that `paths-ignore` too.
+  excluded from the CI trigger — then the PO's daily *report*
+  (`docs/daily-reports/**`) and the memory save (`AGENT_MEMORY.jsonl`)
+  did it again at the end of cycle `5f8f0f63f58c`, two deploys in a
+  minute while QA was still finishing. Adding a new agent write-to-main
+  path means adding it to that `paths-ignore` too.
 - Waiting for a deploy: check the **running container's** image
   (`docker inspect $(docker ps -q -f name=theswarm_theswarm)`), not the
   service spec — the spec updates when the rollout *starts*, and `/health`
