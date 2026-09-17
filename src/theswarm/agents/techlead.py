@@ -265,16 +265,35 @@ async def poll_and_review_prs(state: AgentState) -> dict:
     open_prs = await github.get_open_prs()
     if not open_prs:
         log.info("No open PRs to review")
-        return {"result": "no open PRs", "tokens_used": 0, "cost_usd": 0.0, "reviews": []}
+        return {"result": "no open PRs", "tokens_used": 0, "cost_usd": 0.0,
+                "reviews": [], "reviewed_prs": state.get("reviewed_prs") or []}
 
-    log.info("Found %d open PR(s) to review", len(open_prs))
+    # Once per cycle, unless the head moved. The dev loop runs this node
+    # after every iteration; a PR approved-and-held (SELF_REPO) or filed as
+    # COMMENT is still open next time, and nothing about it has changed.
+    # Cycle 5f8f0f63f58c re-reviewed #124 three times at ~$0.4 and 2–3 min
+    # each, and the 300s phase timed out on the pass that mattered. The
+    # list is the cycle's own object, extended in place, so a phase abort
+    # between two reviews still keeps the ones that were done.
+    reviewed = state.get("reviewed_prs")
+    if reviewed is None:
+        reviewed = []
+    todo = [pr for pr in open_prs if _pr_key(pr) not in reviewed]
+    skipped = len(open_prs) - len(todo)
+    if not todo:
+        log.info("Nothing left to review: %d open PR(s) already reviewed this cycle", skipped)
+        return {"result": f"{skipped} open PR(s) already reviewed this cycle",
+                "tokens_used": 0, "cost_usd": 0.0, "reviews": [], "reviewed_prs": reviewed}
+
+    log.info("Found %d open PR(s) to review (%d already reviewed this cycle)", len(todo), skipped)
     context = state.get("context", "")
     reviews = []
     total_tokens = 0
     total_cost = 0.0
 
-    for pr in open_prs:
+    for pr in todo:
         review = await _review_single_pr(github, claude, pr, context)
+        reviewed.append(_pr_key(pr))
         reviews.append(review)
         total_tokens += review.get("tokens_used", 0)
         total_cost += review.get("cost_usd", 0.0)
@@ -284,7 +303,15 @@ async def poll_and_review_prs(state: AgentState) -> dict:
         "tokens_used": total_tokens,
         "cost_usd": total_cost,
         "reviews": reviews,
+        "reviewed_prs": reviewed,
     }
+
+
+def _pr_key(pr: dict) -> str:
+    """What a review is a review *of*: the PR at a given head. A new push
+    changes the key and earns a new review; a held or commented PR does not."""
+    sha = pr.get("head_sha")
+    return f"{pr['number']}@{sha}" if sha else str(pr["number"])
 
 
 async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
@@ -606,14 +633,14 @@ def _parse_review(text: str) -> tuple[dict, bool]:
     try:
         return json.loads(clean), False
     except json.JSONDecodeError:
-        # Try to find JSON in the text
-        start = clean.find("{")
-        end = clean.rfind("}") + 1
-        if start >= 0 and end > start:
-            try:
-                return json.loads(clean[start:end]), False
-            except json.JSONDecodeError:
-                pass
+        # The verdict is often *in* the answer without *being* the answer:
+        # PR #126 came back as a paragraph of prose, then a fenced ```json
+        # block with the decision and three issues. Slicing from the first
+        # `{` — the one in "`GET /api/cycles/{id}`" — to the last `}` gave
+        # garbage, and the whole review was filed as COMMENT.
+        found = _first_review_object(clean)
+        if found is not None:
+            return found, False
         # Not JSON — but the verdict is usually right there in the prose.
         # PR #104 came back as "**Decision: APPROVE** — I cross-checked the
         # diff against the pre-PR source…" and was filed as COMMENT: the one
@@ -626,8 +653,28 @@ def _parse_review(text: str) -> tuple[dict, bool]:
         return {"decision": decision, "summary": clean[:4000], "issues": []}, True
 
 
+_FENCE_RE = re.compile(r"```[\w-]*[ \t]*\n(.*?)\n[ \t]*```", re.DOTALL)
+
+
+def _first_review_object(text: str) -> dict | None:
+    """The first JSON object in ``text`` that carries a ``decision`` —
+    fenced or bare, wherever it sits. A brace in the prose (``{id}``) or
+    an example payload without a verdict is stepped over."""
+    candidates = [m.group(1) for m in _FENCE_RE.finditer(text)] + [text]
+    decoder = json.JSONDecoder()
+    for chunk in candidates:
+        for match in re.finditer(r"\{", chunk):
+            try:
+                parsed, _ = decoder.raw_decode(chunk, match.start())
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict) and "decision" in parsed:
+                return parsed
+    return None
+
+
 _DECISION_RE = re.compile(
-    r"(?:decision|verdict)\s*[:\-—]\s*\**\s*(APPROVE|REQUEST_CHANGES)\b"
+    r"(?:decision|verdict)[\"'*]*\s*[:\-—]\s*[\"'*]*\s*(APPROVE|REQUEST_CHANGES)\b"
     r"|^\s*\**\s*(APPROVE|REQUEST_CHANGES)\s*\**\s*$",
     re.IGNORECASE | re.MULTILINE,
 )

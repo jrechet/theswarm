@@ -75,6 +75,7 @@ class AgentState(TypedDict, total=False):
     reviews: list[dict]
     merged_prs: list[int]
     held_prs: list[int]  # approved, deliberately left unmerged (SELF_REPO)
+    reviewed_prs: list[str]  # "number@head_sha" reviewed this cycle — once, unless the head moves
     # QA-specific
     test_counts: dict
     e2e_passed: bool

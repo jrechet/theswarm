@@ -415,6 +415,10 @@ async def run_daily_cycle(
         # iteration never returns from — the picker reads it to put a task
         # that already failed behind the ones nobody has tried.
         attempted_tasks: list[int] = []
+        # Every PR the TechLead has reviewed this cycle, at the head it saw.
+        # Same object every iteration: a held or commented PR is not read
+        # again unless something was pushed to it.
+        reviewed_prs: list[str] = []
         _dev_loop_ran = not _skip("dev_loop")
         if _dev_loop_ran:
             await _enter("dev_loop")
@@ -508,7 +512,10 @@ async def run_daily_cycle(
             try:
                 tl_state = await _run_phase(
                     "techlead_review", "TechLead",
-                    tl_review.ainvoke({**base_state, "phase": "review_loop"}),
+                    tl_review.ainvoke({
+                        **base_state, "phase": "review_loop",
+                        "reviewed_prs": reviewed_prs,
+                    }),
                 )
             except PhaseTimeout:
                 await _progress("TechLead", "Review timed out — leaving PRs for next cycle")
