@@ -349,6 +349,73 @@ def _review_timeout(prompt_chars: int) -> int:
     return max(REVIEW_TIMEOUT_FLOOR_SECONDS, min(REVIEW_TIMEOUT_CEILING_SECONDS, scaled))
 
 
+# A REQUEST_CHANGES review used to be written on the PR and forgotten: the
+# task stayed in `status:review`, which the picker skips, so the Dev never
+# saw it and the PR sat open with red CI until a person noticed (#121).
+# The review goes on the *issue* too, behind this marker, and the label
+# flips back — that is what makes it a loop.
+CHANGES_MARKER = "<!-- swarm:changes-requested -->"
+# Two rounds on the same task is a conversation; a third is a spin. After
+# the cap the task stays in review and says so, for a person to pick up.
+CHANGES_REQUESTED_CAP = 2
+
+_TASK_IN_TITLE_RE = re.compile(r"\[#(\d+)\]")
+_CLOSES_RE = re.compile(r"\bCloses #(\d+)", re.IGNORECASE)
+
+
+def _task_of_pr(pr: dict) -> int | None:
+    """The issue a PR implements, from its title prefix or its Closes line."""
+    match = _TASK_IN_TITLE_RE.search(pr.get("title") or "")
+    if match:
+        return int(match.group(1))
+    match = _CLOSES_RE.search(pr.get("body") or "")
+    return int(match.group(1)) if match else None
+
+
+def _changes_comment(pr: dict, summary: str, issues: list[dict]) -> str:
+    """What the Dev will read on the issue before its next attempt."""
+    lines = [
+        CHANGES_MARKER,
+        f"**Changes requested** on PR #{pr['number']} (branch `{pr.get('head', '')}`)",
+        "",
+        summary,
+    ]
+    if issues:
+        lines.append("")
+        for issue in issues:
+            severity = str(issue.get("severity", "")).upper()
+            where = issue.get("file", "")
+            lines.append(f"- {severity} {where}: {issue.get('description', '')}")
+    return "\n".join(lines)
+
+
+async def _send_back_to_dev(github, pr: dict, summary: str, issues: list[dict]) -> bool:
+    """Hand a reviewed-down task back to the queue. True when it went back."""
+    number = _task_of_pr(pr)
+    if number is None:
+        return False  # a PR nobody's task owns: the review on it is the whole story
+    try:
+        comments = await github.get_issue_comments(number)
+        rounds = sum(1 for c in comments if CHANGES_MARKER in (c.get("body") or ""))
+    except Exception:
+        rounds = 0
+    if rounds >= CHANGES_REQUESTED_CAP:
+        await github.add_comment(
+            number,
+            f"Changes were requested {rounds + 1} times on this task "
+            f"(PR #{pr['number']}). Leaving it in review for a person to look at "
+            "rather than sending it round again.",
+        )
+        log.info("Task #%d: %d rounds of changes — left for a person", number, rounds + 1)
+        return False
+    await github.add_comment(number, _changes_comment(pr, summary, issues))
+    await github.add_labels(number, ["status:ready"])
+    await github.remove_label(number, "status:review")
+    log.info("Task #%d sent back to the Dev after REQUEST_CHANGES on PR #%d",
+             number, pr["number"])
+    return True
+
+
 async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
     """Review a single PR: get diff, call Claude, submit review."""
     pr_number = pr["number"]
@@ -431,11 +498,21 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
         await github.add_comment(pr_number, f"**Tech Lead Review** ({event})\n\n{body}")
         review_submitted = True  # comment counts as reviewed
 
+    sent_back = False
+    if decision == "REQUEST_CHANGES":
+        try:
+            sent_back = await _send_back_to_dev(github, pr, summary, issues)
+        except Exception as exc:
+            # The review is posted; failing to requeue is worth a line, not
+            # a lost cycle.
+            log.warning("Could not send PR #%d's task back to the Dev: %s", pr_number, exc)
+
     return {
         "pr_number": pr_number,
         "decision": decision,
         "summary": summary,
         "issues": issues,
+        "sent_back": sent_back,
         "tokens_used": result.total_tokens,
         "cost_usd": result.cost_usd,
     }

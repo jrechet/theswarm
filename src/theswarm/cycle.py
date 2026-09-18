@@ -534,6 +534,12 @@ async def run_daily_cycle(
             all_merged_prs.extend(merged)
             for r in reviews:
                 await _progress("TechLead", f"PR #{r['pr_number']}: {r['decision']}")
+            for r in reviews:
+                if r.get("sent_back"):
+                    await _progress(
+                        "TechLead",
+                        f"PR #{r['pr_number']}: changes requested — task back to the Dev",
+                    )
             for number in tl_state.get("skipped_prs", []):
                 await _progress(
                     "TechLead",
