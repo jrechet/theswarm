@@ -199,6 +199,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   end in `commit_all`, whose answer decides. The container's Bash
   allowlist is the host's `~/.claude/settings.json` mounted in — do not
   rely on it.
+- **The tree is committed before any `ALREADY_SATISFIED` is believed.** A
+  timed-out attempt leaves its in-place edits in the workspace; the retry
+  reads them, truthfully answers "already satisfied", and before this the
+  issue was closed with nothing committed (#133 on `5b1da00155c2`).
+  `commit_all` runs first; the claim only counts on a clean tree.
 - **A PR is reviewed once per cycle, at a given head** (`reviewed_prs`,
   the cycle's own list, threaded into every `techlead_review` pass). The
   review node runs after every Dev iteration; a held (SELF_REPO) or
