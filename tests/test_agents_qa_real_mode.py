@@ -214,6 +214,11 @@ async def test_run_e2e_tests_runs_full_pipeline(tmp_path):
 
 
 # ── run_security_scan ────────────────────────────────────────────────────
+#
+# #135: coverage no longer runs here — it comes from run_unit_tests' single
+# pytest pass and is carried forward on state["security_scan"]. These tests
+# check semgrep behavior and that the carried-forward coverage fields survive
+# untouched, plus that no second pytest invocation happens.
 
 
 async def test_run_security_scan_clean(tmp_path):
@@ -225,27 +230,25 @@ async def test_run_security_scan_clean(tmp_path):
     ]})
 
     claude = MagicMock()
-    claude.run_tests = AsyncMock(side_effect=[
-        # semgrep call
-        {"output": semgrep_output, "passed": True},
-        # coverage call
-        {"output": "5 passed", "passed": True},
-    ])
+    claude.run_tests = AsyncMock(return_value={"output": semgrep_output, "passed": True})
 
-    # Write a fake coverage.json
-    cov_data = {"totals": {"percent_covered": 82.5}}
-    cov_path = tmp_path / "coverage.json"
-    cov_path.write_text(json.dumps(cov_data))
-
-    with patch("theswarm.agents.qa._find_system_python", return_value="/usr/bin/python3"):
-        state = {"claude": claude, "workspace": str(tmp_path)}
-        result = await run_security_scan(state)
+    state = {
+        "claude": claude,
+        "workspace": str(tmp_path),
+        "security_scan": {
+            "coverage_pct": 82.5, "coverage_status": "pass", "coverage_reason": "",
+        },
+    }
+    result = await run_security_scan(state)
 
     scan = result["security_scan"]
     assert scan["semgrep_status"] == "pass"
     assert scan["semgrep_high"] == 0
+    # Coverage carried forward from run_unit_tests untouched.
     assert scan["coverage_pct"] == 82.5
     assert scan["coverage_status"] == "pass"
+    claude.run_tests.assert_called_once()
+    assert "pytest" not in " ".join(claude.run_tests.call_args[0][1])
 
 
 async def test_run_security_scan_high_findings(tmp_path):
@@ -259,92 +262,44 @@ async def test_run_security_scan_high_findings(tmp_path):
     ]})
 
     claude = MagicMock()
-    claude.run_tests = AsyncMock(side_effect=[
-        {"output": semgrep_output, "passed": True},
-        {"output": "3 passed", "passed": True},
-    ])
+    claude.run_tests = AsyncMock(return_value={"output": semgrep_output, "passed": True})
 
-    cov_path = tmp_path / "coverage.json"
-    cov_path.write_text(json.dumps({"totals": {"percent_covered": 75.0}}))
-
-    with patch("theswarm.agents.qa._find_system_python", return_value="/usr/bin/python3"):
-        state = {"claude": claude, "workspace": str(tmp_path)}
-        result = await run_security_scan(state)
+    state = {"claude": claude, "workspace": str(tmp_path)}
+    result = await run_security_scan(state)
 
     scan = result["security_scan"]
     assert scan["semgrep_status"] == "fail"
     assert scan["semgrep_high"] == 2  # HIGH + ERROR both count
-    assert scan["coverage_pct"] == 75.0
 
 
-async def test_run_security_scan_low_coverage(tmp_path):
-    """When coverage is below 70%, coverage_status is 'fail'."""
+async def test_run_security_scan_without_prior_coverage_defaults_not_run(tmp_path):
+    """No upstream security_scan (e.g. stub run_unit_tests) → coverage stays not_run."""
     import json
 
     semgrep_output = json.dumps({"results": []})
-
     claude = MagicMock()
-    claude.run_tests = AsyncMock(side_effect=[
-        {"output": semgrep_output, "passed": True},
-        {"output": "2 passed", "passed": True},
-    ])
+    claude.run_tests = AsyncMock(return_value={"output": semgrep_output, "passed": True})
 
-    cov_path = tmp_path / "coverage.json"
-    cov_path.write_text(json.dumps({"totals": {"percent_covered": 55.0}}))
-
-    with patch("theswarm.agents.qa._find_system_python", return_value="/usr/bin/python3"):
-        state = {"claude": claude, "workspace": str(tmp_path)}
-        result = await run_security_scan(state)
-
-    scan = result["security_scan"]
-    assert scan["semgrep_status"] == "pass"
-    assert scan["coverage_status"] == "fail"
-    assert scan["coverage_pct"] == 55.0
-
-
-async def test_run_security_scan_coverage_timeout_is_not_run(tmp_path):
-    """The coverage run gets its own budget; hitting it is 'not_run', not a fail.
-
-    `claude.run_tests` reports a timeout as `exit_code=-1` with a synthetic
-    "Timed out after Ns" message in place of pytest output — that must not
-    be parsed as a coverage failure or a stray coverage.json left on disk.
-    """
-    import json
-
-    semgrep_output = json.dumps({"results": []})
-
-    claude = MagicMock()
-    claude.run_tests = AsyncMock(side_effect=[
-        {"output": semgrep_output, "passed": True},
-        {"output": "Timed out after 600s", "passed": False, "exit_code": -1},
-    ])
-
-    with patch("theswarm.agents.qa._find_system_python", return_value="/usr/bin/python3"):
-        state = {"claude": claude, "workspace": str(tmp_path)}
-        result = await run_security_scan(state)
+    state = {"claude": claude, "workspace": str(tmp_path)}
+    result = await run_security_scan(state)
 
     scan = result["security_scan"]
     assert scan["coverage_status"] == "not_run"
-    assert scan["coverage_reason"] == "did not finish within 600s"
     assert scan["coverage_pct"] == 0.0
+    assert scan["coverage_reason"] == ""
 
 
 async def test_run_security_scan_semgrep_exception(tmp_path):
     """When semgrep raises an exception, semgrep_status stays 'not_run'."""
-    import json
-
     claude = MagicMock()
-    claude.run_tests = AsyncMock(side_effect=[
-        Exception("semgrep not found"),
-        {"output": "1 passed", "passed": True},
-    ])
+    claude.run_tests = AsyncMock(side_effect=Exception("semgrep not found"))
 
-    cov_path = tmp_path / "coverage.json"
-    cov_path.write_text(json.dumps({"totals": {"percent_covered": 90.0}}))
-
-    with patch("theswarm.agents.qa._find_system_python", return_value="/usr/bin/python3"):
-        state = {"claude": claude, "workspace": str(tmp_path)}
-        result = await run_security_scan(state)
+    state = {
+        "claude": claude,
+        "workspace": str(tmp_path),
+        "security_scan": {"coverage_pct": 90.0, "coverage_status": "pass", "coverage_reason": ""},
+    }
+    result = await run_security_scan(state)
 
     scan = result["security_scan"]
     assert scan["semgrep_status"] == "not_run"

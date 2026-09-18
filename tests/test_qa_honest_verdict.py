@@ -58,7 +58,9 @@ async def test_unit_run_covers_the_whole_test_tree(tmp_path):
     claude = _RecordingClaude()
     result = await run_unit_tests({"workspace": str(tmp_path), "claude": claude})
 
-    command = claude.commands[0]
+    pytest_commands = [c for c in claude.commands if "pytest" in c]
+    assert len(pytest_commands) == 1, "unit tests must run in a single pytest invocation"
+    command = pytest_commands[0]
     assert "tests/" in command
     assert "tests/unit/" not in command
     # The generated E2E file needs a live server — must not run here
@@ -66,15 +68,12 @@ async def test_unit_run_covers_the_whole_test_tree(tmp_path):
     assert result["test_counts"]["passed"] == 3
 
 
-async def test_coverage_run_matches_unit_discovery(tmp_path):
-    """Coverage must measure the same tree the unit gate runs."""
+async def test_security_scan_does_not_run_pytest(tmp_path):
+    """#135: coverage comes from run_unit_tests' single run, not a second pytest pass."""
     from theswarm.agents.qa import run_security_scan
 
     claude = _RecordingClaude()
     await run_security_scan({"workspace": str(tmp_path), "claude": claude})
 
-    pytest_commands = [c for c in claude.commands if "pytest" in " ".join(c)]
-    assert pytest_commands, "coverage run never invoked pytest"
-    for command in pytest_commands:
-        assert "tests/unit/" not in command
-        assert "--ignore=tests/e2e" in command
+    pytest_commands = [c for c in claude.commands if "pytest" in c]
+    assert not pytest_commands, "run_security_scan must not invoke pytest"
