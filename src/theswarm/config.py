@@ -92,6 +92,10 @@ class AgentState(TypedDict, total=False):
     demo_report: dict | None
     demo_artifacts: list  # list of (Artifact, bytes) tuples from screenshot capture
     video_artifacts: list  # (Artifact, bytes) from record_demo_video → generate_demo_report
+    # Why a demo launch (E2E, screenshots or video) never got a running
+    # server to talk to — "" when readiness succeeded. Set by whichever
+    # launch node hit it first; later nodes that don't fail leave it as-is.
+    demo_launch_error: str
     story_preview_urls: dict  # F2 — {pr_number: {"before": url_or_none, "after": url}}
     story_artifacts: dict  # F2 — {pr_number: {"before": [...], "after": [...]}}
     story_videos: dict  # F3 — {pr_number: (Artifact, bytes)}

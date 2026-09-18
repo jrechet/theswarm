@@ -20,6 +20,15 @@ class ReadinessTimeout(TimeoutError):
     """Raised when a server never returns a response within the timeout."""
 
 
+class ProcessExited(ReadinessTimeout):
+    """Raised when the process being waited on has already exited.
+
+    A subclass of `ReadinessTimeout` so existing callers that catch the
+    timeout keep working unchanged — this just arrives well before the
+    deadline instead of at it.
+    """
+
+
 async def wait_for_http_ready(
     url: str,
     *,
@@ -27,6 +36,7 @@ async def wait_for_http_ready(
     interval: float = 0.5,
     accept_statuses: tuple[int, ...] = (200, 204, 301, 302, 307, 308, 404),
     clock: Callable[[], float] = time.monotonic,
+    is_dead: Callable[[], bool] | None = None,
 ) -> float:
     """Poll `url` with short HTTP GETs until a response arrives.
 
@@ -35,6 +45,13 @@ async def wait_for_http_ready(
     A 404 is accepted because the server may not expose a root route yet —
     what matters is that the socket is accepting connections and uvicorn is
     serving. A 5xx is rejected because the app has not finished booting.
+
+    `is_dead`, when given, is checked on every poll: a server whose process
+    has already exited will never answer, and polling it out to the full
+    `timeout` (three separate 90s waits per QA cycle, cycle 5b1da00155c2)
+    wastes the whole readiness window on a process that is already gone.
+    Raises `ProcessExited` — a `ReadinessTimeout` subclass — the moment
+    `is_dead()` reports true.
 
     Raises `ReadinessTimeout` if `timeout` seconds pass with no successful
     probe. Import of `httpx` is deferred so that environments without it
@@ -49,6 +66,11 @@ async def wait_for_http_ready(
     async with httpx.AsyncClient(timeout=interval * 4) as client:
         while True:
             attempts += 1
+            if is_dead is not None and is_dead():
+                raise ProcessExited(
+                    f"server process for {url} exited before it became ready "
+                    f"({attempts} attempt{'s' if attempts != 1 else ''})",
+                )
             try:
                 resp = await client.get(url)
                 if resp.status_code in accept_statuses:
