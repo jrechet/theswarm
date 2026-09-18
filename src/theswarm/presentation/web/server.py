@@ -491,6 +491,17 @@ async def start_server(
         db_path = os.path.join(data_dir, "theswarm.db")
 
     conn = await init_db(db_path)
+
+    # The learned CLI timeout floors outlive this process (#133): without
+    # this, every deploy — one per cycle on this repository — sent the next
+    # implementation call back to the constant that already timed out.
+    from theswarm.infrastructure.persistence.timeout_floor_repo import (
+        SQLiteTimeoutFloorRepository,
+    )
+    from theswarm.tools.claude import prime_repo_floors
+
+    await prime_repo_floors(SQLiteTimeoutFloorRepository(conn))
+
     project_repo = SQLiteProjectRepository(conn)
     cycle_repo = SQLiteCycleRepository(conn)
     activity_repo = SQLiteActivityRepository(conn)
