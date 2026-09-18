@@ -137,14 +137,18 @@ def test_dev_iter_phase_budget_fits_the_success_path():
 
 
 def test_qa_phase_budget_fits_the_swarm_on_itself():
-    """Two full runs of the target's suite (verdict, then coverage — #135),
+    """One run of the target's suite (verdict + coverage in one pass — #135),
     E2E generation and run, and three demo launches at the declared
     readiness must fit, or the phase hard-cancels with no report at all —
-    the TechLead's MAJOR finding on #134."""
-    from theswarm.agents.qa import QA_TEST_TIMEOUT_SECONDS
+    the TechLead's MAJOR finding on #134, still true after #155 raised the
+    unit-run cap to 900s to fit TheSwarm's own 2868 tests."""
+    from theswarm.agents.qa import (
+        E2E_GENERATION_TIMEOUT_SECONDS,
+        QA_TEST_TIMEOUT_SECONDS,
+    )
 
-    two_suite_runs = 2 * QA_TEST_TIMEOUT_SECONDS
-    e2e = 90 + 120
+    unit_run = QA_TEST_TIMEOUT_SECONDS
+    e2e = E2E_GENERATION_TIMEOUT_SECONDS + 120
     three_launches_at_declared_readiness = 3 * 90
     video_and_report = 120
-    assert PHASE_TIMEOUTS["qa"] >= two_suite_runs + e2e + three_launches_at_declared_readiness + video_and_report
+    assert PHASE_TIMEOUTS["qa"] >= unit_run + e2e + three_launches_at_declared_readiness + video_and_report
