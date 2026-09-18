@@ -178,6 +178,64 @@ def _api_backend_viable() -> bool:
 # again (#99). Keyed by workdir: what needs the room is the repository.
 _REPO_FLOORS: dict[str, int] = {}
 
+# …and the process itself is replaced on every deploy, which on this
+# repository is once per cycle: each self-cycle started at the constant
+# again, timed out, and paid seven minutes and a dead call to relearn the
+# same number (#133, cycle b209a76055a6 did it twice and then hit the
+# subscription's session limit). A store, set once at startup, carries the
+# floors across. `_effective_timeout` is synchronous and on the hot path,
+# so reads come from the dict — primed at boot — and writes are fired off
+# in the background, never awaited by the call that learned the floor.
+_FLOOR_STORE: object | None = None
+_FLOOR_WRITES: set[asyncio.Task] = set()
+
+
+def set_floor_store(store: object | None) -> None:
+    """Install (or clear) the store that outlives this process."""
+    global _FLOOR_STORE
+    _FLOOR_STORE = store
+
+
+async def prime_repo_floors(store: object) -> None:
+    """Load the learned floors at startup and keep the store for writes."""
+    set_floor_store(store)
+    try:
+        floors = await store.load_all()
+    except Exception as exc:  # a missing table, a locked DB: not worth a boot failure
+        log.warning("Could not load learned CLI timeout floors: %s", exc)
+        return
+    for workdir, floor in floors.items():
+        _REPO_FLOORS[workdir] = max(_REPO_FLOORS.get(workdir, 0), int(floor))
+    if floors:
+        log.info("Loaded %d learned CLI timeout floor(s)", len(floors))
+
+
+def _remember_floor(workdir: str, floor: int) -> None:
+    """Raise the in-process floor and, best effort, the stored one."""
+    _REPO_FLOORS[workdir] = max(_REPO_FLOORS.get(workdir, 0), floor)
+    store = _FLOOR_STORE
+    if store is None:
+        return
+
+    async def _write() -> None:
+        try:
+            await store.save(workdir, floor)
+        except Exception as exc:
+            log.warning("Could not persist the CLI timeout floor for %s: %s", workdir, exc)
+
+    try:
+        task = asyncio.get_running_loop().create_task(_write())
+    except RuntimeError:
+        return  # no loop (a sync test): the in-process floor still holds
+    _FLOOR_WRITES.add(task)
+    task.add_done_callback(_FLOOR_WRITES.discard)
+
+
+async def drain_floor_writes() -> None:
+    """Await the pending floor writes — for tests and a clean shutdown."""
+    while _FLOOR_WRITES:
+        await asyncio.gather(*tuple(_FLOOR_WRITES), return_exceptions=True)
+
 
 @dataclass
 class ClaudeCLI:
@@ -381,7 +439,7 @@ class ClaudeCLI:
         # hung call into a phase timeout with no diagnosis attached.
         self._timeout_floor = grown
         if workdir:
-            _REPO_FLOORS[workdir] = max(_REPO_FLOORS.get(workdir, 0), grown)
+            _remember_floor(workdir, grown)
         log.warning(
             "Claude CLI timed out at %ds — retrying with %ds "
             "(floor for later calls in this cycle)", effective, grown,

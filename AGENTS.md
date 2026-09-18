@@ -113,7 +113,7 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `claude-sonnet-5`) — never pin dated model IDs.
 - The target workspace uses the *system* python (`agents/base.find_system_python`)
   for installs AND test runs — TheSwarm's venv must never receive target deps.
-- Phase budgets: implementation call 420s, dep install 300s, `dev_iter` 25 min.
+- Phase budgets: implementation call 600s, dep install 300s, `dev_iter` 30 min.
   If a task fails, it must be requeued to `status:ready` (see `implement_task`) or
   the backlog drains with nothing shipped.
 - `commit_all` uses `git add -A` in the target workspace: runtime artifacts
@@ -176,7 +176,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   never offers it again within a cycle (`_timeout_floor`, ceiling 780s —
   `dev_iter` is 30 min so one call plus its retry fit). The task picker
   puts an already-tried sub-task behind the untried ones; without that the
-  heaviest task starved the rest for five iterations.
+  heaviest task starved the rest for five iterations. **The floor is
+  persisted** (`cli_timeout_floors`, primed at boot by
+  `tools/claude.prime_repo_floors`): a process lives one cycle here, and
+  before #133 every self-cycle paid seven minutes and a dead call to
+  relearn the same number. A floor older than 30 days is ignored.
 - CI reports a `tests` job that hits `timeout-minutes` as **"cancelled"** —
   it is neither a failure nor a person hitting stop. The cap is 30 min; the
   suite runs 9–12 on a healthy shared runner.

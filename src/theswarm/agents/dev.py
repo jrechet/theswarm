@@ -29,7 +29,12 @@ DEP_INSTALL_TIMEOUT_SECONDS = 300
 # model a real feature (a route plus a template plus tests) regularly runs
 # past 180s, and during the endurance run every such task died in
 # 'CLI timed out after 180s' while trivial ones passed.
-IMPLEMENT_TIMEOUT_SECONDS = 420
+# 420s was calibrated on a small target. On a real codebase the
+# implementation call times out at 420s and succeeds on the grown retry,
+# every single time (cycles fbd5cf8615e0, 5b1da00155c2, b209a76055a6) —
+# seven wasted minutes and a dead call per iteration. The successful calls
+# ran five to eight minutes.
+IMPLEMENT_TIMEOUT_SECONDS = 600
 
 # Print mode grants nothing: Claude's own `Edit` in the workspace is refused,
 # so it writes the files into a message instead — and `--output-format json`
