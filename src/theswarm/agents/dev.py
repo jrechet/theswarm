@@ -382,7 +382,18 @@ async def implement_task(state: AgentState) -> dict:
         files_written = _extract_files_from_response(result.text, workspace)
         log.info("Extracted %d files from Claude's response", files_written)
 
-        if files_written == 0:
+        # The tree first, the claim second. On cycle 5b1da00155c2 the first
+        # attempt edited six files in place and timed out; the retry read
+        # those edits and answered ALREADY_SATISFIED — true of the tree, and
+        # the issue was closed with nothing committed. Work that exists is
+        # committed; "already satisfied" only counts on a clean tree.
+        committed = await git_ops.commit_all(
+            workspace,
+            f"feat: {task['title']}\n\nCloses #{task['number']}\n\n"
+            f"Co-Authored-By: swarm-dev-agent <agent@swarm-bots.local>",
+        )
+
+        if not committed:
             already_satisfied = _extract_already_satisfied(result.text)
             if already_satisfied:
                 satisfied_file, reason = already_satisfied
@@ -402,12 +413,6 @@ async def implement_task(state: AgentState) -> dict:
                     "branch": branch_name,
                 }
 
-        # Commit all changes
-        committed = await git_ops.commit_all(
-            workspace,
-            f"feat: {task['title']}\n\nCloses #{task['number']}\n\n"
-            f"Co-Authored-By: swarm-dev-agent <agent@swarm-bots.local>",
-        )
     except BaseException as exc:
         if github is not None:
             try:
