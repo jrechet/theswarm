@@ -48,11 +48,21 @@ _MAX_SOURCE_CONTEXT_CHARS = 24_000  # total across all files
 # `demo.ready_seconds` — unchanged from the original hardcoded value.
 _DEFAULT_READY_SECONDS = 30.0
 
-# The unit-test run and the coverage run get their own budget, separate from
-# the `qa` phase's 15 minutes: TheSwarm's own suite takes ~4 min in the
-# container, well past the 120s that used to be hardcoded here (prod cycle
-# 5f8f0f63f58c reported "0 passed, 0 failed" — the run never finished).
-QA_TEST_TIMEOUT_SECONDS = 600
+# The unit-test run (verdict + coverage in one pass, #135) gets its own
+# budget, separate from the `qa` phase's 30 minutes: TheSwarm's own 2868
+# tests take 2m47s locally but outran the old 600s cap in the container with
+# `-v` and coverage on — #146 saw a "did not finish" with 10 minutes spent
+# and nothing to show for it (cycle 28536a4f58b9). `-v` — a line per test —
+# was pure output cost in a run nobody reads line by line; dropping it plus
+# raising the cap to 900s still leaves the rest of the phase (E2E generation
+# and run, three demo launches, the video, the report) its ~6 minutes.
+QA_TEST_TIMEOUT_SECONDS = 900
+
+# Bounded, separate budget for the `--collect-only` probe that runs after a
+# timed-out unit run: cheap even on TheSwarm's own suite, and the only way
+# to tell a merely-slow suite from a genuinely stuck one once the real run's
+# output has already been discarded (see `_is_test_timeout`).
+QA_COLLECT_ONLY_TIMEOUT_SECONDS = 60
 
 
 # ── Prompts ──────────────────────────────────────────────────────────────
@@ -243,7 +253,7 @@ async def run_unit_tests(state: AgentState) -> dict:
     # a live server and runs in its own node. Target repos rarely have a
     # tests/unit/ layout, and pointing pytest there reported unit=0 forever.
     command = [python, "-m", "pytest", "tests/", "--ignore=tests/e2e",
-               "-v", "--tb=short"]
+               "--tb=short"]
     if cov_available:
         command += ["--cov=src", "--cov-report=json"]
 
@@ -256,7 +266,12 @@ async def run_unit_tests(state: AgentState) -> dict:
     output = result["output"]
 
     if _is_test_timeout(result):
+        collected = await _count_collected_tests(claude, workspace, python)
         reason = f"did not finish within {QA_TEST_TIMEOUT_SECONDS}s"
+        reason += (
+            f" ({collected} tests collected)" if collected is not None
+            else " (test count unknown)"
+        )
         log.warning("QA unit tests: %s", reason)
         return {
             "tests_passed": False,
@@ -1437,6 +1452,27 @@ def _is_test_timeout(result: dict) -> bool:
     returns all zeros, which reads as a vacuous pass rather than "unknown".
     """
     return result.get("exit_code") == -1 and str(result.get("output", "")).startswith("Timed out after")
+
+
+async def _count_collected_tests(claude, workspace: str, python: str) -> int | None:
+    """How many tests pytest would run — for the timeout reason, not the verdict.
+
+    A timed-out run leaves nothing to parse (`claude.run_tests` discards
+    stdout and returns a synthetic "Timed out after Ns"), so a reader can't
+    tell a suite that is merely large from one that is genuinely stuck.
+    `--collect-only` answers that on its own short budget, without counting
+    against `QA_TEST_TIMEOUT_SECONDS`.
+    """
+    try:
+        result = await claude.run_tests(
+            workspace,
+            [python, "-m", "pytest", "tests/", "--ignore=tests/e2e", "--collect-only", "-q"],
+            timeout=QA_COLLECT_ONLY_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        return None
+    match = re.search(r"(\d+)\s+tests?\s+collected", result.get("output", ""))
+    return int(match.group(1)) if match else None
 
 
 def _parse_pytest_summary(output: str) -> dict:

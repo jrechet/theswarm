@@ -101,7 +101,8 @@ async def test_timeout_marks_coverage_not_run_too(tmp_path):
     claude = MagicMock()
     claude.run_tests = AsyncMock(side_effect=[
         {"output": "", "passed": True},
-        {"output": "Timed out after 600s", "passed": False, "exit_code": -1},
+        {"output": "Timed out after 900s", "passed": False, "exit_code": -1},
+        {"output": "10 tests collected in 0.5s", "passed": False, "exit_code": 0},
     ])
 
     with patch("theswarm.agents.qa._find_system_python", return_value="/usr/bin/python3"):
@@ -110,5 +111,5 @@ async def test_timeout_marks_coverage_not_run_too(tmp_path):
 
     scan = result["security_scan"]
     assert scan["coverage_status"] == "not_run"
-    assert scan["coverage_reason"] == "did not finish within 600s"
-    assert result["unit_tests_not_run_reason"] == "did not finish within 600s"
+    assert scan["coverage_reason"] == "did not finish within 900s (10 tests collected)"
+    assert result["unit_tests_not_run_reason"] == "did not finish within 900s (10 tests collected)"

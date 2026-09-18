@@ -57,18 +57,33 @@ def test_theswarms_own_manifest_declares_90s():
 
 async def test_unit_tests_timeout_is_reported_as_not_run(tmp_path):
     claude = MagicMock()
-    claude.run_tests = AsyncMock(return_value={
-        "passed": False,
-        "output": "Timed out after 600s",
-        "exit_code": -1,
-    })
+    claude.run_tests = AsyncMock(side_effect=[
+        {"passed": False, "output": "", "exit_code": 1},  # pytest_cov import check
+        {"passed": False, "output": "Timed out after 900s", "exit_code": -1},  # the run itself
+        {"passed": False, "output": "2868 tests collected in 3.21s", "exit_code": 0},  # --collect-only probe
+    ])
 
     state = {"claude": claude, "workspace": str(tmp_path)}
     result = await run_unit_tests(state)
 
-    assert result["unit_tests_not_run_reason"] == "did not finish within 600s"
+    assert result["unit_tests_not_run_reason"] == "did not finish within 900s (2868 tests collected)"
     assert result["test_counts"] == {"passed": 0, "failed": 0, "errors": 0, "total": 0}
     assert result["tests_passed"] is False
+
+
+async def test_unit_tests_timeout_with_unknown_collect_count(tmp_path):
+    """The `--collect-only` probe can itself time out — say so, not a bare guess."""
+    claude = MagicMock()
+    claude.run_tests = AsyncMock(side_effect=[
+        {"passed": False, "output": "", "exit_code": 1},
+        {"passed": False, "output": "Timed out after 900s", "exit_code": -1},
+        {"passed": False, "output": "Timed out after 60s", "exit_code": -1},
+    ])
+
+    state = {"claude": claude, "workspace": str(tmp_path)}
+    result = await run_unit_tests(state)
+
+    assert result["unit_tests_not_run_reason"] == "did not finish within 900s (test count unknown)"
 
 
 async def test_unit_tests_timeout_uses_its_own_budget(tmp_path):
@@ -81,7 +96,7 @@ async def test_unit_tests_timeout_uses_its_own_budget(tmp_path):
     await run_unit_tests(state)
 
     _, kwargs = claude.run_tests.call_args
-    assert kwargs["timeout"] == QA_TEST_TIMEOUT_SECONDS == 600
+    assert kwargs["timeout"] == QA_TEST_TIMEOUT_SECONDS == 900
 
 
 async def test_unit_tests_that_finish_carry_no_reason(tmp_path):
