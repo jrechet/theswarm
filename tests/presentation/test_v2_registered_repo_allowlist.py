@@ -45,11 +45,13 @@ def _isolate_cycle_tracker():
     tracker._cycles.update(before)
 
 
-async def _wait_for(predicate, tries: int = 50) -> None:
+async def _wait_for(predicate, tries: int = 200) -> None:
+    """The Play route runs the cycle as a background task; give it real
+    turns of the loop (not `sleep(0)`, which starved it on the CI runner)."""
     for _ in range(tries):
         if predicate():
             return
-        await asyncio.sleep(0)
+        await asyncio.sleep(0.02)
     raise AssertionError("condition never became true")
 
 
