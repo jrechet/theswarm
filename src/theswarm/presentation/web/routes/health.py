@@ -103,7 +103,11 @@ async def health(request: Request) -> JSONResponse:
 
     if bridge is not None:
         vcs_map = getattr(bridge, "_swarm_po_vcs_map", {})
-        result["repos"] = list(vcs_map.keys())
+        from theswarm.api import effective_allowed_repos
+
+        result["repos"] = await effective_allowed_repos(
+            list(vcs_map.keys()), project_repo,
+        )
 
     http_status = 503 if status == "error" else 200
     return JSONResponse(result, status_code=http_status)
