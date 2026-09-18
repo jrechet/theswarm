@@ -534,6 +534,11 @@ async def run_daily_cycle(
             all_merged_prs.extend(merged)
             for r in reviews:
                 await _progress("TechLead", f"PR #{r['pr_number']}: {r['decision']}")
+            for number in tl_state.get("skipped_prs", []):
+                await _progress(
+                    "TechLead",
+                    f"Review of PR #{number} unavailable — left for the next pass",
+                )
             if merged:
                 await _progress("TechLead", f"Merged: {merged}")
             held = tl_state.get("held_prs", [])
