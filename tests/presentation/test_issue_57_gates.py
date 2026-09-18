@@ -211,9 +211,16 @@ async def test_start_cycle_accepts_but_later_fails_a_disallowed_repo(
     cycle_id = r.json()["cycle_id"]
     assert r.json()["status"] == CycleStatus.QUEUED.value
 
-    await asyncio.sleep(0)  # let the background task run to the allowlist gate
+    # The allowlist gate now also reads project_repo (real aiosqlite I/O,
+    # #148) before failing the cycle, so a single sleep(0) is no longer
+    # enough to reach it — poll instead.
+    record = None
+    for _ in range(50):
+        record = _isolate_cycle_tracker.get(cycle_id)
+        if record.status != CycleStatus.QUEUED:
+            break
+        await asyncio.sleep(0.01)
 
-    record = _isolate_cycle_tracker.get(cycle_id)
     assert record.status == CycleStatus.FAILED
     assert "not in allowed list" in record.error
 

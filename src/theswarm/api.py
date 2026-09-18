@@ -240,6 +240,32 @@ async def send_callback(url: str, payload: dict) -> None:
         log.exception("Failed to send callback to %s", url)
 
 
+async def effective_allowed_repos(
+    allowed_repos: list[str], project_repo: object | None,
+) -> list[str]:
+    """Env-configured repos plus every registered project's repo.
+
+    `allowed_repos` is a snapshot taken at startup from the environment; a
+    repo registered afterward through the V2 picker (`_ensure_project`,
+    written to `project_repo`) never appears in it. Reading `project_repo`
+    fresh on every call — instead of mutating a module-level set — is what
+    makes a restart see the same allowlist a live process does: both derive
+    it from the same durable source.
+    """
+    repos = list(allowed_repos or [])
+    if project_repo is not None:
+        try:
+            projects = await project_repo.list_all()
+        except Exception:
+            log.exception("Reading registered projects for allowlist failed")
+        else:
+            for project in projects:
+                repo_name = str(getattr(project, "repo", "") or "")
+                if repo_name and repo_name not in repos:
+                    repos.append(repo_name)
+    return repos
+
+
 async def _run_api_cycle(
     cycle_id: str,
     repo: str,
@@ -264,11 +290,13 @@ async def _run_api_cycle(
 
     tracker = get_cycle_tracker()
 
-    # Validate repo against allowlist
-    if allowed_repos and repo not in allowed_repos:
+    # Validate repo against allowlist — env-configured repos plus every
+    # registered project, not the stale startup snapshot alone.
+    effective_repos = await effective_allowed_repos(allowed_repos, project_repo)
+    if effective_repos and repo not in effective_repos:
         tracker.update_status(
             cycle_id, CycleStatus.FAILED,
-            error=f"Repo '{repo}' not in allowed list: {allowed_repos}",
+            error=f"Repo '{repo}' not in allowed list: {effective_repos}",
             completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
         return
