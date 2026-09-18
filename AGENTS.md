@@ -211,6 +211,16 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   object that carries a `decision`, fenced or bare, and steps over braces
   in prose (`{id}`) and example payloads. Slicing first-`{`-to-last-`}`
   filed an APPROVE with three issues as COMMENT (#126).
+- **A Claude call that fails is a step skipped, not a cycle lost.** Two
+  cycles in a row died on an optional call that failed twice — the review
+  of a 500-line diff (`bbab1b4ad6e9`) and QA's E2E-file generation
+  (`794a644f6889`): the wrapper's `RuntimeError` left the sub-phase and took
+  QA, the report and the memory save with it (#147). The review loop skips
+  the PR (`skipped_prs`, not marked reviewed, so it is read next pass) and
+  QA goes on without an E2E file; only `ClaudeFatalError` (subscription
+  window) still aborts. Budgets follow the prompt: a review gets
+  `_review_timeout(len(prompt))` (180s floor, +15s per 1k chars, 780s
+  ceiling), E2E generation 240s.
 - **A failed attempt leaves a trace on the issue** (`ATTEMPT_MARKER` comment,
   `agents/dev._note_failed_attempt`), and the picker reads those back: a
   sub-task that failed in an earlier cycle goes behind its untried siblings

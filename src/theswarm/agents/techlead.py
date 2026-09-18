@@ -14,6 +14,7 @@ from langgraph.graph import END, StateGraph
 
 from theswarm.agents.base import load_context, stub_result
 from theswarm.config import SELF_REPO, AgentState, Role
+from theswarm.tools.claude import ClaudeFatalError
 
 log = logging.getLogger(__name__)
 
@@ -291,19 +292,37 @@ async def poll_and_review_prs(state: AgentState) -> dict:
     total_tokens = 0
     total_cost = 0.0
 
+    # A review that cannot be produced is a PR left for the next pass, not
+    # a dead cycle. bbab1b4ad6e9 lost its QA, report and memory save to one
+    # review call that failed twice (#147). The PR is not marked reviewed,
+    # so it is picked up again; only an exhausted subscription window
+    # (ClaudeFatalError) still aborts — nothing after it could succeed.
+    skipped: list[int] = []
     for pr in todo:
-        review = await _review_single_pr(github, claude, pr, context)
+        try:
+            review = await _review_single_pr(github, claude, pr, context)
+        except ClaudeFatalError:
+            raise
+        except Exception as exc:
+            log.warning("PR #%d: review unavailable (%s: %s) — left for the next pass",
+                        pr["number"], type(exc).__name__, str(exc)[:200])
+            skipped.append(pr["number"])
+            continue
         reviewed.append(_pr_key(pr))
         reviews.append(review)
         total_tokens += review.get("tokens_used", 0)
         total_cost += review.get("cost_usd", 0.0)
 
+    summary = f"Reviewed {len(reviews)} PR(s)"
+    if skipped:
+        summary += f", review unavailable for #{', #'.join(str(n) for n in skipped)}"
     return {
-        "result": f"Reviewed {len(reviews)} PR(s)",
+        "result": summary,
         "tokens_used": total_tokens,
         "cost_usd": total_cost,
         "reviews": reviews,
         "reviewed_prs": reviewed,
+        "skipped_prs": skipped,
     }
 
 
@@ -312,6 +331,22 @@ def _pr_key(pr: dict) -> str:
     changes the key and earns a new review; a held or commented PR does not."""
     sha = pr.get("head_sha")
     return f"{pr['number']}@{sha}" if sha else str(pr["number"])
+
+
+# A review's CLI budget follows its prompt. 180s is the CLI default,
+# calibrated for short prompts; the review of #146 (+224/-135, an 18.9k-char
+# prompt) timed out at 180s and again at the 234s retry, and the whole cycle
+# went down with it (#147). The ceiling is ClaudeCLI's own.
+REVIEW_TIMEOUT_FLOOR_SECONDS = 180
+REVIEW_TIMEOUT_CEILING_SECONDS = 780
+_REVIEW_SECONDS_PER_1K_CHARS = 15
+
+
+def _review_timeout(prompt_chars: int) -> int:
+    """Seconds for a review call: 60 plus 15 per thousand prompt characters,
+    never under the floor, never over the CLI ceiling."""
+    scaled = 60 + prompt_chars * _REVIEW_SECONDS_PER_1K_CHARS // 1000
+    return max(REVIEW_TIMEOUT_FLOOR_SECONDS, min(REVIEW_TIMEOUT_CEILING_SECONDS, scaled))
 
 
 async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
@@ -340,7 +375,7 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
         context=context,
     )
 
-    result = await claude.run(prompt)
+    result = await claude.run(prompt, timeout=_review_timeout(len(prompt)))
     log.info("Claude review done for PR #%d: %d tokens, $%.4f",
              pr_number, result.total_tokens, result.cost_usd)
 

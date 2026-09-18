@@ -76,6 +76,7 @@ class AgentState(TypedDict, total=False):
     merged_prs: list[int]
     held_prs: list[int]  # approved, deliberately left unmerged (SELF_REPO)
     reviewed_prs: list[str]  # "number@head_sha" reviewed this cycle — once, unless the head moves
+    skipped_prs: list[int]  # review call failed — left for the next pass, not marked reviewed
     # QA-specific
     test_counts: dict
     # Why the unit-test run did not produce a result at all (hit its own

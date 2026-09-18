@@ -14,16 +14,23 @@ import os
 import re
 from datetime import datetime
 
-import anthropic
 
 from langgraph.graph import END, StateGraph
 
 from theswarm.agents.base import load_context, stub_result
 from theswarm.config import AgentState, Role
+from theswarm.tools.claude import ClaudeFatalError
 
 log = logging.getLogger(__name__)
 
 E2E_PORT = 8000  # port for the live server during E2E tests
+
+# The E2E-file generation is an enhancement: a target without one still
+# gets its unit verdict, its screenshots and its video. 90s was the CLI
+# default; the two generations that succeeded on this repo took close to
+# three minutes wall, and 794a644f6889 died on the 90s cap and its 117s
+# retry (#147).
+E2E_GENERATION_TIMEOUT_SECONDS = 240
 
 # Hard bounds on the source context appended to the E2E prompt. Prod cycle
 # 3859db29d158 failed with a 400 'prompt is too long' because whole router
@@ -156,13 +163,19 @@ async def write_e2e_tests(state: AgentState) -> dict:
         prompt += "\n\n## Source code\n" + "\n\n".join(source_snippets)
 
     try:
-        result = await claude.run(prompt, workdir=workspace, timeout=90)
-    except anthropic.BadRequestError:
-        # E2E generation is an enhancement — a rejected request must not
-        # fail the whole QA phase (and with it the cycle).
-        log.exception(
-            "QA: E2E generation request rejected (prompt_chars=%d) — skipping",
-            len(prompt),
+        result = await claude.run(
+            prompt, workdir=workspace, timeout=E2E_GENERATION_TIMEOUT_SECONDS,
+        )
+    except ClaudeFatalError:
+        raise  # an exhausted subscription window: nothing after this can run
+    except Exception as exc:
+        # E2E generation is an enhancement — a rejected request, a timeout
+        # or a CLI failure must not fail the whole QA phase (and with it
+        # the cycle: 794a644f6889 had its PR approved and lost everything
+        # after, #147).
+        log.warning(
+            "QA: E2E generation unavailable (%s: %s, prompt_chars=%d) — skipping",
+            type(exc).__name__, str(exc)[:200], len(prompt),
         )
         return {"tokens_used": 0}
 
