@@ -132,7 +132,9 @@ async def test_screenshots_skipped_when_server_never_ready(tmp_path):
         state = {"workspace": str(tmp_path), "claude": claude}
         result = await capture_demo_screenshots(state)
 
-    assert result == {"demo_artifacts": [], "tokens_used": 0}
+    assert result["demo_artifacts"] == []
+    assert result["tokens_used"] == 0
+    assert "not ready after 30.0s" in result["demo_launch_error"]
     # No recorder was ever built — so no page.goto was attempted either.
     recorder_cls.assert_not_called()
     # The dead-end server is still cleaned up.
@@ -147,7 +149,7 @@ async def test_screenshots_use_declared_ready_seconds(tmp_path):
     fake_proc = await _fake_server_proc()
     captured = {}
 
-    def capture_timeout(url, *, timeout, interval):
+    def capture_timeout(url, *, timeout, interval, is_dead=None):
         captured["timeout"] = timeout
         raise ReadinessTimeout("boom")
 
@@ -209,7 +211,7 @@ async def test_e2e_uses_declared_ready_seconds(tmp_path):
     fake_proc = await _fake_server_proc()
     captured = {}
 
-    def capture_timeout(url, *, timeout, interval):
+    def capture_timeout(url, *, timeout, interval, is_dead=None):
         captured["timeout"] = timeout
         return 0.1
 

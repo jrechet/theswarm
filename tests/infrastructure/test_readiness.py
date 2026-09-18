@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import socket
+import time
 
 import pytest
 
 from theswarm.infrastructure.resilience.readiness import (
+    ProcessExited,
     ReadinessTimeout,
     wait_for_http_ready,
 )
@@ -125,6 +127,46 @@ async def test_rejects_5xx_until_deadline():
                 timeout=0.5,
                 interval=0.1,
             )
+    finally:
+        server.close()
+        await server.wait_closed()
+
+
+# ── is_dead: stop waiting the instant the process has already exited ────
+
+
+async def test_is_dead_raises_process_exited_immediately():
+    """A process that has already exited will never answer — no reason to
+    poll it out to the full timeout (cycle 5b1da00155c2: three 90s waits
+    for a server that had died on `No module named theswarm`)."""
+    port = _free_port()  # nothing listens here
+    start = time.monotonic()
+    with pytest.raises(ProcessExited):
+        await wait_for_http_ready(
+            f"http://127.0.0.1:{port}/",
+            timeout=30.0,
+            interval=0.1,
+            is_dead=lambda: True,
+        )
+    assert time.monotonic() - start < 1.0
+
+
+async def test_process_exited_is_a_readiness_timeout():
+    """Existing `except ReadinessTimeout` callers must keep working unchanged."""
+    assert issubclass(ProcessExited, ReadinessTimeout)
+
+
+async def test_is_dead_false_does_not_short_circuit_a_live_server():
+    port = _free_port()
+    server = await _serve_one_response(port, "200 OK")
+    try:
+        elapsed = await wait_for_http_ready(
+            f"http://127.0.0.1:{port}/",
+            timeout=3.0,
+            interval=0.1,
+            is_dead=lambda: False,
+        )
+        assert elapsed < 2.0
     finally:
         server.close()
         await server.wait_closed()

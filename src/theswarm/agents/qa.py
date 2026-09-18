@@ -17,7 +17,12 @@ from datetime import datetime
 
 from langgraph.graph import END, StateGraph
 
-from theswarm.agents.base import load_context, stub_result
+from theswarm.agents.base import (
+    _test_runner_missing,
+    install_target,
+    load_context,
+    stub_result,
+)
 from theswarm.config import AgentState, Role
 from theswarm.tools.claude import ClaudeFatalError
 
@@ -216,6 +221,16 @@ async def run_unit_tests(state: AgentState) -> dict:
 
     python = _find_system_python()
 
+    # QA has no evidence the Dev installed the target — a cycle whose Dev
+    # produced no PR (ALREADY_SATISFIED, or nothing at all) never runs the
+    # Dev's install step at all. Same install plan, same fingerprint: a
+    # repeat here (e.g. right after the Dev already installed it) is a
+    # ~1s no-op, not a second cold install (cycle 5b1da00155c2 — QA ran
+    # pytest against a workspace with nothing installed).
+    fingerprint = await install_target(
+        workspace, python, claude, state.get("deps_fingerprint", ""),
+    )
+
     # A target without pytest-cov must still get its verdict — the coverage
     # flags are only added once the plugin actually imports, so a missing
     # plugin doesn't turn a normal test run into an ImportError.
@@ -253,6 +268,28 @@ async def run_unit_tests(state: AgentState) -> dict:
                 "coverage_status": "not_run",
                 "coverage_reason": reason,
             },
+            "deps_fingerprint": fingerprint,
+            "tokens_used": 0,
+        }
+
+    # The runner reporting its own absence, or a suite that collected
+    # nothing, is not a red 0/0 — a workspace with an uninstalled target
+    # (or a genuinely empty tests/) answered instantly and used to read as
+    # "unit=0(pass)" (prod cycle 5f8f0f63f58c and 5b1da00155c2).
+    not_run_reason = _test_runner_missing(output, exit_code=result.get("exit_code"))
+    if not_run_reason:
+        log.warning("QA unit tests: not run — %s", not_run_reason)
+        return {
+            "tests_passed": False,
+            "test_output": output[-3000:],
+            "test_counts": {"passed": 0, "failed": 0, "errors": 0, "total": 0},
+            "unit_tests_not_run_reason": not_run_reason,
+            "security_scan": {
+                "coverage_pct": 0.0,
+                "coverage_status": "not_run",
+                "coverage_reason": not_run_reason,
+            },
+            "deps_fingerprint": fingerprint,
             "tokens_used": 0,
         }
 
@@ -289,6 +326,7 @@ async def run_unit_tests(state: AgentState) -> dict:
             "coverage_status": coverage_status,
             "coverage_reason": coverage_reason,
         },
+        "deps_fingerprint": fingerprint,
         "tokens_used": 0,
     }
 
@@ -339,40 +377,56 @@ async def run_e2e_tests(state: AgentState) -> dict:
         env=env,
     )
 
-    # Sprint G4 — wait for the server to become ready instead of a blind sleep
+    # Sprint G4 — wait for the server to become ready instead of a blind sleep.
+    # `is_dead` stops the wait the moment the process has already exited —
+    # a process that died on import will never answer, and polling it out
+    # to the full ready_seconds window three times over (E2E, screenshots,
+    # video) is 4.5 minutes spent waiting on nothing (cycle 5b1da00155c2).
     from theswarm.infrastructure.resilience import ReadinessTimeout, wait_for_http_ready
+    demo_launch_error = ""
     try:
         await wait_for_http_ready(
             f"http://127.0.0.1:{port}/",
             timeout=_demo_ready_seconds(workspace),
             interval=0.5,
+            is_dead=lambda: server_proc.returncode is not None,
         )
     except ReadinessTimeout as exc:
-        await _log_readiness_failure("QA E2E", server_proc, exc)
+        demo_launch_error = await _log_readiness_failure("QA E2E", server_proc, exc)
 
     e2e_output = ""
     e2e_passed = False
-    try:
-        # Run E2E tests using the same python (system python with app deps).
-        # Only the file QA itself wrote — a target's own Playwright suite
-        # (tests/e2e/ in full) belongs to the target's CI, not here.
-        result = await claude.run_tests(
-            workspace,
-            [python, "-m", "pytest", e2e_test_file, "-v", "--tb=short"],
-            timeout=120,
-        )
-        e2e_output = result["output"]
-        e2e_passed = result["passed"]
-    finally:
-        # Stop the server
+    if demo_launch_error:
+        # The server never came up — running pytest against it would only
+        # reproduce the same connection failure. Say why instead.
+        e2e_output = demo_launch_error
         try:
-            server_proc.send_signal(signal.SIGTERM)
-            await asyncio.wait_for(server_proc.wait(), timeout=5)
-        except (ProcessLookupError, asyncio.TimeoutError):
+            server_proc.kill()
+        except ProcessLookupError:
+            pass
+    else:
+        try:
+            # Run E2E tests using the same python (system python with app
+            # deps). Only the file QA itself wrote — a target's own
+            # Playwright suite (tests/e2e/ in full) belongs to the target's
+            # CI, not here.
+            result = await claude.run_tests(
+                workspace,
+                [python, "-m", "pytest", e2e_test_file, "-v", "--tb=short"],
+                timeout=120,
+            )
+            e2e_output = result["output"]
+            e2e_passed = result["passed"]
+        finally:
+            # Stop the server
             try:
-                server_proc.kill()
-            except ProcessLookupError:
-                pass  # already exited
+                server_proc.send_signal(signal.SIGTERM)
+                await asyncio.wait_for(server_proc.wait(), timeout=5)
+            except (ProcessLookupError, asyncio.TimeoutError):
+                try:
+                    server_proc.kill()
+                except ProcessLookupError:
+                    pass  # already exited
 
     e2e_counts = _parse_pytest_summary(e2e_output)
 
@@ -380,12 +434,15 @@ async def run_e2e_tests(state: AgentState) -> dict:
              "PASSED" if e2e_passed else "FAILED",
              e2e_counts["passed"], e2e_counts["failed"], e2e_counts["errors"])
 
-    return {
+    result = {
         "e2e_passed": e2e_passed,
         "e2e_output": e2e_output[-3000:],
         "e2e_counts": e2e_counts,
         "tokens_used": 0,
     }
+    if demo_launch_error:
+        result["demo_launch_error"] = demo_launch_error
+    return result
 
 
 async def run_security_scan(state: AgentState) -> dict:
@@ -503,20 +560,22 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
         env=env,
     )
 
-    # Sprint G4 — wait for readiness instead of blind sleep
+    # Sprint G4 — wait for readiness instead of blind sleep. `is_dead` cuts
+    # the wait short the moment the process has already exited, instead of
+    # polling a dead server out to the full ready_seconds window.
     from theswarm.infrastructure.resilience import ReadinessTimeout, wait_for_http_ready
-    ready = True
+    demo_launch_error = ""
     try:
         await wait_for_http_ready(
             f"http://127.0.0.1:{port}/",
             timeout=_demo_ready_seconds(workspace),
             interval=0.5,
+            is_dead=lambda: server_proc.returncode is not None,
         )
     except ReadinessTimeout as exc:
-        ready = False
-        await _log_readiness_failure("QA screenshots", server_proc, exc)
+        demo_launch_error = await _log_readiness_failure("QA screenshots", server_proc, exc)
 
-    if not ready:
+    if demo_launch_error:
         # A server that never answered can only refuse every page.goto —
         # don't spend three failed attempts logging what one warning already
         # said (prod cycle 5f8f0f63f58c: three ERR_CONNECTION_REFUSED).
@@ -528,7 +587,11 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
                 server_proc.kill()
             except ProcessLookupError:
                 pass
-        return {"demo_artifacts": [], "tokens_used": 0}
+        return {
+            "demo_artifacts": [],
+            "demo_launch_error": demo_launch_error,
+            "tokens_used": 0,
+        }
 
     recorder = PlaywrightRecorder()
     base_url = f"http://127.0.0.1:{port}"
@@ -660,16 +723,37 @@ async def record_demo_video(state: AgentState) -> dict:
         env=env,
     )
 
-    # Sprint G4 — wait for readiness instead of blind sleep
+    # Sprint G4 — wait for readiness instead of blind sleep. `is_dead` cuts
+    # the wait short the moment the process has already exited, instead of
+    # polling a dead server out to the full ready_seconds window.
     from theswarm.infrastructure.resilience import ReadinessTimeout, wait_for_http_ready
+    demo_launch_error = ""
     try:
         await wait_for_http_ready(
             f"http://127.0.0.1:{port}/",
             timeout=_demo_ready_seconds(workspace),
             interval=0.5,
+            is_dead=lambda: server_proc.returncode is not None,
         )
     except ReadinessTimeout as exc:
-        await _log_readiness_failure("QA video", server_proc, exc)
+        demo_launch_error = await _log_readiness_failure("QA video", server_proc, exc)
+
+    if demo_launch_error:
+        # A dead server can only refuse every page.goto — don't attempt a
+        # recording nobody will get.
+        try:
+            server_proc.send_signal(signal.SIGTERM)
+            await asyncio.wait_for(server_proc.wait(), timeout=5)
+        except (ProcessLookupError, asyncio.TimeoutError):
+            try:
+                server_proc.kill()
+            except ProcessLookupError:
+                pass
+        return {
+            "video_artifacts": video_artifacts,
+            "demo_launch_error": demo_launch_error,
+            "tokens_used": 0,
+        }
 
     recorder = PlaywrightRecorder()
     base_url = f"http://127.0.0.1:{port}"
@@ -812,6 +896,11 @@ async def generate_demo_report(state: AgentState) -> dict:
     coverage_status = security.get("coverage_status", "not_run")
     coverage_reason = security.get("coverage_reason", "")
 
+    # A demo launch (E2E, screenshots or video) whose server process died
+    # before it ever answered — the reason belongs on the card in place of
+    # a bare "0 screenshots" (cycle 5b1da00155c2: "No module named theswarm").
+    demo_launch_error = state.get("demo_launch_error", "")
+
     # All quality gates must pass for green
     all_gates_pass = (
         unit_status == "pass" and tests_passed
@@ -847,6 +936,7 @@ async def generate_demo_report(state: AgentState) -> dict:
                 "passed": e2e_counts.get("passed", 0),
                 "failed": e2e_counts.get("failed", 0),
                 "status": "pass" if (e2e_all_pass and e2e_total > 0) else ("fail" if e2e_total > 0 else "not_run"),
+                "reason": demo_launch_error,
             },
             "security": {
                 "semgrep_high": semgrep_high,
@@ -861,6 +951,7 @@ async def generate_demo_report(state: AgentState) -> dict:
         },
         "overall_status": "green" if all_gates_pass else
                           "yellow" if (unit_status == "pass" and tests_passed) else "red",
+        "demo_launch_error": demo_launch_error,
     }
 
     # Attach demo artifact paths to the report
@@ -1017,11 +1108,12 @@ async def generate_demo_report(state: AgentState) -> dict:
         demo_report["thumbnail_path"] = ""
 
     unit_summary = f"not_run({unit_not_run_reason})" if unit_not_run_reason else f"{unit_total}({unit_status})"
-    log.info("QA report: unit=%s e2e=%d(%s) screenshots=%d videos=%d — status: %s",
+    log.info("QA report: unit=%s e2e=%d(%s) screenshots=%d videos=%d — status: %s%s",
              unit_summary,
              e2e_total, "pass" if e2e_all_pass else "fail",
              len(screenshot_paths), len(video_paths),
-             demo_report["overall_status"])
+             demo_report["overall_status"],
+             f" — demo launch: {demo_launch_error}" if demo_launch_error else "")
 
     return {
         "demo_report": demo_report,
@@ -1067,20 +1159,25 @@ def build_qa_graph() -> StateGraph:
 # ── Helpers ─────────────────────────────────────────────────────────────
 
 
-async def _log_readiness_failure(label: str, server_proc, exc: Exception) -> None:
-    """Report *why* the target app never came up.
+async def _log_readiness_failure(label: str, server_proc, exc: Exception) -> str:
+    """Report *why* the target app never came up, and return that reason.
 
     The server's output is piped but otherwise never read, so a target that
     dies on import — a missing dependency, a syntax error — produced only a
     bare connection-refused with no cause anywhere in the logs (prod cycle
     8170b32ca48f). Read it back when the process has already exited; if it is
     still alive, say so rather than blocking on communicate().
+
+    The returned reason is what the demo card shows in place of a bare
+    "0 screenshots" — a process that never got the chance to serve anything
+    (cycle 5b1da00155c2: `No module named theswarm`, ×3, one per launch).
     """
     import asyncio as _asyncio
 
     if server_proc.returncode is None:
-        log.warning("%s: %s — server still running but not serving", label, exc)
-        return
+        reason = f"{exc} — server still running but not serving"
+        log.warning("%s: %s", label, reason)
+        return reason
 
     output = ""
     try:
@@ -1094,6 +1191,12 @@ async def _log_readiness_failure(label: str, server_proc, exc: Exception) -> Non
         label, exc, server_proc.returncode,
         f"\n--- server output ---\n{output}" if output else " (no output captured)",
     )
+
+    last_line = output.strip().splitlines()[-1] if output.strip() else ""
+    reason = f"server exited rc={server_proc.returncode}"
+    if last_line:
+        reason += f": {last_line}"
+    return reason
 
 
 # What the target's own environment may see when QA starts it for a demo
