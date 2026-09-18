@@ -196,11 +196,19 @@ async def test_run_e2e_tests_runs_full_pipeline(tmp_path):
     # Mock asyncio.create_subprocess_exec for pip install and uvicorn server
     fake_proc = AsyncMock()
     fake_proc.wait = AsyncMock(return_value=0)
+    # A live server: `returncode` is None until the process exits. Left as a
+    # Mock it reads as "exited", and readiness now stops waiting on a dead
+    # process instead of counting to ninety (#151).
+    fake_proc.returncode = None
     fake_proc.send_signal = MagicMock()
     fake_proc.kill = MagicMock()
 
+    # This test is about the pipeline — start, run, stop — so the server is
+    # up: readiness talks to a real socket, and without this the fake one is
+    # unreachable and E2E is (correctly) skipped rather than run (#151).
     with patch("theswarm.agents.qa._find_system_python", return_value="/usr/bin/python3"), \
          patch("asyncio.create_subprocess_exec", new_callable=AsyncMock, return_value=fake_proc), \
+         patch("theswarm.infrastructure.resilience.wait_for_http_ready", new_callable=AsyncMock), \
          patch("asyncio.sleep", new_callable=AsyncMock):
         state = {"claude": claude, "workspace": str(tmp_path)}
         result = await run_e2e_tests(state)
