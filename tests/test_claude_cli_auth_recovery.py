@@ -20,6 +20,7 @@ from theswarm.tools.claude import (
     _CLIUnavailable,
     _envelope_error,
     _is_auth_failure,
+    _is_timeout,
 )
 
 
@@ -261,3 +262,34 @@ def test_the_deploy_no_longer_ships_the_override():
     for f in (".github/actions/write-env/action.yml", ".github/workflows/cd.yml"):
         assert "CLAUDE_CODE_OAUTH_TOKEN" not in Path(f).read_text()
         assert "claude_code_oauth_token" not in Path(f).read_text()
+
+
+async def test_failed_token_drop_reraises_the_original_timeout(monkeypatch):
+    """The drop is a probe, not a diagnosis — it must not mask a timeout.
+
+    Local cycle 20260919T125902Z: a 240s TechLead breakdown call timed out,
+    the token-drop probe answered "OAuth session expired" in two seconds, and
+    `run()` fed *that* to `_retry_timeout` — which only grows on a timeout.
+    The retry got 240s again and the phase blew its 600s budget: the exact
+    failure `_retry_timeout` exists to prevent (its own docstring cites prod
+    cycle 11e5fe09535f dying that way).
+    """
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-valid")
+
+    async def attempts(prompt, *, workdir, timeout,
+                       drop_oauth_env=False, permission_mode=None):
+        if drop_oauth_env:
+            raise _CLIUnavailable(
+                "exit 1: Failed to authenticate: OAuth session expired"
+            )
+        raise _CLIUnavailable("CLI timed out after 240s")
+
+    cli = ClaudeCLI(model="sonnet")
+    with patch.object(cli, "_run_cli", side_effect=attempts):
+        with pytest.raises(_CLIUnavailable) as caught:
+            await cli._cli_with_auth_recovery("hi", workdir=None, timeout=240)
+
+    assert _is_timeout(caught.value), (
+        "the probe's auth error replaced the timeout, so the retry cannot "
+        f"grow its budget; got: {caught.value}"
+    )
