@@ -143,6 +143,31 @@ async def create_branch(workdir: str, branch_name: str, base: str = "main") -> N
     log.info("Created branch %s from %s", branch_name, base)
 
 
+async def resume_branch(workdir: str, branch_name: str) -> None:
+    """Check out the remote branch of a previous attempt, as it stands.
+
+    A task sent back by a REQUEST_CHANGES review must build on the commits
+    the review is about (#121). `create_branch` resets from main, which
+    would throw them away and hand the reviewer the same diff minus its
+    history. If the remote branch is gone — someone deleted it, the PR was
+    closed and pruned — fall back to a fresh branch off main.
+    """
+    await github_app.ensure_github_token()
+    await _run_git("reset", "--hard", cwd=workdir, check=False)
+    await _run_git("clean", "-fd", cwd=workdir, check=False)
+    remote = await _run_git(
+        *_auth_args(), "ls-remote", "--heads", "origin", branch_name,
+        cwd=workdir, check=False,
+    )
+    if not remote.strip():
+        log.warning("Branch %s is gone from origin — starting fresh", branch_name)
+        await create_branch(workdir, branch_name)
+        return
+    await _run_git(*_auth_args(), "fetch", "origin", branch_name, cwd=workdir)
+    await _run_git("checkout", "-B", branch_name, "FETCH_HEAD", cwd=workdir)
+    log.info("Resumed branch %s from origin", branch_name)
+
+
 class BrokenSyntax(RuntimeError):
     """A staged file does not parse. Committing it would ship a broken tree."""
 

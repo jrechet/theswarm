@@ -220,6 +220,15 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   object that carries a `decision`, fenced or bare, and steps over braces
   in prose (`{id}`) and example payloads. Slicing first-`{`-to-last-`}`
   filed an APPROVE with three issues as COMMENT (#126).
+- **A REQUEST_CHANGES review closes the loop**: the review is copied onto
+  the *issue* behind `CHANGES_MARKER`, the label flips back to
+  `status:ready`, and the next attempt resumes the branch the review is
+  about (`git.resume_branch`, not `create_branch`, which would reset from
+  main and discard the commits) and pushes onto the PR that already
+  exists. Two rounds on one task is a conversation; at
+  `CHANGES_REQUESTED_CAP` it stays in review with a comment for a person.
+  Before #121 the review was written on the PR and forgotten, and
+  `pick_task` skips `status:review` — so nothing ever came back.
 - **A Claude call that fails is a step skipped, not a cycle lost.** Two
   cycles in a row died on an optional call that failed twice — the review
   of a 500-line diff (`bbab1b4ad6e9`) and QA's E2E-file generation

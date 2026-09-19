@@ -18,8 +18,12 @@ AGENTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "src" / "theswarm" / 
 
 # Keys returned by plain helper functions rather than graph nodes. These are
 # collected into a declared key (e.g. reviews) instead of flowing through the
-# graph state, so the schema does not need them.
-HELPER_ONLY_KEYS = {"decision", "summary", "issues", "pr_number"}
+# graph state, so the schema does not need them. `sent_back` rides inside a
+# review dict; `text`/`branch` are the pieces of the changes-requested note
+# `_changes_requested` hands to the prompt builder (#121).
+HELPER_ONLY_KEYS = {
+    "decision", "summary", "issues", "pr_number", "sent_back", "text",
+}
 
 
 def _returned_dict_keys(path: pathlib.Path) -> set[str]:
