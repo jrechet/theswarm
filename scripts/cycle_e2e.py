@@ -17,9 +17,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
+
 import httpx
 
 BASE = os.environ.get("SWARM_BASE", "https://bots.jrec.fr/swarm")
@@ -116,11 +119,55 @@ def wait_for(cycle_id: str, budget_s: int) -> tuple[str, str]:
     return "timeout", last_phase
 
 
+def build_result(
+    repo: str,
+    feature: str,
+    cycle_id: str,
+    state: str,
+    last_phase: str,
+    prs: list[dict],
+    left: list[int],
+    timestamp: str,
+) -> dict:
+    """The PASS/FAIL verdict, as a JSON-serializable record.
+
+    Pure and deterministic (timestamp is passed in, not read here) so the
+    harness's exit code and this record always agree on the same run.
+    """
+    reasons = []
+    if state != "completed":
+        reasons.append(f"cycle {state}")
+    if not prs:
+        reasons.append("no pull request produced")
+    if left:
+        reasons.append(f"{len(left)} sub-task(s) left unbuilt")
+    return {
+        "timestamp": timestamp,
+        "repo": repo,
+        "feature": feature.partition("\n")[0].strip()[:80],
+        "cycle_id": cycle_id,
+        "state": state,
+        "last_phase": last_phase,
+        "prs": prs,
+        "unfinished": left,
+        "passed": not reasons,
+        "reasons": reasons,
+    }
+
+
+def append_result(path: pathlib.Path, result: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(result, separators=(",", ":")) + "\n")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
     ap.add_argument("--feature", required=True)
     ap.add_argument("--budget", type=int, default=5400, help="seconds")
+    ap.add_argument("--history", type=pathlib.Path,
+                    default=pathlib.Path("docs/harness-runs.jsonl"))
     args = ap.parse_args()
 
     if not KEY:
@@ -136,6 +183,7 @@ def main() -> int:
     print(f"\n  cycle      : {state}" + (f" (last phase {last_phase})" if last_phase else ""))
     print(f"  pull req.  : {new_prs or 'none'}")
 
+    prs_payload = []
     for pr in new_prs:
         checks = _gh("pr", "checks", str(pr), "--repo", args.repo)
         if not checks:
@@ -154,24 +202,25 @@ def main() -> int:
         pr_state = _gh("pr", "view", str(pr), "--repo", args.repo,
                        "--json", "state", "--jq", ".state")
         print(f"    #{pr}: {pr_state.lower()}, CI {verdict}")
+        prs_payload.append({"number": pr, "state": pr_state.lower(), "ci": verdict})
 
     left = unfinished_children(args.repo, issue)
     if left:
         print(f"  unfinished : {', '.join(f'#{n}' for n in left)}")
 
-    if state == "completed" and new_prs and not left:
-        print("\nPASS — a feature was asked for, and the whole of it was built.")
-        return 0
+    timestamp = datetime.now(timezone.utc).isoformat()
+    result = build_result(
+        args.repo, args.feature, cycle_id, state, last_phase,
+        prs_payload, left, timestamp,
+    )
 
-    reasons = []
-    if state != "completed":
-        reasons.append(f"cycle {state}")
-    if not new_prs:
-        reasons.append("no pull request produced")
-    if left:
-        reasons.append(f"{len(left)} sub-task(s) left unbuilt")
-    print("\nFAIL — " + "; ".join(reasons))
-    return 1
+    if result["passed"]:
+        print("\nPASS — a feature was asked for, and the whole of it was built.")
+    else:
+        print("\nFAIL — " + "; ".join(result["reasons"]))
+
+    append_result(args.history, result)
+    return 0 if result["passed"] else 1
 
 
 if __name__ == "__main__":
