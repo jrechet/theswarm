@@ -411,13 +411,33 @@ class ClaudeCLI:
                     and os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")):
                 raise
             log.warning(
-                "Claude CLI auth failed (%s) — retrying without the "
+                "Claude CLI failed (%s) — retrying without the "
                 "CLAUDE_CODE_OAUTH_TOKEN env override", exc,
             )
-            return await self._run_cli(
-                prompt, workdir=workdir, timeout=timeout, drop_oauth_env=True,
-                permission_mode=permission_mode,
-            )
+            try:
+                return await self._run_cli(
+                    prompt, workdir=workdir, timeout=timeout,
+                    drop_oauth_env=True, permission_mode=permission_mode,
+                )
+            except _CLIUnavailable as without_token:
+                # The drop is a probe, not a diagnosis: it only helps when the
+                # session on disk is valid. When that session is dead too —
+                # the normal state right after `claude setup-token`, and in
+                # any container where the env token is the only credential —
+                # the probe fails instantly with an auth error and says
+                # nothing about the first failure. Surfacing it replaced a
+                # timeout with an auth error, and `_retry_timeout` only grows
+                # on a timeout: the retry got the same budget that had just
+                # run out. Local cycle 20260919T125902Z died that way — a
+                # 240s breakdown call timed out, the probe answered in two
+                # seconds, the retry got 240s again, and the phase blew its
+                # 600s budget. Keep the first failure; it is the one that
+                # describes what actually went wrong.
+                log.warning(
+                    "Claude CLI also failed without the env token (%s) — "
+                    "keeping the original failure", without_token,
+                )
+                raise exc from without_token
 
     def _retry_timeout(
         self, timeout: int | None, error: Exception, workdir: str | None = None,
