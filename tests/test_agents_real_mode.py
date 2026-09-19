@@ -182,6 +182,25 @@ class TestPOWriteDailyPlan:
         assert call_kwargs["branch"] == "main"
         assert "Today we build login." in call_kwargs["content"]
 
+    async def test_no_backlog_does_not_commit_a_placeholder_plan(self):
+        """A drained backlog must not push a content-free plan to main.
+
+        `select_daily_issues` handed its "nothing to plan" sentence down as
+        the plan itself, and `write_daily_plan` only guards on emptiness — so
+        every cycle with no `status:backlog` issue committed a placeholder to
+        the target's main branch (jrechet/theswarm, commit 1bdfa79d).
+        """
+        from theswarm.agents.po import select_daily_issues, write_daily_plan
+
+        github = _make_github(get_issues=AsyncMock(return_value=[]))
+        claude = _make_claude()
+
+        state = _base_state(github=github, claude=claude)
+        state.update(await select_daily_issues(state))
+        await write_daily_plan(state)
+
+        github.update_file.assert_not_awaited()
+
 
 class TestPOValidateDemo:
 

@@ -98,9 +98,13 @@ async def select_daily_issues(state: AgentState) -> dict:
         )]
 
     if not backlog:
+        # The plan stays empty on purpose: `write_daily_plan` commits whatever
+        # lands here, and a human-readable "nothing to plan" sentence is not a
+        # plan. Handing one down pushed a placeholder to the target's main
+        # branch on every cycle with a drained backlog (commit 1bdfa79d).
         log.info("PO: no backlog issues found — nothing to plan")
         return {
-            "daily_plan": "No backlog issues available.",
+            "daily_plan": "",
             "result": "No backlog issues to plan",
             "tokens_used": 0,
         }
@@ -159,9 +163,16 @@ async def write_daily_plan(state: AgentState) -> dict:
     github = state.get("github")
     daily_plan = state.get("daily_plan", "")
 
-    if not daily_plan or github is None:
+    if github is None:
         return stub_result(Role.PO, "write_daily_plan",
                            "create daily plan markdown in docs/daily-plans/")
+
+    # Real mode with nothing to say: skip the commit rather than push an
+    # empty file. Every commit to the target's main branch is a real event —
+    # on this repository it is the one that can redeploy the service.
+    if not daily_plan:
+        log.info("PO: no plan to write — skipping the daily plan commit")
+        return {"result": "No daily plan to write", "tokens_used": 0}
 
     today = datetime.now().strftime("%Y-%m-%d")
     path = f"docs/daily-plans/{today}.md"
