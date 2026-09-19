@@ -237,9 +237,10 @@ async def run_unit_tests(state: AgentState) -> dict:
     # repeat here (e.g. right after the Dev already installed it) is a
     # ~1s no-op, not a second cold install (cycle 5b1da00155c2 — QA ran
     # pytest against a workspace with nothing installed).
-    fingerprint = await install_target(
+    installed = await install_target(
         workspace, python, claude, state.get("deps_fingerprint", ""),
     )
+    fingerprint = installed.fingerprint
 
     # A target without pytest-cov must still get its verdict — the coverage
     # flags are only added once the plugin actually imports, so a missing
@@ -291,7 +292,13 @@ async def run_unit_tests(state: AgentState) -> dict:
     # nothing, is not a red 0/0 — a workspace with an uninstalled target
     # (or a genuinely empty tests/) answered instantly and used to read as
     # "unit=0(pass)" (prod cycle 5f8f0f63f58c and 5b1da00155c2).
-    not_run_reason = _test_runner_missing(output, exit_code=result.get("exit_code"))
+    # …and neither is a suite whose target never installed. Those import
+    # errors count the install, not the code: cycle
+    # targeted-160-20260919T133731Z reported `unit=165(fail)` for a
+    # workspace where `pip install -e .` had refused the interpreter.
+    not_run_reason = installed.failure or _test_runner_missing(
+        output, exit_code=result.get("exit_code"),
+    )
     if not_run_reason:
         log.warning("QA unit tests: not run — %s", not_run_reason)
         return {

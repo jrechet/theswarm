@@ -545,9 +545,10 @@ async def run_quality_gates(state: AgentState) -> dict:
     # installed" flag is wrong too: a retry that adds a missing dependency
     # needs it installed, which is how cycle 8170b32ca48f kept failing on a
     # module the retry had just declared.
-    fingerprint = await install_target(
+    installed = await install_target(
         workspace, python, claude, state.get("deps_fingerprint", ""),
     )
+    fingerprint = installed.fingerprint
 
     # Run pytest if available
     test_result = await claude.run_tests(
@@ -555,7 +556,12 @@ async def run_quality_gates(state: AgentState) -> dict:
         timeout=TEST_RUN_TIMEOUT_SECONDS,
     )
 
-    unavailable = _test_runner_missing(test_result["output"])
+    # An install that failed outranks whatever pytest then printed: the
+    # suite ran against a workspace missing the package under test, so its
+    # import errors measure the install, not the code. Reading them as red
+    # tests spent two Ralph rounds writing nothing and filed a PR claiming
+    # failing tests (local cycle targeted-160-20260919T133731Z).
+    unavailable = installed.failure or _test_runner_missing(test_result["output"])
     if not unavailable and test_result["exit_code"] == -1:
         unavailable = (
             f"the test suite did not finish within {TEST_RUN_TIMEOUT_SECONDS}s "
