@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from theswarm.config import AgentState, Role
@@ -246,10 +247,26 @@ def _requirements_fingerprint(req_file: str) -> str:
         return ""
 
 
+@dataclass(frozen=True)
+class InstallOutcome:
+    """What `install_target` left behind: the fingerprint, and any failure.
+
+    `failure` used to be logged and dropped. A target that would not install
+    still ran pytest, every test file errored on import, and the caller read
+    that as a red suite — two Ralph rounds against a workspace where nothing
+    could have passed, and a PR body claiming failing tests when none had
+    run (local cycle targeted-160-20260919T133731Z). The reason has to reach
+    the caller for the run to be called what it is: not measured.
+    """
+
+    fingerprint: str
+    failure: str = ""
+
+
 async def install_target(
     workspace: str, python: str, claude, deps_fingerprint: str,
     *, timeout: int = DEP_INSTALL_TIMEOUT_SECONDS,
-) -> str:
+) -> InstallOutcome:
     """Install the target the way its toolchain declares, unless nothing changed.
 
     Returns the fingerprint of what the workspace now has installed —
@@ -257,11 +274,32 @@ async def install_target(
     thread this back into `deps_fingerprint` in their own state so a retry
     (Dev's Ralph Loop) or a second phase on the same workspace (QA, right
     after Dev) doesn't pay for a reinstall of what's already there.
+
+    A skipped install reports no failure: the fingerprint matching means the
+    workspace already has what it needs.
     """
     commands, fingerprint = _install_plan(workspace, python)
+    failure = ""
     if fingerprint and fingerprint != deps_fingerprint:
         for command in commands:
             install_result = await claude.run_tests(workspace, command, timeout=timeout)
             if not install_result["passed"]:
-                log.warning("dependency install failed:\n%s", install_result["output"][-1000:])
-    return fingerprint
+                output = install_result["output"][-1000:]
+                log.warning("dependency install failed:\n%s", output)
+                if not failure:
+                    failure = _install_failure_reason(output)
+    return InstallOutcome(fingerprint=fingerprint, failure=failure)
+
+
+def _install_failure_reason(output: str) -> str:
+    """One line a reader can act on, drawn from pip's own output.
+
+    pip puts the actionable sentence on an `ERROR:` line and pads the rest
+    with upgrade notices; a PR body carrying the notices instead of the
+    error would say nothing.
+    """
+    for line in reversed(output.splitlines()):
+        stripped = line.strip()
+        if stripped.startswith("ERROR:"):
+            return f"the target's dependencies could not be installed — {stripped}"
+    return "the target's dependencies could not be installed"
