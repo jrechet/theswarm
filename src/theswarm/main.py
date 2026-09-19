@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from fastapi import Request
+
 import asyncio
 import json
 import logging
@@ -256,11 +258,10 @@ async def start() -> None:
         log.info("Swarm PO: disabled")
 
     # ── Mattermost action callback ────────────────────────────────────
-    import starlette.requests
     from fastapi.responses import JSONResponse
 
     @gw.app.post("/swarm/mattermost/callback")
-    async def mattermost_callback(request: starlette.requests.Request):
+    async def mattermost_callback(request: Request):
         body = await request.json()
         context = body.get("context", {})
 

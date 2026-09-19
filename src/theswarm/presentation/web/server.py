@@ -6,6 +6,8 @@ and wires in the original Mattermost/GitHub/persona integration on top.
 
 from __future__ import annotations
 
+from fastapi import Request
+
 import asyncio
 import json
 import logging
@@ -658,10 +660,9 @@ async def start_server(
 
     # ── Mattermost callback route ────────────────────────────────
     from theswarm_common.models import AgentEvent
-    import starlette.requests
 
     @app.post("/mattermost/callback")
-    async def mattermost_callback(request: starlette.requests.Request):
+    async def mattermost_callback(request: Request):
         body = await request.json()
         context = body.get("context", {})
 
