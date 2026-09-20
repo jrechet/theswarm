@@ -61,7 +61,16 @@ PHASE_TIMEOUTS = {
     # test run and the commit. 25 min capped the usable budget below 520s,
     # which is under what TheSwarm's own repo needs to be read at all.
     "dev_iter": 30 * 60,
-    "techlead_review": 5 * 60,
+    # A review may ask for REVIEW_TIMEOUT_CEILING_SECONDS (780s) on a large
+    # diff, and one phase reviews every open PR. At 300s the phase timeout
+    # fired before the call's own budget ever could: the review could not
+    # finish whatever it found, twice on consecutive local cycles and once
+    # in prod (5f8f0f63f58c, "the pass that mattered"). #130 cut how many
+    # reviews run per phase without reconciling the two numbers. 30 min
+    # holds one ceiling-sized review with room to spare, or several
+    # ordinary ones — the same budget dev_iter and qa already carry.
+    # tests/test_review_budget_fits_its_phase.py keeps the invariant.
+    "techlead_review": 30 * 60,
     "qa": 30 * 60,
     "po_evening": 5 * 60,
     "retrospective": 5 * 60,
