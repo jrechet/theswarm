@@ -881,12 +881,21 @@ async def _requeue_task(github, task: dict) -> None:
     log.info("Requeued task #%d after failed implementation", number)
 
 
-# How long the target's suite may run inside a dev iteration. Enough for a
-# small application; TheSwarm's own 2600 tests need three minutes locally
-# and ten on CI, and the phase budget cannot hold that next to two
-# implementation calls. A suite that does not finish here is reported as
-# such — not as red — and the repository's CI runs it in full.
-TEST_RUN_TIMEOUT_SECONDS = 120
+# How long the target's suite may run inside a dev iteration — the same
+# budget QA gets, because both run the target's whole suite.
+#
+# This was 120s, and its own comment named the trade: "the phase budget
+# cannot hold that next to two implementation calls". True, and the price
+# was that on a repository of this size the Dev's gate never measured
+# anything. Every iteration reported `tests_unavailable` and deferred to
+# CI — honest, but it left the Ralph Loop blind, since a loop can only fix
+# what it watched fail. Five local cycles ended that way.
+#
+# The phase grew to match (`PHASE_TIMEOUTS["dev_iter"]`), and
+# tests/test_dev_iteration_budget.py keeps the two numbers in step. A suite
+# that still does not finish here is reported as not run — not as red — and
+# the repository's CI runs it in full.
+TEST_RUN_TIMEOUT_SECONDS = 900
 
 
 def _make_branch_name(task: dict) -> str:

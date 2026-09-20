@@ -56,11 +56,22 @@ PHASE_TIMEOUTS = {
     # fires first and hides the real cause.
     "po_morning": 8 * 60,
     "techlead_breakdown": 10 * 60,
-    # 30 min holds one implementation call at ClaudeCLI's 780s ceiling plus
-    # its retry (1560s) and still leaves room for the dependency install, the
-    # test run and the commit. 25 min capped the usable budget below 520s,
-    # which is under what TheSwarm's own repo needs to be read at all.
-    "dev_iter": 30 * 60,
+    # 25 min once capped the usable budget below 520s, under what
+    # TheSwarm's own repo needs to be read at all; 30 min then stopped
+    # fitting when the Dev's test budget went from 120s to QA's 900s, so
+    # that the gate could finally measure a real suite instead of always
+    # reporting `tests_unavailable`.
+    #
+    # The binding path is the Ralph one, which runs the suite twice:
+    # implementation (600) + install (300) + tests (900) + the Ralph retry
+    # (600) + tests again (900) = 3300s. 60 min leaves 300s for the commit
+    # and the push. That arithmetic is asserted by
+    # tests/test_persisted_timeout_floor.py::TestTheImplementationBudget —
+    # it predates this change; raising the test budget is what made it bind.
+    #
+    # The cost is real: five iterations can now span five hours on a target
+    # this size. Shrinking it again means shrinking what the Dev may run.
+    "dev_iter": 60 * 60,
     # A review may ask for REVIEW_TIMEOUT_CEILING_SECONDS (780s) on a large
     # diff, and one phase reviews every open PR. At 300s the phase timeout
     # fired before the call's own budget ever could: the review could not
