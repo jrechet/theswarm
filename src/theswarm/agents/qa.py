@@ -229,7 +229,7 @@ async def run_unit_tests(state: AgentState) -> dict:
         return stub_result(Role.QA, "run_unit_tests",
                            "run pytest unit tests")
 
-    python = _find_system_python()
+    python = _find_system_python(workspace)
 
     # QA has no evidence the Dev installed the target — a cycle whose Dev
     # produced no PR (ALREADY_SATISFIED, or nothing at all) never runs the
@@ -376,7 +376,7 @@ async def run_e2e_tests(state: AgentState) -> dict:
             "tokens_used": 0,
         }
 
-    python = _find_system_python()
+    python = _find_system_python(workspace)
     log.info("QA E2E: using python=%s", python)
 
     # Ensure pytest-playwright is installed in the system python
@@ -567,7 +567,7 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
 
     from theswarm.infrastructure.recording.playwright_recorder import PlaywrightRecorder
 
-    python = _find_system_python()
+    python = _find_system_python(workspace)
     port = E2E_PORT + 1  # avoid conflict with E2E test server
     artifacts: list[tuple] = []
 
@@ -730,7 +730,7 @@ async def record_demo_video(state: AgentState) -> dict:
 
     from theswarm.infrastructure.recording.playwright_recorder import PlaywrightRecorder
 
-    python = _find_system_python()
+    python = _find_system_python(workspace)
     port = E2E_PORT + 2  # avoid conflict with E2E and screenshot servers
     video_artifacts: list[tuple] = []
 
@@ -1411,15 +1411,16 @@ async def _page_status(url: str) -> int | None:
         return None
 
 
-def _find_system_python() -> str:
+def _find_system_python(workspace: str = "") -> str:
     """Find system python3, excluding the current venv.
 
     Thin alias kept for existing call sites; the implementation is shared with
-    the Dev agent so both install and test against the same interpreter.
+    the Dev agent so both install and test against the same interpreter — and
+    both pass the workspace, so both honour the target's `requires-python`.
     """
     from theswarm.agents.base import find_system_python
 
-    return find_system_python()
+    return find_system_python(workspace)
 
 
 def _extract_python_code(text: str) -> str | None:

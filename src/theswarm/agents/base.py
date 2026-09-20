@@ -112,7 +112,7 @@ def _infer_role(phase: str) -> str | None:
     return phase_role_map.get(phase)
 
 
-def find_system_python() -> str:
+def find_system_python(workspace: str = "") -> str:
     """Interpreter used to install and run the *target* project's code.
 
     Deliberately not TheSwarm's own venv: the target project's dependencies
@@ -120,18 +120,96 @@ def find_system_python() -> str:
     directory that a non-root ``pip install`` writes to. Dev and QA must agree
     on this — installing with one interpreter and testing with another means
     the tests never see the dependencies (prod cycle 882694d44248).
+
+    With a workspace, a candidate that the target's ``requires-python``
+    refuses is skipped. Taking the first `python3` on PATH regardless put a
+    3.11 in front of a project declaring ``>=3.12``: `pip install -e .`
+    refused it, and because nothing downstream knew, the import errors that
+    followed were read as a red suite (cycle targeted-160-20260919T133731Z).
+    The deploy container never sees this — its system python is new enough.
     """
     import os
     import sys as _sys
 
     venv_prefix = _sys.prefix
+    candidates: list[str] = []
     for entry in os.environ.get("PATH", "").split(os.pathsep):
         if venv_prefix in entry:
             continue
         candidate = os.path.join(entry, "python3")
         if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            candidates.append(candidate)
+    if not candidates:
+        return "python3"
+
+    requirement = _target_python_requirement(workspace) if workspace else ""
+    if not requirement:
+        return candidates[0]
+
+    for candidate in candidates:
+        if _interpreter_satisfies(candidate, requirement):
+            if candidate != candidates[0]:
+                log.info(
+                    "Using %s for the target: %s does not satisfy %s",
+                    candidate, candidates[0], requirement,
+                )
             return candidate
-    return "python3"
+
+    # Let the install speak rather than inventing an interpreter: its error
+    # names the mismatch, and `install_target` now carries that reason.
+    log.warning(
+        "No interpreter on PATH satisfies %s — falling back to %s",
+        requirement, candidates[0],
+    )
+    return candidates[0]
+
+
+def _target_python_requirement(workspace: str) -> str:
+    """The target's ``requires-python``, or "" when it declares none."""
+    import os
+
+    pyproject_file = os.path.join(workspace, "pyproject.toml")
+    if not os.path.isfile(pyproject_file):
+        return ""
+    import tomllib
+
+    try:
+        with open(pyproject_file, "rb") as handle:
+            pyproject = tomllib.load(handle)
+    except (OSError, tomllib.TOMLDecodeError):
+        return ""
+    requirement = (pyproject.get("project", {}) or {}).get("requires-python", "")
+    return requirement if isinstance(requirement, str) else ""
+
+
+def _interpreter_satisfies(candidate: str, requirement: str) -> bool:
+    """True when `candidate` reports a version inside `requirement`.
+
+    Anything unreadable — the interpreter refusing to run, an unparseable
+    specifier — answers True: the point is to skip an interpreter we *know*
+    is wrong, never to reject one we merely failed to measure.
+    """
+    import subprocess
+
+    try:
+        probe = subprocess.run(
+            [candidate, "-c",
+             "import sys; print('.'.join(map(str, sys.version_info[:3])))"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return True
+    reported = probe.stdout.strip()
+    if not reported:
+        return True
+
+    try:
+        from packaging.specifiers import SpecifierSet
+        from packaging.version import Version
+
+        return SpecifierSet(requirement).contains(Version(reported))
+    except Exception:
+        return True
 
 
 def stub_result(role: Role, phase: str, detail: str = "") -> dict[str, Any]:

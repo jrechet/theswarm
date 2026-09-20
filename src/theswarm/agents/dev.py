@@ -466,7 +466,20 @@ async def implement_task(state: AgentState) -> dict:
             f"Co-Authored-By: swarm-dev-agent <agent@swarm-bots.local>",
         )
 
-        if not committed:
+        # `commit_all` answers "did *we* commit", not "is there work".
+        # Claude runs with acceptEdits and a Bash allowlist: on cycle
+        # targeted-161-20260919T143555Z it committed, pushed and opened
+        # PR #165 itself, and seven minutes later this read "Nothing to
+        # commit" as "no file changes produced" — a false failed-attempt
+        # note on the issue, no PR node, and a cycle reporting zero PRs
+        # while the PR sat open. The tree was already the truth for an
+        # in-place edit (#125); the branch is the truth for a commit
+        # someone else made. `get_diff_stat` compares against main, so it
+        # sees the work whoever committed it.
+        diff_stat = await git_ops.get_diff_stat(workspace)
+        has_work = committed or bool(diff_stat.strip())
+
+        if not has_work:
             already_satisfied = _extract_already_satisfied(result.text)
             if already_satisfied:
                 satisfied_file, reason = already_satisfied
@@ -497,7 +510,7 @@ async def implement_task(state: AgentState) -> dict:
                 log.exception("Failed to requeue task #%s", task.get("number"))
         raise
 
-    if not committed:
+    if not has_work:
         log.warning(
             "Claude produced no file changes for task #%d — its answer began: %r",
             task["number"], (result.text or "").strip()[:200],
@@ -510,7 +523,8 @@ async def implement_task(state: AgentState) -> dict:
             "branch": branch_name,
         }
 
-    diff_stat = await git_ops.get_diff_stat(workspace)
+    if not committed:
+        log.info("Branch already carries the work — Claude committed it itself")
     log.info("Changes:\n%s", diff_stat)
 
     return {
@@ -537,7 +551,7 @@ async def run_quality_gates(state: AgentState) -> dict:
     # TheSwarm's venv, so dependencies landed in the system user site while
     # pytest ran in a venv that ignores it — the target's tests never saw
     # them (prod cycle 882694d44248).
-    python = find_system_python()
+    python = find_system_python(workspace)
 
     # Install only when the requirements actually change. The Ralph Loop
     # re-enters this node after every retry, and three cold installs ate 360s

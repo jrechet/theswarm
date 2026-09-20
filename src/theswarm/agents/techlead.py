@@ -456,6 +456,23 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
     # and reviews PRs, so GitHub blocks REQUEST_CHANGES (422).  Only truly
     # critical issues (security vulnerabilities, data loss) should block.
     # "major" style/quality issues are acceptable for autonomous mode.
+    # A *labelled* verdict in prose is a verdict — "Decision: APPROVE" was
+    # thrown away once for its shape and #104 settled that. A *bare*
+    # APPROVE on a line of its own is different: it is whatever the answer
+    # happened to contain. On cycle targeted-161-20260919T143555Z the
+    # reviewer's call answered the host's own session instructions instead
+    # of the review prompt, and a stray APPROVE inside that off-topic
+    # answer was filed as a sign-off on PR #166. The prose still goes up —
+    # a person reads it — but nothing is recorded as an approval that no
+    # stated verdict backs.
+    if decision == "APPROVE" and salvaged and not _verdict_was_labelled(result.text):
+        log.warning(
+            "PR #%d: downgrading APPROVE → COMMENT — the verdict was "
+            "salvaged from prose, not stated in a structured review",
+            pr_number,
+        )
+        decision = "COMMENT"
+
     if decision == "REQUEST_CHANGES" and salvaged:
         # The verdict came out of prose: its reasons are in the summary, not
         # in a list this override can weigh. PR #117 asked for changes and
@@ -790,6 +807,18 @@ _DECISION_RE = re.compile(
     r"|^\s*\**\s*(APPROVE|REQUEST_CHANGES)\s*\**\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
+
+
+def _verdict_was_labelled(text: str) -> bool:
+    """True when the verdict named itself, rather than being a bare word.
+
+    `_DECISION_RE` already separates the two: group 1 is
+    "Decision: APPROVE" in any markdown dress, group 2 is the word alone on
+    a line. The first is a reviewer stating a verdict; the second is
+    whatever the answer happened to contain.
+    """
+    match = _DECISION_RE.search(text)
+    return bool(match and match.group(1))
 
 
 def _salvage_decision(text: str) -> str:
