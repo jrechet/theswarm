@@ -1,0 +1,80 @@
+name: E2E harness
+
+on:
+  schedule:
+    # Daily regression probe against the swarm's default demo target.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'owner/repo the harness drives (defaults to the regression probe target)'
+        type: string
+        default: 'jrechet/concert-tour-app'
+      feature:
+        description: 'Feature text handed to the composer'
+        type: string
+        default: 'Show the remaining ticket count on each concert card'
+      # jrechet/theswarm is deliberately NOT a default here: per AGENTS.md,
+      # TheSwarm enforces one cycle per repo and self-cycle PRs are
+      # approved-but-held for a person to merge, so an unattended scheduled
+      # run against the swarm's own repo would either queue behind another
+      # cycle or stall waiting on a manual merge. Running the harness against
+      # theswarm is a manual override: type the repo in when dispatching.
+
+env:
+  PYTHON_VERSION: '3.12'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harness-${{ github.event.inputs.repo || 'jrechet/concert-tour-app' }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      # Authenticated with BOT_GITHUB_TOKEN, not the default token: that's
+      # the same identity already behind docs/cycle-history.jsonl commits
+      # (it becomes GITHUB_TOKEN in the deployed app — see
+      # .github/actions/write-env), so the publish step below can push
+      # straight to main as that bot.
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.BOT_GITHUB_TOKEN }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: 'latest'
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: uv sync --dev
+      - name: Run e2e harness
+        env:
+          SWARM_ACCESS_KEY: ${{ secrets.SWARM_ACCESS_KEY }}
+          GH_TOKEN: ${{ secrets.BOT_GITHUB_TOKEN }}
+        run: |
+          uv run python scripts/cycle_e2e.py \
+            --repo "${{ github.event.inputs.repo || 'jrechet/concert-tour-app' }}" \
+            --feature "${{ github.event.inputs.feature || 'Show the remaining ticket count on each concert card' }}"
+
+      # Same trap as docs/cycle-history.jsonl (see ci.yml paths-ignore): a
+      # bare run-history commit must not look like a behaviour change, so it
+      # is pushed straight to main with the same bot identity the Dev agent
+      # already commits under, instead of a PR.
+      - name: Publish run history
+        if: always()
+        run: |
+          if [ -z "$(git status --porcelain -- docs/harness-runs.jsonl)" ]; then
+            echo "no change to docs/harness-runs.jsonl"
+            exit 0
+          fi
+          git config user.name "TheSwarm Dev Agent"
+          git config user.email "swarm-dev@jrec.fr"
+          git add docs/harness-runs.jsonl
+          git commit -m "chore: harness run $(date -u +%Y-%m-%d) — ${{ github.event.inputs.repo || 'jrechet/concert-tour-app' }}"
+          git push origin HEAD:main
