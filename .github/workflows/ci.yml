@@ -14,10 +14,15 @@ on:
     # docs/cycle-history.jsonl on the target's main. On the swarm's own
     # repository that commit redeployed the service at the very end of
     # the cycle that wrote it (336a73c, 2026-09-15).
+    # Same trap again: the scheduled e2e harness (.github/workflows/harness.yml)
+    # appends its result straight to docs/harness-runs.jsonl on main. A run
+    # history line is not a behaviour change either — nothing to test, nothing
+    # to deploy.
     paths-ignore:
       - 'docs/daily-plans/**'
       - 'docs/daily-reports/**'
       - 'docs/cycle-history.jsonl'
+      - 'docs/harness-runs.jsonl'
       - 'AGENT_MEMORY.jsonl'
   pull_request:
     branches: [main]
