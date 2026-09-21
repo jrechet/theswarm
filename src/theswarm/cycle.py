@@ -62,16 +62,18 @@ PHASE_TIMEOUTS = {
     # that the gate could finally measure a real suite instead of always
     # reporting `tests_unavailable`.
     #
-    # The binding path is the Ralph one, which runs the suite twice:
-    # implementation (600) + install (300) + tests (900) + the Ralph retry
-    # (600) + tests again (900) = 3300s. 60 min leaves 300s for the commit
+    # The binding path is the Ralph one, which runs the tests twice:
+    # implementation (600) + install (300) + tests (300) + the Ralph retry
+    # (600) + tests again (300) = 2100s. 40 min leaves 300s for the commit
     # and the push. That arithmetic is asserted by
-    # tests/test_persisted_timeout_floor.py::TestTheImplementationBudget —
-    # it predates this change; raising the test budget is what made it bind.
+    # tests/test_persisted_timeout_floor.py::TestTheImplementationBudget.
     #
-    # The cost is real: five iterations can now span five hours on a target
-    # this size. Shrinking it again means shrinking what the Dev may run.
-    "dev_iter": 60 * 60,
+    # It briefly stood at 60 min, when the Dev ran the target's whole suite
+    # on QA's 900s budget — correct, and an hour per iteration. Scoping the
+    # run to the files the diff touches is what brought it back down;
+    # tests/test_dev_iteration_budget.py holds the ceiling so it cannot
+    # drift back up unnoticed.
+    "dev_iter": 40 * 60,
     # A review may ask for REVIEW_TIMEOUT_CEILING_SECONDS (780s) on a large
     # diff, and one phase reviews every open PR. At 300s the phase timeout
     # fired before the call's own budget ever could: the review could not
