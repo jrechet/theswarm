@@ -57,10 +57,15 @@ jobs:
         env:
           SWARM_ACCESS_KEY: ${{ secrets.SWARM_ACCESS_KEY }}
           GH_TOKEN: ${{ secrets.BOT_GITHUB_TOKEN }}
+          # Inputs land in env, not interpolated straight into the shell
+          # script below: templating github.event.inputs.* directly into a
+          # `run:` block lets a crafted workflow_dispatch value break out of
+          # the quoted argument and execute arbitrary shell with this job's
+          # token (CWE-78). $REPO/$FEATURE are plain argv, never re-parsed.
+          REPO: ${{ github.event.inputs.repo || 'jrechet/concert-tour-app' }}
+          FEATURE: ${{ github.event.inputs.feature || 'Show the remaining ticket count on each concert card' }}
         run: |
-          uv run python scripts/cycle_e2e.py \
-            --repo "${{ github.event.inputs.repo || 'jrechet/concert-tour-app' }}" \
-            --feature "${{ github.event.inputs.feature || 'Show the remaining ticket count on each concert card' }}"
+          uv run python scripts/cycle_e2e.py --repo "$REPO" --feature "$FEATURE"
 
       # Same trap as docs/cycle-history.jsonl (see ci.yml paths-ignore): a
       # bare run-history commit must not look like a behaviour change, so it
@@ -68,6 +73,8 @@ jobs:
       # already commits under, instead of a PR.
       - name: Publish run history
         if: always()
+        env:
+          REPO: ${{ github.event.inputs.repo || 'jrechet/concert-tour-app' }}
         run: |
           if [ -z "$(git status --porcelain -- docs/harness-runs.jsonl)" ]; then
             echo "no change to docs/harness-runs.jsonl"
@@ -76,5 +83,10 @@ jobs:
           git config user.name "TheSwarm Dev Agent"
           git config user.email "swarm-dev@jrec.fr"
           git add docs/harness-runs.jsonl
-          git commit -m "chore: harness run $(date -u +%Y-%m-%d) — ${{ github.event.inputs.repo || 'jrechet/concert-tour-app' }}"
+          git commit -m "chore: harness run $(date -u +%Y-%m-%d) — $REPO"
+          # main moves under us during a run that can take up to 120 minutes;
+          # rebase onto the latest tip so this push doesn't silently drop a
+          # concurrent commit's history line via a non-fast-forward failure.
+          git fetch origin main
+          git rebase origin/main
           git push origin HEAD:main
