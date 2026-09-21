@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
 import subprocess
 import sys
 import time
@@ -116,11 +117,65 @@ def wait_for(cycle_id: str, budget_s: int) -> tuple[str, str]:
     return "timeout", last_phase
 
 
+def build_result(repo: str, passed: bool, state: str, new_prs: list[int], left: list[int]) -> dict:
+    return {
+        "repo": repo,
+        "passed": passed,
+        "state": state,
+        "prs": new_prs,
+        "unfinished": left,
+    }
+
+
+def append_result(path: pathlib.Path, result: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as f:
+        f.write(json.dumps(result) + "\n")
+
+
+def read_last_result(path: pathlib.Path, repo: str) -> dict | None:
+    """Most recent (last-in-file) history entry for `repo`, or None.
+
+    Missing file and unparseable lines are treated the same as "no history"
+    rather than raised — the harness reports, it doesn't crash on its own
+    bookkeeping.
+    """
+    if not path.exists():
+        return None
+    last = None
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if entry.get("repo") == repo:
+            last = entry
+    return last
+
+
+def is_regression(previous: dict | None, current: dict) -> bool:
+    """True only when a target flips from passing to failing.
+
+    A first-ever failure (no previous entry) and a repeat failure are both
+    unsurprising — only a pass-then-fail transition is worth flagging.
+    """
+    return (
+        previous is not None
+        and previous["passed"] is True
+        and current["passed"] is False
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
     ap.add_argument("--feature", required=True)
     ap.add_argument("--budget", type=int, default=5400, help="seconds")
+    ap.add_argument("--history", type=pathlib.Path,
+                     default=pathlib.Path("docs/harness-runs.jsonl"))
     args = ap.parse_args()
 
     if not KEY:
@@ -159,7 +214,13 @@ def main() -> int:
     if left:
         print(f"  unfinished : {', '.join(f'#{n}' for n in left)}")
 
-    if state == "completed" and new_prs and not left:
+    passed = state == "completed" and bool(new_prs) and not left
+    result = build_result(args.repo, passed, state, new_prs, left)
+    previous = read_last_result(args.history, args.repo)
+    result["regression"] = is_regression(previous, result)
+    append_result(args.history, result)
+
+    if passed:
         print("\nPASS — a feature was asked for, and the whole of it was built.")
         return 0
 
@@ -171,6 +232,8 @@ def main() -> int:
     if left:
         reasons.append(f"{len(left)} sub-task(s) left unbuilt")
     print("\nFAIL — " + "; ".join(reasons))
+    if result["regression"]:
+        print("\n⚠ REGRESSION — this target passed last run and fails now")
     return 1
 
 

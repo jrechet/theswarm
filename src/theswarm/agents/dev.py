@@ -564,9 +564,41 @@ async def run_quality_gates(state: AgentState) -> dict:
     )
     fingerprint = installed.fingerprint
 
-    # Run pytest if available
+    # Only the tests this diff touches. Running the whole suite here needed
+    # QA's 900s to finish at all on a target this size, and the Ralph retry
+    # runs it a second time — one iteration reached an hour, five of them an
+    # afternoon. The full suite stays QA's job and the repository's CI's;
+    # what the Dev needs before opening a PR is a fast, relevant signal.
+    from theswarm.tools import git as git_ops
+
+    changed = await git_ops.changed_files(workspace)
+    if not changed:
+        # Not "nothing to test" — "we could not tell what changed". A
+        # resumed branch, a missing base ref, a workspace that is not a repo
+        # all land here, and scoping on an answer we do not have would skip
+        # the gate silently. Fall back to the suite, the way it worked
+        # before scoping existed.
+        targets = ["tests/"]
+        log.info("No diff to scope by — running the whole suite")
+    else:
+        targets = _impacted_tests(workspace, changed)
+        if not targets:
+            reason = installed.failure or (
+                "no test file in the workspace maps to the changed files"
+            )
+            log.warning("Tests could not run: %s", reason)
+            return {
+                "tests_passed": False,
+                "tests_unavailable": reason,
+                "test_output": "",
+                "deps_fingerprint": fingerprint,
+                "tokens_used": 0,
+            }
+        log.info("Running %d test file(s) touched by this diff: %s",
+                 len(targets), ", ".join(targets[:5]))
+
     test_result = await claude.run_tests(
-        workspace, [python, "-m", "pytest", "tests/", "-v", "--tb=short"],
+        workspace, [python, "-m", "pytest", *targets, "-v", "--tb=short"],
         timeout=TEST_RUN_TIMEOUT_SECONDS,
     )
 
@@ -881,12 +913,55 @@ async def _requeue_task(github, task: dict) -> None:
     log.info("Requeued task #%d after failed implementation", number)
 
 
-# How long the target's suite may run inside a dev iteration. Enough for a
-# small application; TheSwarm's own 2600 tests need three minutes locally
-# and ten on CI, and the phase budget cannot hold that next to two
-# implementation calls. A suite that does not finish here is reported as
-# such — not as red — and the repository's CI runs it in full.
-TEST_RUN_TIMEOUT_SECONDS = 120
+# How long the Dev's scoped test run may take. It runs only the files its
+# own diff touches (`_impacted_tests`), so this does not have to hold the
+# target's whole suite — QA's `QA_TEST_TIMEOUT_SECONDS` does that.
+#
+# The history is worth keeping: at 120s the gate never measured anything on
+# a repository this size and always deferred to CI, which left the Ralph
+# Loop blind — a loop can only fix what it watched fail. Matching QA's 900s
+# fixed the blindness and cost an hour per iteration instead, because the
+# Ralph retry runs the suite a second time. Scoping the run is what buys
+# both: a real signal, and a budget that fits.
+#
+# 300s is generous for a handful of files and still leaves `dev_iter` under
+# 40 minutes. A run that outlasts it is reported as not run — not as red.
+TEST_RUN_TIMEOUT_SECONDS = 300
+
+
+def _impacted_tests(workspace: str, changed: list[str]) -> list[str]:
+    """The test files this diff touches, workspace-relative and sorted.
+
+    A changed test file is itself. A changed source file is the test named
+    after it, wherever it lives under `tests/`. Everything else maps to
+    nothing, and the caller reports "not run" rather than dragging the whole
+    suite back in — the point of scoping is to give the Dev a signal it can
+    afford to wait for.
+
+    Deleted paths are dropped: `git diff --name-only` lists them, and handing
+    one to pytest only earns an error about a file that is gone.
+    """
+    import os
+
+    by_basename: dict[str, list[str]] = {}
+    tests_root = os.path.join(workspace, "tests")
+    for root, _dirs, files in os.walk(tests_root):
+        for name in files:
+            if name.startswith("test_") and name.endswith(".py"):
+                rel = os.path.relpath(os.path.join(root, name), workspace)
+                by_basename.setdefault(name, []).append(rel)
+
+    impacted: set[str] = set()
+    for rel in changed:
+        if not rel.endswith(".py"):
+            continue
+        name = os.path.basename(rel)
+        if name.startswith("test_"):
+            if os.path.isfile(os.path.join(workspace, rel)):
+                impacted.add(rel)
+            continue
+        impacted.update(by_basename.get(f"test_{name}", []))
+    return sorted(impacted)
 
 
 def _make_branch_name(task: dict) -> str:

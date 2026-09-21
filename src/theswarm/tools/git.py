@@ -261,6 +261,17 @@ async def get_diff_stat(workdir: str) -> str:
     return await _run_git("diff", "--stat", "main", cwd=workdir, check=False)
 
 
+async def changed_files(workdir: str, base: str = "main") -> list[str]:
+    """Repo-relative paths this branch changed against `base`.
+
+    Committed or not, the same view `get_diff_stat` reports — so it sees
+    work whoever committed it, including edits Claude made and committed
+    itself.
+    """
+    out = await _run_git("diff", "--name-only", base, cwd=workdir, check=False)
+    return [line.strip() for line in out.splitlines() if line.strip()]
+
+
 async def cleanup_workspace(workdir: str) -> None:
     """Remove the workspace directory."""
     if os.path.isdir(workdir):
