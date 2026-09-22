@@ -322,6 +322,30 @@ async def _run_api_cycle(
         started_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
     )
 
+    # Issue #49 — reject early when the configured GitHub credential can't
+    # actually read this repo (expired token, wrong scope, no installation).
+    # verify_access above only checks that a token exists; this makes the
+    # real API call so a dead credential fails in seconds instead of deep
+    # inside agent execution.
+    from theswarm.application.services.repo_access_guard import (
+        RepoAccessError,
+        check_repo_access,
+    )
+    try:
+        await check_repo_access(repo)
+    except RepoAccessError as e:
+        tracker.update_status(
+            cycle_id, CycleStatus.FAILED,
+            error=f"repo access: {e.reason}",
+            completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        )
+        if event_bus is not None:
+            from theswarm.domain.cycles.events import CycleBlocked
+            await event_bus.publish(
+                CycleBlocked(project_id=project_id or repo, reason=e.reason),
+            )
+        return
+
     # Sprint B C4 — budget/pause gate.
     if project_repo is not None and cycle_repo is not None and project_id:
         try:

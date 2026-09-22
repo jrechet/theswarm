@@ -49,6 +49,22 @@ def _github_token_for_tests(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _repo_access_ok_for_tests(monkeypatch):
+    """Give every test a passing RepoAccessGuard check by default.
+
+    ``check_repo_access`` (issue #49) makes a real GitHub API call to verify
+    the configured credential can read the repo. Most tests exercise
+    unrelated behavior against a fake token and never meant to hit the
+    network. Tests that check the guard itself override this with their own
+    ``monkeypatch.setattr`` on the same target.
+    """
+    monkeypatch.setattr(
+        "theswarm.application.services.repo_access_guard.check_repo_access",
+        AsyncMock(return_value=None),
+    )
+
+
+@pytest.fixture(autouse=True)
 def _github_identity_is_not_shared_state():
     """ensure_github_token() exports the freshest token into os.environ by
     design (both git and PyGitHub read it there). Outside monkeypatch that

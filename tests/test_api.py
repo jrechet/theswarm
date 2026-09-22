@@ -233,3 +233,88 @@ async def test_run_api_cycle_proceeds_with_valid_token(monkeypatch):
     assert final is not None
     assert final.status == CycleStatus.COMPLETED
     assert final.started_at  # RUNNING transition happened before completion
+
+
+# ── run_api_cycle: RepoAccessGuard precheck (issue #49) ──────────────────
+
+
+async def test_run_api_cycle_rejects_invalid_repo_credential(monkeypatch):
+    """RepoAccessGuard finds a credential that can't read the repo -> reject
+    before any workspace/agent work starts."""
+    from theswarm.application.services.repo_access_guard import RepoAccessError
+
+    async def _denied(repo_name):
+        raise RepoAccessError(
+            repo_name,
+            missing_credential="GITHUB_TOKEN",
+            reason=f"repo '{repo_name}': GITHUB_TOKEN is invalid or expired",
+        )
+
+    monkeypatch.setattr(
+        "theswarm.application.services.repo_access_guard.check_repo_access", _denied,
+    )
+
+    tracker = get_cycle_tracker()
+    record = tracker.create(CycleRequest(repo="owner/bad-creds-repo"))
+
+    with patch("theswarm.cycle.run_daily_cycle") as mock_run_daily_cycle:
+        await run_api_cycle(
+            cycle_id=record.id,
+            repo="owner/bad-creds-repo",
+            description="",
+            callback_url="",
+            allowed_repos=[],
+        )
+
+    mock_run_daily_cycle.assert_not_called()
+
+    final = tracker.get(record.id)
+    assert final is not None
+    assert final.status == CycleStatus.FAILED
+    assert final.error is not None
+    assert "owner/bad-creds-repo" in final.error
+    assert "GITHUB_TOKEN" in final.error
+    assert final.completed_at
+
+
+async def test_run_api_cycle_publishes_cycle_blocked_on_repo_access_failure(monkeypatch):
+    """A blocked cycle publishes CycleBlocked, same as the BudgetGuard path,
+    so the UI can react to it."""
+    from theswarm.application.services.repo_access_guard import RepoAccessError
+    from theswarm.domain.cycles.events import CycleBlocked
+
+    async def _denied(repo_name):
+        raise RepoAccessError(
+            repo_name, missing_credential="GITHUB_TOKEN",
+            reason=f"repo '{repo_name}': GITHUB_TOKEN is missing",
+        )
+
+    monkeypatch.setattr(
+        "theswarm.application.services.repo_access_guard.check_repo_access", _denied,
+    )
+
+    bus = EventBus()
+    events: list = []
+
+    async def _collect(e):
+        events.append(e)
+
+    bus.subscribe_all(_collect)
+
+    tracker = get_cycle_tracker()
+    record = tracker.create(CycleRequest(repo="owner/bad-creds-repo"))
+
+    with patch("theswarm.cycle.run_daily_cycle") as mock_run_daily_cycle:
+        await run_api_cycle(
+            cycle_id=record.id,
+            repo="owner/bad-creds-repo",
+            description="",
+            callback_url="",
+            allowed_repos=[],
+            event_bus=bus,
+        )
+
+    mock_run_daily_cycle.assert_not_called()
+    blocked = [e for e in events if isinstance(e, CycleBlocked)]
+    assert len(blocked) == 1
+    assert "owner/bad-creds-repo" in blocked[0].reason
