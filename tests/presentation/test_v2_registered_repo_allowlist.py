@@ -45,9 +45,17 @@ def _isolate_cycle_tracker():
     tracker._cycles.update(before)
 
 
-async def _wait_for(predicate, tries: int = 200) -> None:
+async def _wait_for(predicate, tries: int = 1000) -> None:
     """The Play route runs the cycle as a background task; give it real
-    turns of the loop (not `sleep(0)`, which starved it on the CI runner)."""
+    turns of the loop (not `sleep(0)`, which starved it on the CI runner).
+
+    1000 tries is 20s. 200 was 4s, and a loaded shared runner blew through
+    it: the suite took 8m51s instead of its usual 2m54s and this test
+    failed with "run_daily_cycle … Called 0 times", green again on a rerun
+    with no code change (PR #173). The wait costs nothing when the task is
+    scheduled promptly — the loop exits on the first true predicate — so
+    the only thing a small budget buys is a flake.
+    """
     for _ in range(tries):
         if predicate():
             return
