@@ -390,16 +390,7 @@ async def run_unit_tests(state: AgentState) -> dict:
     coverage_reason = "" if cov_available else "pytest-cov not installed"
 
     if cov_available:
-        cov_json_path = os.path.join(workspace, "coverage.json")
-        if os.path.exists(cov_json_path):
-            with open(cov_json_path) as f:
-                cov_data = json.loads(f.read())
-            coverage_pct = cov_data.get("totals", {}).get("percent_covered", 0.0)
-            coverage_status = "pass" if coverage_pct >= 70 else "fail"
-            log.info("QA: coverage %.1f%%", coverage_pct)
-        else:
-            coverage_reason = "coverage.json not found"
-            log.warning("QA: coverage.json not found at %s", cov_json_path)
+        coverage_pct, coverage_status, coverage_reason = _read_coverage(workspace)
 
     return {
         "tests_passed": passed,
@@ -1472,6 +1463,51 @@ async def _page_status(url: str) -> int | None:
             return resp.status_code
     except Exception:
         return None
+
+
+def _read_coverage(workspace: str) -> tuple[float, str, str]:
+    """(percent, status, reason) from the workspace's `coverage.json`.
+
+    `num_statements` is the difference between a low figure and a gauge
+    that is not plugged in. Cycle 6 reported `coverage 0.0%` as a **fail**
+    beside 2921 passing tests — coverage had run and instrumented nothing,
+    where the same command measured 87% the cycle before. A zero over zero
+    statements is `not_run`: reporting it as a failure sends the reader
+    after untested code that does not exist.
+    """
+    import os
+
+    cov_json_path = os.path.join(workspace, "coverage.json")
+    if not os.path.exists(cov_json_path):
+        log.warning("QA: coverage.json not found at %s", cov_json_path)
+        return 0.0, "not_run", "coverage.json not found"
+
+    try:
+        with open(cov_json_path) as handle:
+            totals = json.load(handle).get("totals", {}) or {}
+    except (OSError, json.JSONDecodeError) as exc:
+        log.warning("QA: coverage.json unreadable (%s)", exc)
+        return 0.0, "not_run", f"coverage.json unreadable: {exc}"
+
+    # Absent is not zero. A report that does not carry `num_statements` says
+    # nothing about whether anything was instrumented, and treating silence
+    # as zero would throw away a perfectly good percentage.
+    statements = totals.get("num_statements")
+    percent = float(totals.get("percent_covered", 0.0) or 0.0)
+
+    if statements is not None and statements <= 0:
+        reason = (
+            "coverage instrumented no files under src — the figure measures "
+            "the tooling, not the code"
+        )
+        log.warning("QA: %s", reason)
+        return percent, "not_run", reason
+
+    log.info(
+        "QA: coverage %.1f%% over %s statements",
+        percent, statements if statements is not None else "an unreported number of",
+    )
+    return percent, ("pass" if percent >= 70 else "fail"), ""
 
 
 def _find_system_python(workspace: str = "") -> str:
