@@ -90,6 +90,50 @@ PHASE_TIMEOUTS = {
 }
 
 
+async def _merge_held_prs(github, held: list[int], on_progress) -> list[int]:
+    """Merge the approved PRs the review phase held back. Returns those merged.
+
+    A merge that fails leaves its PR open and its branch alone. Cycle 6 is
+    why: #164 and #165 rewrote the same file, and merging one made the other
+    unmergeable — reporting it as merged would have hidden work that never
+    landed.
+    """
+    if github is None or not held:
+        return []
+
+    merged: list[int] = []
+    try:
+        open_prs = await github.get_open_prs()
+    except Exception:
+        open_prs = []
+    branches = {p["number"]: p.get("head") for p in open_prs}
+
+    for pr_number in held:
+        try:
+            await github.merge_pr(pr_number, merge_method="squash")
+        except Exception as exc:
+            log.warning(
+                "PR #%d was approved but did not merge (%s) — left open",
+                pr_number, exc,
+            )
+            continue
+        merged.append(pr_number)
+        log.info("Merged approved PR #%d at end of cycle", pr_number)
+        branch = branches.get(pr_number)
+        if branch:
+            try:
+                await github.delete_branch(branch)
+            except Exception:
+                log.warning("Could not delete branch %s after merge", branch)
+
+    if on_progress is not None and merged:
+        try:
+            await on_progress("TechLead", f"Merged approved PRs {merged}")
+        except Exception:
+            pass
+    return merged
+
+
 class BudgetExceeded(Exception):
     """Raised when a role exceeds its token budget."""
     def __init__(self, role: str, used: int, budget: int) -> None:
@@ -654,6 +698,21 @@ async def run_daily_cycle(
                 "po_evening", bool(po_ev_state),
                 {"tokens": po_ev_state.get("tokens_used", 0), "cost": po_ev_cost},
             )
+
+        # --- MERGE: what the review phase approved but held back ---
+        #
+        # On SELF_REPO the review phase refuses to merge, because the
+        # redeploy that follows would end the cycle mid-review. That rule
+        # stands; what changes is that the holding is no longer permanent.
+        # Here every phase is done — QA has run, the report is written, the
+        # demo is recorded — so a redeploy costs nothing, and approved work
+        # lands without waiting for a person.
+        if all_held_prs:
+            newly_merged = await _merge_held_prs(
+                base_state.get("github"), sorted(set(all_held_prs)), _progress,
+            )
+            all_merged_prs.extend(newly_merged)
+            all_held_prs = [n for n in all_held_prs if n not in newly_merged]
 
         # --- SUMMARY ---
         print(f"\n{'=' * 60}")
