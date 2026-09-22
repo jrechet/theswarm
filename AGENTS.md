@@ -288,3 +288,53 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   page mid-boot — because `make_thumbnail` seeked to a fixed 1s in; it now
   seeks to the midpoint of the video's duration, or the last frame when the
   duration can't be read (#132).
+- **The host's Claude Code hooks fire inside every `claude -p` the swarm
+  launches.** A `Stop` hook that dictates an end-of-session checklist made
+  the reviewer spend its *last* message refusing that checklist — and
+  `--output-format json` keeps only the last message. Cycles 3–4 of the
+  local series (2026-09-20) filed `COMMENT` on reviews that had actually
+  concluded `REQUEST_CHANGES`, and one bare `APPROVE` inside such prose was
+  taken as a sign-off. Two hooks were removed (`~/.claude/hooks/deploy-guard.sh`
+  and the project-local `.claude/hooks/session-wrap.sh`); a *bare* salvaged
+  APPROVE is now downgraded to COMMENT while a labelled `Decision: APPROVE`
+  still counts (#167). Emptying `~/.claude/CLAUDE.md` alone was not enough.
+- **`find_system_python` honours the target's `requires-python`** (#167). On a
+  host with a 3.11 ahead of a 3.12 on PATH the editable install refused, every
+  test file errored on import, and the Dev read 165 import errors as a red
+  suite: two Ralph rounds that wrote nothing and a PR claiming "Some tests
+  failing". A failed install is now `tests_unavailable` carrying pip's
+  `ERROR:` line, for the Dev and for QA alike (#166).
+- **`commit_all` answers "did *we* commit", not "is there work"** (#167). With
+  `acceptEdits` Claude committed, pushed and opened PR #165 by itself; seven
+  minutes later the harness read "Nothing to commit" as "no file changes
+  produced", filed a false failed-attempt note on the issue and reported
+  `prs []`. `get_diff_stat` against main is the truth, whoever committed.
+- **A review call could be granted 780s inside a 300s phase** — the phase
+  timeout fired first, every time (#167). `techlead_review` is 30 min and
+  `tests/test_review_budget_fits_its_phase.py` keeps the invariant. Review
+  calls on this repo still time out now and then (three of seven local
+  cycles): `_review_timeout` may under-estimate for this size of diff.
+- **The Dev's gate runs only the tests its own diff touches** (#171). The
+  whole suite needed QA's 900s here, and the Ralph retry runs it twice — one
+  iteration reached an hour; at 120s the gate never measured anything on
+  this repo. An unreadable diff falls back to the whole suite; a diff that
+  maps to no test is `tests_unavailable`. `dev_iter` is 40 min, bounded on
+  both sides by tests (`test_persisted_timeout_floor.py`,
+  `test_dev_iteration_budget.py`).
+- **QA picks a free base port** (#170). `E2E_PORT = 8000` was hardcoded and a
+  stray `solana-te` held it on the owner's laptop: the readiness probe read a
+  flat 400 for 90s and `e2e=0(pass)` for four cycles while 8001/8002 worked.
+  The port is chosen once per process because the generated E2E file bakes
+  it into its URLs.
+- **On SELF_REPO approved PRs merge at the end of the cycle** (#173), after
+  QA and the report — never in the review phase, whose redeploy would end the
+  cycle. A merge that fails stays open (#164 became unmergeable the moment its
+  companion #165 landed). **Not yet exercised by a real cycle** as of
+  2026-09-22: cycle 7 approved nothing.
+- **0% coverage under a passing suite is `not_run`, not `fail`** (#175):
+  `num_statements == 0` means nothing was instrumented. Absent is not zero —
+  a report without the field keeps its percentage.
+- **Running the swarm on itself from a laptop**: use
+  `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
+  breakdown walks the whole backlog at ~220s an issue inside a 600s phase.
+  Series of 2026-09-19→22: `docs/handoffs/2026-09-22-local-cycle-series-and-v2-handoff.md`.
