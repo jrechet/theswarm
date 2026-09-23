@@ -24,8 +24,13 @@ on:
       - 'docs/cycle-history.jsonl'
       - 'docs/harness-runs.jsonl'
       - 'AGENT_MEMORY.jsonl'
+  # Any base, not only main: the V2 runtime lands as stacked pull requests
+  # (M0 ← M1 ← M2 …), each against the previous milestone's branch, and a
+  # PR without CI is a PR nobody can merge. The deploy trigger above is
+  # still `push` to main only. The default event types, spelled out so the
+  # trigger stays a mapping (tests/test_deploy_trigger_guard.py reads it).
   pull_request:
-    branches: [main]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write

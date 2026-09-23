@@ -373,6 +373,31 @@ async def cmd_validate(args: argparse.Namespace) -> None:
     if result.warnings:
         for w in result.warnings:
             print(f"  WARNING: {w}")
+
+    # V2 runtime, M0: does the Agent SDK run here, and who answers — the
+    # subscription, or an API key that slipped into the child env? Skipped
+    # when the backend is forced to the API: the SDK is irrelevant there,
+    # and that is the test suite's default, which must never spawn a real
+    # Claude Code binary. A failed probe is a warning until M1 makes the
+    # SDK the primary backend.
+    from theswarm.tools import claude as claude_tools
+
+    if claude_tools._resolve_backend_mode() == "api":
+        print("  Agent SDK: skipped (SWARM_CLAUDE_BACKEND=api)")
+    else:
+        report = await claude_tools.probe_sdk()
+        if report["ok"]:
+            print(
+                f"  Agent SDK: ok — identity={report['identity']} "
+                f"model={report['model']} claude_code={report['claude_code_version']} "
+                f"cost=${report['cost_usd']:.4f} binary={report['binary']}"
+            )
+        else:
+            print(
+                f"  WARNING: Agent SDK probe failed — {report['error']} "
+                f"(binary={report['binary'] or 'none'})"
+            )
+
     if result.errors:
         for e in result.errors:
             print(f"  ERROR: {e}")

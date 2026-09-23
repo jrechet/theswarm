@@ -334,6 +334,21 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
 - **0% coverage under a passing suite is `not_run`, not `fail`** (#175):
   `num_statements == 0` means nothing was instrumented. Absent is not zero —
   a report without the field keeps its percentage.
+- **V2 runtime (docs/plans/2026-09-v2-runtime.md) — M0 landed the Agent SDK
+  probe.** `claude-agent-sdk` wheels bundle their own Claude Code binary
+  (217 MB on linux x86_64; the npm install stays until M7) and authenticate
+  exactly like `claude -p`: the mounted `~/.claude` session in prod,
+  `CLAUDE_CODE_OAUTH_TOKEN` on a laptop. Every child env — CLI or SDK — goes
+  through `tools/claude._child_env`, which strips `ANTHROPIC_API_KEY`: in the
+  binary's precedence a key outranks both the token and the session, so one
+  left behind moves the cycle to per-token billing without a word. **For the
+  SDK, omitting is not stripping**: `ClaudeAgentOptions.env` is merged *over*
+  the parent's `os.environ`, so the key must be overridden to `""`
+  (`_sdk_child_env`) — measured 2026-09-23, omission answered
+  `apiKeySource: ANTHROPIC_API_KEY`, the empty override `none`.
+  `python -m theswarm validate` runs a one-turn probe and prints who answered
+  (`identity=subscription` is the only acceptable value); it is skipped when
+  `SWARM_CLAUDE_BACKEND=api`, the test suite's default.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.
