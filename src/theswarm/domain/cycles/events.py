@@ -65,6 +65,13 @@ class CycleCompleted(DomainEvent):
     prs_opened: int = 0
     prs_merged: int = 0
     report_id: str = ""
+    # The PR numbers themselves, each once. The counts above could only be
+    # turned back into `range(1, n + 1)`: cycle a6d93287668b merged
+    # #270-#272 and its row said [1, 2, 3]. Held = approved but left for a
+    # person to merge (SELF_REPO) — opened, not merged.
+    opened_prs: tuple[int, ...] = ()
+    merged_prs: tuple[int, ...] = ()
+    held_prs: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
