@@ -447,6 +447,11 @@ async def implement_task(state: AgentState) -> dict:
             siblings=await _sibling_prs(github, task),
         )
 
+        # The target's venv exists before Claude runs: its Bash reaches for
+        # `python`/`pip` to try the tests, and without one on PATH it used
+        # TheSwarm's own (cycle 83b584194589).
+        await ensure_target_venv(workspace)
+
         # Run Claude in the workspace
         result = await claude.run(
             prompt, workdir=workspace, timeout=IMPLEMENT_TIMEOUT_SECONDS,
@@ -801,6 +806,7 @@ async def retry_implement(state: AgentState) -> dict:
         f"message using the --- FILE: path --- format.\n"
     )
 
+    await ensure_target_venv(workspace)
     result = await claude.run(
         prompt, workdir=workspace, timeout=IMPLEMENT_TIMEOUT_SECONDS,
         permission_mode=EDIT_PERMISSION_MODE,

@@ -21,6 +21,7 @@ import os
 import random
 import re
 import shutil
+import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
@@ -245,7 +246,43 @@ async def drain_floor_writes() -> None:
         await asyncio.gather(*tuple(_FLOOR_WRITES), return_exceptions=True)
 
 
-def _child_env(*, drop_oauth_env: bool = False) -> dict[str, str]:
+# The target's own venv inside its workspace (agents/base.TARGET_VENV_DIR;
+# not imported: agents import this module).
+TARGET_VENV_DIR = ".venv-swarm"
+
+
+def _own_venv() -> str:
+    """TheSwarm's own venv (sys.prefix), "" when it runs on a bare interpreter."""
+    return sys.prefix if sys.prefix != sys.base_prefix else ""
+
+
+def _python_for_target(env: dict[str, str], workdir: str | None) -> None:
+    """Point `python`, `pip` and `uv pip` of a Claude child at the target.
+
+    The container's PATH starts with TheSwarm's venv, so a Dev that ran the
+    target's tests through Bash reached for it: cycle 83b584194589 ran `uv
+    pip install -r requirements.txt --python /app/.venv/bin/python` and
+    replaced TheSwarm's fastapi, pydantic and uvicorn with the target's pins
+    under the running server. TheSwarm's venv leaves PATH; the workspace's
+    `.venv-swarm` goes first when it exists, and VIRTUAL_ENV names it (or
+    nothing — an explicit "" because the SDK merges env over os.environ).
+    """
+    own = _own_venv()
+    own_bin = os.path.realpath(os.path.join(own, "bin")) if own else ""
+    parts = [
+        p for p in env.get("PATH", "").split(os.pathsep)
+        if p and (not own_bin or os.path.realpath(p) != own_bin)
+    ]
+    env["VIRTUAL_ENV"] = ""
+    if workdir:
+        venv = os.path.join(workdir, TARGET_VENV_DIR)
+        if os.path.isdir(os.path.join(venv, "bin")):
+            parts.insert(0, os.path.join(venv, "bin"))
+            env["VIRTUAL_ENV"] = venv
+    env["PATH"] = os.pathsep.join(parts)
+
+
+def _child_env(*, drop_oauth_env: bool = False, workdir: str | None = None) -> dict[str, str]:
     """The environment a Claude Code process gets — CLI subprocess or SDK.
 
     Closes off interactive prompts (CI=1: update banner, login nag, telemetry
@@ -271,12 +308,13 @@ def _child_env(*, drop_oauth_env: bool = False) -> dict[str, str]:
     # ~/.claude/projects/<workspace>/memory, and the binary loads their index
     # into every call — cycle 71c8b870041a's PO tried to Read them.
     env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+    _python_for_target(env, workdir)
     if drop_oauth_env:
         env.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
     return env
 
 
-def _sdk_child_env(*, drop_oauth_env: bool = False) -> dict[str, str]:
+def _sdk_child_env(*, drop_oauth_env: bool = False, workdir: str | None = None) -> dict[str, str]:
     """``_child_env`` for ``ClaudeAgentOptions.env`` — which is *merged over*
     the parent's full ``os.environ`` by the SDK's transport, not used in its
     place like ``create_subprocess_exec(env=...)``. Omitting a key does not
@@ -287,7 +325,7 @@ def _sdk_child_env(*, drop_oauth_env: bool = False) -> dict[str, str]:
     is what lets the session on disk win); an empty override there would
     shadow that session.
     """
-    env = _child_env(drop_oauth_env=drop_oauth_env)
+    env = _child_env(drop_oauth_env=drop_oauth_env, workdir=workdir)
     env["ANTHROPIC_API_KEY"] = ""
     return env
 
@@ -527,6 +565,12 @@ def decide_tool_use(
         for pattern, why in _SDK_BASH_DENY:
             if pattern.search(command):
                 return False, why
+        own = _own_venv()
+        if own and own in command:
+            return False, (
+                "that is TheSwarm's own venv, not the target's — install and "
+                f"test with the workspace's {TARGET_VENV_DIR} (`python` on PATH)"
+            )
         return True, ""
     if tool_name in _SDK_PATH_TOOLS:
         raw = (
@@ -853,7 +897,7 @@ class ClaudeCLI:
         return ClaudeAgentOptions(
             model=model_id,
             cwd=workdir,
-            env=_sdk_child_env(drop_oauth_env=drop_oauth_env),
+            env=_sdk_child_env(drop_oauth_env=drop_oauth_env, workdir=workdir),
             # Nothing from the host — no settings.json, no hooks, no
             # CLAUDE.md of the user (I2). The target's own guidance reaches
             # the model through the prompt's context, as it always has.
@@ -1190,7 +1234,7 @@ class ClaudeCLI:
                 prompt_chars,
             )
 
-        cli_env = _child_env(drop_oauth_env=drop_oauth_env)
+        cli_env = _child_env(drop_oauth_env=drop_oauth_env, workdir=workdir)
 
         try:
             proc = await asyncio.create_subprocess_exec(

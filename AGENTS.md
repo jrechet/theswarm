@@ -111,8 +111,17 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
 - Claude backend is CLI-first (subscription billing); the API is a fallback only
   when a usable API key exists. Model names are aliases (`sonnet` →
   `claude-sonnet-5`) — never pin dated model IDs.
-- The target workspace uses the *system* python (`agents/base.find_system_python`)
+- The target workspace uses its own `.venv-swarm` (`agents/base.find_system_python`)
   for installs AND test runs — TheSwarm's venv must never receive target deps.
+  **That includes Claude's own Bash.** The container's PATH starts with
+  TheSwarm's venv; on 2026-09-23 a Dev that wanted to try the tests ran
+  `uv pip install -r requirements.txt --python /app/.venv/bin/python`
+  (cycle 83b584194589) and replaced TheSwarm's fastapi, pydantic and uvicorn
+  with the target's pins under the running server. Every Claude child with
+  a workspace now gets that workspace's venv first on PATH and in
+  VIRTUAL_ENV, TheSwarm's venv off PATH (`tools/claude._python_for_target`),
+  the Dev builds the venv before its first call, and the policy hook refuses
+  any Bash command that names TheSwarm's own `sys.prefix`.
 - Phase budgets: implementation call 600s, dep install 300s, `dev_iter` 30 min.
   If a task fails, it must be requeued to `status:ready` (see `implement_task`) or
   the backlog drains with nothing shipped.
