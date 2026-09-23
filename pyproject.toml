@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "TheSwarm: Autonomous AI dev team (PO, TechLead, Dev, QA)"
 requires-python = ">=3.12"
 dependencies = [
-    "langgraph>=0.2",
+    "langgraph>=1.1",
     "langchain-core>=0.3",
     "PyGithub>=2.0",
     "fastapi>=0.115",
@@ -30,6 +30,8 @@ dependencies = [
     # separately in the Dockerfile.
     "playwright>=1.58.0",
     "pyjwt>=2.8",
+    "claude-agent-sdk>=0.2.158",
+    "langgraph-checkpoint-sqlite>=3.1",
 ]
 
 [dependency-groups]

@@ -237,6 +237,159 @@ async def drain_floor_writes() -> None:
         await asyncio.gather(*tuple(_FLOOR_WRITES), return_exceptions=True)
 
 
+def _child_env(*, drop_oauth_env: bool = False) -> dict[str, str]:
+    """The environment a Claude Code process gets — CLI subprocess or SDK.
+
+    Closes off interactive prompts (CI=1: update banner, login nag, telemetry
+    opt-in) and strips ANTHROPIC_API_KEY, always:
+
+    - an sk-ant-api key defeats the point of the subscription backends, and
+      in the binary's credential precedence it sits *above* the OAuth token
+      and the session on disk, so leaving it in silently moves the cycle to
+      per-token billing (V2 runtime invariant I1);
+    - an sk-ant-oat token from `claude setup-token` looks API-shaped but the
+      x-api-key header rejects it ('Invalid API key · Fix external API key');
+      it is only accepted on the Authorization: Bearer flow the binary uses
+      for CLAUDE_CODE_OAUTH_TOKEN and ~/.claude/.credentials.json.
+
+    ``drop_oauth_env`` removes CLAUDE_CODE_OAUTH_TOKEN too: it wins over the
+    session on disk, so a stale one breaks every call even while ~/.claude
+    holds valid, self-refreshing credentials. The caller retries without it.
+    """
+    env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    env["CI"] = "1"
+    env["CLAUDE_CODE_NON_INTERACTIVE"] = "1"
+    if drop_oauth_env:
+        env.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
+    return env
+
+
+# ── Agent SDK (V2 runtime; M0 ships the probe, M1 the backend) ──────────
+#
+# The SDK runs the same Claude Code binary as `claude -p`, bundled in its
+# wheel, and authenticates the same way: CLAUDE_CODE_OAUTH_TOKEN, else the
+# session in ~/.claude. What it adds is a stream of typed messages instead
+# of one JSON envelope — the class of bugs where the verdict was "whatever
+# Claude said last" (#125, the host Stop hook) has no transport to ride on.
+
+_SDK_PROBE_PROMPT = "Reply with exactly the single word: OK"
+_SDK_PROBE_TIMEOUT_SECONDS = 90
+
+
+def _sdk_query(prompt: str, options: object):
+    """``claude_agent_sdk.query`` behind one seam, so tests replace it."""
+    from claude_agent_sdk import query
+
+    return query(prompt=prompt, options=options)
+
+
+def sdk_binary_location() -> str:
+    """Where the SDK's Claude Code binary comes from, for the validate report.
+
+    ``bundled:<path>`` when the platform wheel ships it (linux x86_64 and
+    macOS do), ``path:<path>`` when only a `claude` on PATH exists, "" when
+    neither — the SDK would raise CLINotFoundError.
+    """
+    try:
+        import claude_agent_sdk
+    except ImportError:
+        return ""
+    bundled = os.path.join(os.path.dirname(claude_agent_sdk.__file__), "_bundled", "claude")
+    if os.path.isfile(bundled):
+        return f"bundled:{bundled}"
+    on_path = shutil.which("claude")
+    return f"path:{on_path}" if on_path else ""
+
+
+def _identity_from_api_key_source(source: object) -> str:
+    """Read the binary's ``apiKeySource`` (init message) as an identity.
+
+    ``none`` is the OAuth path — the subscription, via the env token or the
+    session file. Anything naming a key or a helper is per-token billing.
+    """
+    if source is None:
+        return "unknown"
+    lowered = str(source).strip().lower()
+    if lowered == "none":
+        return "subscription"
+    if "api_key" in lowered or "apikey" in lowered or "helper" in lowered:
+        return "api-key"
+    return lowered
+
+
+async def probe_sdk(
+    *, model: str = "haiku", timeout: float = _SDK_PROBE_TIMEOUT_SECONDS,
+) -> dict:
+    """One-turn call through the SDK, reporting who answered and at what cost.
+
+    Never raises: the report carries ``ok`` and ``error``. ``ok`` is False
+    when the call failed, produced no result, or — the case this probe
+    exists for — answered with an API key instead of the subscription.
+    """
+    report: dict = {
+        "ok": False,
+        "identity": "unknown",
+        "model": _MODEL_MAP.get(model, model),
+        "session_id": "",
+        "cost_usd": 0.0,
+        "claude_code_version": "",
+        "binary": sdk_binary_location(),
+        "error": "",
+    }
+    try:
+        from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, SystemMessage
+    except ImportError as exc:
+        report["error"] = f"claude-agent-sdk not installed: {exc}"
+        return report
+
+    options = ClaudeAgentOptions(
+        model=report["model"],
+        env=_child_env(),
+        # No host settings, hooks or CLAUDE.md: what the swarm runs is
+        # decided in this codebase (invariant I2).
+        setting_sources=[],
+        allowed_tools=[],
+        max_turns=1,
+        permission_mode="default",
+    )
+
+    async def _consume() -> None:
+        async for message in _sdk_query(_SDK_PROBE_PROMPT, options):
+            if isinstance(message, SystemMessage) and message.subtype == "init":
+                data = message.data or {}
+                report["identity"] = _identity_from_api_key_source(data.get("apiKeySource"))
+                report["claude_code_version"] = str(data.get("claude_code_version", ""))
+                report["session_id"] = str(data.get("session_id", ""))
+            elif isinstance(message, ResultMessage):
+                report["session_id"] = message.session_id or report["session_id"]
+                report["cost_usd"] = float(message.total_cost_usd or 0.0)
+                if message.is_error or message.subtype != "success":
+                    report["error"] = f"{message.subtype}: {message.result or 'no detail'}"
+                    return
+                report["ok"] = True
+
+    try:
+        await asyncio.wait_for(_consume(), timeout=timeout)
+    except asyncio.TimeoutError:
+        report["ok"] = False
+        report["error"] = f"probe timed out after {timeout}s"
+        return report
+    except Exception as exc:  # noqa: BLE001 — a probe reports, it never raises
+        report["ok"] = False
+        report["error"] = f"{type(exc).__name__}: {exc}"
+        return report
+
+    if report["identity"] == "api-key":
+        report["ok"] = False
+        report["error"] = (
+            "the SDK answered with ANTHROPIC_API_KEY — the child env must not "
+            "carry it (V2 runtime invariant I1)"
+        )
+    elif not report["ok"] and not report["error"]:
+        report["error"] = "no result message from the SDK"
+    return report
+
+
 @dataclass
 class ClaudeCLI:
     """Runs a prompt through Claude Code CLI first, Anthropic API as fallback.
@@ -506,29 +659,7 @@ class ClaudeCLI:
                 prompt_chars,
             )
 
-        # Close stdin and set CI=1 so the CLI doesn't hang on any interactive
-        # prompt (update banner, login nag, telemetry opt-in, etc.).
-        #
-        # ANTHROPIC_API_KEY is always stripped from the child env. Rationale:
-        #   - sk-ant-api keys defeat the purpose of the CLI backend (we want
-        #     subscription billing, not per-call API credits).
-        #   - sk-ant-oat tokens from `claude setup-token` look API-shaped but
-        #     Anthropic's server rejects them on the x-api-key header with
-        #     'Invalid API key · Fix external API key' — they are only
-        #     accepted via the Authorization: Bearer flow that the CLI uses
-        #     when reading from ~/.claude/.credentials.json.
-        # Either way, the CLI must be allowed to fall through to the session
-        # file, so the env var always gets removed for the child.
-        cli_env = {
-            k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"
-        }
-        cli_env["CI"] = "1"
-        cli_env["CLAUDE_CODE_NON_INTERACTIVE"] = "1"
-        if drop_oauth_env:
-            # CLAUDE_CODE_OAUTH_TOKEN wins over the session on disk, so a
-            # stale one breaks every call even when ~/.claude holds valid,
-            # self-refreshing credentials. Retry without it before giving up.
-            cli_env.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
+        cli_env = _child_env(drop_oauth_env=drop_oauth_env)
 
         try:
             proc = await asyncio.create_subprocess_exec(

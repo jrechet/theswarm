@@ -28,8 +28,12 @@ Claude Code specifics on top of the shared guide above:
   suite-wide in `tests/conftest.py`). A test that needs the wall re-enables it
   with `monkeypatch.setenv("SWARM_AUTH_DISABLED", "")`. One test:
   `uv run pytest tests/presentation/test_auth_wall.py::test_name -p no:playwright`.
-- `docs/plans/2026-09-v2-one-flow.md` is the current plan; everything else in
-  `docs/plans/` (opus7, theswarm-04/05, the-bigger-swarm) is history, not truth.
+- Two plans are current and together form V2: `docs/plans/2026-09-v2-one-flow.md`
+  (the surface, delivered) and `docs/plans/2026-09-v2-runtime.md` (the engine:
+  Agent SDK backend, durable LangGraph cycle, isolation, traces, evals — read
+  its invariants before touching `tools/claude.py`, `cycle.py` or `agents/`).
+  Everything else in `docs/plans/` (opus7, theswarm-04/05, the-bigger-swarm)
+  is history, not truth.
   `docs/handoffs/` holds open investigations — read the latest before touching
   the GitHub App setup. `docs/DEPENDENCIES.md` is the owner's visual dependency
   map: any new external dependency, credential or CDN is a shared decision and
