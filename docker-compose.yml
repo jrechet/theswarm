@@ -7,6 +7,11 @@ services:
       - .env
     environment:
       - BASE_PATH=/swarm
+      # V2 runtime, M1: Claude calls go through the Agent SDK (same binary,
+      # same subscription identity as `claude -p`, typed message stream).
+      # `auto` stays CLI-first until three harness cycles pass on the SDK;
+      # the rollback is this one line back to `cli` (plan invariant I13).
+      - SWARM_CLAUDE_BACKEND=sdk
       # Identity for the swarm's Dev agent git commits. Without these
       # `git commit` fails with 'Author identity unknown' (rc=128).
       - GIT_AUTHOR_NAME=TheSwarm Dev Agent

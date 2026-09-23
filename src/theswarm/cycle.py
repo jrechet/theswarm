@@ -363,9 +363,15 @@ async def run_daily_cycle(
         except Exception:
             log.exception("on_checkpoint raised (continuing)")
 
+    # Whose turn it is, for events that arrive without a role attached —
+    # the SDK backend's tool calls (V2 runtime, M1) are reported by the
+    # role that owns the running phase.
+    _current_role = {"name": "System"}
+
     async def _run_phase(phase_key: str, role: str, coro):
         """Run an awaitable with that phase's hard timeout. Surfaces PhaseTimeout."""
         timeout = PHASE_TIMEOUTS.get(phase_key, 10 * 60)
+        _current_role["name"] = role
         try:
             return await asyncio.wait_for(coro, timeout=timeout)
         except asyncio.TimeoutError as exc:
@@ -433,6 +439,15 @@ async def run_daily_cycle(
     # Prepare workspace
     await _ensure_workspace(config)
     base_state = _build_base_state(config)
+    # V2 runtime (M1): the SDK backend streams every tool call and text
+    # block; they reach the theater — and the watchdog, as heartbeats — as
+    # progress of the role whose phase is running.
+    _claude = base_state.get("claude")
+    if _claude is not None and hasattr(_claude, "on_event"):
+        async def _on_claude_event(message: str) -> None:
+            await _progress(_current_role["name"], message)
+
+        _claude.on_event = _on_claude_event
 
     try:
         # Ensure branch protection on first run
