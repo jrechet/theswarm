@@ -397,7 +397,9 @@ reconstruire.
   checkpoint. Les gardes du resumer actuel restent : une reprise
   automatique au plus par cycle, trois par boot, `triggered_by =
   auto-resume:N`. L'ancien mécanisme (`on_checkpoint`, `resume_from`,
-  `_skip`) est retiré quand le nouveau est prouvé, pas avant.
+  `_skip`) est retiré quand le nouveau est prouvé, pas avant. *M4
+  (2026-09-23)* : `_skip` a disparu, `resume_from` n'est plus qu'un
+  drapeau, `on_checkpoint` nourrit encore la page V1 des cycles.
 - **Idempotence des nœuds.** Un nœud peut être rejoué après un crash
   survenu entre son effet et son checkpoint. L'agent audite chaque effet
   de bord et ajoute le test manquant : branche (par nom), PR (chercher
@@ -422,6 +424,10 @@ reconstruire.
   par story s'exécutent en branches `Send` parallèles, concurrence bornée
   par une config (défaut 2 ; le conteneur a 2 Go). Un échec de lancement
   de la démo fait sauter toutes les branches de capture, comme aujourd'hui.
+  *Reporté à M5 (2026-09-23)* : les nœuds de capture écrivent les mêmes
+  clés (`demo_launch_error`, `tokens_used`) et `AgentState` n'a pas de
+  réducteurs ; en donner change la sémantique d'accumulation de tous les
+  graphes. À faire avec l'isolation, où le sous-graphe QA est retouché.
 - Le verrou par repo et le timeout dur de cycle restent hors du graphe.
 
 **Acceptation.**

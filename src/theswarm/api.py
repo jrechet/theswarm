@@ -112,9 +112,23 @@ class CycleTracker:
 # Singleton
 _tracker = CycleTracker()
 
+# The LangGraph checkpointer every API cycle runs on (V2 runtime, M4):
+# installed by the server at boot (SQLite, its own connection), None in
+# tests and CLI contexts — the cycle then runs on an in-memory saver.
+_cycle_checkpointer: object | None = None
+
 
 def get_cycle_tracker() -> CycleTracker:
     return _tracker
+
+
+def set_cycle_checkpointer(checkpointer: object | None) -> None:
+    global _cycle_checkpointer
+    _cycle_checkpointer = checkpointer
+
+
+def get_cycle_checkpointer() -> object | None:
+    return _cycle_checkpointer
 
 
 def _pr_numbers(result: dict[str, Any]) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
@@ -283,8 +297,14 @@ async def _run_api_cycle(
     issue_number: int | None = None,
     resume_from: str | None = None,
     role_assignment_service: object | None = None,
+    resume_cycle_id: str | None = None,
 ) -> None:
-    """Execute a cycle initiated via the API."""
+    """Execute a cycle initiated via the API.
+
+    ``resume_cycle_id`` continues the durable graph of an interrupted cycle
+    (its checkpoints live under that id) inside this new record; either it
+    or the legacy ``resume_from`` marks the run as a resume.
+    """
     from theswarm.cycle import run_daily_cycle
     from theswarm.config import CycleConfig
     from theswarm.tools.github import GitHubAccessError, verify_access
@@ -479,6 +499,9 @@ async def _run_api_cycle(
                         on_progress=on_progress,
                         on_checkpoint=on_checkpoint,
                         resume_from=resume_from,
+                        cycle_id=resume_cycle_id or cycle_id,
+                        checkpointer=get_cycle_checkpointer(),
+                        resume=bool(resume_from or resume_cycle_id),
                     ),
                     timeout=CYCLE_HARD_TIMEOUT_SECONDS,
                 )

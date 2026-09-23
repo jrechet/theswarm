@@ -97,10 +97,15 @@ def plan_resumes(
     return plans
 
 
-async def collect_interrupted(cycle_repo, checkpoint_repo) -> list[dict]:
+async def collect_interrupted(cycle_repo, checkpoint_repo, graph_checkpointer=None) -> list[dict]:
     """Read cycles left 'running' by a dead process, with their checkpoints.
 
     Must run *before* the orphan reap, which flips those rows to 'failed'.
+
+    Since V2 M4 the resume itself continues the cycle's LangGraph thread;
+    when a ``graph_checkpointer`` is given, a cycle with no thread on it
+    (one older than M4, or run on a memory saver) gets no ``resume_from``
+    and is left to the reaper — never a resume that cannot start.
     """
     if checkpoint_repo is None or not hasattr(cycle_repo, "list_running"):
         return []
@@ -111,10 +116,24 @@ async def collect_interrupted(cycle_repo, checkpoint_repo) -> list[dict]:
         except Exception:  # noqa: BLE001 — a broken checkpoint is not fatal
             log.exception("Reading checkpoints for %s failed", cycle.id)
             continue
+        resume_from = last_ok.next_phase if last_ok else None
+        if resume_from and graph_checkpointer is not None:
+            if not await _has_graph_thread(graph_checkpointer, str(cycle.id)):
+                log.info("Cycle %s has no graph checkpoint — not resumed", cycle.id)
+                resume_from = None
         items.append({
             "cycle_id": str(cycle.id),
             "repo": cycle.project_id,
             "triggered_by": cycle.triggered_by,
-            "resume_from": last_ok.next_phase if last_ok else None,
+            "resume_from": resume_from,
         })
     return items
+
+
+async def _has_graph_thread(graph_checkpointer, cycle_id: str) -> bool:
+    try:
+        found = await graph_checkpointer.aget_tuple({"configurable": {"thread_id": cycle_id}})
+    except Exception:  # noqa: BLE001 — an unreadable thread is a missing one
+        log.exception("Reading the graph checkpoint for %s failed", cycle_id)
+        return False
+    return found is not None

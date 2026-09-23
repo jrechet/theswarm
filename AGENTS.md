@@ -391,6 +391,30 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `_parse_tasks_json`, `ALREADY_SATISFIED_RE`) stay as the CLI backend's
   fallback until M7 — fakes in older tests return plain `SimpleNamespace`
   results, so read `structured` with `getattr(result, "structured", None)`.
+- **V2 runtime M4 — the cycle is a durable LangGraph** (`cycle_graph.py`;
+  `run_daily_cycle` keeps its contract and runs it). Nodes = the phases
+  (`prepare → po_morning → techlead_breakdown → dev_iter ⇄ techlead_review
+  → dev_loop_end → qa → po_evening → merge_held → finish → cycle_log`),
+  checkpointed after each one (`durability="sync"`) on the server's
+  `AsyncSqliteSaver` — its own file `cycle_checkpoints.db` and connection,
+  never the app's shared one (I10); in memory for the CLI and the gateway.
+  Thread id = cycle id. `run_daily_cycle(resume=True)` continues from the
+  node after the last that finished; the boot resumer runs it on the
+  interrupted cycle's thread inside a new tracker record
+  (`_run_api_cycle(resume_cycle_id=…)`); a cycle with no graph thread
+  (pre-M4) or another `CYCLE_STATE_SCHEMA_VERSION` is refused
+  (`CycleNotResumable`), never misread. **State holds values, never
+  objects**: the GitHub client, the Claude wrapper, the progress callback
+  and the watchdog travel in `Runtime[CycleRuntime]` (context, not
+  checkpointed). `attempted_tasks` is passed by reference to the picker
+  *and* returned — an in-place mutation is invisible to a checkpoint. The
+  budgets and exceptions moved to `cycle_budgets.py`; `theswarm.cycle`
+  re-exports them and the graph reads `PHASE_TIMEOUTS`/`MAX_DEV_ITERATIONS`
+  off `theswarm.cycle` at call time, so tests keep patching them there.
+  A node re-run after a crash between effect and checkpoint is the normal
+  case: keep every node safe to repeat (learnings and the cycle log are
+  separate nodes for that reason). The phase-checkpoint table
+  (`on_checkpoint`) still feeds the V1 cycles page until M7.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

@@ -485,6 +485,7 @@ async def _launch_resume(app, plan, allowed_repos, bus, cycle_repo, project_repo
             cycle_repo=cycle_repo,
             project_id=plan.repo,
             resume_from=plan.resume_from,
+            resume_cycle_id=plan.cycle_id,
         ))
         tracker.set_task(record.id, task)
         log.info(
@@ -524,6 +525,26 @@ async def start_server(
 
     conn = await init_db(db_path)
 
+    # V2 runtime (M4): the durable cycle graph checkpoints on its own SQLite
+    # file and connection — never the app's shared one (a busy cycle must
+    # not sit in /health's path). Without it, cycles run on a memory saver
+    # and a deploy still loses them; the failure is logged, not fatal.
+    cycle_checkpointer = None
+    try:
+        import aiosqlite
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+        from theswarm.api import set_cycle_checkpointer
+
+        graph_db_path = os.path.join(os.path.dirname(db_path) or ".", "cycle_checkpoints.db")
+        graph_conn = await aiosqlite.connect(graph_db_path)
+        cycle_checkpointer = AsyncSqliteSaver(graph_conn)
+        await cycle_checkpointer.setup()
+        set_cycle_checkpointer(cycle_checkpointer)
+        log.info("Cycle checkpoints: %s", graph_db_path)
+    except Exception:
+        log.exception("Cycle checkpointer unavailable — cycles will not survive a restart")
+
     # The learned CLI timeout floors outlive this process (#133): without
     # this, every deploy — one per cycle on this repository — sent the next
     # implementation call back to the constant that already timed out.
@@ -560,7 +581,9 @@ async def start_server(
             SQLiteCheckpointRepository as _CheckpointRepo,
         )
 
-        interrupted = await collect_interrupted(cycle_repo, _CheckpointRepo(conn))
+        interrupted = await collect_interrupted(
+            cycle_repo, _CheckpointRepo(conn), graph_checkpointer=cycle_checkpointer,
+        )
     except Exception:
         log.exception("Collecting interrupted cycles failed (continuing startup)")
 

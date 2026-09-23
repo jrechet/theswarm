@@ -113,12 +113,15 @@ async def test_a_fresh_heartbeat_does_not_resurrect_the_alarm():
 
 
 def test_a_finished_phase_retires_its_role():
-    """_run_phase must retire in `finally`: a phase that raised is over too."""
+    """_run_phase must retire in `finally`: a phase that raised is over too.
+
+    Since V2 M4 the phase runner lives in cycle_graph.py (the durable
+    graph); the rule is the same."""
     from pathlib import Path
 
-    source = Path("src/theswarm/cycle.py").read_text()
+    source = Path("src/theswarm/cycle_graph.py").read_text()
     body = source[source.index("async def _run_phase"):]
-    body = body[:body.index("\n    from theswarm.domain.cycles.checkpoint")]
+    body = body[:body.index("\n\n\ndef ")]
 
     assert "finally:" in body
     assert "watchdog.retire(role)" in body
