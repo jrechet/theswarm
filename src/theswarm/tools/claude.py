@@ -573,10 +573,17 @@ def _relative(path: str, workspace: str | None) -> str:
     return path
 
 
+# Pseudo-tools the SDK uses for its own mechanics — the structured answer is
+# delivered as a "StructuredOutput" tool call — say nothing to the theater.
+_SILENT_TOOLS = frozenset({"StructuredOutput"})
+
+
 def _tool_event(name: str, tool_input: dict, workspace: str | None) -> str:
     """One line per tool call for the theater: what, never the contents."""
     from theswarm.tools.git import redact
 
+    if name in _SILENT_TOOLS:
+        return ""
     if name in _SDK_FILE_TOOLS:
         raw = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         return f"{name} {_relative(str(raw), workspace)}".strip()

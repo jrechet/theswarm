@@ -463,3 +463,10 @@ def test_the_structured_answer_is_never_refused():
         allowed, why = decide_tool_use(profile, "/ws", "StructuredOutput", {"tasks": []})
         assert allowed, (profile, why)
     assert decide_tool_use("text", None, "Bash", {"command": "ls"})[0] is False
+
+
+def test_the_structured_output_pseudo_tool_is_silent():
+    from theswarm.tools.claude import _tool_event
+
+    assert _tool_event("StructuredOutput", {"tasks": [{"title": "x"}]}, "/ws") == ""
+    assert _tool_event("Read", {"file_path": "/ws/a.py"}, "/ws") == "Read a.py"
