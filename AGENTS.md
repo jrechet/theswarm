@@ -414,7 +414,15 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   A node re-run after a crash between effect and checkpoint is the normal
   case: keep every node safe to repeat (learnings and the cycle log are
   separate nodes for that reason). The phase-checkpoint table
-  (`on_checkpoint`) still feeds the V1 cycles page until M7.
+  (`on_checkpoint`) still feeds the V1 cycles page until M7. **Agent graphs
+  run detached** (`cycle_graph._invoke_agent`: a fresh contextvars.Context,
+  the OpenTelemetry context re-attached): a compiled graph invoked inside a
+  node inherits the parent's checkpointer and its state carries live
+  clients — the first prod cycle on the graph (ddd989b4e51e) died in
+  po_morning on "Type is not msgpack serializable: GitHubClient".
+  `checkpointer=False` on the agent graphs is kept too, but alone it trips
+  LangGraph under `durability="sync"` (`_put_checkpoint_fut`). A resume
+  mid dev-loop hands back the tasks the dead iteration claimed first.
 - **V2 runtime M5a — the target runs in its own venv, inside its
   workspace.** `agents/base.ensure_target_venv` builds `<workspace>/.venv-swarm`
   once (`uv venv --seed`, the binary is in the image; `python -m venv`

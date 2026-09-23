@@ -293,4 +293,11 @@ def build_po_graph() -> StateGraph:
     graph.add_edge("validate_demo", "write_daily_report")
     graph.add_edge("write_daily_report", END)
 
-    return graph.compile()
+    # No checkpointer of its own, and none inherited: invoked inside a node
+    # of the durable cycle graph (V2 M4) this graph would otherwise be
+    # checkpointed with the parent's saver, and its state carries live
+    # clients (`github`, `claude`) that msgpack cannot serialise — the first
+    # prod cycle on the graph died in po_morning on exactly that
+    # (ddd989b4e51e). The cycle graph is the durable one; agent graphs are
+    # transient by design.
+    return graph.compile(checkpointer=False)

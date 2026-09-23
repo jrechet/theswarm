@@ -25,6 +25,7 @@ crash between them re-runs only the log.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -123,6 +124,35 @@ def _cycle():
     return cycle
 
 
+def _invoke_agent(graph, state: dict) -> "asyncio.Task":
+    """Run an agent graph *detached* from the cycle graph's runnable context.
+
+    A compiled graph invoked inside a node inherits the parent's
+    checkpointer and gets checkpointed as a subgraph — and the agent state
+    carries live clients that msgpack cannot serialise (the first prod cycle
+    on the durable graph, ddd989b4e51e, died in po_morning on
+    "Type is not msgpack serializable: GitHubClient"). Compiling the agent
+    graphs with ``checkpointer=False`` is not enough under
+    ``durability="sync"`` (LangGraph: `'AsyncPregelLoop' object has no
+    attribute '_put_checkpoint_fut'`). A fresh contextvars.Context leaves
+    the parent's runnable config behind; the OpenTelemetry context is
+    re-attached so the agent's node spans still nest under the phase.
+    `asyncio.wait_for` (the phase budget) cancels the task like any other.
+    """
+    from opentelemetry import context as otel_context
+
+    parent_span_context = otel_context.get_current()
+
+    async def _run():
+        token = otel_context.attach(parent_span_context)
+        try:
+            return await graph.ainvoke(state)
+        finally:
+            otel_context.detach(token)
+
+    return asyncio.get_running_loop().create_task(_run(), context=contextvars.Context())
+
+
 async def _run_phase(rt: CycleRuntime, phase_key: str, role: str, coro):
     """Run an awaitable with that phase's hard timeout. Surfaces PhaseTimeout."""
     # Read off `theswarm.cycle` at call time: tests swap that module's
@@ -180,7 +210,7 @@ async def po_morning(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     await rt.progress("PO", "Starting daily planning…")
     po_state = await _run_phase(
         rt, "po_morning", "PO",
-        _cycle().build_po_graph().ainvoke({**rt.base_state, "phase": Phase.MORNING.value}),
+        _invoke_agent(_cycle().build_po_graph(), {**rt.base_state, "phase": Phase.MORNING.value}),
     )
     tokens, cost = po_state.get("tokens_used", 0), po_state.get("cost_usd", 0.0)
     budget = _within_budget(rt, state, Role.PO, tokens)
@@ -197,7 +227,7 @@ async def techlead_breakdown(state: CycleState, runtime: Runtime[CycleRuntime]) 
     await rt.progress("TechLead", "Breaking down stories into tasks…")
     tl_state = await _run_phase(
         rt, "techlead_breakdown", "TechLead",
-        _cycle().build_techlead_graph().ainvoke({**rt.base_state, "phase": "breakdown"}),
+        _invoke_agent(_cycle().build_techlead_graph(), {**rt.base_state, "phase": "breakdown"}),
     )
     tokens, cost = tl_state.get("tokens_used", 0), tl_state.get("cost_usd", 0.0)
     budget = _within_budget(rt, state, Role.TECHLEAD, tokens)
@@ -229,7 +259,7 @@ async def dev_iter(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     async def _invoke():
         return await _run_phase(
             rt, "dev_iter", "Dev",
-            _cycle().build_dev_graph().ainvoke({
+            _invoke_agent(_cycle().build_dev_graph(), {
                 **rt.base_state,
                 "phase": Phase.DEVELOPMENT.value,
                 "attempted_tasks": attempted,
@@ -301,7 +331,7 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
     try:
         tl_state = await _run_phase(
             rt, "techlead_review", "TechLead",
-            _cycle().build_techlead_graph().ainvoke({
+            _invoke_agent(_cycle().build_techlead_graph(), {
                 **rt.base_state, "phase": "review_loop", "reviewed_prs": reviewed,
             }),
         )
@@ -388,7 +418,7 @@ async def qa(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     try:
         qa_state = await _run_phase(
             rt, "qa", "QA",
-            _cycle().build_qa_graph().ainvoke({**rt.base_state, "phase": Phase.DEMO.value}),
+            _invoke_agent(_cycle().build_qa_graph(), {**rt.base_state, "phase": Phase.DEMO.value}),
         )
     except PhaseTimeout:
         qa_state = {}
@@ -408,7 +438,7 @@ async def po_evening(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     try:
         po_ev_state = await _run_phase(
             rt, "po_evening", "PO",
-            _cycle().build_po_graph().ainvoke({
+            _invoke_agent(_cycle().build_po_graph(), {
                 **rt.base_state,
                 "phase": Phase.EVENING.value,
                 "demo_report": state.get("demo_report"),
