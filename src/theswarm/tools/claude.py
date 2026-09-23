@@ -599,14 +599,27 @@ def _tool_event(name: str, tool_input: dict, workspace: str | None) -> str:
     return name
 
 
+_CODE_LINE_PREFIXES = (
+    "import ", "from ", "def ", "class ", "async def ", "#", "```", "{", "}", "[", "<",
+    "---", "@", "return ", "if ", "for ", "while ", "try:", "except", "with ",
+)
+
+
 def _text_event(text: str) -> str:
-    """The first line of a text block, redacted and short."""
+    """The first prose line of a text block, redacted and short.
+
+    A block that *is* code — the QA's generated E2E file, a JSON verdict —
+    said "import uuid" or "```json" to the theater (cycle e4978adebe03).
+    Code-looking lines are skipped; a block with no prose says nothing.
+    """
     from theswarm.tools.git import redact
 
-    for line in text.splitlines():
-        line = line.strip()
-        if line:
-            return redact(line)[:160]
+    for raw in text.splitlines():
+        line = raw.strip()
+        # an indented line is a line of code; prose does not indent
+        if not line or raw[:1].isspace() or line.startswith(_CODE_LINE_PREFIXES):
+            continue
+        return redact(line)[:160]
     return ""
 
 
