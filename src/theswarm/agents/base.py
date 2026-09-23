@@ -17,6 +17,31 @@ log = logging.getLogger(__name__)
 DEP_INSTALL_TIMEOUT_SECONDS = 300
 
 
+def traced_node(name: str, fn):
+    """Wrap a graph node so it runs inside a ``node.<name>`` span (V2, M2).
+
+    The node keeps its signature and its name; the span nests under the
+    phase's, and any Claude call the node makes nests under the node's.
+    """
+    import functools
+    import inspect
+
+    from theswarm.infrastructure import tracing
+
+    if inspect.iscoroutinefunction(fn):
+        @functools.wraps(fn)
+        async def traced_async(state):
+            with tracing.span(f"node.{name}", **{"swarm.node": name}):
+                return await fn(state)
+        return traced_async
+
+    @functools.wraps(fn)
+    def traced_sync(state):
+        with tracing.span(f"node.{name}", **{"swarm.node": name}):
+            return fn(state)
+    return traced_sync
+
+
 async def load_context(state: AgentState) -> dict[str, Any]:
     """Load GOLDEN_RULES + relevant agent memory + DoD from the target repo.
 

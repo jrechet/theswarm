@@ -12,6 +12,7 @@ from theswarm.agents.qa import build_qa_graph
 from theswarm.agents.techlead import build_techlead_graph
 from theswarm.config import CycleConfig, Phase, Role
 from theswarm.domain.cycles.value_objects import PHASE_ROLE
+from theswarm.infrastructure import tracing
 from theswarm.token_counter import TokenTracker
 from theswarm.tools.claude import ClaudeFatalError
 
@@ -372,18 +373,22 @@ async def run_daily_cycle(
         """Run an awaitable with that phase's hard timeout. Surfaces PhaseTimeout."""
         timeout = PHASE_TIMEOUTS.get(phase_key, 10 * 60)
         _current_role["name"] = role
-        try:
-            return await asyncio.wait_for(coro, timeout=timeout)
-        except asyncio.TimeoutError as exc:
-            log.error("Phase %s exceeded %ds — aborting", phase_key, timeout)
-            await _progress(role, f"⏱  Phase {phase_key} timed out after {timeout}s — aborting")
-            raise PhaseTimeout(phase_key, timeout) from exc
-        finally:
-            # The phase is over either way: this role owes no further
-            # heartbeat, so it must stop being judged idle. A later phase for
-            # the same role (Dev runs one per iteration) re-registers it on
-            # its next heartbeat.
-            watchdog.retire(role)
+        with tracing.span(
+            f"phase.{phase_key}",
+            **{"swarm.phase": phase_key, "swarm.role": role, "swarm.budget_s": timeout},
+        ):
+            try:
+                return await asyncio.wait_for(coro, timeout=timeout)
+            except asyncio.TimeoutError as exc:
+                log.error("Phase %s exceeded %ds — aborting", phase_key, timeout)
+                await _progress(role, f"⏱  Phase {phase_key} timed out after {timeout}s — aborting")
+                raise PhaseTimeout(phase_key, timeout) from exc
+            finally:
+                # The phase is over either way: this role owes no further
+                # heartbeat, so it must stop being judged idle. A later phase
+                # for the same role (Dev runs one per iteration) re-registers
+                # it on its next heartbeat.
+                watchdog.retire(role)
 
     from theswarm.domain.cycles.checkpoint import PHASE_ORDER
 

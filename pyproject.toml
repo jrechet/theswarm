@@ -34,6 +34,8 @@ dependencies = [
     # (see tools/claude._sdk_child_env) are exactly what a minor could change.
     "claude-agent-sdk>=0.2.158,<0.3",
     "langgraph-checkpoint-sqlite>=3.1",
+    "opentelemetry-sdk>=1.44,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
 ]
 
 [dependency-groups]

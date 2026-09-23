@@ -20,6 +20,7 @@
         {% elif record.status.value == 'failed' %}border-rust/50 text-rust bg-rust-wash
         {% else %}border-rule text-soft bg-panel{% endif %}">
         {{ record.status.value }}</span>
+      {% if trace_url %}<a href="{{ trace_url }}" target="_blank" rel="noopener" class="font-mono text-[11px] text-faint hover:text-soft focus-visible:outline-2 focus-visible:outline-honey">trace ↗</a>{% endif %}
       <a href="{{ base }}/cycles/{{ record.id }}" class="font-mono text-[11px] text-faint hover:text-soft focus-visible:outline-2 focus-visible:outline-honey">details ↗</a>
     </div>
   </div>

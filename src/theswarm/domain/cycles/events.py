@@ -13,6 +13,7 @@ class CycleStarted(DomainEvent):
     cycle_id: CycleId = field(default_factory=CycleId.generate)
     project_id: str = ""
     triggered_by: str = ""
+    trace_id: str = ""  # the cycle's root span, when a tracer is installed
 
 
 @dataclass(frozen=True)

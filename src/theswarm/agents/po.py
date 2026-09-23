@@ -12,7 +12,7 @@ from datetime import datetime
 
 from langgraph.graph import END, StateGraph
 
-from theswarm.agents.base import load_context, stub_result
+from theswarm.agents.base import load_context, stub_result, traced_node
 from theswarm.config import AgentState, Phase, Role
 
 log = logging.getLogger(__name__)
@@ -275,11 +275,11 @@ def _route_phase(state: AgentState) -> str:
 def build_po_graph() -> StateGraph:
     graph = StateGraph(AgentState)
 
-    graph.add_node("load_context", load_context)
-    graph.add_node("select_daily_issues", select_daily_issues)
-    graph.add_node("write_daily_plan", write_daily_plan)
-    graph.add_node("validate_demo", validate_demo)
-    graph.add_node("write_daily_report", write_daily_report)
+    graph.add_node("load_context", traced_node("load_context", load_context))
+    graph.add_node("select_daily_issues", traced_node("select_daily_issues", select_daily_issues))
+    graph.add_node("write_daily_plan", traced_node("write_daily_plan", write_daily_plan))
+    graph.add_node("validate_demo", traced_node("validate_demo", validate_demo))
+    graph.add_node("write_daily_report", traced_node("write_daily_report", write_daily_report))
 
     graph.set_entry_point("load_context")
     graph.add_conditional_edges("load_context", _route_phase, {

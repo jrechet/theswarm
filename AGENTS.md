@@ -368,6 +368,16 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `setting_sources` at all: the target repo's `.claude/settings.json` could
   carry the same Stop hook that voided the reviews. `auto` is still
   CLI-first; the flip is its own PR after three green harness cycles.
+- **V2 runtime M2 — one OpenTelemetry trace per cycle, in Seq.** Root span
+  `cycle` (`api.py`), a span per phase (`cycle._run_phase`), per graph
+  node (`agents/base.traced_node`, every `add_node`), per Claude call
+  (`tools/claude.ClaudeCLI.run`, with backend, model, profile, tokens,
+  cost, turns, session). Exported to `$SEQ_URL/ingest/otlp/v1/traces`
+  (Seq 2025.2 on jrec.fr); log events carry `@tr`/`@sp` so a line and its
+  trace meet. The trace id rides `CycleStarted` into the `cycles` row
+  (`trace_id`, migration v027) and the theater links it (`trace ↗`).
+  A new node needs nothing: `traced_node` wraps at `add_node`. Without
+  `SEQ_URL` spans exist (ids for logs) and go nowhere.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

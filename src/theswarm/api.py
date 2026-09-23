@@ -54,6 +54,7 @@ class CycleRecord(BaseModel):
     completed_at: str = ""
     result: dict[str, Any] | None = None
     error: str | None = None
+    trace_id: str = ""  # the cycle's root span in Seq (V2 runtime, M2)
 
 
 class CycleTracker:
@@ -429,49 +430,70 @@ async def _run_api_cycle(
             except Exception:
                 log.exception("EffortProfile.apply failed (using defaults)")
 
-        # Publish CycleStarted event
-        if event_bus is not None:
-            from theswarm.domain.cycles.events import CycleStarted
-            from theswarm.domain.cycles.value_objects import CycleId
-            await event_bus.publish(CycleStarted(
-                cycle_id=CycleId(cycle_id),
-                project_id=repo,
-                triggered_by="web",
-            ))
+        from theswarm.infrastructure import tracing
 
-        on_checkpoint = None
-        if checkpoint_repo is not None:
-            from datetime import datetime as _dt
-            from datetime import timezone as _tz
-            import json as _json
-            from theswarm.domain.cycles.checkpoint import PhaseCheckpoint
+        with tracing.span(
+            "cycle",
+            **{"swarm.cycle_id": cycle_id, "swarm.repo": repo, "swarm.issue": issue_number or 0},
+        ) as cycle_span:
+            trace_id = tracing.current_trace_id()
+            if trace_id:
+                record = tracker.get(cycle_id)
+                if record is not None:
+                    record.trace_id = trace_id
 
-            async def on_checkpoint(phase: str, ok: bool, snapshot: dict) -> None:  # type: ignore[no-redef]
-                try:
-                    await checkpoint_repo.save(PhaseCheckpoint(
-                        cycle_id=cycle_id,
-                        phase=phase,
-                        state_json=_json.dumps(snapshot, default=str),
-                        ok=ok,
-                        completed_at=_dt.now(_tz.utc),
-                    ))
-                except Exception:
-                    log.exception("checkpoint save failed for cycle %s phase %s", cycle_id, phase)
+            # Publish CycleStarted event
+            if event_bus is not None:
+                from theswarm.domain.cycles.events import CycleStarted
+                from theswarm.domain.cycles.value_objects import CycleId
+                await event_bus.publish(CycleStarted(
+                    cycle_id=CycleId(cycle_id),
+                    project_id=repo,
+                    triggered_by="web",
+                    trace_id=trace_id,
+                ))
 
-        try:
-            result = await asyncio.wait_for(
-                run_daily_cycle(
-                    cycle_config,
-                    on_progress=on_progress,
-                    on_checkpoint=on_checkpoint,
-                    resume_from=resume_from,
-                ),
-                timeout=CYCLE_HARD_TIMEOUT_SECONDS,
+            on_checkpoint = None
+            if checkpoint_repo is not None:
+                from datetime import datetime as _dt
+                from datetime import timezone as _tz
+                import json as _json
+                from theswarm.domain.cycles.checkpoint import PhaseCheckpoint
+
+                async def on_checkpoint(phase: str, ok: bool, snapshot: dict) -> None:  # type: ignore[no-redef]
+                    try:
+                        await checkpoint_repo.save(PhaseCheckpoint(
+                            cycle_id=cycle_id,
+                            phase=phase,
+                            state_json=_json.dumps(snapshot, default=str),
+                            ok=ok,
+                            completed_at=_dt.now(_tz.utc),
+                        ))
+                    except Exception:
+                        log.exception("checkpoint save failed for cycle %s phase %s", cycle_id, phase)
+
+            try:
+                result = await asyncio.wait_for(
+                    run_daily_cycle(
+                        cycle_config,
+                        on_progress=on_progress,
+                        on_checkpoint=on_checkpoint,
+                        resume_from=resume_from,
+                    ),
+                    timeout=CYCLE_HARD_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                raise RuntimeError(
+                    f"cycle exceeded hard timeout ({CYCLE_HARD_TIMEOUT_SECONDS}s) — aborted"
+                ) from None
+
+            tracing.set_attributes(
+                cycle_span,
+                **{
+                    "swarm.cost_usd": result.get("cost_usd", 0.0),
+                    "swarm.prs": len(result.get("prs", [])),
+                },
             )
-        except asyncio.TimeoutError:
-            raise RuntimeError(
-                f"cycle exceeded hard timeout ({CYCLE_HARD_TIMEOUT_SECONDS}s) — aborted"
-            ) from None
 
         dash.cost_so_far = result.get("cost_usd", 0.0)
         cycle_date = result.get("date", "")

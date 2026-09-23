@@ -36,81 +36,110 @@ log = logging.getLogger(__name__)
 
 # ── Seq structured logging (CLEF over HTTP) ──────────────────────────
 
+class SeqCLEFHandler(logging.Handler):
+    """Ships log records to Seq as CLEF over HTTP, batched.
+
+    Each event carries ``@tr``/``@sp`` when a span is active (V2 runtime,
+    M2), so a log line and the cycle's trace meet in Seq.
+    """
+
+    _LEVEL_MAP = {"DEBUG": "Debug", "INFO": "Information",
+                  "WARNING": "Warning", "ERROR": "Error", "CRITICAL": "Fatal"}
+
+    def __init__(self, server_url: str, api_key: str | None = None):
+        import threading
+
+        super().__init__()
+        self._url = server_url.rstrip("/") + "/api/events/raw"
+        self._api_key = api_key
+        self._buffer: list[str] = []
+        self._lock = threading.Lock()
+        self._timer: threading.Timer | None = None
+        self._start_timer()
+
+    def _start_timer(self) -> None:
+        import threading
+
+        self._timer = threading.Timer(2.0, self._flush)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            import datetime
+
+            from theswarm.infrastructure import tracing
+
+            ts = datetime.datetime.fromtimestamp(
+                record.created, tz=datetime.timezone.utc
+            ).isoformat()
+            event = {
+                "@t": ts,
+                "@mt": record.getMessage(),
+                "@l": self._LEVEL_MAP.get(record.levelname, record.levelname),
+                "LoggerName": record.name,
+                "from": "theswarm",
+            }
+            trace_id = tracing.current_trace_id()
+            if trace_id:
+                event["@tr"] = trace_id
+                event["@sp"] = tracing.current_span_id()
+            entry = json.dumps(event)
+            with self._lock:
+                self._buffer.append(entry)
+                if len(self._buffer) >= 10:
+                    self._flush_locked()
+        except Exception:
+            self.handleError(record)
+
+    def _flush(self) -> None:
+        with self._lock:
+            self._flush_locked()
+        self._start_timer()
+
+    def _flush_locked(self) -> None:
+        import threading
+
+        if not self._buffer:
+            return
+        payload = "\n".join(self._buffer)
+        self._buffer.clear()
+        threading.Thread(target=self._send, args=(payload,), daemon=True).start()
+
+    def _send(self, payload: str) -> None:
+        import urllib.request
+
+        try:
+            req = urllib.request.Request(
+                self._url, data=payload.encode(),
+                headers={"Content-Type": "application/vnd.serilog.clef"},
+            )
+            if self._api_key:
+                req.add_header("X-Seq-ApiKey", self._api_key)
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+
 def _setup_seq_logging() -> None:
     """Configure Seq log shipping if SEQ_URL is set."""
     seq_url = os.getenv("SEQ_URL", "")
     seq_api_key = os.getenv("SEQ_API_KEY", "")
     if not seq_url:
         return
-
-    import datetime
-    import threading
-    import urllib.request
-
-    class _SeqCLEFHandler(logging.Handler):
-        _LEVEL_MAP = {"DEBUG": "Debug", "INFO": "Information",
-                      "WARNING": "Warning", "ERROR": "Error", "CRITICAL": "Fatal"}
-
-        def __init__(self, server_url: str, api_key: str | None = None):
-            super().__init__()
-            self._url = server_url.rstrip("/") + "/api/events/raw"
-            self._api_key = api_key
-            self._buffer: list[str] = []
-            self._lock = threading.Lock()
-            self._timer: threading.Timer | None = None
-            self._start_timer()
-
-        def _start_timer(self) -> None:
-            self._timer = threading.Timer(2.0, self._flush)
-            self._timer.daemon = True
-            self._timer.start()
-
-        def emit(self, record: logging.LogRecord) -> None:
-            try:
-                ts = datetime.datetime.fromtimestamp(
-                    record.created, tz=datetime.timezone.utc
-                ).isoformat()
-                entry = json.dumps({
-                    "@t": ts,
-                    "@mt": record.getMessage(),
-                    "@l": self._LEVEL_MAP.get(record.levelname, record.levelname),
-                    "LoggerName": record.name,
-                    "from": "theswarm",
-                })
-                with self._lock:
-                    self._buffer.append(entry)
-                    if len(self._buffer) >= 10:
-                        self._flush_locked()
-            except Exception:
-                self.handleError(record)
-
-        def _flush(self) -> None:
-            with self._lock:
-                self._flush_locked()
-            self._start_timer()
-
-        def _flush_locked(self) -> None:
-            if not self._buffer:
-                return
-            payload = "\n".join(self._buffer)
-            self._buffer.clear()
-            threading.Thread(target=self._send, args=(payload,), daemon=True).start()
-
-        def _send(self, payload: str) -> None:
-            try:
-                req = urllib.request.Request(
-                    self._url, data=payload.encode(),
-                    headers={"Content-Type": "application/vnd.serilog.clef"},
-                )
-                if self._api_key:
-                    req.add_header("X-Seq-ApiKey", self._api_key)
-                urllib.request.urlopen(req, timeout=5)
-            except Exception:
-                pass
-
-    handler = _SeqCLEFHandler(seq_url, seq_api_key or None)
+    handler = SeqCLEFHandler(seq_url, seq_api_key or None)
     handler.setLevel(logging.INFO)
     logging.getLogger().addHandler(handler)
+
+
+def _setup_tracing() -> None:
+    """One trace per cycle, exported to Seq's OTLP endpoint when SEQ_URL is set."""
+    from theswarm.infrastructure import tracing
+
+    try:
+        tracing.setup_tracing()
+    except Exception:  # noqa: BLE001 — tracing must never keep the service down
+        logging.getLogger(__name__).exception("Tracing setup failed (continuing without)")
 
 
 # ── Settings loader (from old main.py) ───────────────────────────────
@@ -478,6 +507,7 @@ async def start_server(
         format="%(asctime)s %(levelname)-8s %(name)s -- %(message)s",
     )
     _setup_seq_logging()
+    _setup_tracing()
 
     # Startup validation
     validator = StartupValidator()
