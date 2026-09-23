@@ -1,1 +1,2 @@
 {"repo": "jrechet/concert-tour-app", "passed": true, "state": "completed", "prs": [251], "unfinished": [], "regression": false}
+{"repo": "jrechet/concert-tour-app", "passed": false, "state": "completed", "prs": [257], "unfinished": [254], "regression": true}
