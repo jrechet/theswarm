@@ -264,6 +264,22 @@ def _child_env(*, drop_oauth_env: bool = False) -> dict[str, str]:
     return env
 
 
+def _sdk_child_env(*, drop_oauth_env: bool = False) -> dict[str, str]:
+    """``_child_env`` for ``ClaudeAgentOptions.env`` — which is *merged over*
+    the parent's full ``os.environ`` by the SDK's transport, not used in its
+    place like ``create_subprocess_exec(env=...)``. Omitting a key does not
+    remove it there: measured on 2026-09-23, an omitted ANTHROPIC_API_KEY
+    came back as ``apiKeySource: ANTHROPIC_API_KEY``, an empty override as
+    ``none`` (the subscription). So the keys I1 forbids are overridden to
+    empty, explicitly. The OAuth override is still *dropped* (its absence
+    is what lets the session on disk win); an empty override there would
+    shadow that session.
+    """
+    env = _child_env(drop_oauth_env=drop_oauth_env)
+    env["ANTHROPIC_API_KEY"] = ""
+    return env
+
+
 # ── Agent SDK (V2 runtime; M0 ships the probe, M1 the backend) ──────────
 #
 # The SDK runs the same Claude Code binary as `claude -p`, bundled in its
@@ -338,20 +354,20 @@ async def probe_sdk(
     }
     try:
         from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, SystemMessage
-    except ImportError as exc:
-        report["error"] = f"claude-agent-sdk not installed: {exc}"
-        return report
 
-    options = ClaudeAgentOptions(
-        model=report["model"],
-        env=_child_env(),
-        # No host settings, hooks or CLAUDE.md: what the swarm runs is
-        # decided in this codebase (invariant I2).
-        setting_sources=[],
-        allowed_tools=[],
-        max_turns=1,
-        permission_mode="default",
-    )
+        options = ClaudeAgentOptions(
+            model=report["model"],
+            env=_sdk_child_env(),
+            # No host settings, hooks or CLAUDE.md: what the swarm runs is
+            # decided in this codebase (invariant I2).
+            setting_sources=[],
+            allowed_tools=[],
+            max_turns=1,
+            permission_mode="default",
+        )
+    except Exception as exc:  # noqa: BLE001 — a missing or changed SDK is a report, not a crash
+        report["error"] = f"claude-agent-sdk unavailable: {type(exc).__name__}: {exc}"
+        return report
 
     async def _consume() -> None:
         async for message in _sdk_query(_SDK_PROBE_PROMPT, options):
@@ -384,6 +400,15 @@ async def probe_sdk(
         report["error"] = (
             "the SDK answered with ANTHROPIC_API_KEY — the child env must not "
             "carry it (V2 runtime invariant I1)"
+        )
+    elif report["ok"] and report["identity"] != "subscription":
+        # The probe exists to *confirm* the subscription answered; an init
+        # message without the field, or with a value this code does not
+        # know, is not a confirmation.
+        report["ok"] = False
+        report["error"] = (
+            f"the SDK did not confirm the subscription identity "
+            f"(apiKeySource read as {report['identity']!r})"
         )
     elif not report["ok"] and not report["error"]:
         report["error"] = "no result message from the SDK"

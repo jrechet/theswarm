@@ -17,7 +17,7 @@ import pytest
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, SystemMessage
 
 from theswarm.tools import claude as claude_mod
-from theswarm.tools.claude import _child_env, probe_sdk
+from theswarm.tools.claude import _child_env, _sdk_child_env, probe_sdk
 
 
 def _init(api_key_source: str | None = "none") -> SystemMessage:
@@ -74,6 +74,38 @@ def test_child_env_does_not_mutate_the_process_env(monkeypatch):
     assert os.environ["ANTHROPIC_API_KEY"] == "sk-ant-api03-real"
 
 
+# ── _sdk_child_env: what the SDK's transport actually hands the child ─
+
+
+def _as_the_sdk_transport_merges(options_env: dict) -> dict:
+    """claude_agent_sdk/_internal/transport/subprocess_cli.py builds the
+    child env as ``{**os.environ, **options.env}``: options.env overrides,
+    it does not replace. This mirrors that merge so the test sees what the
+    binary sees, not what we handed the SDK."""
+    return {**os.environ, **options_env}
+
+
+def test_sdk_child_env_overrides_the_api_key_to_empty(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-should-not-leak")
+    child = _as_the_sdk_transport_merges(_sdk_child_env())
+    assert child["ANTHROPIC_API_KEY"] == ""
+    assert child["CI"] == "1"
+
+
+def test_omission_alone_would_leak_through_the_merge(monkeypatch):
+    """The regression this guards: the CLI-style env (key omitted) is not
+    enough for the SDK. Measured 2026-09-23: apiKeySource=ANTHROPIC_API_KEY."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-should-not-leak")
+    child = _as_the_sdk_transport_merges(_child_env())
+    assert child["ANTHROPIC_API_KEY"] == "sk-ant-api03-should-not-leak"
+
+
+def test_sdk_child_env_drops_the_oauth_override_without_shadowing_it(monkeypatch):
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-stale")
+    env = _sdk_child_env(drop_oauth_env=True)
+    assert "CLAUDE_CODE_OAUTH_TOKEN" not in env
+
+
 # ── probe_sdk: one turn, and it says who answered ────────────────────
 
 
@@ -100,7 +132,8 @@ async def test_probe_options_scrub_the_env_and_load_no_host_settings(monkeypatch
     await probe_sdk(timeout=5)
     options = captured["options"]
     assert isinstance(options, ClaudeAgentOptions)
-    assert "ANTHROPIC_API_KEY" not in options.env
+    assert options.env["ANTHROPIC_API_KEY"] == ""  # an explicit override, see _sdk_child_env
+    assert _as_the_sdk_transport_merges(options.env)["ANTHROPIC_API_KEY"] == ""
     assert options.env["CI"] == "1"
     assert options.setting_sources == []
     assert options.max_turns == 1
@@ -117,6 +150,30 @@ async def test_probe_flags_an_api_key_identity_as_a_violation(monkeypatch):
     assert report["ok"] is False
     assert report["identity"] == "api-key"
     assert "ANTHROPIC_API_KEY" in report["error"]
+
+
+async def test_probe_without_an_identity_is_not_ok(monkeypatch):
+    """An init message without apiKeySource confirms nothing."""
+    captured: dict = {}
+    monkeypatch.setattr(
+        claude_mod, "_sdk_query", _fake_query([_init(None), _result()], captured),
+    )
+    report = await probe_sdk(timeout=5)
+    assert report["ok"] is False
+    assert report["identity"] == "unknown"
+    assert "did not confirm" in report["error"]
+
+
+async def test_probe_reports_a_broken_sdk_without_raising(monkeypatch):
+    class Broken:
+        def __init__(self, **kwargs):
+            raise TypeError("unexpected keyword 'setting_sources'")
+
+    import claude_agent_sdk
+    monkeypatch.setattr(claude_agent_sdk, "ClaudeAgentOptions", Broken)
+    report = await probe_sdk(timeout=5)
+    assert report["ok"] is False
+    assert "unavailable" in report["error"]
 
 
 async def test_probe_reports_an_error_result(monkeypatch):

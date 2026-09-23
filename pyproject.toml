@@ -30,7 +30,9 @@ dependencies = [
     # separately in the Dockerfile.
     "playwright>=1.58.0",
     "pyjwt>=2.8",
-    "claude-agent-sdk>=0.2.158",
+    # V2 runtime. Pinned to the tested minor: the SDK's env-merge semantics
+    # (see tools/claude._sdk_child_env) are exactly what a minor could change.
+    "claude-agent-sdk>=0.2.158,<0.3",
     "langgraph-checkpoint-sqlite>=3.1",
 ]
 

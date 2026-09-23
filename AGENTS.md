@@ -341,7 +341,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `CLAUDE_CODE_OAUTH_TOKEN` on a laptop. Every child env — CLI or SDK — goes
   through `tools/claude._child_env`, which strips `ANTHROPIC_API_KEY`: in the
   binary's precedence a key outranks both the token and the session, so one
-  left behind moves the cycle to per-token billing without a word.
+  left behind moves the cycle to per-token billing without a word. **For the
+  SDK, omitting is not stripping**: `ClaudeAgentOptions.env` is merged *over*
+  the parent's `os.environ`, so the key must be overridden to `""`
+  (`_sdk_child_env`) — measured 2026-09-23, omission answered
+  `apiKeySource: ANTHROPIC_API_KEY`, the empty override `none`.
   `python -m theswarm validate` runs a one-turn probe and prints who answered
   (`identity=subscription` is the only acceptable value); it is skipped when
   `SWARM_CLAUDE_BACKEND=api`, the test suite's default.
