@@ -108,8 +108,8 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   connection. Never put an unbounded DB call in a liveness path — `/health`
   bounds its probe at 1s for exactly this reason (a busy cycle used to get the
   container killed by the Docker healthcheck).
-- Claude backend is CLI-first (subscription billing); the API is a fallback only
-  when a usable API key exists. Model names are aliases (`sonnet` →
+- Claude backend is SDK-first, then the CLI, both on the subscription; the
+  API is a fallback only when a usable API key exists. Model names are aliases (`sonnet` →
   `claude-sonnet-5`) — never pin dated model IDs.
 - The target workspace uses its own `.venv-swarm` (`agents/base.find_system_python`)
   for installs AND test runs — TheSwarm's venv must never receive target deps.
@@ -392,8 +392,13 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   re-prompted from scratch while the session exists. Every call checks the
   init message's `apiKeySource` and refuses to run on an API key (I1). No
   `setting_sources` at all: the target repo's `.claude/settings.json` could
-  carry the same Stop hook that voided the reviews. `auto` is still
-  CLI-first; the flip is its own PR after three green harness cycles.
+  carry the same Stop hook that voided the reviews. **`auto` is sdk → cli
+  → api** since three consecutive green harness cycles on sdk: a quota is
+  fatal everywhere, a spent SDK timeout (`SDKTimeoutError`, a
+  `RuntimeError`) is not spent a second time on the CLI, and any other SDK
+  failure falls through to the CLI chain, whose text the callers still
+  parse. `SWARM_CLAUDE_BACKEND=cli` is the way back (I13); prod pins `sdk`
+  in `docker-compose.yml` either way.
 - **V2 runtime M2 — one OpenTelemetry trace per cycle, in Seq.** Root span
   `cycle` (`api.py`), a span per phase (`cycle._run_phase`), per graph
   node (`agents/base.traced_node`, every `add_node`), per Claude call

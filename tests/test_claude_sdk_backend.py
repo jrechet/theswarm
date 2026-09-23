@@ -437,10 +437,10 @@ async def test_the_sdk_raising_mid_stream_is_a_failed_call(sdk, monkeypatch):
         await sdk.run("hi")
 
 
-async def test_auto_mode_still_prefers_the_cli_in_m1(monkeypatch):
-    """The flip of `auto` to sdk-first is a separate PR, after three green
-    harness cycles on `SWARM_CLAUDE_BACKEND=sdk` (plan §5 M1, acceptance)."""
-    monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "auto")
+async def test_forcing_the_cli_never_touches_the_sdk(monkeypatch):
+    """The way back (I13): SWARM_CLAUDE_BACKEND=cli runs the CLI alone, now
+    that `auto` prefers the SDK."""
+    monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "cli")
     cli = ClaudeCLI(model="haiku")
     with patch.object(cli, "_cli_with_auth_recovery", new=AsyncMock(
         return_value=claude_mod.ClaudeResult(text="from cli", backend="cli"),
