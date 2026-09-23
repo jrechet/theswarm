@@ -453,6 +453,11 @@ _SDK_PROFILE_TOOLS: dict[str, frozenset[str]] = {
     "read": frozenset(_SDK_ALLOWED_TOOLS["read"]),
     "text": frozenset(),
 }
+# The SDK's own mechanics, allowed in every profile: with `output_format`
+# the answer itself is delivered as a call to "StructuredOutput". Refusing
+# it refuses the answer — the first prod breakdown on M3 (cycle
+# 71c8b870041a) was refused three times and failed "no structured output".
+_SDK_MECHANICS_TOOLS = frozenset({"StructuredOutput"})
 # Never, in any profile: the web is not the workspace, and a sub-agent is a
 # budget nobody accounted for.
 _SDK_DISALLOWED_TOOLS = ["WebSearch", "WebFetch", "Task"]
@@ -509,6 +514,8 @@ def decide_tool_use(
     Everything the SDK asks about comes here; what the profile auto-approves
     never does. Bash is judged on its command, file tools on their path.
     """
+    if tool_name in _SDK_MECHANICS_TOOLS:
+        return True, ""
     if tool_name not in _SDK_PROFILE_TOOLS.get(profile, frozenset()):
         return False, f"{tool_name} is not available to a {profile} call"
     if tool_name == "Bash":

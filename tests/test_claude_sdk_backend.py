@@ -448,3 +448,18 @@ async def test_auto_mode_still_prefers_the_cli_in_m1(monkeypatch):
         result = await cli.run("hi")
     assert result.backend == "cli"
     assert sdk_spy.await_count == 0
+
+
+def test_the_structured_answer_is_never_refused():
+    """With output_format the answer arrives as a StructuredOutput call.
+
+    Cycle 71c8b870041a: the text profile allows no tool, the hook refused
+    the pseudo-tool three times and the breakdown failed with "no
+    structured output for the requested schema".
+    """
+    from theswarm.tools.claude import decide_tool_use
+
+    for profile in ("text", "read", "edit"):
+        allowed, why = decide_tool_use(profile, "/ws", "StructuredOutput", {"tasks": []})
+        assert allowed, (profile, why)
+    assert decide_tool_use("text", None, "Bash", {"command": "ls"})[0] is False
