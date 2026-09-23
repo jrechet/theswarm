@@ -454,11 +454,13 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   (`MATTERMOST_URL`/`MATTERMOST_BOT_TOKEN`). **The scored record is posted
   to `POST /api/evals/runs`** (table `eval_runs`, migration v028) and the
   repo page reads the trend from there; the `docs/harness-runs.jsonl` line
-  is still written, but `main`'s branch protection now refuses the
-  harness's direct push ("Changes must be made through a pull request",
-  run 35874015968) — the same rule hits every agent write-to-main path
-  (daily report, memory save, cycle history): a person or a PR must carry
-  them until that protection is revisited.
+  is still written, but it is not a delivery path to count on. On
+  2026-09-23 the same step with the same token was refused at 14:37 ("Changes
+  must be made through a pull request", run 35874015968) and accepted at
+  15:33 (run 35882035360). `main`'s protection, read at 17:25, requires a PR
+  but is not enforced on admins, so an admin token gets through; whether
+  agent writes to main (daily report, memory save, cycle history, this
+  line) should rely on that is an owner decision (plan section 8).
 - **V2 runtime M8 — the GitHub-native doors.** The webhook route
   (`/webhooks/github`, outside the auth wall) is installed **only** when
   `SWARM_WEBHOOK_SECRET` is set (server.py; the repository webhook on
