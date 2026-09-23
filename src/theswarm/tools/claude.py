@@ -267,6 +267,10 @@ def _child_env(*, drop_oauth_env: bool = False) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
     env["CI"] = "1"
     env["CLAUDE_CODE_NON_INTERACTIVE"] = "1"
+    # No auto-memory (I2): earlier runs in this home left memory files under
+    # ~/.claude/projects/<workspace>/memory, and the binary loads their index
+    # into every call — cycle 71c8b870041a's PO tried to Read them.
+    env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
     if drop_oauth_env:
         env.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
     return env

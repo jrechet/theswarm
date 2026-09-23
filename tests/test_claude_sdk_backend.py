@@ -470,3 +470,12 @@ def test_the_structured_output_pseudo_tool_is_silent():
 
     assert _tool_event("StructuredOutput", {"tasks": [{"title": "x"}]}, "/ws") == ""
     assert _tool_event("Read", {"file_path": "/ws/a.py"}, "/ws") == "Read a.py"
+
+
+def test_no_child_reads_the_hosts_auto_memory():
+    """Cycle 71c8b870041a: the PO tried to Read memory files an earlier run
+    left in the container's ~/.claude — host state reaching an agent (I2)."""
+    from theswarm.tools.claude import _child_env, _sdk_child_env
+
+    assert _child_env()["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
+    assert _sdk_child_env()["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
