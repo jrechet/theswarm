@@ -247,6 +247,50 @@ async def _evals_trend(state, repo: str) -> dict:
         return evals.trend([])
 
 
+@router.get("/r/{owner}/{name}/memory", response_class=HTMLResponse)
+async def memory_page(request: Request, owner: str, name: str) -> HTMLResponse:
+    """What the swarm learned about this repository (V2 M8): AGENT_MEMORY.jsonl,
+    read from the repo, grouped by category."""
+    from theswarm import memory_store
+    from theswarm.tools.github import GitHubClient
+
+    state = request.app.state
+    full_name = f"{owner}/{name}"
+    entries: list[dict] = []
+    error = ""
+    try:
+        entries = await memory_store.load_entries(GitHubClient(full_name))
+    except Exception as exc:  # noqa: BLE001 — surfaced on the page
+        log.exception("V2: loading the memory of %s failed", full_name)
+        error = str(exc)[:160]
+    groups = [
+        {
+            "key": category,
+            "label": _MEMORY_LABELS.get(category, category),
+            "entries": sorted(
+                (e for e in entries if e.get("category") == category),
+                key=lambda e: (e.get("timestamp") or ""), reverse=True,
+            ),
+        }
+        for category in memory_store.CATEGORIES
+    ]
+    return state.templates.TemplateResponse("v2/memory.html", {
+        "owner": owner, "repo_name": name,
+        "groups": [g for g in groups if g["entries"]],
+        "total": len(entries),
+        "error": error,
+    })
+
+
+_MEMORY_LABELS = {
+    "stack": "Stack",
+    "conventions": "Conventions",
+    "errors": "Mistakes to avoid",
+    "architecture": "Architecture decisions",
+    "learnings": "Learnings",
+}
+
+
 @router.post("/r/{owner}/{name}/issues")
 async def compose_issue(
     request: Request, owner: str, name: str, body: str = Form(default=""),
@@ -276,19 +320,32 @@ async def play(
     request: Request, owner: str, name: str, issue_number: int,
 ):
     """Start a cycle pinned to one issue and follow it."""
+    state = request.app.state
+    record = await start_targeted_cycle(
+        state, owner, name, issue_number, f"Play on issue #{issue_number}",
+    )
+    base = state.base_path
+    return RedirectResponse(f"{base}/c/{record.id}", status_code=303)
+
+
+async def start_targeted_cycle(state, owner: str, name: str, issue_number: int, description: str):
+    """What ▶ Play does: a tracker record and a cycle pinned to the issue.
+
+    The webhook doors (V2 M8) start cycles through here too, so a label and
+    a click are the same thing to the tracker, the theater and the lock.
+    """
     from theswarm.api import CycleRequest, get_cycle_tracker, run_api_cycle
 
-    state = request.app.state
     full_name = f"{owner}/{name}"
     project_id = await _ensure_project(state, owner, name)
 
     tracker = get_cycle_tracker()
     record = tracker.create(
-        CycleRequest(repo=full_name, issue_number=issue_number),
+        CycleRequest(repo=full_name, issue_number=issue_number, description=description),
     )
     task = asyncio.create_task(
         run_api_cycle(
-            record.id, full_name, f"Play on issue #{issue_number}", "",
+            record.id, full_name, description, "",
             getattr(state, "allowed_repos", []),
             event_bus=getattr(state, "event_bus", None),
             report_repo=getattr(state, "report_repo", None),
@@ -302,10 +359,8 @@ async def play(
         ),
     )
     tracker.set_task(record.id, task)
-    log.info("V2: Play #%d on %s → cycle %s", issue_number, full_name, record.id)
-
-    base = state.base_path
-    return RedirectResponse(f"{base}/c/{record.id}", status_code=303)
+    log.info("V2: %s #%d on %s → cycle %s", description, issue_number, full_name, record.id)
+    return record
 
 
 # ── The theater: watch the swarm build ─────────────────────────────────

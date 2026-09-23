@@ -479,3 +479,16 @@ def test_no_child_reads_the_hosts_auto_memory():
 
     assert _child_env()["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
     assert _sdk_child_env()["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Let me read the model first.\nSecond line.", "Let me read the model first."),
+    ("import uuid\nimport pytest\n\ndef test_x():\n    pass\n", ""),
+    ("```json\n{\"decision\": \"APPROVE\"}\n```", ""),
+    ("# heading\nThe fix is in.", "The fix is in."),
+    ("   \n\n", ""),
+])
+def test_text_events_skip_code_and_keep_prose(text, expected):
+    from theswarm.tools.claude import _text_event
+
+    assert _text_event(text) == expected

@@ -91,6 +91,7 @@ jobs:
           swarm_vault_master_key: ${{ secrets.SWARM_VAULT_MASTER_KEY }}
           swarm_access_key: ${{ secrets.SWARM_ACCESS_KEY }}
           swarm_session_secret: ${{ secrets.SWARM_SESSION_SECRET }}
+          swarm_webhook_secret: ${{ secrets.SWARM_WEBHOOK_SECRET }}
       - name: Deploy
         run: |
           export TS_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -159,6 +160,7 @@ jobs:
           swarm_vault_master_key: ${{ secrets.SWARM_VAULT_MASTER_KEY }}
           swarm_access_key: ${{ secrets.SWARM_ACCESS_KEY }}
           swarm_session_secret: ${{ secrets.SWARM_SESSION_SECRET }}
+          swarm_webhook_secret: ${{ secrets.SWARM_WEBHOOK_SECRET }}
       - name: Redeploy (latest)
         run: |
           export TS_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}

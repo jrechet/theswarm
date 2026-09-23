@@ -454,11 +454,30 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   (`MATTERMOST_URL`/`MATTERMOST_BOT_TOKEN`). **The scored record is posted
   to `POST /api/evals/runs`** (table `eval_runs`, migration v028) and the
   repo page reads the trend from there; the `docs/harness-runs.jsonl` line
-  is still written, but `main`'s branch protection now refuses the
-  harness's direct push ("Changes must be made through a pull request",
-  run 35874015968) — the same rule hits every agent write-to-main path
-  (daily report, memory save, cycle history): a person or a PR must carry
-  them until that protection is revisited.
+  is still written, but it is not a delivery path to count on. On
+  2026-09-23 the same step with the same token was refused at 14:37 ("Changes
+  must be made through a pull request", run 35874015968) and accepted at
+  15:33 (run 35882035360). `main`'s protection, read at 17:25, requires a PR
+  but is not enforced on admins, so an admin token gets through; whether
+  agent writes to main (daily report, memory save, cycle history, this
+  line) should rely on that is an owner decision (plan section 8).
+- **V2 runtime M8 — the GitHub-native doors.** The webhook route
+  (`/webhooks/github`, outside the auth wall) is installed **only** when
+  `SWARM_WEBHOOK_SECRET` is set (server.py; the repository webhook on
+  GitHub signs with the same secret — a manual step, like the OAuth App);
+  without it the route answers 501. Both doors are owner-only
+  (`SWARM_OWNER_LOGIN`), allowed-repo-only, and one trigger per repo per
+  minute. **A label** (`swarm:go`, `SWARM_GO_LABEL`) on an issue starts a
+  targeted cycle exactly like ▶ Play (`routes/v2.start_targeted_cycle`,
+  shared) and is taken off again. **`@swarm <instruction>`** from the owner
+  on a pull request reaches the Dev the way a review's REQUEST_CHANGES
+  does: a `CHANGES_MARKER` note on the task issue, `status:ready`, a cycle
+  pinned to the task; the Dev resumes the PR's branch and the review runs
+  again. A PR without `[#N]`/`Closes #N` is answered, not run. **The
+  TechLead's verdict is a commit status** `theswarm/review` on the PR's
+  head (success / failure; a PAT can set statuses where a Check needs an
+  App), best effort. `/r/{owner}/{name}/memory` renders
+  `AGENT_MEMORY.jsonl` by category, linked from the repo page.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

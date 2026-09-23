@@ -10,7 +10,10 @@
         <span class="text-faint font-normal">{{ owner }}/</span>{{ repo_name }}
       </h1>
     </div>
-    <a href="https://github.com/{{ owner }}/{{ repo_name }}" class="font-mono text-[11px] text-faint hover:text-soft shrink-0 focus-visible:outline-2 focus-visible:outline-honey">GitHub ↗</a>
+    <span class="flex items-center gap-4 shrink-0">
+      <a href="{{ base }}/r/{{ owner }}/{{ repo_name }}/memory" class="font-mono text-[11px] text-faint hover:text-soft focus-visible:outline-2 focus-visible:outline-honey">what the swarm learned →</a>
+      <a href="https://github.com/{{ owner }}/{{ repo_name }}" class="font-mono text-[11px] text-faint hover:text-soft focus-visible:outline-2 focus-visible:outline-honey">GitHub ↗</a>
+    </span>
   </div>
 
   {% if running_cycle %}

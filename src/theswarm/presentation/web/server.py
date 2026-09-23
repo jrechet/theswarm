@@ -748,6 +748,18 @@ async def start_server(
     # Store allowed repos on app.state for headless API
     app.state.allowed_repos = github_repos
 
+    # V2 M8 — the GitHub webhook door opens only with a secret to check
+    # signatures against: /webhooks/ is outside the auth wall, and a
+    # handler without a secret would accept anything.
+    webhook_secret = os.getenv("SWARM_WEBHOOK_SECRET", "").strip()
+    if webhook_secret:
+        from theswarm.infrastructure.scheduling.webhook_handler import WebhookHandler
+
+        app.state.webhook_handler = WebhookHandler(webhook_secret=webhook_secret)
+        log.info("GitHub webhooks: on (signature-checked)")
+    else:
+        log.info("GitHub webhooks: off — set SWARM_WEBHOOK_SECRET and a repository webhook to enable")
+
     # A deploy used to throw away whatever a running cycle had achieved.
     # Continue it from the last phase that completed, under the guards in
     # cycle_resumer (one automatic resume per cycle, a few per boot).

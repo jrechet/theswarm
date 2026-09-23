@@ -25,6 +25,12 @@ inputs:
     required: true
   swarm_session_secret:
     required: true
+  # V2 M8: the secret the GitHub repository webhook signs with. Optional —
+  # without it the webhook door stays closed (server.py); an empty value
+  # must not become an empty `SWARM_WEBHOOK_SECRET=` line.
+  swarm_webhook_secret:
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -42,6 +48,7 @@ runs:
         SWARM_VAULT_MASTER_KEY: ${{ inputs.swarm_vault_master_key }}
         SWARM_ACCESS_KEY: ${{ inputs.swarm_access_key }}
         SWARM_SESSION_SECRET: ${{ inputs.swarm_session_secret }}
+        SWARM_WEBHOOK_SECRET: ${{ inputs.swarm_webhook_secret }}
       run: |
         {
           echo "MATTERMOST_BOT_TOKEN=$MATTERMOST_BOT_TOKEN"
@@ -56,4 +63,7 @@ runs:
           echo "SWARM_VAULT_MASTER_KEY=$SWARM_VAULT_MASTER_KEY"
           echo "SWARM_ACCESS_KEY=$SWARM_ACCESS_KEY"
           echo "SWARM_SESSION_SECRET=$SWARM_SESSION_SECRET"
+          if [ -n "$SWARM_WEBHOOK_SECRET" ]; then
+            echo "SWARM_WEBHOOK_SECRET=$SWARM_WEBHOOK_SECRET"
+          fi
         } > .env

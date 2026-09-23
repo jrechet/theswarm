@@ -524,7 +524,17 @@ dispatch manuel.
 
 *Livré le 2026-09-23* : `evals/concert-tour-app.yaml` (cinq features),
 `theswarm.evals` (rotation, scoring, tendance), le harness scoré, le
-panneau « Reliability » sur la page du repo, l'alerte Mattermost. Le
+panneau « Reliability » sur la page du repo, l'alerte Mattermost. *Écart
+constaté en prod le même jour* : la protection de branche de `main` a
+refusé la publication directe de `docs/harness-runs.jsonl` à 14:37
+(« Changes must be made through a pull request », run 35874015968) puis
+l'a acceptée à 15:33 (run 35882035360), même étape, même jeton ; lue à
+17:25, elle exige une PR mais ne s'applique pas aux admins. L'image ne
+livre de toute façon ce fichier qu'à la construction ; le harness poste
+donc chaque run scoré sur `POST /api/evals/runs` (table `eval_runs`) et la
+page lit d'abord ce magasin. Les autres écritures d'agents sur `main`
+(rapport du jour, mémoire, historique des cycles) passent aujourd'hui
+grâce à l'exemption des admins : décision owner à prendre (section 8). Le
 critère d'acceptation « une régression volontaire est détectée » est à
 exercer en prod (un dispatch `all=true` puis un cycle cassé) après le
 déploiement.
@@ -567,6 +577,15 @@ débarrassé des landmines devenues fausses (avec la date).
 
 **Acceptation.** Label → cycle visible dans le théâtre en moins de 30 s ;
 commentaire → PR mise à jour ; check visible sur la PR.
+
+*Livré le 2026-09-23* : les deux portes (label `swarm:go`, `@swarm
+<instruction>` sur une PR, owner seul, une par repo et par minute), le
+verdict de revue en **commit status** `theswarm/review` (un PAT ne peut
+pas créer de Check run ; le status est visible sur la PR et utilisable
+par la protection de branche), la page « what the swarm learned ». La
+route ne s'ouvre qu'avec `SWARM_WEBHOOK_SECRET` ; le owner crée le webhook
+(événements `issues` et `issue_comment`) sur GitHub avec ce secret.
+L'acceptation « en moins de 30 s » se mesure en prod après ce réglage.
 
 ---
 
@@ -615,6 +634,7 @@ L'agent applique le défaut, écrit un handoff, continue.
 | `SkillMCPManager` : brancher via `mcp_servers` ou supprimer | Supprimer en M7 |
 | Parallélisme Dev par défaut en prod | 1, jusqu'à trois cycles verts à 2 |
 | Cadence d'usage de l'abonnement (harness + évals) | Une feature par jour ; la série complète à la main |
+| La protection de branche de `main` exige une PR mais exempte les admins : les écritures directes des agents et du harness passent avec un jeton admin (refusées à 14:37, acceptées à 15:33 le 2026-09-23) | Les runs d'évals passent par l'API quoi qu'il arrive. Rapport du jour, mémoire et historique des cycles attendent une décision : garder l'exemption des admins, exempter explicitement le bot, ou passer par PR |
 | Charger `project` dans `setting_sources` (hooks du repo cible) | **Non** (tranché en M1, 2026-09-23) : un `.claude/settings.json` du repo cible peut porter le même hook `Stop` qui a vidé les revues ; la doc du repo arrive par le contexte du prompt |
 
 ---
