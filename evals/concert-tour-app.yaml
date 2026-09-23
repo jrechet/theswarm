@@ -1,0 +1,39 @@
+# The canonical features the swarm is measured on (V2 runtime, M6).
+#
+# One feature per day in rotation at 07:00 UTC (the subscription is a
+# budget); the whole series on a manual dispatch. Each run is scored —
+# PR opened, CI on that PR, review decisions, cost, duration, files
+# touched — and appended to docs/harness-runs.jsonl; the repo page shows
+# the trend. `expected_paths` are globs the PR's files must match (empty:
+# not judged); tighten them as the target's layout settles.
+repo: jrechet/concert-tour-app
+features:
+  - id: remaining-tickets
+    text: Show the remaining ticket count on each concert card
+    expected_paths: ["**/*.py", "**/*.html", "**/*.js", "**/*.css"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: city-search
+    text: |-
+      Add a search box that filters the concert list by city
+      Typing in the box narrows the list as the user types; clearing it shows every concert again.
+    expected_paths: ["**/*.py", "**/*.html", "**/*.js", "**/*.css"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: chronological-order
+    text: Sort the tour dates chronologically with the next concert first
+    expected_paths: ["**/*.py", "**/*.html", "**/*.js"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: sold-out-badge
+    text: Show a "sold out" badge on a concert card when no tickets remain
+    expected_paths: ["**/*.py", "**/*.html", "**/*.css", "**/*.js"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: upcoming-json
+    text: |-
+      Add a JSON endpoint listing the upcoming concerts
+      GET /api/concerts/upcoming returns the concerts whose date is today or later, soonest first, as JSON.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600

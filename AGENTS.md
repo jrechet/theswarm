@@ -440,6 +440,19 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   1, `cycle.cycle_slot`), held with the repo lock by the API and the
   gateway; a second repo now queues like a second cycle on the same repo.
   Worktree-per-task and parallel sub-tasks are M5b (not shipped).
+- **V2 runtime M6 — the harness is an eval suite.** `evals/<target>.yaml`
+  lists the canonical features (five on concert-tour-app); `theswarm.evals`
+  picks the feature of the day (rotation by day of year), scores a run
+  (`passed` keeps its pre-M6 meaning — completed, a PR, nothing unbuilt —
+  and the PR's CI, the review decisions, cost, duration, `within_cost`,
+  `within_time`, `files_match` against the feature's globs, and the
+  backend the cycle reports are their own fields) and reads the trend the
+  repo page draws (`data-testid="evals"`, last 14 runs, per backend).
+  `scripts/cycle_e2e.py --repo X` with no feature runs the day's; `--all`
+  the series (a manual dispatch, `all=true`); a typed `--feature` runs as
+  before. A failed run posts to Mattermost when the workflow has the token
+  (`MATTERMOST_URL`/`MATTERMOST_BOT_TOKEN`). Every line still lands in
+  `docs/harness-runs.jsonl` (CI `paths-ignore`, never a deploy).
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

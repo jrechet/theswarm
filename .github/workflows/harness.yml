@@ -11,9 +11,13 @@ on:
         type: string
         default: 'jrechet/concert-tour-app'
       feature:
-        description: 'Feature text handed to the composer'
+        description: 'Feature text handed to the composer (empty: the eval manifest''s feature of the day)'
         type: string
-        default: 'Show the remaining ticket count on each concert card'
+        default: ''
+      all:
+        description: 'Run every feature of the eval manifest, in order (the full series)'
+        type: boolean
+        default: false
       # jrechet/theswarm is deliberately NOT a default here: per AGENTS.md,
       # TheSwarm enforces one cycle per repo and self-cycle PRs are
       # approved-but-held for a person to merge, so an unattended scheduled
@@ -63,9 +67,24 @@ jobs:
           # the quoted argument and execute arbitrary shell with this job's
           # token (CWE-78). $REPO/$FEATURE are plain argv, never re-parsed.
           REPO: ${{ github.event.inputs.repo || 'jrechet/concert-tour-app' }}
-          FEATURE: ${{ github.event.inputs.feature || 'Show the remaining ticket count on each concert card' }}
+          FEATURE: ${{ github.event.inputs.feature }}
+          RUN_ALL: ${{ github.event.inputs.all }}
+          # A failed run posts to the swarm's channel (theswarm.evals, M6);
+          # without the token it is a line in this log.
+          MATTERMOST_URL: https://chat.jrec.fr
+          MATTERMOST_BOT_TOKEN: ${{ secrets.MATTERMOST_BOT_TOKEN }}
         run: |
-          uv run python scripts/cycle_e2e.py --repo "$REPO" --feature "$FEATURE"
+          # The scheduled run and a bare dispatch take the eval manifest's
+          # feature of the day (evals/<target>.yaml — one a day, in
+          # rotation); a feature typed in still runs as before; `all` runs
+          # the whole series.
+          if [ "$RUN_ALL" = "true" ]; then
+            uv run python scripts/cycle_e2e.py --repo "$REPO" --all
+          elif [ -n "$FEATURE" ]; then
+            uv run python scripts/cycle_e2e.py --repo "$REPO" --feature "$FEATURE"
+          else
+            uv run python scripts/cycle_e2e.py --repo "$REPO"
+          fi
 
       # Same trap as docs/cycle-history.jsonl (see ci.yml paths-ignore): a
       # bare run-history commit must not look like a behaviour change, so it

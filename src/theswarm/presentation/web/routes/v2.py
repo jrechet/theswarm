@@ -227,7 +227,19 @@ async def repo_page(request: Request, owner: str, name: str) -> HTMLResponse:
         "issues_error": issues_error,
         "running_cycle": running,
         "latest_demo": await _latest_demo(state, full_name),
+        "evals": _evals_trend(full_name),
     })
+
+
+def _evals_trend(repo: str) -> dict:
+    """The last harness runs on this repo (V2 M6), from docs/harness-runs.jsonl."""
+    from theswarm import evals
+
+    try:
+        return evals.trend(evals.read_history(evals.HISTORY_PATH, repo))
+    except Exception:  # noqa: BLE001 — a page, not a judge
+        log.exception("V2: reading the eval history for %s failed", repo)
+        return evals.trend([])
 
 
 @router.post("/r/{owner}/{name}/issues")

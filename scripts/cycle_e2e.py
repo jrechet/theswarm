@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drive a real cycle against prod and assert what it actually produced.
+"""Drive a real cycle against prod and score what it actually produced.
 
 No browser, no clicking: this is the acceptance test for "can the swarm
 implement a feature". It asks the running service for a feature the way a
@@ -8,20 +8,33 @@ person would, then judges the outcome by what exists on GitHub afterwards.
     scripts/cycle_e2e.py --repo jrechet/concert-tour-app \
         --feature "Show the remaining ticket count on each concert card"
 
-Exit code 0 only when a cycle finished AND a pull request came out of it.
-Anything else prints where it stopped and why.
+Since V2 M6 the feature can come from the eval manifest instead
+(`evals/<target>.yaml`, see theswarm.evals): with no --feature the
+feature of the day is run (one a day, in rotation); --feature-id picks
+one; --all runs the series. Every run is scored — PR, its CI, the reviews,
+cost, duration, files touched — and appended to docs/harness-runs.jsonl.
+
+Exit code 0 only when every cycle finished AND a pull request came out of
+it. Anything else prints where it stopped and why.
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
+import fnmatch
 import json
 import os
 import pathlib
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
+
 import httpx
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
+from theswarm import evals  # noqa: E402 — the scoring lives with the app
 
 BASE = os.environ.get("SWARM_BASE", "https://bots.jrec.fr/swarm")
 KEY = os.environ.get("SWARM_ACCESS_KEY", "")
@@ -127,6 +140,70 @@ def build_result(repo: str, passed: bool, state: str, new_prs: list[int], left: 
     }
 
 
+def pr_files(repo: str, pr: int) -> list[str]:
+    raw = _gh("pr", "view", str(pr), "--repo", repo, "--json", "files", "--jq", ".files[].path")
+    return [line.strip() for line in raw.splitlines() if line.strip()]
+
+
+def ci_verdict(checks_output: str) -> str:
+    """`gh pr checks` output → green | RED | none.
+
+    A repo with no CI configured reports nothing. Reading that as a failure
+    made the first green run look red: concert-tour-app has no workflows,
+    yet both PRs were sound and merged.
+    """
+    if not checks_output.strip():
+        return "none"
+    return "RED" if "fail" in checks_output else "green"
+
+
+def duration_seconds(started_at: str, completed_at: str) -> float:
+    """Seconds between two ISO timestamps; 0 when either is missing or odd."""
+    try:
+        start = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(completed_at.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return 0.0
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    return max(0.0, (end - start).total_seconds())
+
+
+def review_decisions(result: dict) -> list[str]:
+    return [str(r.get("decision", "")) for r in (result or {}).get("reviews", []) or []]
+
+
+def cycle_record(cycle_id: str) -> dict:
+    status, body = _api(f"/api/cycles/{cycle_id}")
+    return body if status == 200 and isinstance(body, dict) else {}
+
+
+async def alert_mattermost(text: str) -> bool:
+    """Post a failed run to the swarm's Mattermost channel, when configured.
+
+    MATTERMOST_URL and MATTERMOST_BOT_TOKEN come from the workflow's
+    secrets; without them the alert is a line in the job log, nothing more.
+    """
+    url = os.environ.get("MATTERMOST_URL", "").strip()
+    token = os.environ.get("MATTERMOST_BOT_TOKEN", "").strip()
+    channel = os.environ.get("MATTERMOST_CHANNEL", "swarm-bots-logs").strip()
+    if not url or not token:
+        return False
+    try:
+        from theswarm_common.chat.mattermost import MattermostAdapter
+        from theswarm_common.config import MattermostConfig
+
+        adapter = MattermostAdapter(MattermostConfig(base_url=url, bot_token=token, channel_name=channel))
+        await adapter.connect()
+        await adapter.post_message(channel, text)
+        return True
+    except Exception as exc:  # noqa: BLE001 — an alert that fails is a log line
+        print(f"  (mattermost alert failed: {exc})")
+        return False
+
+
 def append_result(path: pathlib.Path, result: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a") as f:
@@ -169,60 +246,66 @@ def is_regression(previous: dict | None, current: dict) -> bool:
     )
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", required=True)
-    ap.add_argument("--feature", required=True)
-    ap.add_argument("--budget", type=int, default=5400, help="seconds")
-    ap.add_argument("--history", type=pathlib.Path,
-                     default=pathlib.Path("docs/harness-runs.jsonl"))
-    args = ap.parse_args()
+def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
+            budget: int, history: pathlib.Path) -> tuple[bool, dict]:
+    """One feature, one cycle, one scored line of history."""
+    print(f"▶ {repo}: {feature_text.splitlines()[0][:70]}"
+          + (f"  [{feature.id}]" if feature else ""))
+    seen = prs_before(repo)
+    issue = create_issue(repo, feature_text)
+    cycle_id = start_cycle(repo, issue)
+    state, last_phase = wait_for(cycle_id, budget)
 
-    if not KEY:
-        sys.exit("SWARM_ACCESS_KEY is unset")
-
-    print(f"▶ {args.repo}: {args.feature.splitlines()[0][:70]}")
-    seen = prs_before(args.repo)
-    issue = create_issue(args.repo, args.feature)
-    cycle_id = start_cycle(args.repo, issue)
-    state, last_phase = wait_for(cycle_id, args.budget)
-
-    new_prs = sorted(prs_before(args.repo) - seen)
+    new_prs = sorted(prs_before(repo) - seen)
     print(f"\n  cycle      : {state}" + (f" (last phase {last_phase})" if last_phase else ""))
     print(f"  pull req.  : {new_prs or 'none'}")
 
+    ci: dict[int, str] = {}
+    files: list[str] = []
     for pr in new_prs:
-        checks = _gh("pr", "checks", str(pr), "--repo", args.repo)
-        if not checks:
-            # A repo with no CI configured reports nothing. Reading that as a
-            # failure made the first green run look red: concert-tour-app has
-            # no workflows, yet both PRs were sound and merged.
-            verdict = "no CI configured"
-        elif "fail" in checks:
-            verdict = "RED"
-        else:
-            verdict = "green"
+        verdict = ci_verdict(_gh("pr", "checks", str(pr), "--repo", repo))
+        ci[pr] = verdict
+        files.extend(pr_files(repo, pr))
         # Not `state`: that name holds the *cycle* result the verdict below
         # depends on. Shadowing it made a passing run print
-        # "FAIL — stopped at: MERGED" (cycle d4aad3415e99, which had in fact
-        # completed and merged its PR).
-        pr_state = _gh("pr", "view", str(pr), "--repo", args.repo,
+        # "FAIL — stopped at: MERGED" (cycle d4aad3415e99).
+        pr_state = _gh("pr", "view", str(pr), "--repo", repo,
                        "--json", "state", "--jq", ".state")
-        print(f"    #{pr}: {pr_state.lower()}, CI {verdict}")
+        print(f"    #{pr}: {pr_state.lower()}, CI {verdict}, {len(pr_files(repo, pr))} file(s)")
 
-    left = unfinished_children(args.repo, issue)
+    left = unfinished_children(repo, issue)
     if left:
         print(f"  unfinished : {', '.join(f'#{n}' for n in left)}")
 
-    passed = state == "completed" and bool(new_prs) and not left
-    result = build_result(args.repo, passed, state, new_prs, left)
-    previous = read_last_result(args.history, args.repo)
+    record = cycle_record(cycle_id)
+    cycle_result = record.get("result") or {}
+    observed = evals.Observed(
+        state=state,
+        prs=tuple(new_prs),
+        unfinished=tuple(left),
+        ci=ci,
+        files=tuple(files),
+        review_decisions=tuple(review_decisions(cycle_result)),
+        cost_usd=float(cycle_result.get("cost_usd") or 0.0),
+        duration_s=duration_seconds(str(record.get("started_at") or ""), str(record.get("completed_at") or "")),
+        backend=str(cycle_result.get("backend") or ""),
+        tests_unavailable=bool(cycle_result.get("tests_unavailable")),
+    )
+    result = {"repo": repo, **evals.score(feature, observed)}
+    result["cycle_id"] = cycle_id
+    result["issue"] = issue
+    result["timestamp"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    previous = read_last_result(history, repo)
     result["regression"] = is_regression(previous, result)
-    append_result(args.history, result)
+    append_result(history, result)
 
-    if passed:
+    print(f"  cost/time  : ${result['cost_usd']:.2f} / {result['duration_s']}s"
+          + (f"  (over budget)" if result["within_cost"] is False or result["within_time"] is False else "")
+          + (f"  files {'ok' if result['files_match'] else 'off-target'}" if result["files_match"] is not None else ""))
+
+    if result["passed"]:
         print("\nPASS — a feature was asked for, and the whole of it was built.")
-        return 0
+        return True, result
 
     reasons = []
     if state != "completed":
@@ -234,7 +317,59 @@ def main() -> int:
     print("\nFAIL — " + "; ".join(reasons))
     if result["regression"]:
         print("\n⚠ REGRESSION — this target passed last run and fails now")
-    return 1
+    summary = (
+        f":red_circle: Harness failed on {repo}"
+        + (f" [{feature.id}]" if feature else "")
+        + f" — {'; '.join(reasons)}"
+        + (" — REGRESSION" if result["regression"] else "")
+        + f" (cycle {cycle_id}, issue #{issue})"
+    )
+    asyncio.run(alert_mattermost(summary))
+    return False, result
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--repo", required=True)
+    ap.add_argument("--feature", default="", help="free text; empty = the eval manifest's feature of the day")
+    ap.add_argument("--feature-id", default="", help="a feature id from the eval manifest")
+    ap.add_argument("--all", action="store_true", help="run every feature of the manifest, in order")
+    ap.add_argument("--budget", type=int, default=5400, help="seconds per cycle")
+    ap.add_argument("--history", type=pathlib.Path,
+                    default=pathlib.Path("docs/harness-runs.jsonl"))
+    args = ap.parse_args()
+
+    if not KEY:
+        sys.exit("SWARM_ACCESS_KEY is unset")
+
+    manifest = evals.manifest_for(args.repo)
+    plan: list[tuple[str, "evals.Feature | None"]] = []
+    if args.feature:
+        plan.append((args.feature, manifest.by_id(args.feature_id) if manifest and args.feature_id else None))
+    elif args.all:
+        if manifest is None:
+            sys.exit(f"no eval manifest for {args.repo} under {evals.EVALS_DIR}/")
+        plan.extend((f.text, f) for f in manifest.features)
+    elif args.feature_id:
+        if manifest is None or manifest.by_id(args.feature_id) is None:
+            sys.exit(f"unknown feature id {args.feature_id!r} for {args.repo}")
+        feature = manifest.by_id(args.feature_id)
+        plan.append((feature.text, feature))
+    else:
+        if manifest is None:
+            sys.exit(f"no --feature given and no eval manifest for {args.repo}")
+        feature = evals.feature_of_the_day(manifest)
+        plan.append((feature.text, feature))
+
+    failures = 0
+    for text, feature in plan:
+        passed, _ = run_one(args.repo, text, feature, args.budget, args.history)
+        failures += 0 if passed else 1
+        if len(plan) > 1:
+            print("\n" + "-" * 60 + "\n")
+    if len(plan) > 1:
+        print(f"{len(plan) - failures}/{len(plan)} features built")
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

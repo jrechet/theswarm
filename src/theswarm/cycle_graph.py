@@ -490,8 +490,11 @@ async def finish(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
 
     await rt.progress("PO", "Cycle complete!")
 
+    from theswarm.tools.claude import _resolve_backend_mode
+
     result = {
         "date": state.get("date", ""),
+        "backend": _resolve_backend_mode(),
         "tokens": total_tokens,
         "cost_usd": total_cost,
         "prs": prs,
