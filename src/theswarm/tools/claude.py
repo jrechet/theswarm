@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import random
+import re
 import shutil
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -95,7 +96,9 @@ class ClaudeResult:
     total_tokens: int = 0
     cost_usd: float = 0.0
     model: str = ""
-    backend: str = ""  # "cli" or "api"
+    backend: str = ""  # "cli", "api" or "sdk"
+    session_id: str = ""  # SDK only: the Claude Code session, resumable
+    num_turns: int = 0  # SDK only: assistant turns taken
 
 
 # Approximate pricing per 1M tokens (USD) — used for the API path.
@@ -154,7 +157,7 @@ class _CLIUnavailable(Exception):
 
 def _resolve_backend_mode() -> str:
     raw = os.environ.get("SWARM_CLAUDE_BACKEND", "auto").strip().lower()
-    if raw in ("cli", "api", "auto"):
+    if raw in ("cli", "api", "auto", "sdk"):
         return raw
     return "auto"
 
@@ -415,6 +418,175 @@ async def probe_sdk(
     return report
 
 
+# ── Agent SDK backend (M1) ────────────────────────────────────────────
+#
+# One call, one profile. The profile is read off the call itself — the
+# same two arguments the CLI path always took — so no caller changes:
+#   edit  acceptEdits + workdir   the Dev implements and repairs
+#   read  workdir, no edit mode   QA writes E2E tests, the PO reads context
+#   text  no workdir              review, breakdown, plan, memory, feedback
+# What each profile may touch is decided here, in code, and tested —
+# never by a settings.json mounted from the host (invariant I2).
+
+SDK_CONTINUE_PROMPT = (
+    "Continue where you left off. The working tree already contains your "
+    "edits; do not start over. Finish the task and stop."
+)
+
+# Tools auto-approved per profile. Bash is deliberately absent from every
+# list: an auto-approved tool never reaches `can_use_tool`, and Bash is the
+# one that needs a look at its argument (pushes, gh, secrets).
+_SDK_ALLOWED_TOOLS: dict[str, list[str]] = {
+    "edit": ["Read", "Edit", "MultiEdit", "Write", "NotebookEdit", "Glob", "Grep", "TodoWrite"],
+    "read": ["Read", "Glob", "Grep"],
+    "text": [],
+}
+# What `decide_tool_use` may say yes to — the allowlist above plus Bash
+# for the Dev, judged call by call.
+_SDK_PROFILE_TOOLS: dict[str, frozenset[str]] = {
+    "edit": frozenset(_SDK_ALLOWED_TOOLS["edit"]) | {"Bash"},
+    "read": frozenset(_SDK_ALLOWED_TOOLS["read"]),
+    "text": frozenset(),
+}
+# Never, in any profile: the web is not the workspace, and a sub-agent is a
+# budget nobody accounted for.
+_SDK_DISALLOWED_TOOLS = ["WebSearch", "WebFetch", "Task"]
+# A ceiling on assistant turns so a call cannot loop until the phase
+# timeout; the external timeout stays the real budget.
+_SDK_MAX_TURNS: dict[str, int] = {"edit": 200, "read": 40, "text": 8}
+_SDK_FILE_TOOLS = ("Read", "Edit", "MultiEdit", "Write", "NotebookEdit")
+_SDK_PATH_TOOLS = _SDK_FILE_TOOLS + ("Glob", "Grep")
+_SDK_BASH_DENY: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bgit\s+push\b"), "the pipeline pushes; the Dev only commits"),
+    (re.compile(r"(^|[\s;&|(])gh(\s|$)"), "gh is the pipeline's tool, not the Dev's"),
+    (re.compile(r"(^|[\s/'\"])\.env(\.[\w.-]+)?\b"), ".env files hold secrets"),
+    (re.compile(r"\bgit\s+config\b"), "git config is owned by the pipeline"),
+    (re.compile(r"\bgit\s+remote\s+(set-url|add)\b"), "remotes are owned by the pipeline"),
+)
+
+
+class _SDKTimeout(_CLIUnavailable):
+    """An SDK call ran out of budget; ``session_id`` is what to resume."""
+
+    def __init__(self, message: str, session_id: str = "") -> None:
+        super().__init__(message)
+        self.session_id = session_id
+
+
+def _profile_for(workdir: str | None, permission_mode: str | None) -> str:
+    if permission_mode == "acceptEdits":
+        return "edit"
+    return "read" if workdir else "text"
+
+
+def _path_inside(raw: str, workspace: str | None) -> tuple[bool, str]:
+    """Is ``raw`` a path inside the workspace, and not a secret or git state?"""
+    if not workspace:
+        return True, ""
+    root = os.path.normpath(workspace)
+    target = os.path.normpath(os.path.join(root, raw))
+    if target != root and not target.startswith(root + os.sep):
+        return False, f"{raw} is outside the workspace"
+    parts = os.path.relpath(target, root).split(os.sep)
+    if ".git" in parts:
+        return False, ".git is owned by the pipeline"
+    name = parts[-1]
+    if name == ".env" or name.startswith(".env."):
+        return False, ".env files hold secrets"
+    return True, ""
+
+
+def decide_tool_use(
+    profile: str, workspace: str | None, tool_name: str, tool_input: dict,
+) -> tuple[bool, str]:
+    """The permission policy, as a pure function: (allowed, reason).
+
+    Everything the SDK asks about comes here; what the profile auto-approves
+    never does. Bash is judged on its command, file tools on their path.
+    """
+    if tool_name not in _SDK_PROFILE_TOOLS.get(profile, frozenset()):
+        return False, f"{tool_name} is not available to a {profile} call"
+    if tool_name == "Bash":
+        command = str(tool_input.get("command", ""))
+        for pattern, why in _SDK_BASH_DENY:
+            if pattern.search(command):
+                return False, why
+        return True, ""
+    if tool_name in _SDK_PATH_TOOLS:
+        raw = (
+            tool_input.get("file_path")
+            or tool_input.get("notebook_path")
+            or tool_input.get("path")
+        )
+        if raw:
+            return _path_inside(str(raw), workspace)
+    return True, ""
+
+
+def _permission_hook(profile: str, workspace: str | None):
+    """The policy as a PreToolUse hook — the only seat that sees every call.
+
+    `can_use_tool` is consulted only for tools the permission system has
+    not already approved: anything in `allowed_tools`, and reads inside the
+    project, never reach it (the SDK warns: CanUseToolShadowedWarning).
+    A hook runs before that decision, so this is where "outside the
+    workspace" and ".env" are refused for Read and Edit too. It returns a
+    deny with the reason, or nothing — the normal flow then decides.
+    """
+
+    async def hook(input_data, tool_use_id, context):
+        tool_name = str(input_data.get("tool_name", ""))
+        tool_input = dict(input_data.get("tool_input") or {})
+        allowed, why = decide_tool_use(profile, workspace, tool_name, tool_input)
+        if allowed:
+            return {}
+        log.info("Claude SDK: refused %s — %s", tool_name, why)
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": why,
+            }
+        }
+
+    return hook
+
+
+def _relative(path: str, workspace: str | None) -> str:
+    if workspace:
+        root = os.path.normpath(workspace)
+        target = os.path.normpath(os.path.join(root, path))
+        if target.startswith(root + os.sep):
+            return os.path.relpath(target, root)
+    return path
+
+
+def _tool_event(name: str, tool_input: dict, workspace: str | None) -> str:
+    """One line per tool call for the theater: what, never the contents."""
+    from theswarm.tools.git import redact
+
+    if name in _SDK_FILE_TOOLS:
+        raw = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+        return f"{name} {_relative(str(raw), workspace)}".strip()
+    if name == "Bash":
+        command = " ".join(str(tool_input.get("command", "")).split())
+        return f"Bash: {redact(command)[:120]}"
+    if name in ("Glob", "Grep"):
+        return f'{name} "{tool_input.get("pattern", "")}"'[:120]
+    return name
+
+
+def _text_event(text: str) -> str:
+    """The first line of a text block, redacted and short."""
+    from theswarm.tools.git import redact
+
+    for line in text.splitlines():
+        line = line.strip()
+        if line:
+            return redact(line)[:160]
+    return ""
+
+
 @dataclass
 class ClaudeCLI:
     """Runs a prompt through Claude Code CLI first, Anthropic API as fallback.
@@ -440,6 +612,9 @@ class ClaudeCLI:
     # The largest budget already proven insufficient, learned across calls.
     # Not a tuning knob: it only ever moves up, and only after a real timeout.
     _timeout_floor: int = field(default=0, repr=False)
+    # SDK backend: where tool calls and text blocks go while a call runs —
+    # cycle.py points it at the theater, as the running role's progress.
+    on_event: Callable[[str], Awaitable[None]] | None = field(default=None, repr=False)
     # Injected so tests can stub. Not repr-ed.
     _sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep, repr=False)
     _rng: random.Random = field(default_factory=random.Random, repr=False)
@@ -472,6 +647,7 @@ class ClaudeCLI:
                 max_retries=self.max_retries, retry_base_ms=self.retry_base_ms,
                 timeout_growth=self.timeout_growth,
                 timeout_ceiling=self.timeout_ceiling,
+                on_event=self.on_event,
                 _timeout_floor=self._timeout_floor,
             )
         model = routing.get(task_category, self.model)
@@ -480,6 +656,7 @@ class ClaudeCLI:
             max_retries=self.max_retries, retry_base_ms=self.retry_base_ms,
             timeout_growth=self.timeout_growth,
             timeout_ceiling=self.timeout_ceiling,
+            on_event=self.on_event,
             _timeout_floor=self._timeout_floor,
         )
 
@@ -513,6 +690,12 @@ class ClaudeCLI:
 
         if backend == "api":
             return await self._run_api(prompt, workdir=workdir, timeout=timeout)
+
+        if backend == "sdk":
+            return await self._sdk_with_recovery(
+                prompt, workdir=workdir, timeout=timeout,
+                permission_mode=permission_mode,
+            )
 
         try:
             return await self._cli_with_auth_recovery(
@@ -559,6 +742,230 @@ class ClaudeCLI:
 
         log.warning("Claude CLI unavailable (%s) — falling back to API", first_error)
         return await self._run_api(prompt, workdir=workdir, timeout=timeout)
+
+    # ── SDK backend ──────────────────────────────────────────────────
+
+    async def _emit(self, message: str) -> None:
+        """Hand an event to the theater; a broken bridge never fails a call."""
+        if self.on_event is None or not message:
+            return
+        try:
+            await self.on_event(message)
+        except Exception as exc:  # noqa: BLE001 — reporting is best effort
+            log.debug("on_event failed (%s) — continuing", exc)
+
+    def _sdk_options(
+        self, profile: str, workdir: str | None, model_id: str,
+        *, drop_oauth_env: bool, resume: str | None,
+    ):
+        from claude_agent_sdk import (
+            ClaudeAgentOptions,
+            HookMatcher,
+            PermissionResultAllow,
+            PermissionResultDeny,
+        )
+
+        # Two seats, one policy. The hook sees every call and refuses first;
+        # the callback answers the permission requests that remain (Bash,
+        # which no list auto-approves).
+        async def can_use_tool(tool_name, tool_input, context):
+            allowed, why = decide_tool_use(profile, workdir, tool_name, dict(tool_input or {}))
+            if allowed:
+                return PermissionResultAllow()
+            log.info("Claude SDK: refused %s — %s", tool_name, why)
+            return PermissionResultDeny(message=why)
+
+        return ClaudeAgentOptions(
+            model=model_id,
+            cwd=workdir,
+            env=_sdk_child_env(drop_oauth_env=drop_oauth_env),
+            # Nothing from the host — no settings.json, no hooks, no
+            # CLAUDE.md of the user (I2). The target's own guidance reaches
+            # the model through the prompt's context, as it always has.
+            setting_sources=[],
+            # Claude Code's own system prompt where tools are in play; a
+            # bare prompt for the text calls, whose prompts are complete.
+            system_prompt=(
+                {"type": "preset", "preset": "claude_code"} if profile != "text" else None
+            ),
+            permission_mode="acceptEdits" if profile == "edit" else "default",
+            allowed_tools=list(_SDK_ALLOWED_TOOLS[profile]),
+            disallowed_tools=list(_SDK_DISALLOWED_TOOLS),
+            can_use_tool=can_use_tool,
+            hooks={"PreToolUse": [HookMatcher(hooks=[_permission_hook(profile, workdir)])]},
+            max_turns=_SDK_MAX_TURNS[profile],
+            resume=resume,
+        )
+
+    async def _run_sdk(
+        self,
+        prompt: str,
+        *,
+        workdir: str | None,
+        timeout: int | None,
+        permission_mode: str | None,
+        drop_oauth_env: bool = False,
+        resume: str | None = None,
+    ) -> ClaudeResult:
+        """One call through the Agent SDK: stream the messages, keep the result.
+
+        Fails via ``_CLIUnavailable`` (``_SDKTimeout`` on budget, with the
+        session to resume) so ``_sdk_with_recovery`` can decide.
+        """
+        try:
+            from claude_agent_sdk import (
+                AssistantMessage,
+                ResultMessage,
+                SystemMessage,
+                TextBlock,
+                ToolUseBlock,
+            )
+        except ImportError as exc:
+            raise _CLIUnavailable(f"claude-agent-sdk not installed: {exc}") from exc
+
+        effective_timeout = self._effective_timeout(timeout, workdir)
+        model_id = self._resolve_model()
+        profile = _profile_for(workdir, permission_mode)
+        options = self._sdk_options(
+            profile, workdir, model_id, drop_oauth_env=drop_oauth_env, resume=resume,
+        )
+        log.info(
+            "Claude SDK: model=%s profile=%s workdir=%s timeout=%ds prompt_chars=%d resume=%s",
+            model_id, profile, workdir, effective_timeout, len(prompt or ""), resume or "-",
+        )
+
+        seen: dict = {"session_id": resume or "", "result": None}
+
+        async def _consume() -> None:
+            async for message in _sdk_query(prompt, options):
+                if isinstance(message, SystemMessage):
+                    if message.subtype == "init":
+                        data = message.data or {}
+                        seen["session_id"] = str(data.get("session_id") or seen["session_id"])
+                        # I1, on every call, not only in the probe: the binary
+                        # says who it is before it works; a key is a stop.
+                        identity = _identity_from_api_key_source(data.get("apiKeySource"))
+                        if identity == "api-key":
+                            raise _CLIUnavailable(
+                                "the SDK answered with ANTHROPIC_API_KEY — refusing to "
+                                "run a cycle on per-token billing (V2 runtime invariant I1)"
+                            )
+                elif isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            await self._emit(_text_event(block.text))
+                        elif isinstance(block, ToolUseBlock):
+                            await self._emit(_tool_event(block.name, dict(block.input or {}), workdir))
+                elif isinstance(message, ResultMessage):
+                    seen["result"] = message
+
+        try:
+            await asyncio.wait_for(_consume(), timeout=effective_timeout)
+        except asyncio.TimeoutError as exc:
+            # Cancelling the consumer closes the SDK's generator, whose
+            # `finally` terminates the subprocess (claude_agent_sdk/_internal/client.py).
+            raise _SDKTimeout(
+                f"SDK timed out after {effective_timeout}s", session_id=seen["session_id"],
+            ) from exc
+        except _CLIUnavailable:
+            raise
+        except Exception as exc:  # noqa: BLE001 — the SDK's own errors, mapped
+            result = seen["result"]
+            if result is not None and result.is_error:
+                raise _CLIUnavailable(
+                    f"SDK result {result.subtype}: {result.result or exc}"
+                ) from exc
+            raise _CLIUnavailable(f"{type(exc).__name__}: {exc}") from exc
+
+        result = seen["result"]
+        if result is None:
+            raise _CLIUnavailable("SDK stream ended without a result message")
+        if result.is_error or result.subtype != "success":
+            raise _CLIUnavailable(f"SDK result {result.subtype}: {result.result or 'no detail'}")
+
+        usage = result.usage or {}
+        input_tokens = int(usage.get("input_tokens", 0) or 0)
+        output_tokens = int(usage.get("output_tokens", 0) or 0)
+        cost_usd = float(result.total_cost_usd or 0.0)
+        log.info(
+            "Claude SDK result: $%.4f  model=%s  in=%d out=%d turns=%d session=%s",
+            cost_usd, model_id, input_tokens, output_tokens, result.num_turns,
+            result.session_id,
+        )
+        return ClaudeResult(
+            text=result.result or "",
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=input_tokens + output_tokens,
+            cost_usd=cost_usd,
+            model=model_id,
+            backend="sdk",
+            session_id=result.session_id or seen["session_id"],
+            num_turns=int(result.num_turns or 0),
+        )
+
+    async def _sdk_with_recovery(
+        self, prompt: str, *, workdir: str | None, timeout: int | None,
+        permission_mode: str | None,
+    ) -> ClaudeResult:
+        """Run through the SDK with the three recoveries the CLI path learned.
+
+        A timeout is *resumed* — the session keeps its context and the tree
+        keeps its edits — with more room (`_retry_timeout`). An auth failure
+        with the env override present is retried once without it, and the
+        original failure is what surfaces if that probe fails too. An
+        exhausted subscription window is fatal. Anything else is a failed
+        call: the caller skips the step (invariant I6), never the CLI or
+        the API — forced means forced.
+        """
+        try:
+            return await self._run_sdk(
+                prompt, workdir=workdir, timeout=timeout, permission_mode=permission_mode,
+            )
+        except _CLIUnavailable as exc:
+            first = exc
+
+        quota = _quota_exhausted(first)
+        if quota is not None:
+            raise ClaudeFatalError(f"Claude subscription exhausted: {quota}")
+
+        if isinstance(first, _SDKTimeout):
+            grown = self._retry_timeout(timeout, first, workdir=workdir)
+            resume = first.session_id or None
+            log.warning(
+                "Claude SDK timed out — %s with %ds",
+                f"resuming session {resume}" if resume else "re-prompting", grown,
+            )
+            try:
+                return await self._run_sdk(
+                    SDK_CONTINUE_PROMPT if resume else prompt,
+                    workdir=workdir, timeout=grown, permission_mode=permission_mode,
+                    resume=resume,
+                )
+            except _CLIUnavailable as again:
+                quota = _quota_exhausted(again)
+                if quota is not None:
+                    raise ClaudeFatalError(f"Claude subscription exhausted: {quota}")
+                raise RuntimeError(f"Claude SDK failed twice: {again}") from again
+
+        if _is_auth_failure(first) and os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+            log.warning(
+                "Claude SDK failed (%s) — retrying without the CLAUDE_CODE_OAUTH_TOKEN "
+                "env override", first,
+            )
+            try:
+                return await self._run_sdk(
+                    prompt, workdir=workdir, timeout=timeout,
+                    permission_mode=permission_mode, drop_oauth_env=True,
+                )
+            except _CLIUnavailable as without_token:
+                log.warning(
+                    "Claude SDK also failed without the env token (%s) — keeping the "
+                    "original failure", without_token,
+                )
+                raise RuntimeError(f"Claude SDK failed: {first}") from without_token
+
+        raise RuntimeError(f"Claude SDK failed: {first}") from first
 
     async def _cli_with_auth_recovery(
         self, prompt: str, *, workdir: str | None, timeout: int | None,

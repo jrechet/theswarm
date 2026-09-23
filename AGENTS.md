@@ -349,6 +349,25 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `python -m theswarm validate` runs a one-turn probe and prints who answered
   (`identity=subscription` is the only acceptable value); it is skipped when
   `SWARM_CLAUDE_BACKEND=api`, the test suite's default.
+- **V2 runtime M1 — the SDK backend (`SWARM_CLAUDE_BACKEND=sdk`, set in
+  `docker-compose.yml`).** Same `ClaudeCLI.run` contract, a message stream
+  instead of one envelope. The call's *profile* is read off its two
+  arguments: `acceptEdits`+workdir = edit (Dev), workdir alone = read (QA,
+  PO), none = text (review, breakdown, memory). **The permission policy
+  lives in a PreToolUse hook** (`tools/claude.decide_tool_use`), not in
+  `allowed_tools`/`can_use_tool` alone: a tool listed in `allowed_tools` is
+  auto-approved *before* `can_use_tool`, and reads inside the project never
+  ask at all — the SDK says so itself (`CanUseToolShadowedWarning`). Only a
+  hook sees every call; measured 2026-09-23: `Read /etc/hostname`, `cat
+  .env`, `git push` refused, the fix and `pytest` allowed. Bash is not
+  path-confined (`cat /etc/hostname` runs) — the deny list is pushes, `gh`,
+  `.env`, `git config`/`remote`. A timeout is **resumed**
+  (`resume=session_id`, `SDK_CONTINUE_PROMPT`) with the grown budget, never
+  re-prompted from scratch while the session exists. Every call checks the
+  init message's `apiKeySource` and refuses to run on an API key (I1). No
+  `setting_sources` at all: the target repo's `.claude/settings.json` could
+  carry the same Stop hook that voided the reviews. `auto` is still
+  CLI-first; the flip is its own PR after three green harness cycles.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

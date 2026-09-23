@@ -270,11 +270,12 @@ d'outils. `Dockerfile` et `docker-compose.yml` ajustés au strict nécessaire.
   = `permission_mode="acceptEdits"` avec `Read/Edit/Write/Glob/Grep/Bash` ;
   revue et breakdown = lecture seule `Read/Glob/Grep` ; plan, rapport,
   génération E2E = ce que l'agent juge utile, jamais `Bash` en écriture
-  hors workspace. `can_use_tool` et/ou un hook `PreToolUse` refusent :
-  tout chemin hors du workspace, `git push`, `gh`, la lecture de `.env`,
-  l'écriture dans `.git/config`. `WebSearch`/`WebFetch` désactivés sauf
-  besoin motivé. `setting_sources` sans `user` ; `project` est acceptable
-  pour lire le `CLAUDE.md` de la cible (repos du owner uniquement).
+  hors workspace. **La politique est un hook `PreToolUse`** (mesuré en
+  M1 : un outil dans `allowed_tools` est approuvé avant `can_use_tool`, et
+  les lectures dans le projet ne demandent rien ; seul un hook voit chaque
+  appel) ; elle refuse tout chemin hors du workspace, `git push`, `gh`, la
+  lecture de `.env`, l'écriture dans `.git/config`. `WebSearch`/`WebFetch`
+  désactivés sauf besoin motivé. `setting_sources` vide : voir section 8.
 - **Bornes.** Un `max_turns` par catégorie (valeur généreuse, configurable)
   pour qu'un appel ne boucle pas jusqu'au timeout de phase.
 - **Théâtre.** Chaque appel d'outil produit au plus un événement
@@ -592,7 +593,7 @@ L'agent applique le défaut, écrit un handoff, continue.
 | `SkillMCPManager` : brancher via `mcp_servers` ou supprimer | Supprimer en M7 |
 | Parallélisme Dev par défaut en prod | 1, jusqu'à trois cycles verts à 2 |
 | Cadence d'usage de l'abonnement (harness + évals) | Une feature par jour ; la série complète à la main |
-| Charger `project` dans `setting_sources` (hooks du repo cible) | Oui, repos du owner uniquement |
+| Charger `project` dans `setting_sources` (hooks du repo cible) | **Non** (tranché en M1, 2026-09-23) : un `.claude/settings.json` du repo cible peut porter le même hook `Stop` qui a vidé les revues ; la doc du repo arrive par le contexte du prompt |
 
 ---
 
