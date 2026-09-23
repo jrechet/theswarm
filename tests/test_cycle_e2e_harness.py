@@ -132,7 +132,7 @@ def test_run_one_scores_and_appends_a_full_record(tmp_path, monkeypatch):
     monkeypatch.setattr(cycle_e2e, "wait_for_health", lambda *a, **k: True)  # no network in the suite
     monkeypatch.setattr(cycle_e2e, "prs_before", lambda repo: next(seen_prs))
     monkeypatch.setattr(cycle_e2e, "start_cycle", lambda repo, issue: "cyc-1")
-    monkeypatch.setattr(cycle_e2e, "wait_for", lambda cycle_id, budget: ("completed", "po_evening"))
+    monkeypatch.setattr(cycle_e2e, "wait_for", lambda cycle_id, budget: ("completed", "po_evening", cycle_id))
     monkeypatch.setattr(cycle_e2e, "cycle_record", lambda cycle_id: {
         "started_at": "2026-09-23T07:00:00+00:00", "completed_at": "2026-09-23T07:25:00+00:00",
         "result": {"cost_usd": 3.25, "backend": "sdk", "reviews": [{"decision": "APPROVE"}]},

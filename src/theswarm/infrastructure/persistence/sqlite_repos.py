@@ -110,6 +110,9 @@ from theswarm.infrastructure.persistence.migrations.v027_cycle_trace_id import (
 from theswarm.infrastructure.persistence.migrations.v028_eval_runs import (
     SQL as MIGRATION_V028,
 )
+from theswarm.infrastructure.persistence.migrations.v029_cycle_resumed_as import (
+    ALTERS as MIGRATION_V029_ALTERS,
+)
 
 log = logging.getLogger(__name__)
 
@@ -171,11 +174,11 @@ async def _ensure_memory_entries_columns(db: aiosqlite.Connection) -> None:
 
 
 async def _ensure_cycles_columns(db: aiosqlite.Connection) -> None:
-    """Columns added to ``cycles`` after v001, only if missing (v027)."""
+    """Columns added to ``cycles`` after v001, only if missing (v027, v029)."""
     cursor = await db.execute("PRAGMA table_info(cycles)")
     rows = await cursor.fetchall()
     existing = {row[1] for row in rows}
-    for column_name, alter_sql in MIGRATION_V027_ALTERS:
+    for column_name, alter_sql in MIGRATION_V027_ALTERS + MIGRATION_V029_ALTERS:
         if column_name not in existing:
             await db.execute(alter_sql)
 
@@ -310,6 +313,13 @@ class SQLiteCycleRepository:
         rows = await cursor.fetchall()
         return [self._row_to_cycle(row) for row in rows]
 
+    async def mark_resumed(self, cycle_id: str, resumed_as: str) -> None:
+        """Point an interrupted cycle at the cycle that continues it."""
+        await self._db.execute(
+            "UPDATE cycles SET resumed_as = ? WHERE id = ?", (resumed_as, cycle_id),
+        )
+        await self._db.commit()
+
     async def reap_orphans(self, *, max_age_seconds: int = 7200) -> int:
         """Mark stale 'running' cycles as 'failed'.
 
@@ -377,8 +387,8 @@ class SQLiteCycleRepository:
             """INSERT OR REPLACE INTO cycles
                (id, project_id, status, triggered_by, started_at, completed_at,
                 total_tokens, total_cost_usd, prs_opened_json, prs_merged_json,
-                phases_json, budgets_json, trace_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                phases_json, budgets_json, trace_id, resumed_as)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(cycle.id), cycle.project_id, cycle.status.value,
                 cycle.triggered_by,
@@ -387,7 +397,7 @@ class SQLiteCycleRepository:
                 cycle.total_tokens, cycle.total_cost_usd,
                 json.dumps(list(cycle.prs_opened)),
                 json.dumps(list(cycle.prs_merged)),
-                phases_json, budgets_json, cycle.trace_id,
+                phases_json, budgets_json, cycle.trace_id, cycle.resumed_as,
             ),
         )
         await self._db.commit()
@@ -425,6 +435,7 @@ class SQLiteCycleRepository:
             prs_opened=tuple(json.loads(row["prs_opened_json"])),
             prs_merged=tuple(json.loads(row["prs_merged_json"])),
             trace_id=(row["trace_id"] or "") if "trace_id" in row.keys() else "",
+            resumed_as=(row["resumed_as"] or "") if "resumed_as" in row.keys() else "",
         )
 
 

@@ -26,6 +26,7 @@ class GetCycleStatusQuery:
             total_cost_usd=cycle.total_cost_usd,
             prs_opened=list(cycle.prs_opened),
             prs_merged=list(cycle.prs_merged),
+            resumed_as=getattr(cycle, "resumed_as", ""),
             phases=[
                 PhaseDTO(
                     phase=p.phase,

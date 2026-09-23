@@ -45,6 +45,7 @@ class CycleDTO:
     prs_opened: list[int]
     prs_merged: list[int]
     phases: list[PhaseDTO]
+    resumed_as: str = ""
 
     @property
     def duration_seconds(self) -> int | None:

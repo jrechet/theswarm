@@ -486,8 +486,13 @@ async def _launch_resume(app, plan, allowed_repos, bus, cycle_repo, project_repo
             project_id=plan.repo,
             resume_from=plan.resume_from,
             resume_cycle_id=plan.cycle_id,
+            triggered_by=plan.triggered_by,
         ))
         tracker.set_task(record.id, task)
+        try:
+            await cycle_repo.mark_resumed(plan.cycle_id, record.id)
+        except Exception:
+            log.exception("Linking cycle %s to its resume %s failed", plan.cycle_id, record.id)
         log.info(
             "Resumed cycle %s as %s from phase %s",
             plan.cycle_id, record.id, plan.resume_from,

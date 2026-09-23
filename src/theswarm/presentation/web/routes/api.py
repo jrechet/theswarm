@@ -262,12 +262,18 @@ async def api_cycle(request: Request, cycle_id: str) -> JSONResponse:
     # Try v2 repo first
     query: GetCycleStatusQuery = request.app.state.get_cycle_status_query
     cycle = await query.execute(cycle_id)
-    if cycle is not None:
-        return JSONResponse(_cycle_dto_to_unified_json(cycle))
-    # Fall back to in-memory tracker
     from theswarm.api import get_cycle_tracker
-    tracker = get_cycle_tracker()
-    record = tracker.get(cycle_id)
+    record = get_cycle_tracker().get(cycle_id)
+    if cycle is not None:
+        body = _cycle_dto_to_unified_json(cycle)
+        if record is not None:
+            # The row has no result: cost, backend and review decisions live
+            # on the tracker while the process does. The harness scored every
+            # eval run with none of them until this overlay.
+            # Only the result: which store answers the rest stays the rule
+            # test_known_to_both_stores_matches_sqlite_version pins.
+            body["result"] = dict(record.result or {})
+        return JSONResponse(body)
     if record:
         return JSONResponse(_tracker_record_to_unified_json(record))
     return JSONResponse({"error": "not found"}, status_code=404)
@@ -515,6 +521,10 @@ def _cycle_dto_to_unified_json(c) -> dict:
         # started through the headless tracker (`CycleRecord`) have them.
         "issue_number": None,
         "error": None,
+        "result": {},
+        # Set when a restart interrupted this cycle and the boot resumer
+        # continued it under another id (V2 runtime, M4): follow it.
+        "resumed_as": getattr(c, "resumed_as", "") or None,
     }
 
 
@@ -536,6 +546,8 @@ def _tracker_record_to_unified_json(record) -> dict:
         "phases": [],
         "issue_number": record.issue_number,
         "error": record.error,
+        "result": dict(record.result or {}),
+        "resumed_as": None,
     }
 
 
