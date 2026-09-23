@@ -24,7 +24,7 @@ from theswarm.domain.cycles.events import (
     CycleFailed,
     PhaseChanged,
 )
-from theswarm.domain.cycles.value_objects import PHASE_ROLE, CycleId
+from theswarm.domain.cycles.value_objects import CYCLE_NODE_ROLES, PHASE_ROLE, CycleId
 
 log = logging.getLogger(__name__)
 
@@ -71,15 +71,7 @@ def get_live_progress(cycle_id: str) -> list[dict]:
 # The theater draws its graph from this history, and once the bridge has
 # heard one real phase it stops guessing phase changes from role switches —
 # a guess that called the first sentence of every agent a "phase".
-PHASE_OWNER: dict[str, str] = {
-    "po_morning": "po",
-    "techlead_breakdown": "techlead",
-    "dev_loop": "dev",
-    "dev_iter": "dev",
-    "techlead_review": "techlead",
-    "qa": "qa",
-    "po_evening": "po",
-}
+PHASE_OWNER: dict[str, str] = dict(CYCLE_NODE_ROLES)
 
 _PHASE_HISTORY: "OrderedDict[str, list[dict]]" = OrderedDict()
 _PHASE_HISTORY_MAX = 100  # cycles, not entries — a cycle announces ~15

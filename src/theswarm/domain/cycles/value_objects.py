@@ -13,6 +13,19 @@ from uuid import uuid4
 # this, so nothing else can collide with it.
 PHASE_ROLE = "phase"
 
+# The phases a cycle announces, and the role that owns each. One map for
+# the durable cycle graph (which announces them) and the theater's bridge
+# (which draws them): a phase declared here is known to both (V2, M4).
+CYCLE_NODE_ROLES: dict[str, str] = {
+    "po_morning": "po",
+    "techlead_breakdown": "techlead",
+    "dev_loop": "dev",
+    "dev_iter": "dev",
+    "techlead_review": "techlead",
+    "qa": "qa",
+    "po_evening": "po",
+}
+
 
 class CycleStatus(str, Enum):
     PENDING = "pending"

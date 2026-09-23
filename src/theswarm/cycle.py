@@ -11,6 +11,12 @@ from theswarm.agents.po import build_po_graph
 from theswarm.agents.qa import build_qa_graph
 from theswarm.agents.techlead import build_techlead_graph
 from theswarm.config import CycleConfig, Phase, Role
+from theswarm.cycle_budgets import (  # noqa: F401 — re-exported for callers and tests
+    MAX_DEV_ITERATIONS,
+    PHASE_TIMEOUTS,
+    BudgetExceeded,
+    PhaseTimeout,
+)
 from theswarm.domain.cycles.value_objects import PHASE_ROLE
 from theswarm.infrastructure import tracing
 from theswarm.token_counter import TokenTracker
@@ -18,7 +24,6 @@ from theswarm.tools.claude import ClaudeFatalError
 
 log = logging.getLogger(__name__)
 
-MAX_DEV_ITERATIONS = 5  # safety cap per cycle
 MAX_AUTONOMOUS_CYCLES = 10  # safety cap for autonomous mode
 MAX_DAILY_STORIES = 3  # imported by PO but defined here for reference
 
@@ -46,49 +51,6 @@ def repo_lock(repo: str) -> asyncio.Lock:
 # Per-phase hard timeouts (seconds). Beyond this we abort the phase rather
 # than letting it hang indefinitely.
 #
-# dev_iter budget: an implementation call runs up to IMPLEMENT_TIMEOUT_SECONDS
-# (420s, retried once by ClaudeCLI on a transient failure), a cold dependency
-# install up to 300s, pytest 120s, plus up to two Ralph Loop repair rounds.
-# The old 8-minute cap was sized for the 180s-per-call era and killed every
-# substantial task mid-flight during the endurance run.
-PHASE_TIMEOUTS = {
-    # Each budget must hold one Claude call plus its grown retry (a retried
-    # timeout gets timeout_growth× more room), otherwise the phase timeout
-    # fires first and hides the real cause.
-    "po_morning": 8 * 60,
-    "techlead_breakdown": 10 * 60,
-    # 25 min once capped the usable budget below 520s, under what
-    # TheSwarm's own repo needs to be read at all; 30 min then stopped
-    # fitting when the Dev's test budget went from 120s to QA's 900s, so
-    # that the gate could finally measure a real suite instead of always
-    # reporting `tests_unavailable`.
-    #
-    # The binding path is the Ralph one, which runs the tests twice:
-    # implementation (600) + install (300) + tests (300) + the Ralph retry
-    # (600) + tests again (300) = 2100s. 40 min leaves 300s for the commit
-    # and the push. That arithmetic is asserted by
-    # tests/test_persisted_timeout_floor.py::TestTheImplementationBudget.
-    #
-    # It briefly stood at 60 min, when the Dev ran the target's whole suite
-    # on QA's 900s budget — correct, and an hour per iteration. Scoping the
-    # run to the files the diff touches is what brought it back down;
-    # tests/test_dev_iteration_budget.py holds the ceiling so it cannot
-    # drift back up unnoticed.
-    "dev_iter": 40 * 60,
-    # A review may ask for REVIEW_TIMEOUT_CEILING_SECONDS (780s) on a large
-    # diff, and one phase reviews every open PR. At 300s the phase timeout
-    # fired before the call's own budget ever could: the review could not
-    # finish whatever it found, twice on consecutive local cycles and once
-    # in prod (5f8f0f63f58c, "the pass that mattered"). #130 cut how many
-    # reviews run per phase without reconciling the two numbers. 30 min
-    # holds one ceiling-sized review with room to spare, or several
-    # ordinary ones — the same budget dev_iter and qa already carry.
-    # tests/test_review_budget_fits_its_phase.py keeps the invariant.
-    "techlead_review": 30 * 60,
-    "qa": 30 * 60,
-    "po_evening": 5 * 60,
-    "retrospective": 5 * 60,
-}
 
 
 async def _merge_held_prs(github, held: list[int], on_progress) -> list[int]:
@@ -133,23 +95,6 @@ async def _merge_held_prs(github, held: list[int], on_progress) -> list[int]:
         except Exception:
             pass
     return merged
-
-
-class BudgetExceeded(Exception):
-    """Raised when a role exceeds its token budget."""
-    def __init__(self, role: str, used: int, budget: int) -> None:
-        self.role = role
-        self.used = used
-        self.budget = budget
-        super().__init__(f"{role} exceeded token budget: {used:,} > {budget:,}")
-
-
-class PhaseTimeout(Exception):
-    """Raised when a phase exceeds its hard timeout."""
-    def __init__(self, phase: str, timeout: int) -> None:
-        self.phase = phase
-        self.timeout = timeout
-        super().__init__(f"phase {phase!r} exceeded {timeout}s hard timeout")
 
 
 async def _write_cycle_learnings(
@@ -319,26 +264,39 @@ async def run_daily_cycle(
     on_progress=None,
     on_checkpoint=None,
     resume_from: str | None = None,
+    *,
+    cycle_id: str | None = None,
+    checkpointer=None,
+    resume: bool = False,
 ) -> dict:
     """Run one complete daily cycle and return the summary.
+
+    Since V2 M4 the cycle is a durable LangGraph (`cycle_graph.py`): every
+    phase is a node, checkpointed on ``checkpointer`` under ``cycle_id`` as
+    the thread id. ``resume=True`` continues an interrupted cycle from the
+    node after the last one that finished — the same ``cycle_id``, the same
+    checkpointer, a fresh workspace.
 
     Args:
         config: Cycle configuration.
         on_progress: Optional async callback ``(role, message) -> None`` for live updates.
         on_checkpoint: Optional async callback ``(phase: str, ok: bool, state: dict) -> None``
-            called after each phase completes or fails. Sprint G1.
-        resume_from: Optional phase name (e.g. ``"qa"``) to skip earlier phases.
-            When set, PHASE_ORDER phases earlier than this are skipped. Sprint G5.
+            called after each phase completes or fails. Sprint G1; kept for the
+            V1 cycles page until M7.
+        resume_from: Legacy phase name from the pre-M4 resumer; any value means
+            ``resume=True`` (the graph knows where it stopped).
+        cycle_id: The thread the graph checkpoints under (a fresh id by default).
+        checkpointer: A LangGraph checkpointer; in memory when None (no durability).
+        resume: Continue the thread instead of starting a cycle.
     """
+    import uuid
+
     from theswarm.application.services.watchdog import AgentWatchdog
+    from theswarm.cycle_graph import CycleRuntime, run_cycle_graph
 
     today = datetime.now().strftime("%Y-%m-%d")
-    tracker = TokenTracker()
-    total_cost = 0.0
-    all_prs: list[dict] = []
-    all_reviews: list[dict] = []
-    all_merged_prs: list[int] = []
-    all_held_prs: list[int] = []
+    resume = resume or bool(resume_from)
+    cycle_id = cycle_id or uuid.uuid4().hex[:12]
 
     watchdog = AgentWatchdog(
         idle_threshold=config.watchdog_idle_threshold,
@@ -364,414 +322,43 @@ async def run_daily_cycle(
         except Exception:
             log.exception("on_checkpoint raised (continuing)")
 
-    # Whose turn it is, for events that arrive without a role attached —
-    # the SDK backend's tool calls (V2 runtime, M1) are reported by the
-    # role that owns the running phase.
-    _current_role = {"name": "System"}
-
-    async def _run_phase(phase_key: str, role: str, coro):
-        """Run an awaitable with that phase's hard timeout. Surfaces PhaseTimeout."""
-        timeout = PHASE_TIMEOUTS.get(phase_key, 10 * 60)
-        _current_role["name"] = role
-        with tracing.span(
-            f"phase.{phase_key}",
-            **{"swarm.phase": phase_key, "swarm.role": role, "swarm.budget_s": timeout},
-        ):
-            try:
-                return await asyncio.wait_for(coro, timeout=timeout)
-            except asyncio.TimeoutError as exc:
-                log.error("Phase %s exceeded %ds — aborting", phase_key, timeout)
-                await _progress(role, f"⏱  Phase {phase_key} timed out after {timeout}s — aborting")
-                raise PhaseTimeout(phase_key, timeout) from exc
-            finally:
-                # The phase is over either way: this role owes no further
-                # heartbeat, so it must stop being judged idle. A later phase
-                # for the same role (Dev runs one per iteration) re-registers
-                # it on its next heartbeat.
-                watchdog.retire(role)
-
-    from theswarm.domain.cycles.checkpoint import PHASE_ORDER
-
-    def _skip(phase: str) -> bool:
-        if not resume_from:
-            return False
-        if phase not in PHASE_ORDER or resume_from not in PHASE_ORDER:
-            return False
-        return PHASE_ORDER.index(phase) < PHASE_ORDER.index(resume_from)
-
-    # Per-role token accumulators for budget enforcement
-    role_tokens: dict[str, int] = {r.value: 0 for r in Role}
-
-    def _check_budget(role: Role, new_tokens: int) -> None:
-        role_tokens[role.value] += new_tokens
-        budget = config.token_budget.get(role, 0)
-        if budget and role_tokens[role.value] > budget:
-            raise BudgetExceeded(role.value, role_tokens[role.value], budget)
-
-    # Sprint G1 — tracks the phase currently executing so we can emit a
-    # failed checkpoint if it crashes before completing.
-    _current_phase = {"name": "po_morning"}
-    # True from the first Dev claim until the loop has handed back what it
-    # did not finish. A cancelled or crashed cycle skips that hand-back, and
-    # every sub-task it claimed stays `in-progress` for the next cycle to
-    # trip over (0793e29ce7c7 found #86, #87 and #88 exactly there).
-    dev_claims_open = False
-
-    async def _announce(phase: str) -> None:
-        """Tell the theater which phase runs now.
-
-        Not a heartbeat and not a log line: a typed channel (role PHASE_ROLE)
-        the bridge turns into the real PhaseChanged, so the graph on
-        /c/{id} follows the cycle instead of guessing from whoever spoke
-        last. Sub-phases (dev_iter, techlead_review) go through here too;
-        checkpoints know nothing about them and must not.
-        """
-        if on_progress is None:
-            return
-        try:
-            await on_progress(PHASE_ROLE, phase)
-        except Exception:
-            pass
-
-    async def _enter(phase: str) -> None:
-        _current_phase["name"] = phase
-        await _announce(phase)
-
     print(f"\n{'=' * 60}")
-    print(f"SWARM CYCLE — {today}")
+    print(f"SWARM CYCLE — {today}{' (resumed)' if resume else ''}")
     print(f"{'=' * 60}\n")
 
-    # Prepare workspace
+    # Prepare workspace — on a resume too: the container that died took
+    # its clone with it.
     await _ensure_workspace(config)
     base_state = _build_base_state(config)
+
+    runtime = CycleRuntime(
+        config=config,
+        base_state=base_state,
+        progress=_progress,
+        raw_progress=on_progress,
+        checkpoint=_checkpoint,
+        watchdog=watchdog,
+    )
+
     # V2 runtime (M1): the SDK backend streams every tool call and text
     # block; they reach the theater — and the watchdog, as heartbeats — as
     # progress of the role whose phase is running.
     _claude = base_state.get("claude")
     if _claude is not None and hasattr(_claude, "on_event"):
         async def _on_claude_event(message: str) -> None:
-            await _progress(_current_role["name"], message)
+            await _progress(runtime.current_role["name"], message)
 
         _claude.on_event = _on_claude_event
 
     try:
-        # Ensure branch protection on first run
-        if config.is_real_mode and base_state.get("github"):
-            await _progress("System", "Checking branch protection…")
-            await base_state["github"].ensure_branch_protection()
-
-        # --- MORNING: PO daily planning ---
-        if not _skip("po_morning"):
-            await _enter("po_morning")
-            await _progress("PO", "Starting daily planning…")
-            po = build_po_graph()
-            po_state = await _run_phase(
-                "po_morning", "PO",
-                po.ainvoke({**base_state, "phase": Phase.MORNING.value}),
-            )
-            po_cost = po_state.get("cost_usd", 0.0)
-            tracker.record("po_morning", po_state.get("tokens_used", 0), po_cost)
-            total_cost += po_cost
-            _check_budget(Role.PO, po_state.get("tokens_used", 0))
-            await _checkpoint(
-                "po_morning", True,
-                {"tokens": po_state.get("tokens_used", 0), "cost": po_cost},
-            )
-
-        # --- MORNING: Tech Lead story breakdown ---
-        if not _skip("techlead_breakdown"):
-            await _enter("techlead_breakdown")
-            await _progress("TechLead", "Breaking down stories into tasks…")
-            tl = build_techlead_graph()
-            tl_state = await _run_phase(
-                "techlead_breakdown", "TechLead",
-                tl.ainvoke({**base_state, "phase": "breakdown"}),
-            )
-            tl_bd_cost = tl_state.get("cost_usd", 0.0)
-            tracker.record("techlead_breakdown", tl_state.get("tokens_used", 0), tl_bd_cost)
-            total_cost += tl_bd_cost
-            _check_budget(Role.TECHLEAD, tl_state.get("tokens_used", 0))
-            await _checkpoint(
-                "techlead_breakdown", True,
-                {"tokens": tl_state.get("tokens_used", 0), "cost": tl_bd_cost},
-            )
-
-        # --- DEVELOPMENT: Dev implements → TechLead reviews → repeat ---
-        attempted_without_pr: set[int] = set()
-        # Every task this loop hands to the Dev, in order, repeats included.
-        # Passed by reference so `pick_task` can record an attempt that the
-        # iteration never returns from — the picker reads it to put a task
-        # that already failed behind the ones nobody has tried.
-        attempted_tasks: list[int] = []
-        # Every PR the TechLead has reviewed this cycle, at the head it saw.
-        # Same object every iteration: a held or commented PR is not read
-        # again unless something was pushed to it.
-        reviewed_prs: list[str] = []
-        _dev_loop_ran = not _skip("dev_loop")
-        if _dev_loop_ran:
-            await _enter("dev_loop")
-            dev_claims_open = True
-            await _progress("Dev", "Starting development loop…")
-        for iteration in range(1, MAX_DEV_ITERATIONS + 1):
-            if not _dev_loop_ran:
-                break
-            await _announce("dev_iter")
-            await _progress("Dev", f"Iteration {iteration}/{MAX_DEV_ITERATIONS} — picking next task…")
-            dev = build_dev_graph()
-            # Phase 4.1 — one retry on transient errors (git, network, etc).
-            # PhaseTimeout already implies a hung Claude call; don't retry that
-            # to avoid stacking 8-min waits.
-            dev_state = None
-            try:
-                dev_state = await _run_phase(
-                    "dev_iter", "Dev",
-                    dev.ainvoke({
-                        **base_state,
-                        "phase": Phase.DEVELOPMENT.value,
-                        "attempted_tasks": attempted_tasks,
-                    }),
-                )
-            except PhaseTimeout:
-                await _progress("Dev", f"Iteration {iteration} timed out — moving on")
-                continue
-            except ClaudeFatalError as exc:
-                # Billing/auth error — every later call would fail identically.
-                await _progress("Dev", f"Fatal Claude error — aborting cycle: {str(exc)[:160]}")
-                raise
-            except Exception as exc:
-                msg = f"{type(exc).__name__}: {str(exc)[:160]}"
-                await _progress("Dev", f"Iteration {iteration} failed ({msg}) — retrying once")
-                log.warning("Dev iteration %d failed, retrying: %s", iteration, exc)
-                try:
-                    dev_state = await _run_phase(
-                        "dev_iter", "Dev",
-                        build_dev_graph().ainvoke({
-                            **base_state,
-                            "phase": Phase.DEVELOPMENT.value,
-                            "attempted_tasks": attempted_tasks,
-                        }),
-                    )
-                except PhaseTimeout:
-                    await _progress("Dev", f"Iteration {iteration} retry timed out — moving on")
-                    continue
-                except ClaudeFatalError as exc2:
-                    await _progress("Dev", f"Fatal Claude error — aborting cycle: {str(exc2)[:160]}")
-                    raise
-                except Exception as exc2:
-                    msg2 = f"{type(exc2).__name__}: {str(exc2)[:160]}"
-                    await _progress("Dev", f"Iteration {iteration} retry also failed ({msg2}) — skipping")
-                    log.error("Dev iteration %d retry failed: %s", iteration, exc2)
-                    continue
-            dev_cost = dev_state.get("cost_usd", 0.0)
-            dev_tokens = dev_state.get("tokens_used", 0)
-            tracker.record(f"dev_iter{iteration}", dev_tokens, dev_cost)
-            total_cost += dev_cost
-            _check_budget(Role.DEV, dev_tokens)
-
-            pr = dev_state.get("pr")
-            if pr:
-                all_prs.append(pr)
-                await _progress("Dev", f"PR #{pr['number']} opened: {pr['url']}")
-            else:
-                task = dev_state.get("task")
-                if task is None:
-                    await _progress("Dev", "No more ready tasks — ending dev loop")
-                    break
-                # A task that yields no PR twice yields none at all: a
-                # verification story with nothing to change, or work the
-                # model cannot complete. Without this the loop re-picks it
-                # every iteration — harmless before targeting (each iteration
-                # took a different issue), a guaranteed five-times-nothing
-                # once the cycle is pinned to one issue.
-                number = task["number"]
-                if number in attempted_without_pr:
-                    await _progress(
-                        "Dev",
-                        f"Task #{number} produced no changes twice — ending dev loop",
-                    )
-                    break
-                attempted_without_pr.add(number)
-                await _progress("Dev", f"No PR produced for task #{number}")
-
-            # TechLead reviews and merges
-            await _announce("techlead_review")
-            await _progress("TechLead", "Reviewing open PRs…")
-            tl_review = build_techlead_graph()
-            try:
-                tl_state = await _run_phase(
-                    "techlead_review", "TechLead",
-                    tl_review.ainvoke({
-                        **base_state, "phase": "review_loop",
-                        "reviewed_prs": reviewed_prs,
-                    }),
-                )
-            except PhaseTimeout:
-                await _progress("TechLead", "Review timed out — leaving PRs for next cycle")
-                continue
-            tl_cost = tl_state.get("cost_usd", 0.0)
-            tl_tokens = tl_state.get("tokens_used", 0)
-            tracker.record(f"techlead_review_iter{iteration}", tl_tokens, tl_cost)
-            total_cost += tl_cost
-            _check_budget(Role.TECHLEAD, tl_tokens)
-
-            reviews = tl_state.get("reviews", [])
-            all_reviews.extend(reviews)
-            merged = tl_state.get("merged_prs", [])
-            all_merged_prs.extend(merged)
-            for r in reviews:
-                await _progress("TechLead", f"PR #{r['pr_number']}: {r['decision']}")
-            for r in reviews:
-                if r.get("sent_back"):
-                    await _progress(
-                        "TechLead",
-                        f"PR #{r['pr_number']}: changes requested — task back to the Dev",
-                    )
-            for number in tl_state.get("skipped_prs", []):
-                await _progress(
-                    "TechLead",
-                    f"Review of PR #{number} unavailable — left for the next pass",
-                )
-            if merged:
-                await _progress("TechLead", f"Merged: {merged}")
-            held = tl_state.get("held_prs", [])
-            all_held_prs.extend(held)
-            if held:
-                await _progress(
-                    "TechLead",
-                    f"Approved, not merged: {held} — merging {config.github_repo} "
-                    "redeploys the swarm and would end this cycle mid-flight",
-                )
-
-            # Pull latest into workspace so next iteration builds on merged code
-            if merged:
-                await _pull_latest(config)
-
-        if _dev_loop_ran:
-            # Hand back anything still marked in-progress. The loop can end
-            # with work claimed but unfinished — the iteration cap, a task
-            # that produced nothing twice, a timeout — and a task left
-            # in-progress reads as "someone is on it" when nobody is. Prod
-            # cycle 751202be0c3a delivered #216 and #219 and left #217 and
-            # #218 exactly there, then reported itself completed.
-            requeued = await _requeue_unfinished(config)
-            dev_claims_open = False
-            if requeued:
-                await _progress(
-                    "Dev",
-                    "Handing back "
-                    + ", ".join(f"#{n}" for n in requeued)
-                    + " — claimed but not finished",
-                )
-
-            await _checkpoint(
-                "dev_loop", True,
-                {
-                    "prs_opened": [p.get("number") for p in all_prs if isinstance(p, dict)],
-                    "reviews": len(all_reviews),
-                    "requeued": requeued,
-                },
-            )
-
-        # --- DEMO: QA generates demo ---
-        qa_state: dict = {}
-        if not _skip("qa"):
-            await _enter("qa")
-            await _progress("QA", "Running tests + security scan…")
-            qa = build_qa_graph()
-            try:
-                qa_state = await _run_phase(
-                    "qa", "QA",
-                    qa.ainvoke({**base_state, "phase": Phase.DEMO.value}),
-                )
-            except PhaseTimeout:
-                qa_state = {}
-            qa_cost = qa_state.get("cost_usd", 0.0)
-            tracker.record("qa", qa_state.get("tokens_used", 0), qa_cost)
-            total_cost += qa_cost
-            _check_budget(Role.QA, qa_state.get("tokens_used", 0))
-            await _checkpoint(
-                "qa", bool(qa_state),
-                {"tokens": qa_state.get("tokens_used", 0), "cost": qa_cost},
-            )
-
-        # --- EVENING: PO validates + reports ---
-        po_ev_state: dict = {}
-        if not _skip("po_evening"):
-            await _enter("po_evening")
-            await _progress("PO", "Generating daily report…")
-            po_evening = build_po_graph()
-            try:
-                po_ev_state = await _run_phase(
-                    "po_evening", "PO",
-                    po_evening.ainvoke({
-                        **base_state,
-                        "phase": Phase.EVENING.value,
-                        "demo_report": qa_state.get("demo_report"),
-                    }),
-                )
-            except PhaseTimeout:
-                po_ev_state = {}
-            po_ev_cost = po_ev_state.get("cost_usd", 0.0)
-            tracker.record("po_evening", po_ev_state.get("tokens_used", 0), po_ev_cost)
-            total_cost += po_ev_cost
-            await _checkpoint(
-                "po_evening", bool(po_ev_state),
-                {"tokens": po_ev_state.get("tokens_used", 0), "cost": po_ev_cost},
-            )
-
-        # --- MERGE: what the review phase approved but held back ---
-        #
-        # On SELF_REPO the review phase refuses to merge, because the
-        # redeploy that follows would end the cycle mid-review. That rule
-        # stands; what changes is that the holding is no longer permanent.
-        # Here every phase is done — QA has run, the report is written, the
-        # demo is recorded — so a redeploy costs nothing, and approved work
-        # lands without waiting for a person.
-        if all_held_prs:
-            newly_merged = await _merge_held_prs(
-                base_state.get("github"), sorted(set(all_held_prs)), _progress,
-            )
-            all_merged_prs.extend(newly_merged)
-            all_held_prs = [n for n in all_held_prs if n not in newly_merged]
-
-        # --- SUMMARY ---
-        print(f"\n{'=' * 60}")
-        print("CYCLE COMPLETE")
-        print(f"{'=' * 60}")
-        tracker.print_summary()
-        print(f"\nClaude API cost: ${total_cost:.2f}")
-        print(f"PRs opened: {len(all_prs)}")
-        print(f"PRs merged: {len(set(all_merged_prs))}")
-        if all_held_prs:
-            print(f"PRs held for a human to merge: {sorted(set(all_held_prs))}")
-
-        await _progress("PO", "Cycle complete!")
-
-        result = {
-            "date": today,
-            "tokens": tracker.total_tokens,
-            "cost_usd": total_cost,
-            "prs": all_prs,
-            "reviews": all_reviews,
-            "merged_prs": sorted(set(all_merged_prs)),
-            "held_prs": sorted(set(all_held_prs)),
-            "demo_report": qa_state.get("demo_report"),
-            "daily_report": po_ev_state.get("daily_report", ""),
-        }
-
-        # --- MEMORY: retrospective + learnings ---
-        if config.is_real_mode:
-            await _write_cycle_learnings(base_state, result, _progress)
-
-        # --- PERSIST: write cycle history ---
-        from theswarm.cycle_log import append_cycle_log
-        await append_cycle_log(config, result)
-
-        return result
+        return await run_cycle_graph(
+            runtime, cycle_id=cycle_id, checkpointer=checkpointer,
+            resume=resume, date=today,
+        )
     except Exception as exc:
         # Sprint G1 — persist a failed checkpoint for the phase that crashed
         # so /cycles/{id}/resume can pick up from the next one.
-        failed_phase = _current_phase["name"]
+        failed_phase = runtime.current_phase["name"]
         await _checkpoint(
             failed_phase, False,
             {"error": f"{type(exc).__name__}: {exc}"},
@@ -779,7 +366,7 @@ async def run_daily_cycle(
         raise
     finally:
         await watchdog.stop()
-        if dev_claims_open:
+        if runtime.dev_claims_open:
             # Cancelled or crashed mid-loop: give back what was claimed.
             # _requeue_unfinished never raises; a hand-back that fails is
             # logged, not fatal, and the next cycle's picker copes.
