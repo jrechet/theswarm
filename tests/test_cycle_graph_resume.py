@@ -219,3 +219,64 @@ async def test_the_resumer_skips_cycles_without_a_graph_thread(saver):
     by_id = {i["cycle_id"]: i["resume_from"] for i in items}
     assert by_id == {"has-thread": "qa", "no-thread": None}
     assert [p.cycle_id for p in plan_resumes(items)] == ["has-thread"]
+
+
+class _FailOn:
+    """A builder whose graphs fail on the given call numbers (1-based)."""
+
+    def __init__(self, state: dict, fail_calls: set[int]):
+        self.state = state
+        self.calls = 0
+        self.fail_calls = fail_calls
+
+    def __call__(self):
+        graph = MagicMock()
+
+        async def ainvoke(_state):
+            self.calls += 1
+            if self.calls in self.fail_calls:
+                raise RuntimeError("container replaced mid-flight")
+            return dict(self.state)
+
+        graph.ainvoke = AsyncMock(side_effect=ainvoke)
+        return graph
+
+
+async def test_a_resume_mid_dev_loop_hands_back_the_dead_iterations_claims(tmp_path, saver):
+    """The dead iteration marked its task in-progress and never handed it
+    back; the picker skips claimed tasks, so a resume would find nothing
+    ready. The resume hands the claims back before continuing."""
+    config = CycleConfig(github_repo="owner/repo", team_id="t", workspace_dir=str(tmp_path))
+    builders = {
+        "po": _Counting({**STUB, "daily_plan": "p", "daily_report": "r"}),
+        # call 1 = breakdown, call 2 = the first review: that is where it dies
+        "tl": _FailOn({**STUB, "reviews": [], "merged_prs": [], "held_prs": []}, fail_calls={2}),
+        "dev": _Counting({**STUB, "task": {"number": 41}, "pr": {"number": 1, "url": "u"}}),
+        "qa": _Counting(QA_OK),
+    }
+    requeue = AsyncMock(return_value=[41])
+    heard: list[tuple[str, str]] = []
+
+    async def on_progress(role, message):
+        heard.append((role, message))
+
+    patches = _patched(builders, _base_state(tmp_path)) + (
+        patch("theswarm.cycle._requeue_unfinished", requeue),
+    )
+    for p in patches:
+        p.start()
+    try:
+        with pytest.raises(RuntimeError, match="mid-flight"):
+            await run_daily_cycle(config, on_progress=on_progress, cycle_id="cyc-4", checkpointer=saver)
+        assert builders["dev"].calls == 1
+        heard.clear()
+        result = await run_daily_cycle(
+            config, on_progress=on_progress, cycle_id="cyc-4", checkpointer=saver, resume=True,
+        )
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert ("Dev", "Resumed — handing back #41 claimed by the interrupted iteration") in heard
+    assert result["prs"]                      # the loop went on after the resume
+    assert builders["tl"].calls >= 3          # breakdown, the crash, the review that worked

@@ -587,6 +587,17 @@ async def run_cycle_graph(
         runtime.dev_claims_open = bool(values.get("dev_claims_open"))
         runtime.current_phase["name"] = _phase_of(values)
         log.info("Resuming cycle %s at iteration %s", cycle_id, values.get("iteration", 0))
+        if runtime.dev_claims_open:
+            # The iteration that died had claimed a task (`status:in-progress`)
+            # and never handed it back; the picker skips claimed tasks, so a
+            # resume would find "nothing ready" and go straight to QA. Give
+            # the claims back first — the Dev picks them up again.
+            requeued = await _cycle()._requeue_unfinished(runtime.config)
+            if requeued:
+                await runtime.progress(
+                    "Dev", "Resumed — handing back " + ", ".join(f"#{n}" for n in requeued)
+                    + " claimed by the interrupted iteration",
+                )
         final = await graph.ainvoke(None, thread, context=runtime, durability="sync")
     else:
         final = await graph.ainvoke(
