@@ -111,7 +111,11 @@ class TestSameRepository:
 
 
 class TestDifferentRepositories:
-    async def test_cycles_on_different_repos_overlap(self):
+    async def test_cycles_on_different_repos_overlap(self, monkeypatch):
+        """The repo lock is per repository. The *global* bound
+        (SWARM_MAX_CONCURRENT_CYCLES, V2 M5, default 1) is a separate rule
+        with its own tests; lift it here so this one tests the lock alone."""
+        monkeypatch.setenv("SWARM_MAX_CONCURRENT_CYCLES", "2")
         h = _Harness()
         with patch.object(api_mod, "_run_api_cycle", h.body):
             a, b = h.cycle("o/one"), h.cycle("o/two")

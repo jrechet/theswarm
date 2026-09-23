@@ -18,6 +18,7 @@ from datetime import datetime
 from langgraph.graph import END, StateGraph
 
 from theswarm.agents.base import (
+    ensure_target_venv,
     traced_node,
     _test_runner_missing,
     install_target,
@@ -293,6 +294,7 @@ async def run_unit_tests(state: AgentState) -> dict:
         return stub_result(Role.QA, "run_unit_tests",
                            "run pytest unit tests")
 
+    await ensure_target_venv(workspace)
     python = _find_system_python(workspace)
 
     # QA has no evidence the Dev installed the target — a cycle whose Dev

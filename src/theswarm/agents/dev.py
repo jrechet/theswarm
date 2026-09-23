@@ -16,6 +16,7 @@ from langgraph.graph import END, StateGraph
 
 from theswarm.agents.schemas import DevOutcome
 from theswarm.agents.base import (
+    ensure_target_venv,
     traced_node,
     DEP_INSTALL_TIMEOUT_SECONDS,
     _dev_dependencies,
@@ -569,6 +570,7 @@ async def run_quality_gates(state: AgentState) -> dict:
     # TheSwarm's venv, so dependencies landed in the system user site while
     # pytest ran in a venv that ignores it — the target's tests never saw
     # them (prod cycle 882694d44248).
+    await ensure_target_venv(workspace)
     python = find_system_python(workspace)
 
     # Install only when the requirements actually change. The Ralph Loop

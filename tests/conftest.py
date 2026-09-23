@@ -23,6 +23,16 @@ def _default_claude_backend_for_tests(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_target_venv_for_tests(monkeypatch):
+    """The Dev and QA nodes build the target's venv (V2 M5) before choosing
+    an interpreter. Not in the suite: a real `uv venv` in every tmp
+    workspace is seconds per test. Tests of the venv itself re-enable it
+    with ``monkeypatch.setenv("SWARM_TARGET_VENV", "1")``."""
+    if "SWARM_TARGET_VENV" not in os.environ:
+        monkeypatch.setenv("SWARM_TARGET_VENV", "0")
+
+
+@pytest.fixture(autouse=True)
 def _auth_open_for_tests(monkeypatch):
     """Keep the auth wall (issue #38) down for the suite.
 

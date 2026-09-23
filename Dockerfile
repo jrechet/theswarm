@@ -43,6 +43,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/* /root/.npm
 
+# uv at runtime: the Dev and QA agents build the target's venv with
+# `uv venv --seed` (V2 M5); seconds instead of the minute python -m venv
+# takes, and no more installs into this image's system python.
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 RUN useradd -m -s /bin/bash botuser \
     && mkdir -p /app/data \
     && chown -R botuser:botuser /app /home/botuser

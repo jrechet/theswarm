@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import os
+import shutil
 from dataclasses import dataclass
 from typing import Any
 
@@ -137,8 +139,92 @@ def _infer_role(phase: str) -> str | None:
     return phase_role_map.get(phase)
 
 
+# The target's own virtual environment, inside its workspace (V2, M5).
+# Installing the target into the container's system python mutated an
+# interpreter every cycle and every repo shared; a venv per workspace is
+# thrown away with the workspace. Excluded from git through
+# .git/info/exclude (tools/git.exclude_locally), so `git clean -fd` and
+# `git add -A` both leave it alone.
+TARGET_VENV_DIR = ".venv-swarm"
+TARGET_VENV_TIMEOUT_SECONDS = 120
+
+
+def target_venv_python(workspace: str) -> str:
+    """Path of the workspace's venv interpreter, whether or not it exists."""
+    return os.path.join(workspace, TARGET_VENV_DIR, "bin", "python")
+
+
+def _target_venv_enabled() -> bool:
+    return os.environ.get("SWARM_TARGET_VENV", "1").strip().lower() not in ("0", "false", "no")
+
+
+def _has_manifest(workspace: str) -> bool:
+    return any(
+        os.path.isfile(os.path.join(workspace, name))
+        for name in ("pyproject.toml", "requirements.txt")
+    )
+
+
+async def ensure_target_venv(workspace: str) -> str:
+    """Create the workspace's venv once and return its python, "" when none.
+
+    Nothing to do without a workspace, without a manifest to install, or
+    when disabled (`SWARM_TARGET_VENV=0`, the test suite's default). Built
+    with `uv venv --seed` when uv is on PATH (seeded with pip, so the
+    install plan's `python -m pip` keeps working), else `python -m venv`.
+    The base interpreter is the one the target's `requires-python`
+    accepts, as before. A failed creation logs and falls back to that base
+    interpreter — the behaviour before M5, never a dead phase.
+    """
+    if not _target_venv_enabled() or not workspace or not os.path.isdir(workspace):
+        return ""
+    venv_python = target_venv_python(workspace)
+    if os.path.isfile(venv_python):
+        return venv_python
+    if not _has_manifest(workspace):
+        return ""
+    base = _system_python(workspace)
+    venv_dir = os.path.join(workspace, TARGET_VENV_DIR)
+    uv = shutil.which("uv")
+    if uv:
+        command = [uv, "venv", "--seed", "--quiet", "--python", base, venv_dir]
+    else:
+        command = [base, "-m", "venv", venv_dir]
+    log.info("Creating the target venv: %s", " ".join(command))
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        )
+        output, _ = await asyncio.wait_for(proc.communicate(), timeout=TARGET_VENV_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        log.warning("Target venv creation timed out after %ds — using %s",
+                    TARGET_VENV_TIMEOUT_SECONDS, base)
+        return ""
+    except OSError as exc:
+        log.warning("Target venv creation failed to start (%s) — using %s", exc, base)
+        return ""
+    if proc.returncode != 0 or not os.path.isfile(venv_python):
+        log.warning(
+            "Target venv creation failed (rc=%s): %s — using %s",
+            proc.returncode, (output or b"").decode(errors="replace")[-500:], base,
+        )
+        return ""
+    return venv_python
+
+
 def find_system_python(workspace: str = "") -> str:
     """Interpreter used to install and run the *target* project's code.
+
+    The workspace's own venv when `ensure_target_venv` built one (V2, M5);
+    otherwise a system interpreter the target accepts — see `_system_python`.
+    """
+    if workspace and os.path.isfile(target_venv_python(workspace)):
+        return target_venv_python(workspace)
+    return _system_python(workspace)
+
+
+def _system_python(workspace: str = "") -> str:
+    """A system interpreter for the target — never TheSwarm's own venv.
 
     Deliberately not TheSwarm's own venv: the target project's dependencies
     must not be installed into it, and the venv ignores the user site-packages
