@@ -267,6 +267,10 @@ def _child_env(*, drop_oauth_env: bool = False) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
     env["CI"] = "1"
     env["CLAUDE_CODE_NON_INTERACTIVE"] = "1"
+    # No auto-memory (I2): earlier runs in this home left memory files under
+    # ~/.claude/projects/<workspace>/memory, and the binary loads their index
+    # into every call — cycle 71c8b870041a's PO tried to Read them.
+    env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
     if drop_oauth_env:
         env.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
     return env
@@ -453,6 +457,11 @@ _SDK_PROFILE_TOOLS: dict[str, frozenset[str]] = {
     "read": frozenset(_SDK_ALLOWED_TOOLS["read"]),
     "text": frozenset(),
 }
+# The SDK's own mechanics, allowed in every profile: with `output_format`
+# the answer itself is delivered as a call to "StructuredOutput". Refusing
+# it refuses the answer — the first prod breakdown on M3 (cycle
+# 71c8b870041a) was refused three times and failed "no structured output".
+_SDK_MECHANICS_TOOLS = frozenset({"StructuredOutput"})
 # Never, in any profile: the web is not the workspace, and a sub-agent is a
 # budget nobody accounted for.
 _SDK_DISALLOWED_TOOLS = ["WebSearch", "WebFetch", "Task"]
@@ -509,6 +518,8 @@ def decide_tool_use(
     Everything the SDK asks about comes here; what the profile auto-approves
     never does. Bash is judged on its command, file tools on their path.
     """
+    if tool_name in _SDK_MECHANICS_TOOLS:
+        return True, ""
     if tool_name not in _SDK_PROFILE_TOOLS.get(profile, frozenset()):
         return False, f"{tool_name} is not available to a {profile} call"
     if tool_name == "Bash":
@@ -566,10 +577,17 @@ def _relative(path: str, workspace: str | None) -> str:
     return path
 
 
+# Pseudo-tools the SDK uses for its own mechanics — the structured answer is
+# delivered as a "StructuredOutput" tool call — say nothing to the theater.
+_SILENT_TOOLS = frozenset({"StructuredOutput"})
+
+
 def _tool_event(name: str, tool_input: dict, workspace: str | None) -> str:
     """One line per tool call for the theater: what, never the contents."""
     from theswarm.tools.git import redact
 
+    if name in _SILENT_TOOLS:
+        return ""
     if name in _SDK_FILE_TOOLS:
         raw = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         return f"{name} {_relative(str(raw), workspace)}".strip()
