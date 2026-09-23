@@ -492,3 +492,20 @@ def test_text_events_skip_code_and_keep_prose(text, expected):
     from theswarm.tools.claude import _text_event
 
     assert _text_event(text) == expected
+
+
+def test_each_profile_sees_only_the_tools_its_policy_allows():
+    """A tool the model can see but not use is a turn spent asking for it:
+    the breakdown of cycle a6d93287668b asked for Bash twice and for
+    AskUserQuestion once before answering."""
+    from theswarm.tools.claude import ClaudeCLI, _SDK_PROFILE_TOOLS
+
+    cli = ClaudeCLI(model="haiku")
+    for profile in ("text", "read", "edit"):
+        opts = cli._sdk_options(
+            profile, "/ws" if profile != "text" else None, "claude-haiku-4-5",
+            drop_oauth_env=False, resume=None,
+        )
+        assert sorted(opts.tools) == sorted(_SDK_PROFILE_TOOLS[profile]), profile
+    text = cli._sdk_options("text", None, "claude-haiku-4-5", drop_oauth_env=False, resume=None)
+    assert text.tools == []

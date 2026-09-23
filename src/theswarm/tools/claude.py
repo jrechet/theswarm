@@ -864,6 +864,14 @@ class ClaudeCLI:
                 {"type": "preset", "preset": "claude_code"} if profile != "text" else None
             ),
             permission_mode="acceptEdits" if profile == "edit" else "default",
+            # What the model sees is what the policy allows: a tool it cannot
+            # use is a turn spent asking for it. The first breakdown after the
+            # StructuredOutput fix asked for Bash twice and AskUserQuestion
+            # once before answering; with the base set narrowed, a text call
+            # answers in two turns for a seventh of the price (measured on
+            # prod 2026-09-23). StructuredOutput is not a base tool and
+            # survives an empty set.
+            tools=sorted(_SDK_PROFILE_TOOLS[profile]),
             allowed_tools=list(_SDK_ALLOWED_TOOLS[profile]),
             disallowed_tools=list(_SDK_DISALLOWED_TOOLS),
             can_use_tool=can_use_tool,
