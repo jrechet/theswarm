@@ -129,6 +129,7 @@ def test_run_one_scores_and_appends_a_full_record(tmp_path, monkeypatch):
 
     seen_prs = iter([set(), {77}])
     monkeypatch.setattr(cycle_e2e, "_gh", fake_gh)
+    monkeypatch.setattr(cycle_e2e, "wait_for_health", lambda *a, **k: True)  # no network in the suite
     monkeypatch.setattr(cycle_e2e, "prs_before", lambda repo: next(seen_prs))
     monkeypatch.setattr(cycle_e2e, "start_cycle", lambda repo, issue: "cyc-1")
     monkeypatch.setattr(cycle_e2e, "wait_for", lambda cycle_id, budget: ("completed", "po_evening"))
@@ -151,3 +152,20 @@ def test_run_one_scores_and_appends_a_full_record(tmp_path, monkeypatch):
     assert record["regression"] is False and record["cycle_id"] == "cyc-1"
     (line,) = history.read_text().splitlines()
     assert json.loads(line)["repo"] == "o/r"
+
+
+def test_the_harness_waits_out_a_deploy_before_creating_anything():
+    """Run 35873827304 hit the rollout window: it created its issue, then the
+    cycle start read a 404 page as JSON and failed. Health first."""
+    answers = iter([(404, {}), (404, {}), (200, {"status": "ok"})])
+    slept: list[float] = []
+    ok = cycle_e2e.wait_for_health(budget_s=60, api=lambda path: next(answers), sleep=slept.append)
+    assert ok is True
+    assert slept == [10, 10]
+
+
+def test_the_health_wait_gives_up_within_its_budget(monkeypatch):
+    clock = iter([0.0, 0.0, 5.0, 11.0, 20.0, 31.0])
+    monkeypatch.setattr(cycle_e2e.time, "time", lambda: next(clock))
+    ok = cycle_e2e.wait_for_health(budget_s=10, api=lambda path: (404, {}), sleep=lambda s: None)
+    assert ok is False

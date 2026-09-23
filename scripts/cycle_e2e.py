@@ -96,7 +96,30 @@ def prs_before(repo: str) -> set[int]:
     return {p["number"] for p in json.loads(raw or "[]")}
 
 
+HEALTH_WAIT_SECONDS = 180
+
+
+def wait_for_health(budget_s: int = HEALTH_WAIT_SECONDS, *, api=None, sleep=time.sleep) -> bool:
+    """True once /health answers 200, False when it never does within budget.
+
+    A deploy's rolling update answers 404 for a couple of minutes; a harness
+    dispatched into that window created its issue and then failed to start
+    the cycle (run 35873827304, "HTTP 0 … Extra data"). Wait it out first.
+    """
+    api = api or _api
+    deadline = time.time() + budget_s
+    while True:
+        status, _ = api("/health")
+        if status == 200:
+            return True
+        if time.time() >= deadline:
+            return False
+        sleep(10)
+
+
 def start_cycle(repo: str, issue: int) -> str:
+    if not wait_for_health():
+        sys.exit(f"FAIL start: {BASE}/health never answered 200 in {HEALTH_WAIT_SECONDS}s")
     status, body = _api("/api/cycle", {"repo": repo, "issue_number": issue})
     if status != 200:
         sys.exit(f"FAIL start: HTTP {status} {body}")
@@ -251,6 +274,8 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
     """One feature, one cycle, one scored line of history."""
     print(f"▶ {repo}: {feature_text.splitlines()[0][:70]}"
           + (f"  [{feature.id}]" if feature else ""))
+    if not wait_for_health():
+        sys.exit(f"FAIL start: {BASE}/health never answered 200 in {HEALTH_WAIT_SECONDS}s")
     seen = prs_before(repo)
     issue = create_issue(repo, feature_text)
     cycle_id = start_cycle(repo, issue)
