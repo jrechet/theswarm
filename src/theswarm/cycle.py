@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import logging
 from datetime import datetime
 
@@ -32,6 +33,33 @@ MAX_DAILY_STORIES = 3  # imported by PO but defined here for reference
 # The workspace is one directory per repo, and a cycle treats it as its own:
 # `git reset --hard`, `clean -fd`, `checkout -B`, and rm -rf at the end.
 _repo_locks: dict[str, tuple[asyncio.AbstractEventLoop, asyncio.Lock]] = {}
+
+
+# How many cycles may run at once, all repositories together (V2, M5).
+# One per repo is a correctness rule (the workspace); this one is about
+# the box: a 2 GB container and one shared subscription window.
+DEFAULT_MAX_CONCURRENT_CYCLES = 1
+_cycle_slots: dict[str, tuple[asyncio.AbstractEventLoop, int, asyncio.Semaphore]] = {}
+
+
+def max_concurrent_cycles() -> int:
+    raw = os.environ.get("SWARM_MAX_CONCURRENT_CYCLES", "").strip()
+    try:
+        return max(1, int(raw)) if raw else DEFAULT_MAX_CONCURRENT_CYCLES
+    except ValueError:
+        return DEFAULT_MAX_CONCURRENT_CYCLES
+
+
+def cycle_slot() -> asyncio.Semaphore:
+    """The semaphore every cycle holds while it runs, sized by
+    SWARM_MAX_CONCURRENT_CYCLES. Per loop, like `repo_lock`; rebuilt when
+    the configured size changes."""
+    loop = asyncio.get_running_loop()
+    size = max_concurrent_cycles()
+    entry = _cycle_slots.get("global")
+    if entry is None or entry[0] is not loop or entry[1] != size:
+        entry = _cycle_slots["global"] = (loop, size, asyncio.Semaphore(size))
+    return entry[2]
 
 
 def repo_lock(repo: str) -> asyncio.Lock:

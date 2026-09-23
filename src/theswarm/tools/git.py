@@ -100,6 +100,56 @@ def _auth_args() -> list[str]:
     return ["-c", f"http.https://github.com/.extraheader=AUTHORIZATION: basic {basic}"]
 
 
+# What a cycle leaves in a workspace and must never commit: the target's
+# venv (V2 M5), worktrees, test databases, coverage output. `commit_all`
+# runs `git add -A` and `create_branch` runs `git clean -fd`; both honour
+# .git/info/exclude, which is local to the clone and never pushed — the
+# target's own .gitignore is not ours to edit. Closes the "runtime
+# artifacts committed by git add -A" gap.
+RUNTIME_EXCLUDES: tuple[str, ...] = (
+    ".venv-swarm/",
+    ".worktrees/",
+    "test.db",
+    "test.db-*",
+    ".coverage",
+    "coverage.json",
+    "coverage.xml",
+    "htmlcov/",
+    ".pytest_cache/",
+)
+_EXCLUDE_MARKER = "# theswarm runtime artifacts"
+
+
+def exclude_locally(workdir: str, patterns: tuple[str, ...] = RUNTIME_EXCLUDES) -> bool:
+    """Add ``patterns`` to the clone's .git/info/exclude once.
+
+    False without a .git, or when the file cannot be written — best effort:
+    an exclusion that fails is a warning, never a clone that fails.
+    """
+    info_dir = os.path.join(workdir, ".git", "info")
+    if not os.path.isdir(os.path.join(workdir, ".git")):
+        return False
+    try:
+        os.makedirs(info_dir, exist_ok=True)
+        path = os.path.join(info_dir, "exclude")
+        existing = ""
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as handle:
+                existing = handle.read()
+        present = {line.strip() for line in existing.splitlines()}
+        missing = [pattern for pattern in patterns if pattern not in present]
+        if not missing:
+            return True
+        with open(path, "a", encoding="utf-8") as handle:
+            if existing and not existing.endswith("\n"):
+                handle.write("\n")
+            handle.write(_EXCLUDE_MARKER + "\n" + "\n".join(missing) + "\n")
+        return True
+    except OSError as exc:
+        log.warning("Could not write %s/.git/info/exclude: %s", workdir, exc)
+        return False
+
+
 async def clone_repo(repo_url: str, dest: str) -> str:
     """Clone a repo to dest. If dest already exists, pull instead."""
     await github_app.ensure_github_token()
@@ -107,11 +157,13 @@ async def clone_repo(repo_url: str, dest: str) -> str:
         log.info("Repo already cloned at %s — pulling latest", dest)
         await _run_git("checkout", "main", cwd=dest, check=False)
         await _run_git(*_auth_args(), "pull", "--ff-only", cwd=dest, check=False)
+        exclude_locally(dest)
         return dest
 
     log.info("Cloning %s → %s", repo_url, dest)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     await _run_git(*_auth_args(), "clone", repo_url, dest)
+    exclude_locally(dest)
     return dest
 
 

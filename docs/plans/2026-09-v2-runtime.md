@@ -479,6 +479,13 @@ temps.
   prod tant que la mémoire n'est pas mesurée).
 - **Hors périmètre** : un conteneur par cycle via le socket Docker. C'est
   une décision de sécurité du owner (section 8).
+- *Livré en deux temps (2026-09-23)* : **M5a** = interpréteur par
+  workspace (`uv venv --seed`), artefacts d'exécution exclus via
+  `.git/info/exclude` (ferme aussi le trou « `git add -A` commite les
+  artefacts »), borne globale `SWARM_MAX_CONCURRENT_CYCLES`. **M5b** (à
+  faire) = worktree par tâche, sous-tâches parallèles via `Send`, et le
+  parallélisme des captures QA reporté de M4 — les trois demandent des
+  réducteurs dans `AgentState` et se livrent ensemble.
 
 **Acceptation.**
 - Test de régression du cas `16f3b8af2cca` / `2878898cc504` : deux tâches

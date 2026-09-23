@@ -617,15 +617,22 @@ async def run_api_cycle(cycle_id: str, repo: str, *args, **kwargs) -> None:
     Cancelling a waiting cycle is honoured immediately: nothing has started,
     so there is nothing to persist beyond the status.
     """
-    from theswarm.cycle import repo_lock
+    from theswarm.cycle import cycle_slot, max_concurrent_cycles, repo_lock
 
     tracker = get_cycle_tracker()
     lock = repo_lock(repo)
+    slot = cycle_slot()
     if lock.locked():
         log.info("Cycle %s queued: another cycle is running on %s", cycle_id, repo)
+    elif slot.locked():
+        log.info(
+            "Cycle %s queued: %d cycle(s) already running (SWARM_MAX_CONCURRENT_CYCLES)",
+            cycle_id, max_concurrent_cycles(),
+        )
     try:
         async with lock:
-            await _run_api_cycle(cycle_id, repo, *args, **kwargs)
+            async with slot:
+                await _run_api_cycle(cycle_id, repo, *args, **kwargs)
     except asyncio.CancelledError:
         tracker.update_status(
             cycle_id, CycleStatus.CANCELLED,

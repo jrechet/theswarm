@@ -414,7 +414,32 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   A node re-run after a crash between effect and checkpoint is the normal
   case: keep every node safe to repeat (learnings and the cycle log are
   separate nodes for that reason). The phase-checkpoint table
-  (`on_checkpoint`) still feeds the V1 cycles page until M7.
+  (`on_checkpoint`) still feeds the V1 cycles page until M7. **Agent graphs
+  run detached** (`cycle_graph._invoke_agent`: a fresh contextvars.Context,
+  the OpenTelemetry context re-attached): a compiled graph invoked inside a
+  node inherits the parent's checkpointer and its state carries live
+  clients — the first prod cycle on the graph (ddd989b4e51e) died in
+  po_morning on "Type is not msgpack serializable: GitHubClient".
+  `checkpointer=False` on the agent graphs is kept too, but alone it trips
+  LangGraph under `durability="sync"` (`_put_checkpoint_fut`). A resume
+  mid dev-loop hands back the tasks the dead iteration claimed first.
+- **V2 runtime M5a — the target runs in its own venv, inside its
+  workspace.** `agents/base.ensure_target_venv` builds `<workspace>/.venv-swarm`
+  once (`uv venv --seed`, the binary is in the image; `python -m venv`
+  without it), from the interpreter the target's `requires-python`
+  accepts; `find_system_python` then answers that venv, so Dev and QA
+  install and test with the same one and the container's system python is
+  never mutated again. Off in the suite (`SWARM_TARGET_VENV=0` in
+  conftest) — a real venv per tmp workspace is seconds per test. **Runtime
+  artifacts never reach a commit**: `clone_repo` writes `.venv-swarm/`,
+  `.worktrees/`, `test.db*`, coverage output into the clone's
+  `.git/info/exclude` (`tools/git.exclude_locally`, best effort), which
+  `git add -A` and `git clean -fd` both honour — the old "known gap" is
+  closed without touching the target's `.gitignore`. **Cycles across
+  repositories share one bound**: `SWARM_MAX_CONCURRENT_CYCLES` (default
+  1, `cycle.cycle_slot`), held with the repo lock by the API and the
+  gateway; a second repo now queues like a second cycle on the same repo.
+  Worktree-per-task and parallel sub-tasks are M5b (not shipped).
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

@@ -16,6 +16,7 @@ from langgraph.graph import END, StateGraph
 
 from theswarm.agents.schemas import DevOutcome
 from theswarm.agents.base import (
+    ensure_target_venv,
     traced_node,
     DEP_INSTALL_TIMEOUT_SECONDS,
     _dev_dependencies,
@@ -569,6 +570,7 @@ async def run_quality_gates(state: AgentState) -> dict:
     # TheSwarm's venv, so dependencies landed in the system user site while
     # pytest ran in a venv that ignores it — the target's tests never saw
     # them (prod cycle 882694d44248).
+    await ensure_target_venv(workspace)
     python = find_system_python(workspace)
 
     # Install only when the requirements actually change. The Ralph Loop
@@ -878,7 +880,14 @@ def build_dev_graph() -> StateGraph:
     })
     graph.add_edge("open_pr", END)
 
-    return graph.compile()
+    # No checkpointer of its own, and none inherited: invoked inside a node
+    # of the durable cycle graph (V2 M4) this graph would otherwise be
+    # checkpointed with the parent's saver, and its state carries live
+    # clients (`github`, `claude`) that msgpack cannot serialise — the first
+    # prod cycle on the graph died in po_morning on exactly that
+    # (ddd989b4e51e). The cycle graph is the durable one; agent graphs are
+    # transient by design.
+    return graph.compile(checkpointer=False)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
