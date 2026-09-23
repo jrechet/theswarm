@@ -451,8 +451,14 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `scripts/cycle_e2e.py --repo X` with no feature runs the day's; `--all`
   the series (a manual dispatch, `all=true`); a typed `--feature` runs as
   before. A failed run posts to Mattermost when the workflow has the token
-  (`MATTERMOST_URL`/`MATTERMOST_BOT_TOKEN`). Every line still lands in
-  `docs/harness-runs.jsonl` (CI `paths-ignore`, never a deploy).
+  (`MATTERMOST_URL`/`MATTERMOST_BOT_TOKEN`). **The scored record is posted
+  to `POST /api/evals/runs`** (table `eval_runs`, migration v028) and the
+  repo page reads the trend from there; the `docs/harness-runs.jsonl` line
+  is still written, but `main`'s branch protection now refuses the
+  harness's direct push ("Changes must be made through a pull request",
+  run 35874015968) — the same rule hits every agent write-to-main path
+  (daily report, memory save, cycle history): a person or a PR must carry
+  them until that protection is revisited.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

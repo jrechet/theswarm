@@ -107,6 +107,9 @@ from theswarm.infrastructure.persistence.migrations.v026_cli_timeout_floors impo
 from theswarm.infrastructure.persistence.migrations.v027_cycle_trace_id import (
     ALTERS as MIGRATION_V027_ALTERS,
 )
+from theswarm.infrastructure.persistence.migrations.v028_eval_runs import (
+    SQL as MIGRATION_V028,
+)
 
 log = logging.getLogger(__name__)
 
@@ -148,6 +151,7 @@ async def init_db(db_path: str = _DEFAULT_DB) -> aiosqlite.Connection:
     await db.executescript(MIGRATION_V025)
     await db.executescript(MIGRATION_V026)
     await _ensure_cycles_columns(db)
+    await db.executescript(MIGRATION_V028)
     await db.commit()
     return db
 
@@ -718,6 +722,45 @@ class SQLiteScheduleRepository:
 
 
 # ── Checkpoint Repository (Sprint G1) ──────────────────────────────
+
+
+class SQLiteEvalRunRepository:
+    """Scored harness runs (V2 M6): the record the harness posts, as is."""
+
+    def __init__(self, db: aiosqlite.Connection) -> None:
+        self._db = db
+
+    async def save(self, record: dict) -> int:
+        cursor = await self._db.execute(
+            """INSERT INTO eval_runs (repo, feature, cycle_id, timestamp, record_json)
+               VALUES (?, ?, ?, ?, ?)""",
+            (
+                str(record.get("repo", "")),
+                str(record.get("feature", "") or ""),
+                str(record.get("cycle_id", "") or ""),
+                str(record.get("timestamp") or _now_iso()),
+                json.dumps(record, default=str),
+            ),
+        )
+        await self._db.commit()
+        return int(cursor.lastrowid or 0)
+
+    async def list_for_repo(self, repo: str, limit: int = 50) -> list[dict]:
+        """Oldest first, the last `limit` runs — the shape `evals.trend` reads."""
+        cursor = await self._db.execute(
+            """SELECT record_json FROM eval_runs WHERE repo = ?
+               ORDER BY id DESC LIMIT ?""",
+            (repo, limit),
+        )
+        rows = await cursor.fetchall()
+        records = []
+        for row in rows:
+            try:
+                records.append(json.loads(row["record_json"]))
+            except (json.JSONDecodeError, TypeError):
+                continue
+        records.reverse()
+        return records
 
 
 class SQLiteCheckpointRepository:

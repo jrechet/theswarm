@@ -169,3 +169,15 @@ def test_the_health_wait_gives_up_within_its_budget(monkeypatch):
     monkeypatch.setattr(cycle_e2e.time, "time", lambda: next(clock))
     ok = cycle_e2e.wait_for_health(budget_s=10, api=lambda path: (404, {}), sleep=lambda s: None)
     assert ok is False
+
+
+def test_the_scored_record_is_posted_to_the_api(monkeypatch):
+    posted: list[tuple[str, dict]] = []
+    monkeypatch.setattr(cycle_e2e, "_api", lambda path, payload=None: (posted.append((path, payload)) or (201, {"id": 7})))
+    assert cycle_e2e.post_run({"repo": "o/r", "passed": True}) is True
+    assert posted == [("/api/evals/runs", {"repo": "o/r", "passed": True})]
+
+
+def test_a_refused_post_is_reported_not_raised(monkeypatch):
+    monkeypatch.setattr(cycle_e2e, "_api", lambda path, payload=None: (503, {"error": "no database"}))
+    assert cycle_e2e.post_run({"repo": "o/r"}) is False

@@ -280,6 +280,31 @@ async def api_list_cycles(request: Request, limit: int = 20) -> JSONResponse:
     return JSONResponse({"cycles": cycles})
 
 
+@router.post("/evals/runs")
+async def api_post_eval_run(request: Request) -> JSONResponse:
+    """The harness posts each scored run here (V2 M6) — behind the wall,
+    with the access key as a Bearer like every /api route."""
+    repo = getattr(request.app.state, "eval_run_repo", None)
+    if repo is None:
+        return JSONResponse({"error": "no database"}, status_code=503)
+    try:
+        record = await request.json()
+    except Exception:  # noqa: BLE001 — a body that is not JSON
+        return JSONResponse({"error": "invalid JSON body"}, status_code=400)
+    if not isinstance(record, dict) or not str(record.get("repo", "")).strip():
+        return JSONResponse({"error": "a record with a repo is required"}, status_code=422)
+    run_id = await repo.save(record)
+    return JSONResponse({"id": run_id}, status_code=201)
+
+
+@router.get("/evals/runs")
+async def api_list_eval_runs(request: Request, repo: str = "", limit: int = 50) -> JSONResponse:
+    store = getattr(request.app.state, "eval_run_repo", None)
+    if store is None or not repo:
+        return JSONResponse({"runs": []})
+    return JSONResponse({"runs": await store.list_for_repo(repo, limit=max(1, min(limit, 500)))})
+
+
 @router.post("/cycle")
 async def start_cycle(request: Request) -> JSONResponse:
     """Start a new cycle via the headless API."""

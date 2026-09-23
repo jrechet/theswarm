@@ -163,6 +163,18 @@ def build_result(repo: str, passed: bool, state: str, new_prs: list[int], left: 
     }
 
 
+def post_run(record: dict) -> bool:
+    """Send the scored record to the swarm (POST /api/evals/runs), where the
+    repo page reads the trend. The jsonl line is still written, but its
+    push to main is refused by branch protection; this is the live copy."""
+    status, body = _api("/api/evals/runs", record)
+    if status == 201:
+        print(f"  recorded   : run #{body.get('id')} on {BASE}")
+        return True
+    print(f"  (run not recorded on the API: HTTP {status} {str(body)[:120]})")
+    return False
+
+
 def pr_files(repo: str, pr: int) -> list[str]:
     raw = _gh("pr", "view", str(pr), "--repo", repo, "--json", "files", "--jq", ".files[].path")
     return [line.strip() for line in raw.splitlines() if line.strip()]
@@ -323,6 +335,7 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
     previous = read_last_result(history, repo)
     result["regression"] = is_regression(previous, result)
     append_result(history, result)
+    post_run(result)
 
     print(f"  cost/time  : ${result['cost_usd']:.2f} / {result['duration_s']}s"
           + (f"  (over budget)" if result["within_cost"] is False or result["within_time"] is False else "")
