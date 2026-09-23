@@ -148,7 +148,9 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   Dev iteration starts over with its claimed tasks handed back; the tree
   survives on the `swarm-workspaces` volume. A continuation is never
   resumed a second time (`auto-resume:1`), so two deploys inside one
-  cycle still lose it. Keep agent write-to-main paths out of the CI
+  cycle still lose it. The resume also needs the old container not to
+  write the cycle down as cancelled on its way out (see "Cancel is
+  persisted"). Keep agent write-to-main paths out of the CI
   trigger anyway: the PO's daily plan, its daily *report*
   (`docs/daily-reports/**`) and the memory save (`AGENT_MEMORY.jsonl`) each
   redeployed mid-cycle once (`5f8f0f63f58c`: two deploys in a minute while

@@ -449,7 +449,11 @@ reconstruire.
   `/c/{id}` suivent le lien), chaque cycle s'enregistrait `triggered_by =
   web` (la limite d'une reprise ne tenait pas ; la reprise dit maintenant
   `auto-resume:1`), et le workspace vivait dans le conteneur (volume nommé
-  `swarm-workspaces`). La reprise a aussi révélé qu'un Dev pouvait
+  `swarm-workspaces`). Un quatrième après coup : l'arrêt d'un conteneur
+  était enregistré comme une annulation, et la reprise dépendait d'une
+  course entre la fin de la boucle et le SIGKILL — le cycle `04fc7fff85a0`
+  a été perdu au déploiement de #192 (#194 : seule une annulation demandée
+  est écrite). La reprise a aussi révélé qu'un Dev pouvait
   installer les dépendances de la cible dans le venv de TheSwarm par son
   propre Bash : chaque enfant Claude reçoit désormais le `.venv-swarm` du
   workspace en tête de PATH, jamais celui de TheSwarm.
