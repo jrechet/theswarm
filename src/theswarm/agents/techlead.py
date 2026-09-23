@@ -13,6 +13,7 @@ import re
 from langgraph.graph import END, StateGraph
 
 from theswarm.agents.base import load_context, stub_result, traced_node
+from theswarm.agents.schemas import Breakdown, ReviewVerdict
 from theswarm.config import SELF_REPO, AgentState, Role
 from theswarm.tools.claude import ClaudeFatalError
 
@@ -208,12 +209,18 @@ async def breakdown_stories(state: AgentState) -> dict:
             issue_body=issue.get("body", "(no description)"),
         )
 
-        result = await claude.run(prompt, timeout=BREAKDOWN_TIMEOUT_SECONDS)
+        result = await claude.run(
+            prompt, timeout=BREAKDOWN_TIMEOUT_SECONDS,
+            output_schema=Breakdown.model_json_schema(),
+        )
         total_tokens += result.total_tokens
         total_cost += result.cost_usd
 
-        # Parse the task list
-        tasks = _parse_tasks_json(result.text)
+        # The structure first (SDK backend, validated); the text parser is
+        # the CLI backend's fallback only (M3).
+        tasks = _tasks_from_structure(result)
+        if tasks is None:
+            tasks = _parse_tasks_json(result.text)
         if not tasks:
             log.warning("TechLead: could not parse breakdown for #%d", issue["number"])
             continue
@@ -442,12 +449,19 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
         context=context,
     )
 
-    result = await claude.run(prompt, timeout=_review_timeout(len(prompt)))
+    result = await claude.run(
+        prompt, timeout=_review_timeout(len(prompt)),
+        output_schema=ReviewVerdict.model_json_schema(),
+    )
     log.info("Claude review done for PR #%d: %d tokens, $%.4f",
              pr_number, result.total_tokens, result.cost_usd)
 
-    # Parse the review
-    review_data, salvaged = _parse_review(result.text)
+    # The verdict is a field when the SDK answered (M3); the prose is read
+    # only on the CLI backend, where it is all there is.
+    review_data = _verdict_from_structure(result)
+    salvaged = False
+    if review_data is None:
+        review_data, salvaged = _parse_review(result.text)
     decision = review_data.get("decision", "COMMENT")
     summary = review_data.get("summary", "Review completed.")
     issues = review_data.get("issues", [])
@@ -682,6 +696,30 @@ def _salvage_objects(text: str) -> list[dict]:
             elif depth < 0:
                 depth = 0
     return objects
+
+
+def _tasks_from_structure(result) -> list[dict] | None:
+    """The breakdown's tasks from a structured answer, None without one."""
+    structured = getattr(result, "structured", None)
+    if not isinstance(structured, dict):
+        return None
+    try:
+        return Breakdown.model_validate(structured).model_dump()["tasks"]
+    except Exception as exc:  # noqa: BLE001 — a shape this code does not know
+        log.warning("Breakdown structure rejected (%s) — falling back to the text", exc)
+        return None
+
+
+def _verdict_from_structure(result) -> dict | None:
+    """The review as a dict from a structured answer, None without one."""
+    structured = getattr(result, "structured", None)
+    if not isinstance(structured, dict):
+        return None
+    try:
+        return ReviewVerdict.model_validate(structured).model_dump()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Review structure rejected (%s) — falling back to the text", exc)
+        return None
 
 
 def _parse_tasks_json(text: str) -> list[dict]:

@@ -14,6 +14,7 @@ from datetime import datetime
 
 from langgraph.graph import END, StateGraph
 
+from theswarm.agents.schemas import DevOutcome
 from theswarm.agents.base import (
     traced_node,
     DEP_INSTALL_TIMEOUT_SECONDS,
@@ -93,6 +94,7 @@ Implement the task described above.
 
 Edit the files in place in the working directory — your edits there are
 accepted. If you cannot edit a file in place, output it in your final message
+(when the answer is structured, put it in `files` and set `status`)
 using this exact format for EACH such file (earlier messages are not read):
 
 --- FILE: path/to/file.py ---
@@ -448,12 +450,20 @@ async def implement_task(state: AgentState) -> dict:
         result = await claude.run(
             prompt, workdir=workspace, timeout=IMPLEMENT_TIMEOUT_SECONDS,
             permission_mode=EDIT_PERMISSION_MODE,
+            output_schema=DevOutcome.model_json_schema(),
         )
         log.info("Claude implementation done: %d tokens, $%.4f",
                  result.total_tokens, result.cost_usd)
 
-        # Extract files from Claude's response and write them to workspace
-        files_written = _extract_files_from_response(result.text, workspace)
+        # A structured answer (SDK) carries its files and its claim as
+        # fields; the text is read only when there is nothing else (CLI).
+        outcome = _outcome_of(result)
+        if outcome is not None:
+            files_written = _write_outcome_files(
+                [f.model_dump() for f in outcome.files], workspace,
+            )
+        else:
+            files_written = _extract_files_from_response(result.text, workspace)
         log.info("Extracted %d files from Claude's response", files_written)
 
         # The tree first, the claim second. On cycle 5b1da00155c2 the first
@@ -481,7 +491,14 @@ async def implement_task(state: AgentState) -> dict:
         has_work = committed or bool(diff_stat.strip())
 
         if not has_work:
-            already_satisfied = _extract_already_satisfied(result.text)
+            if outcome is not None:
+                already_satisfied = (
+                    (outcome.already_satisfied_file or "(unspecified)",
+                     outcome.reason or outcome.summary or "already satisfied")
+                    if outcome.status == "already_satisfied" else None
+                )
+            else:
+                already_satisfied = _extract_already_satisfied(result.text)
             if already_satisfied:
                 satisfied_file, reason = already_satisfied
                 comment = "Already satisfied: `" + satisfied_file + "` " + chr(8212) + " " + reason
@@ -785,10 +802,15 @@ async def retry_implement(state: AgentState) -> dict:
     result = await claude.run(
         prompt, workdir=workspace, timeout=IMPLEMENT_TIMEOUT_SECONDS,
         permission_mode=EDIT_PERMISSION_MODE,
+        output_schema=DevOutcome.model_json_schema(),
     )
 
     from theswarm.tools import git as git_ops
-    files_written = _extract_files_from_response(result.text, workspace)
+    outcome = _outcome_of(result)
+    if outcome is not None:
+        files_written = _write_outcome_files([f.model_dump() for f in outcome.files], workspace)
+    else:
+        files_written = _extract_files_from_response(result.text, workspace)
     log.info("Ralph Loop retry: wrote %d files from the answer", files_written)
 
     # The tree decides, not the extractor: an in-place fix leaves no FILE
@@ -862,6 +884,43 @@ def build_dev_graph() -> StateGraph:
 # ── Helpers ─────────────────────────────────────────────────────────────
 
 
+def _outcome_of(result) -> DevOutcome | None:
+    """The Dev's structured outcome, None on a text backend or a bad shape."""
+    structured = getattr(result, "structured", None)
+    if not isinstance(structured, dict):
+        return None
+    try:
+        return DevOutcome.model_validate(structured)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Dev outcome structure rejected (%s) — reading the text", exc)
+        return None
+
+
+def _write_workspace_file(workspace: str, filepath: str, content: str) -> bool:
+    """Write one file inside the workspace; refuse anything that escapes it."""
+    filepath = filepath.strip()
+    if not filepath or ".." in filepath or filepath.startswith("/"):
+        log.warning("Skipping suspicious path: %s", filepath)
+        return False
+    full_path = os.path.join(workspace, filepath)
+    os.makedirs(os.path.dirname(full_path) or workspace, exist_ok=True)
+    with open(full_path, "w") as f:
+        f.write(content)
+        if not content.endswith("\n"):
+            f.write("\n")
+    log.info("Wrote file: %s", filepath)
+    return True
+
+
+def _write_outcome_files(files: list[dict], workspace: str) -> int:
+    """The structured twin of ``_extract_files_from_response``."""
+    written = 0
+    for block in files:
+        if _write_workspace_file(workspace, str(block.get("path", "")), str(block.get("content", ""))):
+            written += 1
+    return written
+
+
 def _extract_files_from_response(text: str, workspace: str) -> int:
     """Extract files from Claude's response and write them to workspace.
 
@@ -884,24 +943,8 @@ def _extract_files_from_response(text: str, workspace: str) -> int:
 
     files_written = 0
     for match in pattern.finditer(text):
-        filepath = match.group(1).strip()
-        content = match.group(2)
-
-        # Security: prevent path traversal
-        if ".." in filepath or filepath.startswith("/"):
-            log.warning("Skipping suspicious path: %s", filepath)
-            continue
-
-        full_path = os.path.join(workspace, filepath)
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
-
-        with open(full_path, "w") as f:
-            f.write(content)
-            if not content.endswith("\n"):
-                f.write("\n")
-
-        files_written += 1
-        log.info("Wrote file: %s", filepath)
+        if _write_workspace_file(workspace, match.group(1), match.group(2)):
+            files_written += 1
 
     return files_written
 

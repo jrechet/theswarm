@@ -101,6 +101,9 @@ class ClaudeResult:
     backend: str = ""  # "cli", "api" or "sdk"
     session_id: str = ""  # SDK only: the Claude Code session, resumable
     num_turns: int = 0  # SDK only: assistant turns taken
+    # SDK only: the validated answer when the call asked for a schema
+    # (``run(output_schema=...)``); None on the text backends.
+    structured: dict | None = None
 
 
 # Approximate pricing per 1M tokens (USD) — used for the API path.
@@ -675,8 +678,13 @@ class ClaudeCLI:
         workdir: str | None = None,
         timeout: int | None = None,
         permission_mode: str | None = None,
+        output_schema: dict | None = None,
     ) -> ClaudeResult:
         """Run a prompt. Tries CLI first, falls back to API on failure.
+
+        ``output_schema`` (a JSON Schema, draft-07) asks the SDK backend for
+        a validated answer in ``ClaudeResult.structured``; the text backends
+        ignore it and the caller falls back to its text parser (M3).
 
         Honors ``SWARM_CLAUDE_BACKEND`` (``auto`` | ``cli`` | ``api``).
 
@@ -697,11 +705,12 @@ class ClaudeCLI:
                 "swarm.profile": _profile_for(workdir, permission_mode),
                 "swarm.prompt_chars": len(prompt or ""),
                 "swarm.timeout_s": self._effective_timeout(timeout, workdir),
+                "swarm.structured": output_schema is not None,
             },
         ) as current:
             result = await self._dispatch(
                 prompt, backend, workdir=workdir, timeout=timeout,
-                permission_mode=permission_mode,
+                permission_mode=permission_mode, output_schema=output_schema,
             )
             tracing.set_attributes(
                 current,
@@ -719,6 +728,7 @@ class ClaudeCLI:
     async def _dispatch(
         self, prompt: str, backend: str, *, workdir: str | None,
         timeout: int | None, permission_mode: str | None,
+        output_schema: dict | None = None,
     ) -> ClaudeResult:
         """The backend switch; ``run`` wraps it in the call's span."""
         if backend == "api":
@@ -727,7 +737,7 @@ class ClaudeCLI:
         if backend == "sdk":
             return await self._sdk_with_recovery(
                 prompt, workdir=workdir, timeout=timeout,
-                permission_mode=permission_mode,
+                permission_mode=permission_mode, output_schema=output_schema,
             )
 
         try:
@@ -790,6 +800,7 @@ class ClaudeCLI:
     def _sdk_options(
         self, profile: str, workdir: str | None, model_id: str,
         *, drop_oauth_env: bool, resume: str | None,
+        output_schema: dict | None = None,
     ):
         from claude_agent_sdk import (
             ClaudeAgentOptions,
@@ -828,6 +839,9 @@ class ClaudeCLI:
             hooks={"PreToolUse": [HookMatcher(hooks=[_permission_hook(profile, workdir)])]},
             max_turns=_SDK_MAX_TURNS[profile],
             resume=resume,
+            output_format=(
+                {"type": "json_schema", "schema": output_schema} if output_schema else None
+            ),
         )
 
     async def _run_sdk(
@@ -839,6 +853,7 @@ class ClaudeCLI:
         permission_mode: str | None,
         drop_oauth_env: bool = False,
         resume: str | None = None,
+        output_schema: dict | None = None,
     ) -> ClaudeResult:
         """One call through the Agent SDK: stream the messages, keep the result.
 
@@ -861,6 +876,7 @@ class ClaudeCLI:
         profile = _profile_for(workdir, permission_mode)
         options = self._sdk_options(
             profile, workdir, model_id, drop_oauth_env=drop_oauth_env, resume=resume,
+            output_schema=output_schema,
         )
         log.info(
             "Claude SDK: model=%s profile=%s workdir=%s timeout=%ds prompt_chars=%d resume=%s",
@@ -915,6 +931,14 @@ class ClaudeCLI:
             raise _CLIUnavailable("SDK stream ended without a result message")
         if result.is_error or result.subtype != "success":
             raise _CLIUnavailable(f"SDK result {result.subtype}: {result.result or 'no detail'}")
+        structured = result.structured_output
+        if output_schema is not None and not isinstance(structured, dict):
+            # A schema was asked for and nothing validated came back: the
+            # docs call this a failure too ("success" with no structured
+            # output). Never guess from the text.
+            raise _CLIUnavailable(
+                "SDK result success but no structured output for the requested schema"
+            )
 
         usage = result.usage or {}
         input_tokens = int(usage.get("input_tokens", 0) or 0)
@@ -935,11 +959,12 @@ class ClaudeCLI:
             backend="sdk",
             session_id=result.session_id or seen["session_id"],
             num_turns=int(result.num_turns or 0),
+            structured=structured if isinstance(structured, dict) else None,
         )
 
     async def _sdk_with_recovery(
         self, prompt: str, *, workdir: str | None, timeout: int | None,
-        permission_mode: str | None,
+        permission_mode: str | None, output_schema: dict | None = None,
     ) -> ClaudeResult:
         """Run through the SDK with the three recoveries the CLI path learned.
 
@@ -954,6 +979,7 @@ class ClaudeCLI:
         try:
             return await self._run_sdk(
                 prompt, workdir=workdir, timeout=timeout, permission_mode=permission_mode,
+                output_schema=output_schema,
             )
         except _CLIUnavailable as exc:
             first = exc
@@ -973,7 +999,7 @@ class ClaudeCLI:
                 return await self._run_sdk(
                     SDK_CONTINUE_PROMPT if resume else prompt,
                     workdir=workdir, timeout=grown, permission_mode=permission_mode,
-                    resume=resume,
+                    resume=resume, output_schema=output_schema,
                 )
             except _CLIUnavailable as again:
                 quota = _quota_exhausted(again)
@@ -990,6 +1016,7 @@ class ClaudeCLI:
                 return await self._run_sdk(
                     prompt, workdir=workdir, timeout=timeout,
                     permission_mode=permission_mode, drop_oauth_env=True,
+                    output_schema=output_schema,
                 )
             except _CLIUnavailable as without_token:
                 log.warning(

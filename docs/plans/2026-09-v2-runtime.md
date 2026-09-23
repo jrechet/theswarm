@@ -352,9 +352,11 @@ décision owner (section 8) : handoff, et export vers les logs en attendant.
   résultat `error_max_structured_output_retries`, ou `success` sans
   `structured_output`, est un **appel échoué** : traité comme un appel
   optionnel raté (I6), jamais deviné.
-- `_DECISION_RE`, `_FENCE_RE` et `ALREADY_SATISFIED_RE` sont supprimés
-  avec leurs tests, remplacés par des tests de schéma. La règle « l'arbre
-  est commité avant de croire un already_satisfied » (I3) reste.
+- `_DECISION_RE`, `_FENCE_RE` et `ALREADY_SATISFIED_RE` ne décident plus
+  rien dès qu'une structure existe ; ils restent le repli du backend
+  `cli` jusqu'à M7 (I13 : le rollback existe tant que M7 n'a pas eu lieu —
+  écart tranché en M3, 2026-09-23) et partent avec lui. La règle
+  « l'arbre est commité avant de croire un already_satisfied » (I3) reste.
 - Un verdict REQUEST_CHANGES continue de fermer la boucle exactement comme
   aujourd'hui (`CHANGES_MARKER`, retour en `status:ready`,
   `resume_branch`, `CHANGES_REQUESTED_CAP`).
