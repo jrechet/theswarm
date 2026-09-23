@@ -48,8 +48,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # takes, and no more installs into this image's system python.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# ~/.swarm-workspaces exists in the image so the named volume mounted there
+# (docker-compose.yml) is created owned by botuser: Docker copies the image
+# directory's ownership into an empty volume on first mount.
 RUN useradd -m -s /bin/bash botuser \
-    && mkdir -p /app/data \
+    && mkdir -p /app/data /home/botuser/.swarm-workspaces \
     && chown -R botuser:botuser /app /home/botuser
 
 COPY --from=builder --chown=botuser:botuser /app/.venv /app/.venv
