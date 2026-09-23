@@ -3,3 +3,4 @@
 {"repo": "jrechet/concert-tour-app", "passed": true, "state": "completed", "prs": [263], "unfinished": [], "regression": false}
 {"repo": "jrechet/concert-tour-app", "passed": false, "state": "failed", "prs": [], "unfinished": [], "regression": true}
 {"repo": "jrechet/concert-tour-app", "passed": false, "state": "failed", "prs": [], "unfinished": [], "regression": false}
+{"repo": "jrechet/concert-tour-app", "passed": true, "state": "completed", "prs": [270, 271, 272], "unfinished": [], "feature": "city-search", "ci": "none", "review_decisions": [], "cost_usd": 0.0, "duration_s": 1290, "within_cost": true, "within_time": true, "files_match": true, "backend": "", "tests_unavailable": false, "cycle_id": "a6d93287668b", "issue": 266, "timestamp": "2026-09-23T17:57:18+00:00", "regression": false}
