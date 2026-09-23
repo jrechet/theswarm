@@ -378,6 +378,19 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   (`trace_id`, migration v027) and the theater links it (`trace ↗`).
   A new node needs nothing: `traced_node` wraps at `add_node`. Without
   `SEQ_URL` spans exist (ids for logs) and go nowhere.
+- **V2 runtime M3 — no decision of code is read out of prose.** The
+  breakdown, the review verdict and the Dev's outcome are asked for as
+  validated JSON (`agents/schemas.py`: `Breakdown`, `ReviewVerdict`,
+  `DevOutcome`; `ClaudeCLI.run(output_schema=…)` → `ClaudeResult.structured`)
+  and the SDK re-prompts on a mismatch; a schema asked for and not
+  answered is a failed call (skipped, never guessed). The Dev's
+  `--- FILE:` fallback has a structured twin (`DevOutcome.files`,
+  `_write_outcome_files`, same path rules); `already_satisfied` is a
+  `status`, read only from the structure when there is one, and still only
+  believed on a clean tree (I3). The text parsers (`_parse_review`,
+  `_parse_tasks_json`, `ALREADY_SATISFIED_RE`) stay as the CLI backend's
+  fallback until M7 — fakes in older tests return plain `SimpleNamespace`
+  results, so read `structured` with `getattr(result, "structured", None)`.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

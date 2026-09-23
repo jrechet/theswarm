@@ -329,7 +329,7 @@ async def test_a_timeout_closes_the_stream_and_names_the_session(sdk, monkeypatc
 async def test_a_timeout_is_resumed_with_more_room(sdk):
     attempts: list[dict] = []
 
-    async def run_sdk(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None):
+    async def run_sdk(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None, output_schema=None):
         attempts.append({"prompt": prompt, "timeout": timeout, "resume": resume})
         if len(attempts) == 1:
             raise _SDKTimeout("SDK timed out after 30s", session_id="s-1")
@@ -347,7 +347,7 @@ async def test_a_timeout_is_resumed_with_more_room(sdk):
 
 
 async def test_a_second_timeout_surfaces_as_a_failed_call(sdk):
-    async def always(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None):
+    async def always(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None, output_schema=None):
         raise _SDKTimeout("SDK timed out after 30s", session_id="s-1")
 
     with patch.object(sdk, "_run_sdk", side_effect=always):
@@ -359,7 +359,7 @@ async def test_an_auth_failure_retries_once_without_the_oauth_override(sdk, monk
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-stale")
     attempts: list[bool] = []
 
-    async def run_sdk(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None):
+    async def run_sdk(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None, output_schema=None):
         attempts.append(drop_oauth_env)
         if not drop_oauth_env:
             raise _CLIUnavailable("Failed to authenticate: OAuth session expired")
@@ -373,7 +373,7 @@ async def test_an_auth_failure_retries_once_without_the_oauth_override(sdk, monk
 
 
 async def test_an_auth_failure_without_an_override_is_just_a_failure(sdk):
-    async def run_sdk(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None):
+    async def run_sdk(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None, output_schema=None):
         raise _CLIUnavailable("Failed to authenticate: OAuth session expired")
 
     with patch.object(sdk, "_run_sdk", side_effect=run_sdk) as spy:
@@ -383,7 +383,7 @@ async def test_an_auth_failure_without_an_override_is_just_a_failure(sdk):
 
 
 async def test_an_exhausted_window_is_fatal(sdk):
-    async def run_sdk(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None):
+    async def run_sdk(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None, output_schema=None):
         raise _CLIUnavailable("You've hit your usage limit — resets at 3pm")
 
     with patch.object(sdk, "_run_sdk", side_effect=run_sdk):
@@ -394,7 +394,7 @@ async def test_an_exhausted_window_is_fatal(sdk):
 async def test_forced_sdk_never_falls_back_to_the_cli_or_the_api(sdk, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-real")
 
-    async def run_sdk(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None):
+    async def run_sdk(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None, output_schema=None):
         raise _CLIUnavailable("CLINotFoundError: no binary")
 
     with patch.object(sdk, "_run_sdk", side_effect=run_sdk), \
