@@ -244,6 +244,33 @@ class GitHubClient:
         )
         return [_pr_to_dict(p) for p in prs]
 
+    async def get_pr(self, pr_number: int) -> dict | None:
+        """One pull request as the dict `get_open_prs` returns, None if absent."""
+        await self._fresh()
+        try:
+            pr = await self._run(self._repo.get_pull, pr_number)
+        except GithubException as exc:
+            if _is_client_error(exc):
+                return None
+            raise
+        return _pr_to_dict(pr)
+
+    async def create_commit_status(
+        self, sha: str, state: str, description: str,
+        *, context: str = "theswarm/review", target_url: str = "",
+    ) -> None:
+        """A commit status on `sha` — what a PAT can do where a Check needs an App.
+
+        `state` is success | failure | error | pending; `description` is cut
+        to GitHub's 140 characters.
+        """
+        await self._fresh()
+        commit = await self._run(self._repo.get_commit, sha)
+        kwargs: dict = {"state": state, "description": description[:140], "context": context}
+        if target_url:
+            kwargs["target_url"] = target_url
+        await self._run(commit.create_status, **kwargs)
+
     async def get_pr_files(self, pr_number: int) -> list[dict]:
         """Return the list of changed files in a PR with patch diffs."""
         await self._fresh()

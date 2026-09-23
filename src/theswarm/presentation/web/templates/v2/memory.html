@@ -1,0 +1,43 @@
+{% extends "v2/base.html" %}
+{% block title %}{{ repo_name }} — what the swarm learned{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-8">
+
+  <div class="flex items-end justify-between gap-4">
+    <div class="min-w-0">
+      <a href="{{ base }}/r/{{ owner }}/{{ repo_name }}" class="font-mono text-[11px] uppercase tracking-[0.14em] text-faint hover:text-soft focus-visible:outline-2 focus-visible:outline-honey">← {{ owner }}/{{ repo_name }}</a>
+      <h1 class="text-[26px] font-semibold tracking-tight mt-2">What the swarm learned</h1>
+      <p class="text-sm text-soft mt-1">{{ total }} entr{{ 'y' if total == 1 else 'ies' }} in <span class="font-mono">AGENT_MEMORY.jsonl</span>, written by the agents after each cycle.</p>
+    </div>
+  </div>
+
+  {% if error %}
+  <p class="text-sm text-rust border border-rust/40 bg-rust-wash rounded-lg px-4 py-3" data-testid="memory-error">Could not read the memory: {{ error }}</p>
+  {% endif %}
+
+  {% for group in groups %}
+  <section aria-labelledby="mem-{{ group.key }}" data-testid="memory-{{ group.key }}">
+    <h2 id="mem-{{ group.key }}" class="font-mono text-[11px] uppercase tracking-[0.14em] text-faint mb-2">
+      {{ group.label }} <span class="normal-case tracking-normal text-soft">· {{ group.entries | length }}</span>
+    </h2>
+    <ul class="flex flex-col gap-2">
+      {% for entry in group.entries %}
+      <li class="border border-rule rounded-lg bg-panel px-4 py-3">
+        <p class="text-[14px]">{{ entry.content }}</p>
+        <p class="font-mono text-[11px] text-faint mt-1">
+          {%- if entry.timestamp %}{{ entry.timestamp[:10] }}{% endif %}
+          {%- if entry.confidence is defined %} · confidence {{ (entry.confidence * 100) | round | int }}%{% endif %}
+          {%- if entry.source %} · {{ entry.source }}{% endif %}
+        </p>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+
+  {% if not groups and not error %}
+  <p class="text-sm text-faint py-6 text-center border border-dashed border-rule rounded-lg">Nothing learned yet — the first cycle writes the first entry.</p>
+  {% endif %}
+
+</div>
+{% endblock %}

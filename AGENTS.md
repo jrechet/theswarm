@@ -459,6 +459,23 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   run 35874015968) — the same rule hits every agent write-to-main path
   (daily report, memory save, cycle history): a person or a PR must carry
   them until that protection is revisited.
+- **V2 runtime M8 — the GitHub-native doors.** The webhook route
+  (`/webhooks/github`, outside the auth wall) is installed **only** when
+  `SWARM_WEBHOOK_SECRET` is set (server.py; the repository webhook on
+  GitHub signs with the same secret — a manual step, like the OAuth App);
+  without it the route answers 501. Both doors are owner-only
+  (`SWARM_OWNER_LOGIN`), allowed-repo-only, and one trigger per repo per
+  minute. **A label** (`swarm:go`, `SWARM_GO_LABEL`) on an issue starts a
+  targeted cycle exactly like ▶ Play (`routes/v2.start_targeted_cycle`,
+  shared) and is taken off again. **`@swarm <instruction>`** from the owner
+  on a pull request reaches the Dev the way a review's REQUEST_CHANGES
+  does: a `CHANGES_MARKER` note on the task issue, `status:ready`, a cycle
+  pinned to the task; the Dev resumes the PR's branch and the review runs
+  again. A PR without `[#N]`/`Closes #N` is answered, not run. **The
+  TechLead's verdict is a commit status** `theswarm/review` on the PR's
+  head (success / failure; a PAT can set statuses where a Check needs an
+  App), best effort. `/r/{owner}/{name}/memory` renders
+  `AGENT_MEMORY.jsonl` by category, linked from the repo page.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

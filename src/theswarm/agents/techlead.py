@@ -396,6 +396,27 @@ def _changes_comment(pr: dict, summary: str, issues: list[dict]) -> str:
     return "\n".join(lines)
 
 
+_REVIEW_STATUS_CONTEXT = "theswarm/review"
+_REVIEW_STATUS_STATE = {"APPROVE": "success", "REQUEST_CHANGES": "failure", "COMMENT": "success"}
+
+
+async def _publish_review_status(github, pr: dict, decision: str, summary: str) -> None:
+    """The verdict as a commit status on the PR's head (V2 M8) — visible on
+    the PR page and to branch protection, with the identity a PAT has. Best
+    effort: a status that fails to post is a log line."""
+    sha = pr.get("head_sha") or ""
+    if not sha or not hasattr(github, "create_commit_status"):
+        return
+    state = _REVIEW_STATUS_STATE.get(decision, "success")
+    label = {"APPROVE": "Approved", "REQUEST_CHANGES": "Changes requested"}.get(decision, "Commented")
+    try:
+        await github.create_commit_status(
+            sha, state, f"{label}: {summary}".strip(), context=_REVIEW_STATUS_CONTEXT,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Could not publish the review status on PR #%s: %s", pr.get("number"), exc)
+
+
 async def _send_back_to_dev(github, pr: dict, summary: str, issues: list[dict]) -> bool:
     """Hand a reviewed-down task back to the queue. True when it went back."""
     number = _task_of_pr(pr)
@@ -537,6 +558,8 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
             # The review is posted; failing to requeue is worth a line, not
             # a lost cycle.
             log.warning("Could not send PR #%d's task back to the Dev: %s", pr_number, exc)
+
+    await _publish_review_status(github, pr, decision, summary)
 
     return {
         "pr_number": pr_number,

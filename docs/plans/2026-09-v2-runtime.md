@@ -568,6 +568,15 @@ débarrassé des landmines devenues fausses (avec la date).
 **Acceptation.** Label → cycle visible dans le théâtre en moins de 30 s ;
 commentaire → PR mise à jour ; check visible sur la PR.
 
+*Livré le 2026-09-23* : les deux portes (label `swarm:go`, `@swarm
+<instruction>` sur une PR, owner seul, une par repo et par minute), le
+verdict de revue en **commit status** `theswarm/review` (un PAT ne peut
+pas créer de Check run ; le status est visible sur la PR et utilisable
+par la protection de branche), la page « what the swarm learned ». La
+route ne s'ouvre qu'avec `SWARM_WEBHOOK_SECRET` ; le owner crée le webhook
+(événements `issues` et `issue_comment`) sur GitHub avec ce secret.
+L'acceptation « en moins de 30 s » se mesure en prod après ce réglage.
+
 ---
 
 ## 6. Ce que la spec ne fixe pas
