@@ -537,15 +537,16 @@ async def _run_api_cycle(
         if event_bus is not None:
             from theswarm.domain.cycles.events import CycleCompleted
             from theswarm.domain.cycles.value_objects import CycleId
+            opened, merged, held = _pr_numbers(result)
             await event_bus.publish(CycleCompleted(
                 cycle_id=CycleId(cycle_id),
                 project_id=repo,
                 total_cost_usd=result.get("cost_usd", 0.0),
-                prs_opened=len(result.get("prs", [])),
-                prs_merged=sum(
-                    1 for r in result.get("reviews", [])
-                    if r.get("decision") == "APPROVE"
-                ),
+                prs_opened=len(opened),
+                prs_merged=len(merged),
+                opened_prs=opened,
+                merged_prs=merged,
+                held_prs=held,
             ))
 
             # F1b — persist report + publish DemoReady
