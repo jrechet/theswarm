@@ -930,6 +930,14 @@ def create_web_app(
     # Sprint B: secret vault + audit DB
     app.state.secret_vault = secret_vault
     app.state.db = db
+    # V2 M6: the scored harness runs, read by the repo page and written by
+    # POST /api/evals/runs; None without a database (stub/tests without one).
+    if db is not None:
+        from theswarm.infrastructure.persistence.sqlite_repos import SQLiteEvalRunRepository
+
+        app.state.eval_run_repo = SQLiteEvalRunRepository(db)
+    else:
+        app.state.eval_run_repo = None
 
     # Sprint C F6 — VCS factory for story approve/reject/comment
     app.state.vcs_factory = vcs_factory

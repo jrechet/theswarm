@@ -522,6 +522,13 @@ détectée comme run raté puis annulée.
 et consomme l'abonnement. Ne jamais l'exécuter sur `SELF_REPO` sans
 dispatch manuel.
 
+*Livré le 2026-09-23* : `evals/concert-tour-app.yaml` (cinq features),
+`theswarm.evals` (rotation, scoring, tendance), le harness scoré, le
+panneau « Reliability » sur la page du repo, l'alerte Mattermost. Le
+critère d'acceptation « une régression volontaire est détectée » est à
+exercer en prod (un dispatch `all=true` puis un cycle cassé) après le
+déploiement.
+
 ### M7 — Nettoyage
 
 **But.** Retirer ce que V2 a rendu inutile, sans toucher à la V1.

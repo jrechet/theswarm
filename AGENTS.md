@@ -440,6 +440,25 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   1, `cycle.cycle_slot`), held with the repo lock by the API and the
   gateway; a second repo now queues like a second cycle on the same repo.
   Worktree-per-task and parallel sub-tasks are M5b (not shipped).
+- **V2 runtime M6 — the harness is an eval suite.** `evals/<target>.yaml`
+  lists the canonical features (five on concert-tour-app); `theswarm.evals`
+  picks the feature of the day (rotation by day of year), scores a run
+  (`passed` keeps its pre-M6 meaning — completed, a PR, nothing unbuilt —
+  and the PR's CI, the review decisions, cost, duration, `within_cost`,
+  `within_time`, `files_match` against the feature's globs, and the
+  backend the cycle reports are their own fields) and reads the trend the
+  repo page draws (`data-testid="evals"`, last 14 runs, per backend).
+  `scripts/cycle_e2e.py --repo X` with no feature runs the day's; `--all`
+  the series (a manual dispatch, `all=true`); a typed `--feature` runs as
+  before. A failed run posts to Mattermost when the workflow has the token
+  (`MATTERMOST_URL`/`MATTERMOST_BOT_TOKEN`). **The scored record is posted
+  to `POST /api/evals/runs`** (table `eval_runs`, migration v028) and the
+  repo page reads the trend from there; the `docs/harness-runs.jsonl` line
+  is still written, but `main`'s branch protection now refuses the
+  harness's direct push ("Changes must be made through a pull request",
+  run 35874015968) — the same rule hits every agent write-to-main path
+  (daily report, memory save, cycle history): a person or a PR must carry
+  them until that protection is revisited.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

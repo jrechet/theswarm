@@ -47,6 +47,11 @@ def test_harness_workflow_default_repo_is_the_regression_probe_not_theswarm():
 
 
 def test_harness_workflow_dispatch_also_accepts_a_feature_input():
+    """A typed feature still runs as before; an empty one (the default since
+    V2 M6) means the eval manifest's feature of the day, and `all` runs the
+    whole series — the scheduled run takes the rotation."""
     inputs = HARNESS_TRIGGERS["workflow_dispatch"]["inputs"]
     assert "feature" in inputs
-    assert inputs["feature"]["default"]
+    assert inputs["feature"]["default"] == ""
+    assert inputs["all"]["type"] == "boolean"
+    assert inputs["all"]["default"] is False

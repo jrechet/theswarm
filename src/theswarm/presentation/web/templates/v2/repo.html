@@ -24,6 +24,32 @@
   </a>
   {% endif %}
 
+  {% if evals and evals.count %}
+  <section aria-labelledby="evals-title" data-testid="evals"
+     class="border border-rule rounded-lg bg-panel p-4 flex flex-col gap-2">
+    <div class="flex items-baseline justify-between gap-3 flex-wrap">
+      <h2 id="evals-title" class="font-mono text-[11px] uppercase tracking-[0.14em] text-faint">
+        Reliability <span class="normal-case tracking-normal text-soft">· last {{ evals.count }} harness run{{ 's' if evals.count != 1 }}</span>
+      </h2>
+      <span class="font-mono text-[11px] text-faint">
+        {%- for name, b in evals.by_backend.items() %}{{ name }} {{ b.passed }}/{{ b.runs }}{{ ' · ' if not loop.last }}{% endfor -%}
+      </span>
+    </div>
+    <p class="text-[14px] text-soft">
+      <span class="font-semibold {% if evals.pass_rate >= 0.8 %}text-moss{% elif evals.pass_rate >= 0.5 %}text-honey-deep{% else %}text-rust{% endif %}">{{ (evals.pass_rate * 100) | round | int }}% built</span>
+      {%- if evals.avg_cost_usd is not none %} · ${{ "%.2f" | format(evals.avg_cost_usd) }} avg{% endif %}
+      {%- if evals.avg_duration_s %} · {{ (evals.avg_duration_s / 60) | round | int }} min avg{% endif %}
+      {%- if evals.last and evals.last.regression %} · <span class="text-rust font-semibold">regression on the last run</span>{% endif %}
+    </p>
+    <ol class="flex gap-1.5 flex-wrap" aria-label="Runs, oldest first">
+      {% for run in evals.runs %}
+      <li class="w-3.5 h-3.5 rounded-sm {% if run.passed %}bg-moss{% else %}bg-rust{% endif %}{% if run.within_cost is false or run.within_time is false %} ring-2 ring-honey{% endif %}"
+          title="{{ run.feature or 'feature' }} — {{ 'built' if run.passed else 'failed' }}{% if run.cost_usd is defined %} · ${{ '%.2f' | format(run.cost_usd) }}{% endif %}{% if run.duration_s %} · {{ (run.duration_s / 60) | round | int }} min{% endif %}{% if run.ci and run.ci != 'none' %} · CI {{ run.ci }}{% endif %}"></li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+
   {% if latest_demo %}
   <section aria-labelledby="latest-demo-title" data-testid="latest-demo"
      class="border border-rule rounded-lg bg-panel p-4 flex gap-5 items-start flex-col sm:flex-row">
