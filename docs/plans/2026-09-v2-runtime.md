@@ -524,7 +524,15 @@ dispatch manuel.
 
 *Livré le 2026-09-23* : `evals/concert-tour-app.yaml` (cinq features),
 `theswarm.evals` (rotation, scoring, tendance), le harness scoré, le
-panneau « Reliability » sur la page du repo, l'alerte Mattermost. Le
+panneau « Reliability » sur la page du repo, l'alerte Mattermost. *Écart
+constaté en prod le même jour* : la protection de branche de `main`
+refuse la publication directe de `docs/harness-runs.jsonl` (« Changes
+must be made through a pull request »), et l'image ne livre ce fichier
+qu'à la construction ; le harness poste donc chaque run scoré sur
+`POST /api/evals/runs` (table `eval_runs`) et la page lit d'abord ce
+magasin. La même protection bloque les autres écritures d'agents sur
+`main` (rapport du jour, mémoire, historique des cycles) : décision owner
+à prendre (section 8). Le
 critère d'acceptation « une régression volontaire est détectée » est à
 exercer en prod (un dispatch `all=true` puis un cycle cassé) après le
 déploiement.
@@ -624,6 +632,7 @@ L'agent applique le défaut, écrit un handoff, continue.
 | `SkillMCPManager` : brancher via `mcp_servers` ou supprimer | Supprimer en M7 |
 | Parallélisme Dev par défaut en prod | 1, jusqu'à trois cycles verts à 2 |
 | Cadence d'usage de l'abonnement (harness + évals) | Une feature par jour ; la série complète à la main |
+| La protection de branche de `main` (revue de PR obligatoire) bloque les écritures directes des agents et du harness | Les laisser bloquées ; les runs d'évals passent par l'API. Rapport du jour, mémoire et historique des cycles attendent une décision : exemption du bot, ou passage par PR |
 | Charger `project` dans `setting_sources` (hooks du repo cible) | **Non** (tranché en M1, 2026-09-23) : un `.claude/settings.json` du repo cible peut porter le même hook `Stop` qui a vidé les revues ; la doc du repo arrive par le contexte du prompt |
 
 ---
