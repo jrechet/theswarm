@@ -12,7 +12,7 @@ import re
 
 from langgraph.graph import END, StateGraph
 
-from theswarm.agents.base import load_context, stub_result
+from theswarm.agents.base import load_context, stub_result, traced_node
 from theswarm.config import SELF_REPO, AgentState, Role
 from theswarm.tools.claude import ClaudeFatalError
 
@@ -621,10 +621,10 @@ def _route_phase(state: AgentState) -> str:
 def build_techlead_graph() -> StateGraph:
     graph = StateGraph(AgentState)
 
-    graph.add_node("load_context", load_context)
-    graph.add_node("breakdown_stories", breakdown_stories)
-    graph.add_node("poll_and_review_prs", poll_and_review_prs)
-    graph.add_node("merge_approved_prs", merge_approved_prs)
+    graph.add_node("load_context", traced_node("load_context", load_context))
+    graph.add_node("breakdown_stories", traced_node("breakdown_stories", breakdown_stories))
+    graph.add_node("poll_and_review_prs", traced_node("poll_and_review_prs", poll_and_review_prs))
+    graph.add_node("merge_approved_prs", traced_node("merge_approved_prs", merge_approved_prs))
 
     graph.set_entry_point("load_context")
     graph.add_conditional_edges("load_context", _route_phase, {

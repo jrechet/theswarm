@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 
 import anthropic
 
+from theswarm.infrastructure import tracing
+
 log = logging.getLogger(__name__)
 
 # Retryable Anthropic API errors: back off and try again.
@@ -687,7 +689,38 @@ class ClaudeCLI:
         ignores it.
         """
         backend = _resolve_backend_mode()
+        with tracing.span(
+            "claude.call",
+            **{
+                "swarm.backend": backend,
+                "swarm.model": self._resolve_model(),
+                "swarm.profile": _profile_for(workdir, permission_mode),
+                "swarm.prompt_chars": len(prompt or ""),
+                "swarm.timeout_s": self._effective_timeout(timeout, workdir),
+            },
+        ) as current:
+            result = await self._dispatch(
+                prompt, backend, workdir=workdir, timeout=timeout,
+                permission_mode=permission_mode,
+            )
+            tracing.set_attributes(
+                current,
+                **{
+                    "swarm.backend": result.backend,
+                    "swarm.input_tokens": result.input_tokens,
+                    "swarm.output_tokens": result.output_tokens,
+                    "swarm.cost_usd": result.cost_usd,
+                    "swarm.turns": result.num_turns,
+                    "swarm.session_id": result.session_id,
+                },
+            )
+            return result
 
+    async def _dispatch(
+        self, prompt: str, backend: str, *, workdir: str | None,
+        timeout: int | None, permission_mode: str | None,
+    ) -> ClaudeResult:
+        """The backend switch; ``run`` wraps it in the call's span."""
         if backend == "api":
             return await self._run_api(prompt, workdir=workdir, timeout=timeout)
 

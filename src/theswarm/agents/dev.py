@@ -15,6 +15,7 @@ from datetime import datetime
 from langgraph.graph import END, StateGraph
 
 from theswarm.agents.base import (
+    traced_node,
     DEP_INSTALL_TIMEOUT_SECONDS,
     _dev_dependencies,
     _install_plan,
@@ -816,12 +817,12 @@ async def retry_implement(state: AgentState) -> dict:
 def build_dev_graph() -> StateGraph:
     graph = StateGraph(AgentState)
 
-    graph.add_node("load_context", load_context)
-    graph.add_node("pick_task", pick_task)
-    graph.add_node("implement", implement_task)
-    graph.add_node("quality_gates", run_quality_gates)
-    graph.add_node("retry_implement", retry_implement)
-    graph.add_node("open_pr", open_pull_request)
+    graph.add_node("load_context", traced_node("load_context", load_context))
+    graph.add_node("pick_task", traced_node("pick_task", pick_task))
+    graph.add_node("implement", traced_node("implement", implement_task))
+    graph.add_node("quality_gates", traced_node("quality_gates", run_quality_gates))
+    graph.add_node("retry_implement", traced_node("retry_implement", retry_implement))
+    graph.add_node("open_pr", traced_node("open_pr", open_pull_request))
 
     graph.set_entry_point("load_context")
     graph.add_edge("load_context", "pick_task")
@@ -829,7 +830,7 @@ def build_dev_graph() -> StateGraph:
         "implement": "implement",
         "end": END,
     })
-    graph.add_node("check_pr", _noop)
+    graph.add_node("check_pr", traced_node("check_pr", _noop))
 
     # A targeted child can turn out to already be satisfied by a sibling
     # task (story #85): implement_task closes the issue itself and sets

@@ -39,7 +39,7 @@ flowchart LR
     SWARM -->|CLI first| CLI
     SWARM -->|V2: SDK first| SDK
     SWARM -.->|fallback| API
-    SWARM -->|logs| SEQ
+    SWARM -->|logs + OTLP traces| SEQ
     SWARM -.-> MM
     GHA -->|push image| GHCR -->|pull| SWARM
     TW -.->|app.css baked into image| SWARM
@@ -53,6 +53,7 @@ flowchart LR
 | Claude Code CLI (subscription) | Anthropic | owner's Max plan | OAuth session mounted in container | session expiry (seen 3×) → cycles fail | Claude API | ✔ settled |
 | Claude API | Anthropic | per-token | `ANTHROPIC_API_KEY` | spend without cap if primary silently fails | none (fallback) | ✔ settled |
 | **Claude Agent SDK** (`claude-agent-sdk`, PyPI) | Anthropic | owner's Max plan (same identity as the CLI: `CLAUDE_CODE_OAUTH_TOKEN`, else the mounted session) | none of its own | the wheel bundles a 217 MB Claude Code binary (image size); Anthropic's terms allow *individual* subscription use only — never route other users through it | the CLI backend (`SWARM_CLAUDE_BACKEND=cli`) until V2 M7 removes it | ✔ owner, 2026-09-22 (V2 runtime, decision 1) |
+| `opentelemetry-sdk` + `opentelemetry-exporter-otlp-proto-http` (+ protobuf, requests) | OSS (CNCF) | free | reuses `SEQ_API_KEY` | supply chain (pinned in uv.lock); exports only to Seq, already a dependency — no new service | log lines alone (spans off when `SEQ_URL` is unset) | ✔ owner, 2026-09-22 (V2 runtime, M2) |
 | `langgraph-checkpoint-sqlite` (+ `sqlite-vec`) | OSS (LangChain) | free | — | supply chain (pinned in uv.lock); its own SQLite file, never the app's shared connection | LangGraph's in-memory saver (loses durability) | ✔ owner, 2026-09-22 (V2 runtime, decision 2) |
 | Mattermost `chat.jrec.fr` | Owner | self-hosted | bot token | low — optional surface | disconnect | ⚠ 404 on boot, fix-or-drop pending |
 | Seq `logs.jrec.fr` | Owner | self-hosted | API key | low | stdout logs | ✔ settled |

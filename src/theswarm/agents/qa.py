@@ -18,6 +18,7 @@ from datetime import datetime
 from langgraph.graph import END, StateGraph
 
 from theswarm.agents.base import (
+    traced_node,
     _test_runner_missing,
     install_target,
     load_context,
@@ -1204,17 +1205,17 @@ async def generate_demo_report(state: AgentState) -> dict:
 def build_qa_graph() -> StateGraph:
     graph = StateGraph(AgentState)
 
-    graph.add_node("load_context", load_context)
-    graph.add_node("write_e2e", write_e2e_tests)
-    graph.add_node("run_unit", run_unit_tests)
-    graph.add_node("run_e2e", run_e2e_tests)
-    graph.add_node("run_security", run_security_scan)
-    graph.add_node("collect_issues", collect_issue_status)
-    graph.add_node("capture_screenshots", capture_demo_screenshots)
-    graph.add_node("capture_before_after_per_story", capture_before_after_per_story)
-    graph.add_node("record_story_video", record_story_video)
-    graph.add_node("record_video", record_demo_video)
-    graph.add_node("generate_report", generate_demo_report)
+    graph.add_node("load_context", traced_node("load_context", load_context))
+    graph.add_node("write_e2e", traced_node("write_e2e", write_e2e_tests))
+    graph.add_node("run_unit", traced_node("run_unit", run_unit_tests))
+    graph.add_node("run_e2e", traced_node("run_e2e", run_e2e_tests))
+    graph.add_node("run_security", traced_node("run_security", run_security_scan))
+    graph.add_node("collect_issues", traced_node("collect_issues", collect_issue_status))
+    graph.add_node("capture_screenshots", traced_node("capture_screenshots", capture_demo_screenshots))
+    graph.add_node("capture_before_after_per_story", traced_node("capture_before_after_per_story", capture_before_after_per_story))
+    graph.add_node("record_story_video", traced_node("record_story_video", record_story_video))
+    graph.add_node("record_video", traced_node("record_video", record_demo_video))
+    graph.add_node("generate_report", traced_node("generate_report", generate_demo_report))
 
     graph.set_entry_point("load_context")
     graph.add_edge("load_context", "write_e2e")

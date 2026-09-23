@@ -80,6 +80,9 @@ class Cycle:
     total_cost_usd: float = 0.0
     prs_opened: tuple[int, ...] = ()
     prs_merged: tuple[int, ...] = ()
+    # OpenTelemetry trace id (32 hex chars) of the cycle's root span, "" for
+    # cycles older than V2 M2 or run without a tracer.
+    trace_id: str = ""
 
     @property
     def total_tokens(self) -> int:

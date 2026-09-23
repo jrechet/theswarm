@@ -8,6 +8,8 @@ for silent registration when a repo is opened for the first time.
 
 from __future__ import annotations
 
+import os
+
 import asyncio
 import logging
 
@@ -489,7 +491,19 @@ async def _stage_context(request: Request, record) -> dict:
         "graph": graph,
         "pinned": pinned,
         "feed": feed,
+        "trace_url": trace_url(getattr(record, "trace_id", "")),
     }
+
+
+def trace_url(trace_id: str, seq_url: str | None = None) -> str:
+    """Where to read this cycle's trace in Seq — "" without a tracer or Seq."""
+    from urllib.parse import quote
+
+    if seq_url is None:
+        seq_url = os.getenv("SEQ_URL", "")
+    if not trace_id or not seq_url:
+        return ""
+    return f"{seq_url.rstrip('/')}/#/events?filter={quote(f"@tr = '{trace_id}'", safe='')}"
 
 
 def _tracker_record(cycle_id: str):
