@@ -142,8 +142,9 @@ class TestRunApiCyclePublishesIt:
             task = asyncio.create_task(run_api_cycle(
                 record.id, "owner/some-repo", "", "", [], event_bus=bus,
             ))
+            tracker.set_task(record.id, task)
             await asyncio.wait_for(started.wait(), timeout=5)
-            task.cancel()
+            assert tracker.cancel(record.id)  # what the cancel route does
             await task  # the cancellation is absorbed and recorded
 
         cancelled = [e for e in bus.events if isinstance(e, CycleCancelled)]
@@ -151,6 +152,37 @@ class TestRunApiCyclePublishesIt:
         assert str(cancelled[0].cycle_id) == record.id
         assert cancelled[0].project_id == "owner/some-repo"
         assert tracker.get(record.id).status == CycleStatus.CANCELLED
+
+    async def test_a_shutdown_is_not_a_cancel(self):
+        """A deploy's SIGTERM cancels every task left at loop teardown.
+
+        Cycle 04fc7fff85a0 was written 'cancelled' by the deploy of #192 and
+        the next boot, rightly, would not resume a cancelled cycle. Only a
+        cancel a person asked for is recorded; a shutdown's goes through and
+        leaves the row 'running' for the resumer (V2 runtime, M4).
+        """
+        started = asyncio.Event()
+
+        async def hang(*_a, **_kw):
+            started.set()
+            await asyncio.sleep(30)
+
+        bus = _Bus()
+        tracker = get_cycle_tracker()
+        record = tracker.create(CycleRequest(repo="owner/some-repo"))
+
+        with patch("theswarm.cycle.run_daily_cycle", side_effect=hang):
+            task = asyncio.create_task(run_api_cycle(
+                record.id, "owner/some-repo", "", "", [], event_bus=bus,
+            ))
+            tracker.set_task(record.id, task)
+            await asyncio.wait_for(started.wait(), timeout=5)
+            task.cancel()  # the loop's teardown, not the route
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+        assert not any(isinstance(e, CycleCancelled) for e in bus.events)
+        assert tracker.get(record.id).status != CycleStatus.CANCELLED
 
     async def test_a_completed_cycle_publishes_no_cancellation(self):
         async def quick(*_a, **_kw):

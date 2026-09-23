@@ -63,6 +63,10 @@ class CycleTracker:
     def __init__(self) -> None:
         self._cycles: dict[str, CycleRecord] = {}
         self._tasks: dict[str, asyncio.Task] = {}
+        # Cycles a person asked to stop. A CancelledError is also what a
+        # shutdown delivers to every task still running; only these ones
+        # are written down as cancelled (see _run_api_cycle).
+        self._cancel_requested: set[str] = set()
 
     def create(self, req: CycleRequest) -> CycleRecord:
         cycle_id = uuid.uuid4().hex[:12]
@@ -103,10 +107,15 @@ class CycleTracker:
     def cancel(self, cycle_id: str) -> bool:
         task = self._tasks.get(cycle_id)
         if task and not task.done():
+            self._cancel_requested.add(cycle_id)
             task.cancel()
             self.update_status(cycle_id, CycleStatus.CANCELLED)
             return True
         return False
+
+    def cancel_requested(self, cycle_id: str) -> bool:
+        """True when a person asked for this cycle to stop."""
+        return cycle_id in self._cancel_requested
 
 
 # Singleton
@@ -567,6 +576,15 @@ async def _run_api_cycle(
             })
 
     except asyncio.CancelledError:
+        if not tracker.cancel_requested(cycle_id):
+            # Nobody asked: the process is going down (a deploy's SIGTERM
+            # cancels every task left at loop teardown). The row stays
+            # 'running' so the next boot resumes the cycle (V2 runtime, M4).
+            # Writing it cancelled here is how cycle 04fc7fff85a0 was lost
+            # to the deploy of #192, while an earlier restart that killed
+            # the process before teardown was resumed: a race.
+            log.warning("Cycle %s interrupted by shutdown — left for the resumer", cycle_id)
+            raise
         tracker.update_status(
             cycle_id, CycleStatus.CANCELLED,
             completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -639,6 +657,8 @@ async def run_api_cycle(cycle_id: str, repo: str, *args, **kwargs) -> None:
             async with slot:
                 await _run_api_cycle(cycle_id, repo, *args, **kwargs)
     except asyncio.CancelledError:
+        if not tracker.cancel_requested(cycle_id):
+            raise
         tracker.update_status(
             cycle_id, CycleStatus.CANCELLED,
             completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),

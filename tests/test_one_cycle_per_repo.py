@@ -82,7 +82,8 @@ class TestSameRepository:
             tb = asyncio.create_task(run_api_cycle(b, "o/r", "", "", []))
             await _settle()
 
-            tb.cancel()
+            get_cycle_tracker().set_task(b, tb)
+            assert get_cycle_tracker().cancel(b)  # a person's cancel, via the route
             await tb  # absorbed: recorded as cancelled, not raised
 
             assert get_cycle_tracker().get(b).status == CycleStatus.CANCELLED

@@ -172,7 +172,12 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   each other's branches (`16f3b8af2cca` vs `2878898cc504`: two commits, no PR).
 - **Cancel is persisted** (`CycleCancelled` → cycles table). The resumer
   reads `list_running()` at boot; before #96 a cancelled cycle came back
-  after every deploy, on top of whatever had replaced it.
+  after every deploy, on top of whatever had replaced it. **Only a cancel a
+  person asked for** (`CycleTracker.cancel`, the cancel route) is written
+  down: a deploy's SIGTERM cancels every task left at loop teardown, and
+  recording that as a cancel lost cycle 04fc7fff85a0 to the deploy of #192
+  — the resume was a race between the teardown and the SIGKILL. A
+  cancellation nobody asked for propagates and leaves the row `running`.
 - **On `SELF_REPO` the TechLead approves but never merges** — a merge to
   main redeploys this service and kills the cycle mid-review. Approved PRs
   come back as `held_prs`; a person merges them between cycles.
