@@ -423,6 +423,17 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `checkpointer=False` on the agent graphs is kept too, but alone it trips
   LangGraph under `durability="sync"` (`_put_checkpoint_fut`). A resume
   mid dev-loop hands back the tasks the dead iteration claimed first.
+  **A resumed cycle has a new id**: the reap marks the old row `failed`
+  and the continuation runs under a fresh tracker record, so the old row
+  carries `resumed_as` (migration v029, set by `server._launch_resume`),
+  `/api/cycles/{old}` returns it, the harness follows it (and waits out the
+  404s of a stop-first rolling update instead of calling the cycle lost),
+  and `/c/{old}` redirects to the continuation's theater. The
+  continuation's trigger is `auto-resume:1` — before, every cycle row said
+  `web` and the one-resume cap (`MAX_RESUME_DEPTH`) never held.
+  `/api/cycles/{id}` also carries the tracker's `result` on the database
+  answer: the harness read cost, backend and review decisions from it, and
+  every eval run before this scored them empty.
 - **V2 runtime M5a — the target runs in its own venv, inside its
   workspace.** `agents/base.ensure_target_venv` builds `<workspace>/.venv-swarm`
   once (`uv venv --seed`, the binary is in the image; `python -m venv`

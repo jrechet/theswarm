@@ -537,6 +537,11 @@ async def theater(request: Request, cycle_id: str):
         # Historical cycle (tracker is in-memory): the V1 detail page reads
         # the database and stays the archive view.
         cycle = await state.get_cycle_status_query.execute(cycle_id)
+        resumed_as = getattr(cycle, "resumed_as", "") if cycle is not None else ""
+        if resumed_as and _tracker_record(resumed_as) is not None:
+            # A restart interrupted it and the resumer continued it: the
+            # theater of the continuation is where this cycle now lives.
+            return RedirectResponse(f"{state.base_path}/c/{resumed_as}", status_code=303)
         if cycle is not None:
             return RedirectResponse(
                 f"{state.base_path}/cycles/{cycle_id}", status_code=303,

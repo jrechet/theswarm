@@ -114,6 +114,7 @@ class CyclePersistenceHandler:
                 prs_opened=tuple(range(1, event.prs_opened + 1)) if event.prs_opened else cycle.prs_opened,
                 prs_merged=tuple(range(1, event.prs_merged + 1)) if event.prs_merged else cycle.prs_merged,
                 trace_id=cycle.trace_id,
+                resumed_as=cycle.resumed_as,
             )
             await self._cycle_repo.save(cycle)
         except Exception:
@@ -141,6 +142,7 @@ class CyclePersistenceHandler:
                 prs_opened=cycle.prs_opened,
                 prs_merged=cycle.prs_merged,
                 trace_id=cycle.trace_id,
+                resumed_as=cycle.resumed_as,
             )
             await self._cycle_repo.save(cycle)
         except Exception:

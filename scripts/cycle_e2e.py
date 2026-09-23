@@ -130,12 +130,27 @@ def start_cycle(repo: str, issue: int) -> str:
     return cycle_id
 
 
-def wait_for(cycle_id: str, budget_s: int) -> tuple[str, str]:
-    """Poll until terminal. Returns (status, last_phase_seen)."""
+# A restart interrupts a cycle and the boot resumer continues it under a new
+# id, once (cycle_resumer.MAX_RESUME_DEPTH); one spare hop costs nothing.
+MAX_RESUME_HOPS = 2
+
+
+def wait_for(cycle_id: str, budget_s: int, *, api=None, sleep=time.sleep,
+             health=None) -> tuple[str, str, str]:
+    """Poll until terminal. Returns (status, last_phase_seen, final_cycle_id).
+
+    A deploy during the cycle is the normal case since V2 M4: the service
+    answers 404 while no container runs (stop-first rolling update), then
+    the interrupted cycle reads 'failed' with ``resumed_as`` — the id it goes
+    on under. The first made this loop report "lost", the second "failed",
+    for a cycle that was still running.
+    """
+    api = api or _api
+    health = health or (lambda: wait_for_health(api=api, sleep=sleep))
     deadline = time.time() + budget_s
-    last_seen, last_phase = "", ""
+    last_seen, last_phase, hops = "", "", 0
     while time.time() < deadline:
-        status, body = _api(f"/api/cycles/{cycle_id}")
+        status, body = api(f"/api/cycles/{cycle_id}")
         state = str(body.get("status", "")) if status == 200 else ""
         phase = str(body.get("current_phase") or body.get("phase") or "")
         if state and state != last_seen:
@@ -145,12 +160,23 @@ def wait_for(cycle_id: str, budget_s: int) -> tuple[str, str]:
         if phase:
             last_phase = phase
         if state in TERMINAL:
-            return state, last_phase
+            resumed_as = str(body.get("resumed_as") or "")
+            if resumed_as and hops < MAX_RESUME_HOPS:
+                print(f"  [{time.strftime('%H:%M:%S')}] resumed as {resumed_as} after a restart")
+                cycle_id, last_seen, hops = resumed_as, "", hops + 1
+                continue
+            return state, last_phase, cycle_id
         if not state:
-            # The tracker is in memory; a restart makes the cycle vanish.
-            return "lost", last_phase
-        time.sleep(20)
-    return "timeout", last_phase
+            if status != 404 or body.get("error") != "not found":
+                # No container behind the proxy: a deploy is rolling. Wait
+                # for the new one, then ask again.
+                if health():
+                    sleep(20)
+                    continue
+            # The service answers and does not know the cycle.
+            return "lost", last_phase, cycle_id
+        sleep(20)
+    return "timeout", last_phase, cycle_id
 
 
 def build_result(repo: str, passed: bool, state: str, new_prs: list[int], left: list[int]) -> dict:
@@ -291,7 +317,7 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
     seen = prs_before(repo)
     issue = create_issue(repo, feature_text)
     cycle_id = start_cycle(repo, issue)
-    state, last_phase = wait_for(cycle_id, budget)
+    state, last_phase, cycle_id = wait_for(cycle_id, budget)
 
     new_prs = sorted(prs_before(repo) - seen)
     print(f"\n  cycle      : {state}" + (f" (last phase {last_phase})" if last_phase else ""))

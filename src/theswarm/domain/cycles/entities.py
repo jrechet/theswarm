@@ -83,6 +83,9 @@ class Cycle:
     # OpenTelemetry trace id (32 hex chars) of the cycle's root span, "" for
     # cycles older than V2 M2 or run without a tracer.
     trace_id: str = ""
+    # The cycle that continued this one after a restart (its tracker id),
+    # "" when none did (V2 runtime, M4; migration v029).
+    resumed_as: str = ""
 
     @property
     def total_tokens(self) -> int:

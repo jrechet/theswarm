@@ -298,6 +298,7 @@ async def _run_api_cycle(
     resume_from: str | None = None,
     role_assignment_service: object | None = None,
     resume_cycle_id: str | None = None,
+    triggered_by: str = "web",
 ) -> None:
     """Execute a cycle initiated via the API.
 
@@ -469,7 +470,10 @@ async def _run_api_cycle(
                 await event_bus.publish(CycleStarted(
                     cycle_id=CycleId(cycle_id),
                     project_id=repo,
-                    triggered_by="web",
+                    # A continuation says so ("auto-resume:1"): the resumer's
+                    # one-resume cap reads it back, and a hardcoded "web"
+                    # made every resumed cycle look fresh.
+                    triggered_by=triggered_by,
                     trace_id=trace_id,
                 ))
 
