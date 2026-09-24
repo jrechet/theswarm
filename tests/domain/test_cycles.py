@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime, timezone
 
 import pytest
@@ -231,6 +232,71 @@ class TestCycle:
         p2 = PhaseExecution(phase="b", agent="dev", started_at=now, cost_usd=2.50)
         c2 = c.add_phase(p1).add_phase(p2)
         assert c2.total_cost_usd == pytest.approx(4.0)
+
+
+# ── Cycle transitions keep what they do not own ─────────────────
+#
+# Each transition used to rebuild the Cycle field by field and forgot
+# trace_id and resumed_as: the first PhaseChanged saved the row with ""
+# and the theater lost its trace link. Every field is set here, so a
+# field added to Cycle later fails this test until it is listed.
+
+_T0 = datetime(2026, 9, 24, 8, 0, tzinfo=timezone.utc)
+
+
+def _cycle_with_every_field_set() -> Cycle:
+    return Cycle(
+        id=CycleId("c-all"),
+        project_id="o/r",
+        status=CycleStatus.RUNNING,
+        triggered_by="web",
+        started_at=_T0,
+        completed_at=_T0,
+        phases=(PhaseExecution(phase="po_morning", agent="po", started_at=_T0),),
+        budgets=(Budget("dev", 1000, 10),),
+        total_cost_usd=1.5,
+        prs_opened=(7,),
+        prs_merged=(7,),
+        trace_id="a" * 32,
+        resumed_as="next-cycle",
+    )
+
+
+_PHASE = PhaseExecution(phase="dev_iter", agent="dev", started_at=_T0, cost_usd=0.5)
+
+_TRANSITIONS = {
+    "start": (lambda c: c.start("api"), {"status", "triggered_by", "started_at", "completed_at"}),
+    "add_phase": (lambda c: c.add_phase(_PHASE), {"phases", "total_cost_usd"}),
+    "add_pr_opened": (lambda c: c.add_pr_opened(8), {"prs_opened"}),
+    "add_pr_merged": (lambda c: c.add_pr_merged(8), {"prs_merged"}),
+    "complete": (lambda c: c.complete(), {"status", "completed_at"}),
+    "fail": (lambda c: c.fail(), {"status", "completed_at"}),
+    "cancel": (lambda c: c.cancel(), {"status", "completed_at"}),
+}
+
+
+def test_the_fixture_sets_every_field_of_cycle():
+    cycle = _cycle_with_every_field_set()
+    for f in dataclasses.fields(Cycle):
+        if f.default is not dataclasses.MISSING:
+            assert getattr(cycle, f.name) != f.default, f"{f.name} left at its default"
+
+
+@pytest.mark.parametrize("name", sorted(_TRANSITIONS))
+def test_a_transition_keeps_every_field_it_does_not_own(name):
+    transition, owned = _TRANSITIONS[name]
+    before = _cycle_with_every_field_set()
+
+    after = transition(before)
+
+    kept = {f.name for f in dataclasses.fields(Cycle)} - owned
+    assert {k: getattr(after, k) for k in kept} == {k: getattr(before, k) for k in kept}
+
+
+def test_start_clears_the_end_of_an_earlier_run():
+    c = _cycle_with_every_field_set().start("api")
+    assert c.completed_at is None
+    assert c.trace_id == "a" * 32
 
 
 # ── Events ───────────────────────────────────────────────────────

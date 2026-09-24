@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
 from theswarm.domain.cycles.value_objects import (
@@ -105,106 +105,42 @@ class Cycle:
         end = self.completed_at or datetime.now(timezone.utc)
         return (end - self.started_at).total_seconds()
 
+    # Every transition goes through dataclasses.replace: a field-by-field
+    # rebuild forgot trace_id and resumed_as, and the first PhaseChanged
+    # saved the row without its trace.
     def start(self, triggered_by: str = "") -> Cycle:
-        return Cycle(
-            id=self.id,
-            project_id=self.project_id,
+        return replace(
+            self,
             status=CycleStatus.RUNNING,
             triggered_by=triggered_by,
             started_at=datetime.now(timezone.utc),
-            phases=self.phases,
-            budgets=self.budgets,
+            completed_at=None,
         )
 
     def add_phase(self, phase: PhaseExecution) -> Cycle:
-        return Cycle(
-            id=self.id,
-            project_id=self.project_id,
-            status=self.status,
-            triggered_by=self.triggered_by,
-            started_at=self.started_at,
-            completed_at=self.completed_at,
+        return replace(
+            self,
             phases=self.phases + (phase,),
-            budgets=self.budgets,
             total_cost_usd=self.total_cost_usd + phase.cost_usd,
-            prs_opened=self.prs_opened,
-            prs_merged=self.prs_merged,
         )
 
     def add_pr_opened(self, pr_number: int) -> Cycle:
-        return Cycle(
-            id=self.id,
-            project_id=self.project_id,
-            status=self.status,
-            triggered_by=self.triggered_by,
-            started_at=self.started_at,
-            completed_at=self.completed_at,
-            phases=self.phases,
-            budgets=self.budgets,
-            total_cost_usd=self.total_cost_usd,
-            prs_opened=self.prs_opened + (pr_number,),
-            prs_merged=self.prs_merged,
-        )
+        return replace(self, prs_opened=self.prs_opened + (pr_number,))
 
     def add_pr_merged(self, pr_number: int) -> Cycle:
-        return Cycle(
-            id=self.id,
-            project_id=self.project_id,
-            status=self.status,
-            triggered_by=self.triggered_by,
-            started_at=self.started_at,
-            completed_at=self.completed_at,
-            phases=self.phases,
-            budgets=self.budgets,
-            total_cost_usd=self.total_cost_usd,
-            prs_opened=self.prs_opened,
-            prs_merged=self.prs_merged + (pr_number,),
-        )
+        return replace(self, prs_merged=self.prs_merged + (pr_number,))
 
     def complete(self) -> Cycle:
-        return Cycle(
-            id=self.id,
-            project_id=self.project_id,
-            status=CycleStatus.COMPLETED,
-            triggered_by=self.triggered_by,
-            started_at=self.started_at,
-            completed_at=datetime.now(timezone.utc),
-            phases=self.phases,
-            budgets=self.budgets,
-            total_cost_usd=self.total_cost_usd,
-            prs_opened=self.prs_opened,
-            prs_merged=self.prs_merged,
-        )
+        return self._end(CycleStatus.COMPLETED)
 
     def fail(self) -> Cycle:
-        return Cycle(
-            id=self.id,
-            project_id=self.project_id,
-            status=CycleStatus.FAILED,
-            triggered_by=self.triggered_by,
-            started_at=self.started_at,
-            completed_at=datetime.now(timezone.utc),
-            phases=self.phases,
-            budgets=self.budgets,
-            total_cost_usd=self.total_cost_usd,
-            prs_opened=self.prs_opened,
-            prs_merged=self.prs_merged,
-        )
+        return self._end(CycleStatus.FAILED)
 
     def cancel(self) -> Cycle:
-        return Cycle(
-            id=self.id,
-            project_id=self.project_id,
-            status=CycleStatus.CANCELLED,
-            triggered_by=self.triggered_by,
-            started_at=self.started_at,
-            completed_at=datetime.now(timezone.utc),
-            phases=self.phases,
-            budgets=self.budgets,
-            total_cost_usd=self.total_cost_usd,
-            prs_opened=self.prs_opened,
-            prs_merged=self.prs_merged,
-        )
+        return self._end(CycleStatus.CANCELLED)
+
+    def _end(self, status: CycleStatus) -> Cycle:
+        return replace(self, status=status, completed_at=datetime.now(timezone.utc))
 
     def get_budget(self, role: str) -> Budget | None:
         for b in self.budgets:
