@@ -65,6 +65,7 @@ class CycleState(TypedDict, total=False):
     dev_claims_open: bool
     attempted_tasks: list[int]
     attempted_without_pr: list[int]
+    already_satisfied: list[int]  # tasks the Dev closed: the work was on main
     reviewed_prs: list[str]
     prs: list[dict]
     reviews: list[dict]
@@ -311,12 +312,19 @@ async def dev_iter(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     # A task that yields no PR twice yields none at all: a verification
     # story with nothing to change, or work the model cannot complete.
     number = task["number"]
+    if dev_state.get("already_satisfied"):
+        # Closed by the Dev, not failed: the result says why no PR came
+        # out, and the harness scores it already delivered, not a
+        # regression (cycle 874f575645f2 closed #286-#288 this way).
+        updates["already_satisfied"] = [*state.get("already_satisfied", []), number]
+        await rt.progress("Dev", f"Task #{number} already satisfied on main — closed")
     without = list(state.get("attempted_without_pr", []))
     if number in without:
         await rt.progress("Dev", f"Task #{number} produced no changes twice — ending dev loop")
         return {**updates, "dev_outcome": "end"}
     without.append(number)
-    await rt.progress("Dev", f"No PR produced for task #{number}")
+    if not dev_state.get("already_satisfied"):
+        await rt.progress("Dev", f"No PR produced for task #{number}")
     return {**updates, "attempted_without_pr": without, "dev_outcome": "review"}
 
 
@@ -498,6 +506,7 @@ async def finish(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
         "tokens": total_tokens,
         "cost_usd": total_cost,
         "prs": prs,
+        "already_satisfied": sorted(set(state.get("already_satisfied", []))),
         "reviews": state.get("reviews", []),
         "merged_prs": merged,
         "held_prs": held,
@@ -574,6 +583,7 @@ def initial_state(cycle_id: str, date: str) -> CycleState:
         "dev_claims_open": False,
         "attempted_tasks": [],
         "attempted_without_pr": [],
+        "already_satisfied": [],
         "reviewed_prs": [],
         "prs": [],
         "reviews": [],

@@ -1,0 +1,6 @@
+# Append-only history written straight to main by the E2E harness
+# (.github/workflows/harness.yml). Two runs that start from the same main
+# both append at the end of the file, and a line-based merge calls that a
+# conflict — the "Publish run history" step of run 35908375032 died on it.
+# `union` keeps both sides' lines, which is exactly right for a log.
+docs/harness-runs.jsonl merge=union

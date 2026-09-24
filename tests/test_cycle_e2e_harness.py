@@ -39,43 +39,52 @@ def test_is_regression_false_when_previous_already_failed():
     assert cycle_e2e.is_regression(previous, current) is False
 
 
-def test_read_last_result_returns_most_recent_entry_for_matching_repo_only(tmp_path):
+def test_is_regression_false_when_the_current_run_was_already_delivered():
+    """Cycle 874f575645f2 printed "REGRESSION" for a feature already merged."""
+    previous = {"repo": "acme/app", "passed": True, "outcome": "built"}
+    current = {"repo": "acme/app", "passed": False, "outcome": "already_delivered"}
+
+    assert cycle_e2e.is_regression(previous, current) is False
+
+
+def _no_api(path, payload=None):
+    return 0, {"error": "offline"}
+
+
+def test_past_runs_come_from_the_api_first(tmp_path):
+    """The API is the live copy: the checkout's jsonl is main at dispatch,
+    stale for a run queued behind another (35908375032)."""
+    history = tmp_path / "harness-runs.jsonl"
+    history.write_text(json.dumps({"repo": "acme/app", "passed": False, "seq": 0}) + "\n")
+    asked: list[str] = []
+
+    def api(path, payload=None):
+        asked.append(path)
+        return 200, {"runs": [{"repo": "acme/app", "passed": True, "seq": 1}]}
+
+    runs = cycle_e2e.past_runs("acme/app", history, api=api)
+
+    assert runs == [{"repo": "acme/app", "passed": True, "seq": 1}]
+    assert asked == ["/api/evals/runs?repo=acme%2Fapp&limit=500"]
+
+
+@pytest.mark.parametrize("answer", [(0, {"error": "offline"}), (503, {"error": "no database"}), (200, {"runs": []})])
+def test_past_runs_fall_back_to_the_file_for_the_repo_only(tmp_path, answer):
     history = tmp_path / "harness-runs.jsonl"
     entries = [
         {"repo": "acme/app", "passed": True, "seq": 1},
         {"repo": "other/app", "passed": True, "seq": 2},
         {"repo": "acme/app", "passed": False, "seq": 3},
-        {"repo": "other/app", "passed": False, "seq": 4},
     ]
-    history.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+    history.write_text("not json\n" + "\n".join(json.dumps(e) for e in entries) + "\n")
 
-    result = cycle_e2e.read_last_result(history, "acme/app")
+    runs = cycle_e2e.past_runs("acme/app", history, api=lambda path, payload=None: answer)
 
-    assert result == {"repo": "acme/app", "passed": False, "seq": 3}
-
-
-def test_read_last_result_returns_none_when_history_file_is_absent(tmp_path):
-    history = tmp_path / "does-not-exist.jsonl"
-
-    assert cycle_e2e.read_last_result(history, "acme/app") is None
+    assert [r["seq"] for r in runs] == [1, 3]
 
 
-def test_read_last_result_ignores_unparseable_lines(tmp_path):
-    history = tmp_path / "harness-runs.jsonl"
-    history.write_text(
-        "not json\n" + json.dumps({"repo": "acme/app", "passed": True}) + "\n"
-    )
-
-    result = cycle_e2e.read_last_result(history, "acme/app")
-
-    assert result == {"repo": "acme/app", "passed": True}
-
-
-def test_read_last_result_returns_none_when_no_lines_match_repo(tmp_path):
-    history = tmp_path / "harness-runs.jsonl"
-    history.write_text(json.dumps({"repo": "other/app", "passed": True}) + "\n")
-
-    assert cycle_e2e.read_last_result(history, "acme/app") is None
+def test_past_runs_without_api_or_file_are_empty(tmp_path):
+    assert cycle_e2e.past_runs("acme/app", tmp_path / "absent.jsonl", api=_no_api) == []
 
 
 # ── V2 M6: the harness scores, and reads the manifest ──────────────
@@ -105,10 +114,31 @@ async def test_the_alert_is_a_no_op_without_a_token(monkeypatch):
     assert await cycle_e2e.alert_mattermost("x") is False
 
 
+async def test_a_failed_alert_names_the_server_that_refused_it(monkeypatch, capsys):
+    """Run 35908375032 logged "404 page not found" and nothing else: that is
+    Traefik saying no Mattermost container runs behind chat.jrec.fr."""
+    import theswarm_common.chat.mattermost as mm
+
+    class _Down:
+        def __init__(self, *a, **k):
+            pass
+
+        async def connect(self):
+            raise RuntimeError("404 page not found\n")
+
+    monkeypatch.setattr(mm, "MattermostAdapter", _Down)
+    monkeypatch.setenv("MATTERMOST_URL", "https://chat.example")
+    monkeypatch.setenv("MATTERMOST_BOT_TOKEN", "t")
+
+    assert await cycle_e2e.alert_mattermost("x") is False
+    assert "(mattermost alert to https://chat.example failed: 404 page not found)" in capsys.readouterr().out
+
+
 def test_run_one_scores_and_appends_a_full_record(tmp_path, monkeypatch):
     """The whole flow with the network stubbed: what lands in the history."""
     from theswarm import evals
 
+    monkeypatch.setattr(cycle_e2e, "_api", _no_api)  # post_run and past_runs
     calls: list[str] = []
 
     def fake_gh(*args):
@@ -150,8 +180,151 @@ def test_run_one_scores_and_appends_a_full_record(tmp_path, monkeypatch):
     assert record["within_cost"] is True and record["within_time"] is True
     assert record["files_match"] is True and record["backend"] == "sdk"
     assert record["regression"] is False and record["cycle_id"] == "cyc-1"
+    assert record["outcome"] == "built"
     (line,) = history.read_text().splitlines()
     assert json.loads(line)["repo"] == "o/r"
+
+
+def _stub_a_cycle_with_no_pr(monkeypatch, result: dict, previous_runs: list[dict],
+                             closed: tuple[int, ...] = (286, 287, 288)):
+    """The 874f575645f2 run: completed, no new PR, nothing left open, the
+    breakdown's sub-tasks closed."""
+    def fake_gh(*args):
+        if args[:2] == ("issue", "create"):
+            return "https://github.com/o/r/issues/285"
+        if args[:2] == ("issue", "list") and "closed" in args:
+            return json.dumps([{"number": n, "body": f"Do a part\n\nParent: #285"} for n in closed]
+                              + [{"number": 200, "body": "Parent: #199"}])
+        return "[]"
+
+    monkeypatch.setattr(cycle_e2e, "_gh", fake_gh)
+    monkeypatch.setattr(cycle_e2e, "wait_for_health", lambda *a, **k: True)
+    monkeypatch.setattr(cycle_e2e, "prs_before", lambda repo: {270, 271, 272})
+    monkeypatch.setattr(cycle_e2e, "start_cycle", lambda repo, issue: "874f575645f2")
+    monkeypatch.setattr(cycle_e2e, "wait_for", lambda cycle_id, budget: ("completed", "po_evening", cycle_id))
+    monkeypatch.setattr(cycle_e2e, "cycle_record", lambda cycle_id: {
+        "started_at": "2026-09-23T19:18:31+00:00", "completed_at": "2026-09-23T19:28:07+00:00",
+        "result": result,
+    })
+    monkeypatch.setattr(cycle_e2e, "past_runs", lambda repo, history: previous_runs)
+    monkeypatch.setattr(cycle_e2e, "post_run", lambda record: True)
+    alerts: list[str] = []
+
+    async def alert(text):
+        alerts.append(text)
+        return True
+
+    monkeypatch.setattr(cycle_e2e, "alert_mattermost", alert)
+    return alerts
+
+
+CITY_SEARCH_BUILT = {"repo": "o/r", "passed": True, "outcome": "built", "feature": "city-search"}
+
+
+def test_a_feature_already_on_main_is_not_a_failure_nor_a_regression(tmp_path, monkeypatch, capsys):
+    from theswarm import evals
+
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    alerts = _stub_a_cycle_with_no_pr(
+        monkeypatch, {"cost_usd": 0.83, "backend": "sdk", "already_satisfied": [286, 287, 288]},
+        [CITY_SEARCH_BUILT],
+    )
+    feature = evals.Feature(id="city-search", text="Add a search box", expected_paths=("**/*.py",))
+    history = tmp_path / "runs.jsonl"
+
+    ok, record = cycle_e2e.run_one("o/r", feature.text, feature, 60, history)
+
+    assert ok is True
+    assert record["outcome"] == "already_delivered" and record["passed"] is False
+    assert record["regression"] is False
+    assert record["already_satisfied"] == [286, 287, 288]
+    assert alerts == []
+    out = capsys.readouterr().out
+    assert "NOT MEASURED — already delivered" in out and "#286, #287, #288" in out
+    assert "::warning title=E2E harness::o/r [city-search]: already delivered" in out
+    assert "REGRESSION" not in out and "FAIL" not in out
+    assert json.loads(history.read_text())["outcome"] == "already_delivered"
+
+
+def test_a_sub_task_closed_by_hand_is_not_already_delivered(tmp_path, monkeypatch, capsys):
+    """Three closed as satisfied, a fourth closed some other way: that one
+    was never built, and the feature is not on main."""
+    from theswarm import evals
+
+    _stub_a_cycle_with_no_pr(
+        monkeypatch, {"already_satisfied": [286, 287, 288]}, [CITY_SEARCH_BUILT],
+        closed=(286, 287, 288, 289),
+    )
+    feature = evals.Feature(id="city-search", text="Add a search box")
+
+    ok, record = cycle_e2e.run_one("o/r", feature.text, feature, 60, tmp_path / "runs.jsonl")
+
+    assert ok is False
+    assert record["outcome"] == "failed" and record["unfinished"] == [289]
+    assert "closed, not built: #289" in capsys.readouterr().out
+
+
+def test_no_pr_and_no_reason_is_still_a_failure_and_a_regression(tmp_path, monkeypatch, capsys):
+    """Without the Dev's already-satisfied answers the verdict stays what it was."""
+    from theswarm import evals
+
+    alerts = _stub_a_cycle_with_no_pr(monkeypatch, {"cost_usd": 0.83}, [CITY_SEARCH_BUILT])
+    feature = evals.Feature(id="city-search", text="Add a search box")
+
+    ok, record = cycle_e2e.run_one("o/r", feature.text, feature, 60, tmp_path / "runs.jsonl")
+
+    assert ok is False
+    assert record["outcome"] == "failed" and record["regression"] is True
+    assert "FAIL — no pull request produced" in capsys.readouterr().out
+    assert len(alerts) == 1 and "REGRESSION" in alerts[0]
+
+
+def test_a_regression_is_judged_against_the_last_measured_run(tmp_path, monkeypatch):
+    """built, then already delivered, then failed: the failure follows a pass."""
+    from theswarm import evals
+
+    delivered = {"repo": "o/r", "passed": False, "outcome": "already_delivered", "feature": "city-search"}
+    _stub_a_cycle_with_no_pr(monkeypatch, {}, [CITY_SEARCH_BUILT, delivered])
+    feature = evals.Feature(id="chronological-order", text="Sort")
+
+    _, record = cycle_e2e.run_one("o/r", feature.text, feature, 60, tmp_path / "runs.jsonl")
+
+    assert record["regression"] is True
+
+
+def test_a_bare_dispatch_runs_a_feature_the_target_does_not_have(tmp_path, monkeypatch, capsys):
+    from theswarm import evals
+
+    manifest = evals.load_manifest(pathlib.Path("evals/concert-tour-app.yaml"))
+    of_the_day = evals.feature_of_the_day(manifest)
+    ran: list[str] = []
+    monkeypatch.setattr(cycle_e2e, "KEY", "k")
+    monkeypatch.setattr(cycle_e2e, "past_runs", lambda repo, history: [
+        {"repo": repo, "feature": of_the_day.id, "passed": True, "outcome": "built"},
+    ])
+    monkeypatch.setattr(cycle_e2e, "run_one", lambda repo, text, feature, budget, history: (ran.append(feature.id) or (True, {})))
+    monkeypatch.setattr(cycle_e2e.sys, "argv", ["cycle_e2e.py", "--repo", "jrechet/concert-tour-app",
+                                                "--history", str(tmp_path / "runs.jsonl")])
+
+    assert cycle_e2e.main() == 0
+
+    assert ran == [evals.next_feature(manifest, [{"feature": of_the_day.id, "passed": True}]).id]
+    assert ran != [of_the_day.id]
+    assert f"[{of_the_day.id}] is already on jrechet/concert-tour-app" in capsys.readouterr().out
+
+
+def test_a_feature_asked_for_by_id_runs_even_when_delivered(tmp_path, monkeypatch):
+    ran: list[str] = []
+    monkeypatch.setattr(cycle_e2e, "KEY", "k")
+    monkeypatch.setattr(cycle_e2e, "past_runs", lambda repo, history: [
+        {"repo": repo, "feature": "city-search", "passed": True, "outcome": "built"},
+    ])
+    monkeypatch.setattr(cycle_e2e, "run_one", lambda repo, text, feature, budget, history: (ran.append(feature.id) or (True, {})))
+    monkeypatch.setattr(cycle_e2e.sys, "argv", ["cycle_e2e.py", "--repo", "jrechet/concert-tour-app",
+                                                "--feature-id", "city-search"])
+
+    assert cycle_e2e.main() == 0
+    assert ran == ["city-search"]
 
 
 def test_the_harness_waits_out_a_deploy_before_creating_anything():

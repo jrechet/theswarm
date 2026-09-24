@@ -3,10 +3,11 @@
 V2 runtime, M6. The harness (`scripts/cycle_e2e.py`, run by
 .github/workflows/harness.yml) used to ask one hard-coded feature and
 answer pass or fail. Now it draws from a manifest (`evals/<target>.yaml`),
-one feature a day in rotation, and scores what came out: the pull request,
-its CI, the reviews, cost, duration, the files touched. Every run is a
-line in docs/harness-runs.jsonl — the old fields kept, the new ones added
-— and the repo page draws the trend from it.
+one feature a day in rotation (skipping the ones the target already has),
+and scores what came out: the pull request, its CI, the reviews, cost,
+duration, the files touched. Every run is a line in
+docs/harness-runs.jsonl — the old fields kept, the new ones added — and
+the repo page draws the trend from it.
 
 Pure functions, no I/O beyond reading files: the harness and the web page
 both use them, and tests cover them without a cycle.
@@ -80,13 +81,59 @@ def manifest_for(repo: str, evals_dir: Path = EVALS_DIR) -> Manifest | None:
     return None
 
 
+def _day_index(manifest: Manifest, day: date | None) -> int:
+    day = day or datetime.now(timezone.utc).date()
+    return day.timetuple().tm_yday % len(manifest.features)
+
+
 def feature_of_the_day(manifest: Manifest, day: date | None = None) -> Feature:
     """Rotation by day of year: every feature comes around, one a day."""
-    day = day or datetime.now(timezone.utc).date()
-    return manifest.features[day.timetuple().tm_yday % len(manifest.features)]
+    return manifest.features[_day_index(manifest, day)]
+
+
+def delivered_features(runs: list[dict]) -> set[str]:
+    """Feature ids whose latest run built them or found them built.
+
+    The latest run decides: a feature that failed since (a target reset, a
+    regression) is worth running again.
+    """
+    latest: dict[str, str] = {}
+    for run in runs:
+        if run.get("feature"):
+            latest[str(run["feature"])] = outcome_of(run)
+    return {fid for fid, outcome in latest.items() if outcome in DELIVERED}
+
+
+def next_feature(manifest: Manifest, runs: list[dict], day: date | None = None) -> Feature:
+    """The feature of the day, unless the target already has it — then the
+    next one in rotation it does not have.
+
+    The rotation alone gave every dispatch of a day the same feature: on
+    2026-09-23 the fourth run asked for the city search two runs had
+    already merged, the Dev rightly closed each sub-task as already
+    satisfied, and the harness reported a regression (cycle 874f575645f2).
+    When every feature is delivered, the feature of the day runs anyway
+    and its score says so.
+    """
+    start = _day_index(manifest, day)
+    delivered = delivered_features(runs)
+    count = len(manifest.features)
+    for offset in range(count):
+        feature = manifest.features[(start + offset) % count]
+        if feature.id not in delivered:
+            return feature
+    return manifest.features[start]
 
 
 # ── Scoring ──────────────────────────────────────────────────────────
+
+# What a run says about the swarm. `already_delivered` measured nothing:
+# the cycle ran, and every sub-task was already on main — neither a pass
+# nor a failure, and never a regression.
+OUTCOME_BUILT = "built"
+OUTCOME_FAILED = "failed"
+OUTCOME_ALREADY_DELIVERED = "already_delivered"
+DELIVERED = frozenset({OUTCOME_BUILT, OUTCOME_ALREADY_DELIVERED})
 
 
 @dataclass(frozen=True)
@@ -103,6 +150,19 @@ class Observed:
     duration_s: float = 0.0
     backend: str = ""
     tests_unavailable: bool = False
+    already_satisfied: tuple[int, ...] = ()  # sub-tasks the Dev closed as already built
+
+
+def outcome_of(run: dict) -> str:
+    """A record's outcome; records from before the field read off `passed`."""
+    outcome = run.get("outcome")
+    if outcome in (OUTCOME_BUILT, OUTCOME_FAILED, OUTCOME_ALREADY_DELIVERED):
+        return str(outcome)
+    return OUTCOME_BUILT if run.get("passed") else OUTCOME_FAILED
+
+
+def is_measured(run: dict) -> bool:
+    return outcome_of(run) != OUTCOME_ALREADY_DELIVERED
 
 
 def files_match(files: tuple[str, ...] | list[str], expected: tuple[str, ...]) -> bool | None:
@@ -119,8 +179,20 @@ def score(feature: Feature | None, observed: Observed) -> dict[str, Any]:
     """The run record. `passed` keeps its meaning from before M6 — the
     cycle completed, a PR came out, no sub-task was left unbuilt — so the
     history stays comparable; the budgets and the file check are their own
-    fields, judged on the page."""
-    passed = observed.state == "completed" and bool(observed.prs) and not observed.unfinished
+    fields, judged on the page.
+
+    A completed cycle with no PR and nothing left open, whose Dev closed
+    its sub-tasks as already satisfied, is `already_delivered`: `passed`
+    stays False (no PR came out) and `outcome` says why.
+    """
+    finished = observed.state == "completed" and not observed.unfinished
+    passed = finished and bool(observed.prs)
+    if passed:
+        outcome = OUTCOME_BUILT
+    elif finished and not observed.prs and observed.already_satisfied:
+        outcome = OUTCOME_ALREADY_DELIVERED
+    else:
+        outcome = OUTCOME_FAILED
     within_cost = (
         None if not feature or not feature.max_cost_usd
         else observed.cost_usd <= feature.max_cost_usd
@@ -133,9 +205,11 @@ def score(feature: Feature | None, observed: Observed) -> dict[str, Any]:
     ci = "RED" if "RED" in ci_values else ("green" if "green" in ci_values else "none")
     return {
         "passed": passed,
+        "outcome": outcome,
         "state": observed.state,
         "prs": list(observed.prs),
         "unfinished": list(observed.unfinished),
+        "already_satisfied": list(observed.already_satisfied),
         "feature": feature.id if feature else "",
         "ci": ci,
         "review_decisions": list(observed.review_decisions),
@@ -143,7 +217,11 @@ def score(feature: Feature | None, observed: Observed) -> dict[str, Any]:
         "duration_s": int(observed.duration_s),
         "within_cost": within_cost,
         "within_time": within_time,
-        "files_match": files_match(observed.files, feature.expected_paths if feature else ()),
+        # Nothing was written: there are no files to judge, not wrong ones.
+        "files_match": (
+            None if outcome == OUTCOME_ALREADY_DELIVERED
+            else files_match(observed.files, feature.expected_paths if feature else ())
+        ),
         "backend": observed.backend,
         "tests_unavailable": observed.tests_unavailable,
     }
@@ -170,26 +248,37 @@ def read_history(path: Path = HISTORY_PATH, repo: str | None = None) -> list[dic
     return entries
 
 
+def last_measured(entries: list[dict]) -> dict | None:
+    """The most recent run that measured something — what a new run is
+    compared with to call a regression."""
+    return next((e for e in reversed(entries) if is_measured(e)), None)
+
+
 def trend(entries: list[dict], window: int = TREND_WINDOW) -> dict[str, Any]:
-    """The last `window` runs, summarised for the page."""
+    """The last `window` runs, summarised for the page. The pass rate and
+    the per-backend counts are over measured runs only; an already
+    delivered run is drawn, not counted."""
     recent = entries[-window:]
     if not recent:
         return {"runs": [], "count": 0, "pass_rate": None, "avg_cost_usd": None,
-                "avg_duration_s": None, "by_backend": {}, "last": None}
-    passed = sum(1 for e in recent if e.get("passed"))
+                "avg_duration_s": None, "by_backend": {}, "already_delivered": 0,
+                "last": None}
+    measured = [e for e in recent if is_measured(e)]
+    passed = sum(1 for e in measured if e.get("passed"))
     costs = [float(e["cost_usd"]) for e in recent if e.get("cost_usd") is not None]
     durations = [float(e["duration_s"]) for e in recent if e.get("duration_s")]
     by_backend: dict[str, dict[str, int]] = {}
-    for e in recent:
+    for e in measured:
         bucket = by_backend.setdefault(e.get("backend") or "unknown", {"runs": 0, "passed": 0})
         bucket["runs"] += 1
         bucket["passed"] += 1 if e.get("passed") else 0
     return {
         "runs": recent,
         "count": len(recent),
-        "pass_rate": passed / len(recent),
+        "pass_rate": (passed / len(measured)) if measured else None,
         "avg_cost_usd": (sum(costs) / len(costs)) if costs else None,
         "avg_duration_s": (sum(durations) / len(durations)) if durations else None,
         "by_backend": by_backend,
+        "already_delivered": len(recent) - len(measured),
         "last": recent[-1],
     }

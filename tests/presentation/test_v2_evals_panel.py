@@ -70,3 +70,41 @@ async def test_no_history_means_no_panel(web, tmp_path, monkeypatch):
     response = await _page(web)
     assert response.status_code == 200
     assert 'data-testid="evals"' not in response.text
+
+
+def _write(tmp_path, monkeypatch, lines: list[dict]) -> None:
+    history = tmp_path / "runs.jsonl"
+    history.write_text("\n".join(json.dumps(l) for l in lines) + "\n")
+    monkeypatch.setattr(evals, "HISTORY_PATH", history)
+
+
+async def test_an_already_delivered_run_is_drawn_neutral_and_not_counted(web, tmp_path, monkeypatch):
+    """Cycle 874f575645f2 found the city search already merged: not a
+    failure, so not a rust square and not a point off the pass rate."""
+    _write(tmp_path, monkeypatch, [
+        {"repo": REPO, "passed": True, "outcome": "built", "feature": "city-search", "backend": "sdk"},
+        {"repo": REPO, "passed": False, "outcome": "already_delivered", "feature": "city-search",
+         "backend": "sdk", "already_satisfied": [286, 287, 288], "regression": False},
+    ])
+
+    html = (await _page(web)).text
+
+    assert "100% built" in html
+    assert "1 already delivered" in html
+    assert "sdk 1/1" in html
+    assert "regression on the last run" not in html
+    assert html.count('<li class="w-3.5') == 2
+    assert html.count("bg-faint") == 1
+    assert "city-search — already delivered" in html
+
+
+async def test_a_window_of_already_delivered_runs_says_nothing_was_measured(web, tmp_path, monkeypatch):
+    _write(tmp_path, monkeypatch, [
+        {"repo": REPO, "passed": False, "outcome": "already_delivered", "feature": "city-search"},
+    ])
+
+    response = await _page(web)
+
+    assert response.status_code == 200
+    assert "nothing measured" in response.text
+    assert "% built" not in response.text

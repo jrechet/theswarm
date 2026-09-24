@@ -115,3 +115,115 @@ def test_history_reads_old_and_new_lines_and_skips_junk(tmp_path):
 def test_an_empty_history_has_no_trend():
     assert trend([])["pass_rate"] is None
     assert evals.read_history(Path("/nowhere/runs.jsonl")) == []
+
+
+# ── Already delivered: neither a pass nor a failure ─────────────────
+
+
+def test_every_sub_task_already_satisfied_is_already_delivered_not_a_failure():
+    """Cycle 874f575645f2: the city search was merged by two earlier runs,
+    the Dev closed #286-#288 as already satisfied, no PR came out."""
+    record = score(_feature(), Observed(
+        state="completed", already_satisfied=(286, 287, 288), cost_usd=0.83, duration_s=576,
+    ))
+    assert record["passed"] is False        # no PR came out: the old meaning holds
+    assert record["outcome"] == "already_delivered"
+    assert record["already_satisfied"] == [286, 287, 288]
+    assert record["files_match"] is None    # nothing written, nothing off-target
+    assert record["within_cost"] is True    # the cycle still cost something
+
+
+def test_a_pr_alongside_satisfied_sub_tasks_is_built():
+    record = score(_feature(), Observed(state="completed", prs=(12,), already_satisfied=(9,)))
+    assert record["passed"] is True and record["outcome"] == "built"
+
+
+@pytest.mark.parametrize("observed", [
+    Observed(state="completed"),                                            # no PR, no reason
+    Observed(state="completed", already_satisfied=(9,), unfinished=(10,)),  # one left unbuilt
+    Observed(state="failed", already_satisfied=(9,)),                       # the cycle broke
+    Observed(state="timeout", already_satisfied=(9,)),
+])
+def test_satisfied_sub_tasks_do_not_excuse_a_failure(observed):
+    record = score(_feature(), observed)
+    assert record["passed"] is False and record["outcome"] == "failed"
+
+
+def test_records_written_before_the_outcome_field_read_off_passed():
+    assert evals.outcome_of({"passed": True}) == "built"
+    assert evals.outcome_of({"passed": False}) == "failed"
+    assert evals.outcome_of({"passed": False, "outcome": "already_delivered"}) == "already_delivered"
+    assert evals.outcome_of({"passed": False, "outcome": "nonsense"}) == "failed"
+
+
+def test_the_pass_rate_counts_measured_runs_only():
+    entries = [
+        {"passed": True, "outcome": "built", "backend": "sdk", "cost_usd": 3.0},
+        {"passed": False, "outcome": "already_delivered", "backend": "sdk", "cost_usd": 1.0},
+        {"passed": False, "backend": "sdk"},  # an old failed record
+    ]
+    summary = trend(entries)
+    assert summary["count"] == 3              # all three are drawn
+    assert summary["pass_rate"] == 0.5        # 1 built of 2 measured
+    assert summary["by_backend"] == {"sdk": {"runs": 2, "passed": 1}}
+    assert summary["already_delivered"] == 1
+    assert summary["avg_cost_usd"] == 2.0     # it did cost
+
+
+def test_a_window_of_already_delivered_runs_measured_nothing():
+    summary = trend([{"passed": False, "outcome": "already_delivered"}])
+    assert summary["pass_rate"] is None
+    assert summary["by_backend"] == {}
+
+
+def test_the_run_to_compare_with_is_the_last_that_measured_something():
+    built = {"passed": True, "outcome": "built", "seq": 1}
+    delivered = {"passed": False, "outcome": "already_delivered", "seq": 2}
+    assert evals.last_measured([built, delivered]) == built
+    assert evals.last_measured([delivered]) is None
+    assert evals.last_measured([]) is None
+
+
+# ── Picking a feature the target does not have yet ─────────────────
+
+
+SEPT_23 = date(2026, 9, 23)  # day 266: city-search is the feature of the day
+
+
+def test_a_same_day_redispatch_skips_the_feature_just_built():
+    """The fourth dispatch of 2026-09-23 asked for the city search again."""
+    manifest = evals.load_manifest(MANIFEST)
+    assert feature_of_the_day(manifest, SEPT_23).id == "city-search"
+    runs = [{"feature": "city-search", "passed": True, "outcome": "built"}]
+
+    assert evals.next_feature(manifest, runs, SEPT_23).id == "chronological-order"
+
+
+def test_the_feature_of_the_day_runs_when_the_target_does_not_have_it():
+    manifest = evals.load_manifest(MANIFEST)
+    runs = [{"feature": "chronological-order", "passed": True, "outcome": "built"}]
+    assert evals.next_feature(manifest, runs, SEPT_23).id == "city-search"
+    assert evals.next_feature(manifest, [], SEPT_23).id == "city-search"
+
+
+def test_already_delivered_and_old_passing_records_count_as_delivered():
+    manifest = evals.load_manifest(MANIFEST)
+    runs = [
+        {"feature": "city-search", "passed": True},  # before the outcome field
+        {"feature": "chronological-order", "passed": False, "outcome": "already_delivered"},
+    ]
+    assert evals.next_feature(manifest, runs, SEPT_23).id == "sold-out-badge"
+
+
+def test_a_feature_that_failed_since_it_was_built_comes_back():
+    runs = [
+        {"feature": "city-search", "passed": True, "outcome": "built"},
+        {"feature": "city-search", "passed": False, "outcome": "failed"},
+    ]
+    assert evals.delivered_features(runs) == set()
+
+
+def test_when_the_target_has_every_feature_the_feature_of_the_day_runs():
+    manifest = evals.load_manifest(MANIFEST)
+    runs = [{"feature": f.id, "passed": True, "outcome": "built"} for f in manifest.features]
+    assert evals.next_feature(manifest, runs, SEPT_23).id == "city-search"
