@@ -7,6 +7,7 @@ ProgressBridge (or any other publisher) is durably stored.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from theswarm.domain.cycles.entities import Cycle, PhaseExecution
@@ -75,19 +76,7 @@ class CyclePersistenceHandler:
                     completed_prev = prev.complete(summary="")
                     phases = list(cycle.phases)
                     phases[-2] = completed_prev
-                    cycle = Cycle(
-                        id=cycle.id,
-                        project_id=cycle.project_id,
-                        status=cycle.status,
-                        triggered_by=cycle.triggered_by,
-                        started_at=cycle.started_at,
-                        completed_at=cycle.completed_at,
-                        phases=tuple(phases),
-                        budgets=cycle.budgets,
-                        total_cost_usd=cycle.total_cost_usd,
-                        prs_opened=cycle.prs_opened,
-                        prs_merged=cycle.prs_merged,
-                    )
+                    cycle = replace(cycle, phases=tuple(phases))
             await self._cycle_repo.save(cycle)
         except Exception:
             log.exception("Failed to persist PhaseChanged %s", event.cycle_id)
@@ -101,22 +90,16 @@ class CyclePersistenceHandler:
             phases = list(cycle.phases)
             if phases and phases[-1].status == PhaseStatus.RUNNING:
                 phases[-1] = phases[-1].complete(summary="Cycle completed")
-            cycle = Cycle(
-                id=cycle.id,
-                project_id=cycle.project_id,
+            cycle = replace(
+                cycle,
                 status=CycleStatus.COMPLETED,
-                triggered_by=cycle.triggered_by,
-                started_at=cycle.started_at,
                 completed_at=event.occurred_at,
                 phases=tuple(phases),
-                budgets=cycle.budgets,
                 total_cost_usd=event.total_cost_usd,
                 # Numbers only: an event that carries counts alone keeps the
                 # row as it was — a count cannot be turned back into numbers.
                 prs_opened=event.opened_prs or cycle.prs_opened,
                 prs_merged=event.merged_prs or cycle.prs_merged,
-                trace_id=cycle.trace_id,
-                resumed_as=cycle.resumed_as,
             )
             await self._cycle_repo.save(cycle)
         except Exception:
@@ -131,20 +114,11 @@ class CyclePersistenceHandler:
             phases = list(cycle.phases)
             if phases and phases[-1].status == PhaseStatus.RUNNING:
                 phases[-1] = phases[-1].fail(summary=event.error[:200])
-            cycle = Cycle(
-                id=cycle.id,
-                project_id=cycle.project_id,
+            cycle = replace(
+                cycle,
                 status=CycleStatus.FAILED,
-                triggered_by=cycle.triggered_by,
-                started_at=cycle.started_at,
                 completed_at=event.occurred_at,
                 phases=tuple(phases),
-                budgets=cycle.budgets,
-                total_cost_usd=cycle.total_cost_usd,
-                prs_opened=cycle.prs_opened,
-                prs_merged=cycle.prs_merged,
-                trace_id=cycle.trace_id,
-                resumed_as=cycle.resumed_as,
             )
             await self._cycle_repo.save(cycle)
         except Exception:
@@ -161,18 +135,11 @@ class CyclePersistenceHandler:
                 phases[-1] = phases[-1].fail(
                     summary=f"Cancelled: {event.reason}"[:200] if event.reason else "Cancelled",
                 )
-            cycle = Cycle(
-                id=cycle.id,
-                project_id=cycle.project_id,
+            cycle = replace(
+                cycle,
                 status=CycleStatus.CANCELLED,
-                triggered_by=cycle.triggered_by,
-                started_at=cycle.started_at,
                 completed_at=event.occurred_at,
                 phases=tuple(phases),
-                budgets=cycle.budgets,
-                total_cost_usd=cycle.total_cost_usd,
-                prs_opened=cycle.prs_opened,
-                prs_merged=cycle.prs_merged,
             )
             await self._cycle_repo.save(cycle)
         except Exception:
