@@ -70,14 +70,19 @@ jobs:
           FEATURE: ${{ github.event.inputs.feature }}
           RUN_ALL: ${{ github.event.inputs.all }}
           # A failed run posts to the swarm's channel (theswarm.evals, M6);
-          # without the token it is a line in this log.
+          # without the token it is a line in this log. The host is the one
+          # the Mattermost stack's Traefik router serves; a "404 page not
+          # found" from it means no Mattermost container is running.
           MATTERMOST_URL: https://chat.jrec.fr
           MATTERMOST_BOT_TOKEN: ${{ secrets.MATTERMOST_BOT_TOKEN }}
+          # print() to a pipe is block-buffered: without this, a library's
+          # stderr line lands at the top of the log, far from its cause.
+          PYTHONUNBUFFERED: '1'
         run: |
           # The scheduled run and a bare dispatch take the eval manifest's
           # feature of the day (evals/<target>.yaml — one a day, in
-          # rotation); a feature typed in still runs as before; `all` runs
-          # the whole series.
+          # rotation, skipping the ones the target already has); a feature
+          # typed in still runs as before; `all` runs the whole series.
           if [ "$RUN_ALL" = "true" ]; then
             uv run python scripts/cycle_e2e.py --repo "$REPO" --all
           elif [ -n "$FEATURE" ]; then
@@ -103,9 +108,25 @@ jobs:
           git config user.email "swarm-dev@jrec.fr"
           git add docs/harness-runs.jsonl
           git commit -m "chore: harness run $(date -u +%Y-%m-%d) — $REPO"
-          # main moves under us during a run that can take up to 120 minutes;
-          # rebase onto the latest tip so this push doesn't silently drop a
-          # concurrent commit's history line via a non-fast-forward failure.
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
+          # The checkout is main as it was at *dispatch*: a run queued behind
+          # another (the concurrency group above) starts without that run's
+          # history line, and both appended at the end of the file. The
+          # rebase keeps both lines because .gitattributes merges this file
+          # with `union` (run 35908375032 died on that conflict); the loop
+          # covers a push that lost a race with another commit to main. A
+          # rebase that still stops is not a race: say so, never retry it
+          # (and `bash -e` would end the step on it with no word anyway).
+          for attempt in 1 2 3; do
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo "::error::docs/harness-runs.jsonl does not rebase onto main — the run is recorded on the API, not in the file"
+              exit 1
+            fi
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "::error::docs/harness-runs.jsonl not published after 3 attempts"
+          exit 1

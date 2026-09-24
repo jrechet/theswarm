@@ -39,15 +39,21 @@
       </span>
     </div>
     <p class="text-[14px] text-soft">
+      {%- if evals.pass_rate is not none %}
       <span class="font-semibold {% if evals.pass_rate >= 0.8 %}text-moss{% elif evals.pass_rate >= 0.5 %}text-honey-deep{% else %}text-rust{% endif %}">{{ (evals.pass_rate * 100) | round | int }}% built</span>
+      {%- else %}
+      <span class="font-semibold text-faint">nothing measured</span>
+      {%- endif %}
+      {%- if evals.already_delivered %} · <span class="text-faint">{{ evals.already_delivered }} already delivered</span>{% endif %}
       {%- if evals.avg_cost_usd is not none %} · ${{ "%.2f" | format(evals.avg_cost_usd) }} avg{% endif %}
       {%- if evals.avg_duration_s %} · {{ (evals.avg_duration_s / 60) | round | int }} min avg{% endif %}
       {%- if evals.last and evals.last.regression %} · <span class="text-rust font-semibold">regression on the last run</span>{% endif %}
     </p>
     <ol class="flex gap-1.5 flex-wrap" aria-label="Runs, oldest first">
       {% for run in evals.runs %}
-      <li class="w-3.5 h-3.5 rounded-sm {% if run.passed %}bg-moss{% else %}bg-rust{% endif %}{% if run.within_cost is false or run.within_time is false %} ring-2 ring-honey{% endif %}"
-          title="{{ run.feature or 'feature' }} — {{ 'built' if run.passed else 'failed' }}{% if run.cost_usd is defined %} · ${{ '%.2f' | format(run.cost_usd) }}{% endif %}{% if run.duration_s %} · {{ (run.duration_s / 60) | round | int }} min{% endif %}{% if run.ci and run.ci != 'none' %} · CI {{ run.ci }}{% endif %}"></li>
+      {%- set delivered_before = run.outcome == 'already_delivered' %}
+      <li class="w-3.5 h-3.5 rounded-sm {% if run.passed %}bg-moss{% elif delivered_before %}bg-faint{% else %}bg-rust{% endif %}{% if run.within_cost is false or run.within_time is false %} ring-2 ring-honey{% endif %}"
+          title="{{ run.feature or 'feature' }} — {{ 'built' if run.passed else ('already delivered' if delivered_before else 'failed') }}{% if run.cost_usd is defined %} · ${{ '%.2f' | format(run.cost_usd) }}{% endif %}{% if run.duration_s %} · {{ (run.duration_s / 60) | round | int }} min{% endif %}{% if run.ci and run.ci != 'none' %} · CI {{ run.ci }}{% endif %}"></li>
       {% endfor %}
     </ol>
   </section>

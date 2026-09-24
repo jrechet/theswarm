@@ -486,6 +486,22 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   but is not enforced on admins, so an admin token gets through; whether
   agent writes to main (daily report, memory save, cycle history, this
   line) should rely on that is an owner decision (plan section 8).
+  **A feature already on main is `already_delivered`, not a failure.** The
+  target keeps what the swarm merges, and the rotation gave every dispatch
+  of a day the same feature: the fourth run of 2026-09-23 (cycle
+  874f575645f2) asked for the city search two runs had merged, the Dev
+  rightly closed #286-#288 as already satisfied, and the harness printed
+  "no pull request produced" and a regression. The cycle result now lists
+  those sub-tasks (`already_satisfied`); a completed cycle with no PR,
+  nothing open and that list non-empty scores `outcome:
+  already_delivered` — `passed` stays False, it is never a regression,
+  never the run a new one is compared with, and not counted in the pass
+  rate. A bare dispatch skips the features whose last run built them or
+  found them built (`evals.next_feature`), reading the history from the
+  API first: the checkout is main *at dispatch*, and a run queued behind
+  another lacks that run's line — which is also why two runs' appends
+  conflicted in the publish step until `.gitattributes` gave the file
+  `merge=union`.
 - **V2 runtime M8 — the GitHub-native doors.** The webhook route
   (`/webhooks/github`, outside the auth wall) is installed **only** when
   `SWARM_WEBHOOK_SECRET` is set (server.py; the repository webhook on

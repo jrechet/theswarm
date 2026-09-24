@@ -10,12 +10,15 @@ person would, then judges the outcome by what exists on GitHub afterwards.
 
 Since V2 M6 the feature can come from the eval manifest instead
 (`evals/<target>.yaml`, see theswarm.evals): with no --feature the
-feature of the day is run (one a day, in rotation); --feature-id picks
-one; --all runs the series. Every run is scored — PR, its CI, the reviews,
-cost, duration, files touched — and appended to docs/harness-runs.jsonl.
+feature of the day is run (one a day, in rotation, skipping the ones the
+target already has); --feature-id picks one; --all runs the series. Every
+run is scored — PR, its CI, the reviews, cost, duration, files touched —
+and appended to docs/harness-runs.jsonl.
 
-Exit code 0 only when every cycle finished AND a pull request came out of
-it. Anything else prints where it stopped and why.
+Exit code 0 when every cycle finished AND a pull request came out of it,
+or when the Dev found every sub-task already on main (`already_delivered`:
+nothing measured, a warning, never a regression). Anything else prints
+where it stopped and why.
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 import httpx
 
@@ -87,6 +91,20 @@ def unfinished_children(repo: str, parent: int) -> list[int]:
         i["number"] for i in open_issues
         if marker in (i.get("body") or "")
         and "status:review" not in {l["name"] for l in i.get("labels", [])}
+    )
+
+
+def closed_children(repo: str, parent: int) -> list[int]:
+    """Sub-tasks of `parent` already closed. With no PR, each must be one
+    the Dev closed as already satisfied — a sub-task closed any other way
+    (by hand, as a duplicate) was not built, and does not make the
+    feature already delivered."""
+    raw = _gh("issue", "list", "--repo", repo, "--state", "closed",
+              "--limit", "60", "--json", "number,body")
+    marker = f"Parent: #{parent}"
+    return sorted(
+        i["number"] for i in json.loads(raw or "[]")
+        if marker in (i.get("body") or "")
     )
 
 
@@ -261,7 +279,9 @@ async def alert_mattermost(text: str) -> bool:
         await adapter.post_message(channel, text)
         return True
     except Exception as exc:  # noqa: BLE001 — an alert that fails is a log line
-        print(f"  (mattermost alert failed: {exc})")
+        # Name the server: "404 page not found" alone is Traefik saying no
+        # container answers for that host, which reads like a bad path.
+        print(f"  (mattermost alert to {url} failed: {str(exc).strip()[:200]})")
         return False
 
 
@@ -271,45 +291,53 @@ def append_result(path: pathlib.Path, result: dict) -> None:
         f.write(json.dumps(result) + "\n")
 
 
-def read_last_result(path: pathlib.Path, repo: str) -> dict | None:
-    """Most recent (last-in-file) history entry for `repo`, or None.
+PAST_RUNS_LIMIT = 500
 
-    Missing file and unparseable lines are treated the same as "no history"
-    rather than raised — the harness reports, it doesn't crash on its own
-    bookkeeping.
+
+def past_runs(repo: str, history: pathlib.Path, *, api=None) -> list[dict]:
+    """Every scored run on `repo`, oldest first.
+
+    The API is the live copy: every run posts there. The jsonl is the
+    fallback, and a stale one — the checkout is main as it was at dispatch,
+    so a run queued behind another (the workflow's concurrency group) does
+    not have that run's line (35908375032 started behind 35907412563).
+    Missing file and unparseable lines read as no history, never raise.
     """
-    if not path.exists():
-        return None
-    last = None
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if entry.get("repo") == repo:
-            last = entry
-    return last
+    api = api or _api
+    status, body = api(f"/api/evals/runs?repo={quote(repo, safe='')}&limit={PAST_RUNS_LIMIT}")
+    runs = body.get("runs") if status == 200 and isinstance(body, dict) else None
+    if isinstance(runs, list) and runs:
+        return [r for r in runs if isinstance(r, dict)]
+    return evals.read_history(history, repo)
 
 
 def is_regression(previous: dict | None, current: dict) -> bool:
-    """True only when a target flips from passing to failing.
+    """True only when a target flips from built to failed.
 
     A first-ever failure (no previous entry) and a repeat failure are both
-    unsurprising — only a pass-then-fail transition is worth flagging.
+    unsurprising — only a pass-then-fail transition is worth flagging. An
+    already delivered run is neither side: it measured nothing, so it is
+    never a regression and never the run a new one is compared with
+    (`evals.last_measured`).
     """
     return (
         previous is not None
-        and previous["passed"] is True
-        and current["passed"] is False
+        and evals.outcome_of(previous) == evals.OUTCOME_BUILT
+        and evals.outcome_of(current) == evals.OUTCOME_FAILED
     )
+
+
+def annotate(level: str, message: str) -> None:
+    """A line in the log, and an annotation on the run's summary page when
+    the harness runs in GitHub Actions."""
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        print(f"::{level} title=E2E harness::{message}")
 
 
 def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
             budget: int, history: pathlib.Path) -> tuple[bool, dict]:
-    """One feature, one cycle, one scored line of history."""
+    """One feature, one cycle, one scored line of history. True unless the
+    run failed — an already delivered one is not a failure."""
     print(f"▶ {repo}: {feature_text.splitlines()[0][:70]}"
           + (f"  [{feature.id}]" if feature else ""))
     if not wait_for_health():
@@ -337,11 +365,16 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
         print(f"    #{pr}: {pr_state.lower()}, CI {verdict}, {len(pr_files(repo, pr))} file(s)")
 
     left = unfinished_children(repo, issue)
-    if left:
-        print(f"  unfinished : {', '.join(f'#{n}' for n in left)}")
-
     record = cycle_record(cycle_id)
     cycle_result = record.get("result") or {}
+    satisfied = tuple(int(n) for n in cycle_result.get("already_satisfied") or ())
+    if not new_prs:
+        unexplained = sorted(set(closed_children(repo, issue)) - set(satisfied))
+        if unexplained:
+            print(f"  closed, not built: {', '.join(f'#{n}' for n in unexplained)}")
+            left = sorted(set(left) | set(unexplained))
+    if left:
+        print(f"  unfinished : {', '.join(f'#{n}' for n in left)}")
     observed = evals.Observed(
         state=state,
         prs=tuple(new_prs),
@@ -353,12 +386,13 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
         duration_s=duration_seconds(str(record.get("started_at") or ""), str(record.get("completed_at") or "")),
         backend=str(cycle_result.get("backend") or ""),
         tests_unavailable=bool(cycle_result.get("tests_unavailable")),
+        already_satisfied=satisfied,
     )
     result = {"repo": repo, **evals.score(feature, observed)}
     result["cycle_id"] = cycle_id
     result["issue"] = issue
     result["timestamp"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    previous = read_last_result(history, repo)
+    previous = evals.last_measured(past_runs(repo, history))
     result["regression"] = is_regression(previous, result)
     append_result(history, result)
     post_run(result)
@@ -369,6 +403,15 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
 
     if result["passed"]:
         print("\nPASS — a feature was asked for, and the whole of it was built.")
+        return True, result
+
+    if result["outcome"] == evals.OUTCOME_ALREADY_DELIVERED:
+        satisfied = ", ".join(f"#{n}" for n in result["already_satisfied"])
+        message = (f"already delivered — the Dev found every sub-task on main "
+                   f"({satisfied}); nothing was built, nothing measured")
+        print(f"\nNOT MEASURED — {message}")
+        annotate("warning", f"{repo}"
+                 + (f" [{feature.id}]" if feature else "") + f": {message}")
         return True, result
 
     reasons = []
@@ -422,13 +465,16 @@ def main() -> int:
     else:
         if manifest is None:
             sys.exit(f"no --feature given and no eval manifest for {args.repo}")
-        feature = evals.feature_of_the_day(manifest)
+        feature = evals.next_feature(manifest, past_runs(args.repo, args.history))
+        of_the_day = evals.feature_of_the_day(manifest)
+        if feature != of_the_day:
+            print(f"  [{of_the_day.id}] is already on {args.repo} — running [{feature.id}] instead")
         plan.append((feature.text, feature))
 
     failures = 0
     for text, feature in plan:
-        passed, _ = run_one(args.repo, text, feature, args.budget, args.history)
-        failures += 0 if passed else 1
+        ok, _ = run_one(args.repo, text, feature, args.budget, args.history)
+        failures += 0 if ok else 1
         if len(plan) > 1:
             print("\n" + "-" * 60 + "\n")
     if len(plan) > 1:

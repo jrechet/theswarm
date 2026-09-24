@@ -1,11 +1,13 @@
 # The canonical features the swarm is measured on (V2 runtime, M6).
 #
 # One feature per day in rotation at 07:00 UTC (the subscription is a
-# budget); the whole series on a manual dispatch. Each run is scored —
-# PR opened, CI on that PR, review decisions, cost, duration, files
-# touched — and appended to docs/harness-runs.jsonl; the repo page shows
-# the trend. `expected_paths` are globs the PR's files must match (empty:
-# not judged); tighten them as the target's layout settles.
+# budget), skipping the features whose last run built them or found them
+# built — the target keeps what the swarm merges; the whole series on a
+# manual dispatch. Each run is scored — PR opened, CI on that PR, review
+# decisions, cost, duration, files touched — and appended to
+# docs/harness-runs.jsonl; the repo page shows the trend.
+# `expected_paths` are globs the PR's files must match (empty: not
+# judged); tighten them as the target's layout settles.
 repo: jrechet/concert-tour-app
 features:
   - id: remaining-tickets
