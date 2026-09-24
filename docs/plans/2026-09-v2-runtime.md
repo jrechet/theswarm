@@ -299,6 +299,16 @@ d'outils. `Dockerfile` et `docker-compose.yml` ajustés au strict nécessaire.
   l'identité abonnement.
 - Alors seulement, `auto` prend `sdk` en premier. Le retour à `cli` par env
   est vérifié une fois en prod (I13).
+  *Livré le 2026-09-24* : trois runs consécutifs du harness, verts, sur
+  `sdk`, chacun avec ses PR — `c314a7ee3bf5` (chronological order, 3 PR),
+  `5544340c96cb` (sold-out badge, repris après le déploiement d'un merge
+  en plein cycle, 2 PR), `1ab66ead498d` (compte à rebours, 2 PR). Avant
+  eux, deux runs rouges sans rapport avec le SDK : `04fc7fff85a0` perdu à
+  la course arrêt/annulation (#194) et `874f575645f2`, une feature déjà
+  livrée (#196). Le retour à `cli` : un appel en prod avec
+  `SWARM_CLAUDE_BACKEND=cli`, servi par Claude Code 2.1.197 (2026-09-23).
+  `auto` devient `sdk → cli → api` : un quota reste fatal, un timeout déjà
+  dépensé par le SDK (`SDKTimeoutError`) n'est pas redépensé sur la CLI.
 
 **Liberté.** Structure du module (un fichier de plus ou un paquet
 `tools/claude/`), forme de l'objet permissions, choix entre `query()` et
