@@ -61,6 +61,14 @@ def _quota_exhausted(error: Exception) -> str | None:
     return None
 
 
+class SDKTimeoutError(RuntimeError):
+    """The SDK ran out of time twice, the second time resumed with more room.
+
+    `auto` does not fall back to the CLI on it: the CLI would start the same
+    work from scratch and spend the same budget again inside one phase.
+    """
+
+
 class ClaudeFatalError(Exception):
     """Non-retryable Claude failure: billing, auth, or invalid credentials.
 
@@ -815,6 +823,23 @@ class ClaudeCLI:
                 permission_mode=permission_mode, output_schema=output_schema,
             )
 
+        if backend == "auto":
+            # sdk → cli → api (V2 runtime M1, after three consecutive green
+            # harness cycles on the sdk backend). A quota is fatal on every
+            # backend and a spent timeout would only be spent again; any
+            # other SDK failure (not installed, a broken stream, no
+            # structured answer) falls through to the CLI chain, whose text
+            # the callers still parse.
+            try:
+                return await self._sdk_with_recovery(
+                    prompt, workdir=workdir, timeout=timeout,
+                    permission_mode=permission_mode, output_schema=output_schema,
+                )
+            except SDKTimeoutError:
+                raise
+            except RuntimeError as sdk_error:
+                log.warning("Claude SDK failed (%s) — falling back to the CLI", sdk_error)
+
         try:
             return await self._cli_with_auth_recovery(
                 prompt, workdir=workdir, timeout=timeout,
@@ -1088,7 +1113,7 @@ class ClaudeCLI:
                 quota = _quota_exhausted(again)
                 if quota is not None:
                     raise ClaudeFatalError(f"Claude subscription exhausted: {quota}")
-                raise RuntimeError(f"Claude SDK failed twice: {again}") from again
+                raise SDKTimeoutError(f"Claude SDK failed twice: {again}") from again
 
         if _is_auth_failure(first) and os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
             log.warning(

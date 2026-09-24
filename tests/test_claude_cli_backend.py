@@ -11,6 +11,16 @@ import pytest
 from theswarm.tools.claude import ClaudeCLI, _CLIUnavailable
 
 
+@pytest.fixture(autouse=True)
+def _no_sdk_leg(monkeypatch):
+    """`auto` is sdk → cli → api; these tests are about the cli → api part.
+    Without this the SDK leg would spawn the real bundled binary."""
+    async def unavailable(self, *args, **kwargs):
+        raise RuntimeError("Claude SDK failed: not in this test")
+
+    monkeypatch.setattr(ClaudeCLI, "_sdk_with_recovery", unavailable)
+
+
 def _api_response(text: str = "ok", in_tok: int = 10, out_tok: int = 20):
     return SimpleNamespace(
         content=[SimpleNamespace(text=text)],
