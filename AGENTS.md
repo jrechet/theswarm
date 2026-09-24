@@ -127,8 +127,10 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   the backlog drains with nothing shipped.
 - `commit_all` uses `git add -A` in the target workspace: runtime artifacts
   (test.db*, coverage) must be excluded before commit — known gap.
-- The cycle tracker is in-memory: a container restart forgets running cycles
-  (issue #5), and the theater can only show cycles it still knows.
+- The cycle tracker is in-memory, but a restart no longer loses a running
+  cycle (V2 runtime M4, closes the practical side of #5): the boot resumer
+  continues it under a new tracker id, `/c/{old}` redirects to it while it
+  runs, and the archive view shows it afterwards.
 - The GitHub App manifest flow is broken (GitHub returns a code it does not
   recognise, no app is created) and **is not needed**: repos come from
   `github_app.list_user_repositories()` with the owner's `GITHUB_TOKEN`, and
@@ -136,14 +138,24 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   (`/setup/github-oauth`, vault `__github_oauth__`). Do not sink time into
   the manifest flow; the investigation is in
   `docs/handoffs/2026-09-06-github-app-manifest-conversion-404.md`.
-- **Anything that commits to `main` of a repo a cycle is running against
-  redeploys the service and kills that cycle** — the tracker is in-memory
-  (#5). The PO's daily plan did exactly that until `docs/daily-plans/**` was
-  excluded from the CI trigger — then the PO's daily *report*
-  (`docs/daily-reports/**`) and the memory save (`AGENT_MEMORY.jsonl`)
-  did it again at the end of cycle `5f8f0f63f58c`, two deploys in a
-  minute while QA was still finishing. Adding a new agent write-to-main
-  path means adding it to that `paths-ignore` too.
+- **Anything that commits to `main` of this repo redeploys the service and
+  interrupts a running cycle** — it no longer kills it (V2 runtime M4).
+  Proven on prod 2026-09-23: a forced restart during the Dev phase of
+  `747bb89eced2`; the new container resumed it as `83b584194589` within a
+  second of booting, and it finished with three PRs reviewed and merged
+  (harness PASS, $2.81). What an interruption still costs: the stop-first
+  gap (a minute or two of 404s) and the node in flight — the interrupted
+  Dev iteration starts over with its claimed tasks handed back; the tree
+  survives on the `swarm-workspaces` volume. A continuation is never
+  resumed a second time (`auto-resume:1`), so two deploys inside one
+  cycle still lose it. The resume also needs the old container not to
+  write the cycle down as cancelled on its way out (see "Cancel is
+  persisted"). Keep agent write-to-main paths out of the CI
+  trigger anyway: the PO's daily plan, its daily *report*
+  (`docs/daily-reports/**`) and the memory save (`AGENT_MEMORY.jsonl`) each
+  redeployed mid-cycle once (`5f8f0f63f58c`: two deploys in a minute while
+  QA was still finishing). A new agent write-to-main path goes into
+  `paths-ignore` too.
 - Waiting for a deploy: check the **running container's** image
   (`docker inspect $(docker ps -q -f name=theswarm_theswarm)`), not the
   service spec — the spec updates when the rollout *starts*, and `/health`
