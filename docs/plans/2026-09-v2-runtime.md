@@ -512,7 +512,12 @@ temps.
   artefacts »), borne globale `SWARM_MAX_CONCURRENT_CYCLES`. **M5b** (à
   faire) = worktree par tâche, sous-tâches parallèles via `Send`, et le
   parallélisme des captures QA reporté de M4 — les trois demandent des
-  réducteurs dans `AgentState` et se livrent ensemble.
+  réducteurs dans `AgentState` et se livrent ensemble. *M5b, première moitié (2026-09-25)* : un
+  worktree par tâche Dev (`tools/git.add_worktree`), le clone reste sur
+  main, le worktree partage le `.venv-swarm` du clone ; les sous-tâches
+  parallèles et les captures QA parallèles restent à livrer. Le partage du
+  venv tient à concurrence 1 : à 2, une installation éditable de l'une
+  ferait tester le code de l'autre — chaque worktree aura alors son venv.
 
 **Acceptation.**
 - Test de régression du cas `16f3b8af2cca` / `2878898cc504` : deux tâches

@@ -406,6 +406,16 @@ async def dev_loop_end(state: CycleState, runtime: Runtime[CycleRuntime]) -> dic
     rt = runtime.context
     requeued = await _cycle()._requeue_unfinished(rt.config)
     rt.dev_claims_open = False
+    # Worktrees a task left behind (no PR, a timeout, a crash): the
+    # branches stay, the checkouts go (M5b).
+    workspace = getattr(rt.config, "workspace_dir", "") or ""
+    if workspace:
+        try:
+            from theswarm.tools import git as git_ops
+
+            await git_ops.prune_worktrees(workspace)
+        except Exception:  # noqa: BLE001 - tidying never fails a cycle
+            log.exception("Pruning worktrees of %s failed", workspace)
     if requeued:
         await rt.progress(
             "Dev",

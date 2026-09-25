@@ -402,6 +402,11 @@ async def pick_task(state: AgentState) -> dict:
     return {"task": None, "tokens_used": 0}
 
 
+def _worktrees_enabled() -> bool:
+    """One worktree per task (V2 runtime, M5b); off in the test suite."""
+    return os.environ.get("SWARM_DEV_WORKTREES", "1").strip().lower() not in ("0", "false", "no")
+
+
 async def implement_task(state: AgentState) -> dict:
     """Implement the task using Claude CLI in the cloned repo."""
     task = state.get("task")
@@ -430,11 +435,15 @@ async def implement_task(state: AgentState) -> dict:
         # rather than resetting from main, which would hand the reviewer the
         # same diff with its history thrown away (#121).
         note = await _changes_requested(github, task["number"])
-        if note and note.get("branch"):
-            branch_name = note["branch"]
+        resuming = bool(note and note.get("branch"))
+        branch_name = note["branch"] if resuming else _make_branch_name(task)
+        if _worktrees_enabled():
+            # The task's own checkout: the clone stays on main, and nothing
+            # another task leaves in a tree can reach this one's commit.
+            workspace = await git_ops.add_worktree(workspace, branch_name, resume=resuming)
+        elif resuming:
             await git_ops.resume_branch(workspace, branch_name)
         else:
-            branch_name = _make_branch_name(task)
             await git_ops.create_branch(workspace, branch_name)
 
         # Build the prompt
@@ -515,6 +524,7 @@ async def implement_task(state: AgentState) -> dict:
                     "Task #%d already satisfied: %s " + chr(8212) + " %s",
                     task["number"], satisfied_file, reason,
                 )
+                await git_ops.remove_worktree(workspace)
                 return {
                     "result": "already satisfied: " + satisfied_file + " " + chr(8212) + " " + reason,
                     "already_satisfied": True,
@@ -532,6 +542,10 @@ async def implement_task(state: AgentState) -> dict:
                 ))
             except Exception:
                 log.exception("Failed to requeue task #%s", task.get("number"))
+        try:
+            await asyncio.shield(git_ops.remove_worktree(workspace))
+        except Exception:
+            log.exception("Failed to remove the worktree of task #%s", task.get("number"))
         raise
 
     if not has_work:
@@ -540,6 +554,7 @@ async def implement_task(state: AgentState) -> dict:
             task["number"], (result.text or "").strip()[:200],
         )
         await _note_failed_attempt(github, task, "no file changes produced")
+        await git_ops.remove_worktree(workspace)
         return {
             "result": "no changes produced",
             "tokens_used": result.total_tokens,
@@ -557,6 +572,8 @@ async def implement_task(state: AgentState) -> dict:
         "cost_usd": result.cost_usd,
         "branch": branch_name,
         "diff_stat": diff_stat,
+        # The gates, the Ralph retry and the PR work where the change is.
+        "workspace": workspace,
     }
 
 
@@ -707,6 +724,7 @@ async def open_pull_request(state: AgentState) -> dict:
             f"Pushed a new attempt to `{branch}` — PR #{existing['number']} is updated.",
         )
         log.info("Updated PR #%d on branch %s", existing["number"], branch)
+        await git_ops.remove_worktree(workspace)
         return {
             "pr": existing,
             "result": f"PR #{existing['number']} updated: {existing['url']}",
@@ -725,6 +743,7 @@ async def open_pull_request(state: AgentState) -> dict:
     await github.add_labels(task["number"], ["status:review"])
 
     log.info("Opened PR #%d: %s", pr["number"], pr["url"])
+    await git_ops.remove_worktree(workspace)
     return {
         "pr": pr,
         "result": f"PR #{pr['number']} opened: {pr['url']}",
