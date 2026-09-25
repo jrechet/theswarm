@@ -73,4 +73,3 @@ async def test_the_periodic_loop_keeps_its_age_guard():
 def test_startup_passes_no_age_cutoff():
     source = Path("src/theswarm/presentation/web/server.py").read_text()
     assert "reap_orphans(max_age_seconds=0)" in source
-
