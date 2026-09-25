@@ -121,6 +121,7 @@ class CyclePersistenceHandler:
                 phases=tuple(phases),
                 # The tracker forgets it at the next restart; the row does not.
                 error=event.error,
+                total_cost_usd=max(cycle.total_cost_usd, event.total_cost_usd),
             )
             await self._cycle_repo.save(cycle)
         except Exception:

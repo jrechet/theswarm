@@ -125,10 +125,12 @@ async def collect_interrupted(cycle_repo, checkpoint_repo, graph_checkpointer=No
         resume_from = last_ok.next_phase if last_ok else None
         issue_number = None
         not_resumable = ""
-        if resume_from and graph_checkpointer is not None:
+        thread = None
+        if graph_checkpointer is not None:
             # A continuation runs on the thread of the cycle it continues.
             thread_id = await _thread_id_of(cycle_repo, str(cycle.id))
             thread = await _graph_thread(graph_checkpointer, thread_id)
+        if resume_from and graph_checkpointer is not None:
             if thread is None:
                 log.info("Cycle %s has no graph checkpoint — not resumed", cycle.id)
                 resume_from = None
@@ -142,11 +144,31 @@ async def collect_interrupted(cycle_repo, checkpoint_repo, graph_checkpointer=No
             "resume_from": resume_from,
             "issue_number": issue_number,
             "not_resumable": not_resumable,
+            # What the chain had spent at its last checkpoint: written on the
+            # row if nobody continues it (a continuation inherits it).
+            "cost_usd": _total_cost_of(thread),
         })
     return items
 
 
 NO_GRAPH_THREAD = "no graph checkpoint (it predates the durable cycle)"
+
+
+def _total_cost_of(thread) -> float:
+    checkpoint = getattr(thread, "checkpoint", None) or {}
+    value = (checkpoint.get("channel_values") or {}).get("total_cost")
+    return float(value) if isinstance(value, (int, float)) else 0.0
+
+
+async def spent_so_far(graph_checkpointer, thread_id: str) -> float:
+    """The cycle's running total at its last graph checkpoint, 0.0 when unknown.
+
+    A failed cycle's row said $0 while its checkpoint knew better (csv-export,
+    2026-09-25: scored $0.00 after two phases and three merged PRs).
+    """
+    if graph_checkpointer is None or not thread_id:
+        return 0.0
+    return _total_cost_of(await _graph_thread(graph_checkpointer, thread_id))
 
 
 async def _thread_id_of(cycle_repo, cycle_id: str) -> str:
@@ -197,10 +219,13 @@ def not_resumed_reasons(
 
 async def record_not_resumed(cycle_repo, interrupted: list[dict], plans: list[ResumePlan]) -> None:
     """Write each left-behind cycle's reason on its row (after the reap)."""
+    spent = {item.get("cycle_id"): float(item.get("cost_usd") or 0.0) for item in interrupted}
     for cycle_id, reason in not_resumed_reasons(interrupted, plans).items():
         log.info("Cycle %s: %s", cycle_id, reason)
         try:
             await cycle_repo.set_error(cycle_id, reason)
+            if spent.get(cycle_id) and hasattr(cycle_repo, "set_spend"):
+                await cycle_repo.set_spend(cycle_id, spent[cycle_id])
         except Exception:  # noqa: BLE001 — a reason is not worth a failed boot
             log.exception("Recording why cycle %s was not resumed failed", cycle_id)
 

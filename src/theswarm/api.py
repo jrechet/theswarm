@@ -603,9 +603,14 @@ async def _run_api_cycle(
     except Exception as e:
         error_msg = f"{type(e).__name__}: {e}"
         log.exception("API cycle %s failed", cycle_id)
+        # A continuation runs on its origin's thread (V2 M4).
+        from theswarm.application.services.cycle_resumer import spent_so_far
+
+        spent = await spent_so_far(get_cycle_checkpointer(), resume_cycle_id or cycle_id)
         tracker.update_status(
             cycle_id, CycleStatus.FAILED,
             error=error_msg,
+            result={"cost_usd": spent},
             completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
         # Publish CycleFailed event
@@ -616,6 +621,7 @@ async def _run_api_cycle(
                 cycle_id=CycleId(cycle_id),
                 project_id=repo,
                 error=error_msg,
+                total_cost_usd=spent,
             ))
         if callback_url:
             await send_callback(callback_url, {

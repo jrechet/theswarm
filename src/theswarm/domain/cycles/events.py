@@ -79,6 +79,8 @@ class CycleFailed(DomainEvent):
     cycle_id: CycleId = field(default_factory=CycleId.generate)
     project_id: str = ""
     error: str = ""
+    # What it spent up to its last graph checkpoint (0.0 when unknown).
+    total_cost_usd: float = 0.0
 
 
 @dataclass(frozen=True)

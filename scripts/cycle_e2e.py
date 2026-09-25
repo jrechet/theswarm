@@ -262,6 +262,13 @@ def review_decisions(result: dict) -> list[str]:
     return [str(r.get("decision", "")) for r in (result or {}).get("reviews", []) or []]
 
 
+def cycle_cost(record: dict) -> float:
+    """What the cycle spent: its result's figure, else its row's (a failed
+    cycle has no result, and its spend is on the row since v030)."""
+    result = record.get("result") or {}
+    return float(result.get("cost_usd") or record.get("total_cost_usd") or 0.0)
+
+
 def failure_reasons(state: str, *, new_prs, left, error: str = "") -> list[str]:
     """What the FAIL line says. The cycle's own error comes with its state:
     "cycle failed" alone sent the reader to Seq for 46ff31375dce, which a
@@ -407,13 +414,14 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
         ci=ci,
         files=tuple(files),
         review_decisions=tuple(review_decisions(cycle_result)),
-        cost_usd=float(cycle_result.get("cost_usd") or 0.0),
+        cost_usd=cycle_cost(record),
         duration_s=duration_seconds(str(record.get("started_at") or ""), str(record.get("completed_at") or "")),
         backend=str(cycle_result.get("backend") or ""),
         tests_unavailable=bool(cycle_result.get("tests_unavailable")),
         already_satisfied=satisfied,
         merged=tuple(merged),
         qa=evals.qa_of(cycle_result.get("demo_report")),
+        error=str(record.get("error") or ""),
     )
     result = {"repo": repo, **evals.score(feature, observed)}
     result["cycle_id"] = cycle_id
@@ -436,6 +444,13 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
         satisfied = ", ".join(f"#{n}" for n in result["already_satisfied"])
         message = (f"already delivered — the Dev found every sub-task on main "
                    f"({satisfied}); nothing was built, nothing measured")
+        print(f"\nNOT MEASURED — {message}")
+        annotate("warning", f"{repo}"
+                 + (f" [{feature.id}]" if feature else "") + f": {message}")
+        return True, result
+
+    if result["outcome"] == evals.OUTCOME_INTERRUPTED:
+        message = f"interrupted — {result['error']}; nothing about the swarm was measured"
         print(f"\nNOT MEASURED — {message}")
         annotate("warning", f"{repo}"
                  + (f" [{feature.id}]" if feature else "") + f": {message}")
