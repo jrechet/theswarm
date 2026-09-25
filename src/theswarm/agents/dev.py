@@ -29,6 +29,7 @@ from theswarm.agents.base import (
     find_system_python,
     install_target,
     load_context,
+    note_text_fallback,
     stub_result,
 )
 from theswarm.config import AgentState, Role
@@ -499,6 +500,7 @@ async def implement_task(state: AgentState) -> dict:
             )
         else:
             files_written = _extract_files_from_response(result.text, workspace)
+            note_text_fallback("file_blocks", result, produced=files_written > 0)
         log.info("Extracted %d files from Claude's response", files_written)
 
         # The tree first, the claim second. On cycle 5b1da00155c2 the first
@@ -534,6 +536,7 @@ async def implement_task(state: AgentState) -> dict:
                 )
             else:
                 already_satisfied = _extract_already_satisfied(result.text)
+                note_text_fallback("already_satisfied", result, produced=bool(already_satisfied))
             if already_satisfied:
                 satisfied_file, reason = already_satisfied
                 comment = "Already satisfied: `" + satisfied_file + "` " + chr(8212) + " " + reason
@@ -858,6 +861,7 @@ async def retry_implement(state: AgentState) -> dict:
         files_written = _write_outcome_files([f.model_dump() for f in outcome.files], workspace)
     else:
         files_written = _extract_files_from_response(result.text, workspace)
+        note_text_fallback("file_blocks", result, produced=files_written > 0)
     log.info("Ralph Loop retry: wrote %d files from the answer", files_written)
 
     # The tree decides, not the extractor: an in-place fix leaves no FILE

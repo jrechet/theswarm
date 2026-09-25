@@ -12,7 +12,7 @@ import re
 
 from langgraph.graph import END, StateGraph
 
-from theswarm.agents.base import load_context, stub_result, traced_node
+from theswarm.agents.base import load_context, note_text_fallback, stub_result, traced_node
 from theswarm.agents.schemas import Breakdown, ReviewVerdict
 from theswarm.config import SELF_REPO, AgentState, Role
 from theswarm.tools.claude import ClaudeFatalError
@@ -221,6 +221,7 @@ async def breakdown_stories(state: AgentState) -> dict:
         tasks = _tasks_from_structure(result)
         if tasks is None:
             tasks = _parse_tasks_json(result.text)
+            note_text_fallback("breakdown", result, produced=bool(tasks))
         if not tasks:
             log.warning("TechLead: could not parse breakdown for #%d", issue["number"])
             continue
@@ -483,6 +484,7 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
     salvaged = False
     if review_data is None:
         review_data, salvaged = _parse_review(result.text)
+        note_text_fallback("review", result, produced=bool(review_data.get("decision")))
     decision = review_data.get("decision", "COMMENT")
     summary = review_data.get("summary", "Review completed.")
     issues = review_data.get("issues", [])
