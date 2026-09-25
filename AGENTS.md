@@ -508,8 +508,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   A branch that raises is its task's failure (already handed back), not
   the iteration's; a quota still ends the cycle. Side by side, each
   worktree has its own `.venv-swarm` — an editable install into a shared
-  one would make one task test the other's code. Not yet run in prod
-  with a width of 2 (the plan's acceptance).
+  one would make one task test the other's code. Run once in prod at
+  width 2 (cycle `9d3174f41829`, 2026-09-25, `docker service update
+  --env-add`, then `--env-rm`): two worktrees five seconds apart, each
+  building its own venv, three PRs, harness PASS, TheSwarm's venv
+  untouched. Prod stays at 1 until the owner chooses otherwise.
 - **V2 runtime M6 — the harness is an eval suite.** `evals/<target>.yaml`
   lists the canonical features (five on concert-tour-app); `theswarm.evals`
   picks the feature of the day (rotation by day of year), scores a run
