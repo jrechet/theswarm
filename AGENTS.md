@@ -301,6 +301,14 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   from the first iteration. The learned CLI timeout floor is also kept per
   workspace across cycles (`tools/claude._REPO_FLOORS`). Before both, every
   self-cycle spent its first sixteen minutes re-timing-out on #89 (#99).
+- **A sub-task waits for what it depends on** (`Breakdown.depends_on`,
+  earlier positions only → "Depends on: #N" on the issue →
+  `dev.depends_on`). Both pickers leave a task alone while a dependency is
+  still open — claimed by a sibling Dev, in review, or not started. At
+  width 2 the first two ready siblings used to start together and write
+  each other's code (#322/#323 in 9d3174f41829; #325 never merged).
+  Dependencies wait for a *merge*: on SELF_REPO, where approved PRs merge
+  only at the end of the cycle, a dependent task waits for the next cycle.
 - **The Dev is told about its siblings' open PRs** (`_sibling_prs`: title +
   files, in the prompt above the `ALREADY_SATISFIED` rule). Four sub-tasks
   of one story built in parallel each re-implemented the others' work

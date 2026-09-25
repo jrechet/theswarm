@@ -23,6 +23,9 @@ class BreakdownTask(BaseModel):
     title: str
     body: str = ""
     labels: list[str] = Field(default_factory=lambda: list(DEFAULT_TASK_LABELS))
+    # 1-based positions of earlier tasks in the same breakdown that must be
+    # merged before this one starts. Empty: it can be built side by side.
+    depends_on: list[int] = Field(default_factory=list)
 
 
 class Breakdown(BaseModel):
