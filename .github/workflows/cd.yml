@@ -99,16 +99,29 @@ jobs:
         # is lost, and a second deploy in the same cycle loses the cycle:
         # a merge made while prod was idle landed ten minutes later in the
         # middle of 2f5114ae7713 (2026-09-25). Wait for idle, bounded; an API
-        # that does not answer never blocks a deploy.
+        # that does not answer never blocks a deploy. Only a cycle's own
+        # status counts: a grep for "running" anywhere also matched phases
+        # left running inside reaped cycles, and every deploy waited 30 min.
         env:
           SWARM_ACCESS_KEY: ${{ secrets.SWARM_ACCESS_KEY }}
           SWARM_BASE: https://bots.jrec.fr/swarm
           MAX_WAIT_SECONDS: 1800
         run: |
+          active_cycles() {
+            python3 -c '
+          import json, sys
+          try:
+              data = json.load(sys.stdin)
+          except ValueError:
+              data = []
+          rows = data.get("cycles", []) if isinstance(data, dict) else data
+          print(sum(1 for c in rows if isinstance(c, dict) and c.get("status") in ("running", "queued")))
+          ' 2>/dev/null || echo 0
+          }
           deadline=$(( $(date +%s) + MAX_WAIT_SECONDS ))
           while :; do
             body=$(curl -s --max-time 20 -H "Authorization: Bearer $SWARM_ACCESS_KEY" "$SWARM_BASE/api/cycles" || true)
-            if ! printf '%s' "$body" | grep -Eq '"status": ?"(running|queued)"'; then
+            if [ "$(printf '%s' "$body" | active_cycles)" = 0 ]; then
               echo "No cycle running — deploying."
               break
             fi

@@ -359,6 +359,14 @@ class SQLiteCycleRepository:
                 phases = json.loads(phases_json_raw or "[]") or []
             except (TypeError, json.JSONDecodeError):
                 phases = []
+            # The phase in flight died with the process: close it. Left
+            # 'running', it made a failed cycle read as a live one to anything
+            # that looked inside (the deploy gate waited 30 min for five).
+            phases = [
+                {**p, "status": "failed", "completed_at": p.get("completed_at") or completed}
+                if isinstance(p, dict) and p.get("status") == "running" else p
+                for p in phases
+            ]
             phases.append(orphan_phase)
             await self._db.execute(
                 "UPDATE cycles SET status = 'failed', completed_at = ?, phases_json = ? "

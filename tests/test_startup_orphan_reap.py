@@ -73,3 +73,22 @@ async def test_the_periodic_loop_keeps_its_age_guard():
 def test_startup_passes_no_age_cutoff():
     source = Path("src/theswarm/presentation/web/server.py").read_text()
     assert "reap_orphans(max_age_seconds=0)" in source
+
+
+async def test_the_phase_in_flight_is_closed_with_the_cycle(repo):
+    """A reaped cycle kept its interrupted phase 'running' next to the reap's
+    own failed one; the deploy gate read that as a live cycle (2026-09-25)."""
+    from theswarm.domain.cycles.entities import PhaseExecution
+    from theswarm.domain.cycles.value_objects import PhaseStatus
+
+    await repo.save(Cycle(
+        id=CycleId("46ff31375dce"), project_id="p", status=CycleStatus.RUNNING,
+        triggered_by="test", started_at=datetime.now(timezone.utc),
+        phases=(PhaseExecution(phase="qa", agent="qa", started_at=datetime.now(timezone.utc)),),
+    ))
+
+    await repo.reap_orphans(max_age_seconds=0)
+
+    cycle = await repo.get(CycleId("46ff31375dce"))
+    assert [p.status for p in cycle.phases] == [PhaseStatus.FAILED, PhaseStatus.FAILED]
+    assert cycle.phases[0].completed_at is not None
