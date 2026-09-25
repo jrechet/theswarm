@@ -3,8 +3,8 @@
 Prod repro (cycle 65ab4b0fdf3e): the CLI hung transiently under load, the
 auto-mode fallback hit the Messages API with the deployment's
 ``sk-ant-oat`` OAuth token — which the ``x-api-key`` header rejects by
-design — and the resulting 401 killed the whole cycle. A transient CLI
-failure must retry the CLI, not switch to a backend that can never work.
+design — and the resulting 401 killed the whole cycle. The same rule holds
+for the SDK: without a usable key, its own failure is the one to read.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ from theswarm.tools.claude import (
     ClaudeCLI,
     ClaudeResult,
     _api_backend_viable,
-    _CLIUnavailable,
 )
 
 
@@ -44,77 +43,46 @@ def test_blank_key_is_not_viable(monkeypatch):
     assert _api_backend_viable() is False
 
 
-# ── run() routing ──────────────────────────────────────────────────────
+# ── run() routing (the SDK since V2 M7; the CLI backend is retired) ──
 
 
-async def test_cli_failure_retries_cli_when_api_not_viable(monkeypatch):
-    """With an OAuth token, a transient CLI failure retries the CLI."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-oat01-abc123")
-    monkeypatch.delenv("SWARM_CLAUDE_BACKEND", raising=False)
-
-    cli = ClaudeCLI(model="haiku")
-    calls = 0
-
-    async def flaky_cli(*_a, **_kw):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            raise _CLIUnavailable("CLI timed out after 180s")
-        return ClaudeResult(text="recovered", backend="cli")
-
-    api_mock = AsyncMock()
-    with patch.object(cli, "_run_cli", side_effect=flaky_cli), \
-         patch.object(cli, "_run_api", api_mock):
-        result = await cli.run("hi")
-
-    assert result.text == "recovered"
-    assert calls == 2
-    api_mock.assert_not_awaited()  # never touched the unusable API path
-
-
-async def test_persistent_cli_failure_surfaces_cli_error_not_401(monkeypatch):
-    """Two CLI failures raise the CLI's own error, never an opaque 401."""
+async def test_an_sdk_failure_with_an_oauth_token_never_reaches_the_api(monkeypatch):
+    """The SDK's own error surfaces, never an opaque 401 from the API."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-oat01-abc123")
     monkeypatch.delenv("SWARM_CLAUDE_BACKEND", raising=False)
 
     cli = ClaudeCLI(model="haiku")
     api_mock = AsyncMock()
-
-    with patch.object(cli, "_run_cli", side_effect=_CLIUnavailable("exit 1: boom")), \
+    failing = AsyncMock(side_effect=RuntimeError("Claude SDK failed: stream closed"))
+    with patch.object(cli, "_sdk_with_recovery", failing), \
          patch.object(cli, "_run_api", api_mock):
-        with pytest.raises(RuntimeError, match="CLI failed twice"):
+        with pytest.raises(RuntimeError, match="stream closed"):
             await cli.run("hi")
 
     api_mock.assert_not_awaited()
 
 
-async def test_cli_failure_falls_back_when_api_key_is_real(monkeypatch):
-    """A genuine API key keeps the original fallback behaviour."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-abc123")
+async def test_an_sdk_failure_falls_back_when_the_api_key_is_real(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-real")
     monkeypatch.delenv("SWARM_CLAUDE_BACKEND", raising=False)
 
     cli = ClaudeCLI(model="haiku")
-    api_mock = AsyncMock(return_value=ClaudeResult(text="from api", backend="api"))
-
-    with patch.object(cli, "_run_cli", side_effect=_CLIUnavailable("exit 1")), \
-         patch.object(cli, "_run_api", api_mock):
+    failing = AsyncMock(side_effect=RuntimeError("Claude SDK failed: stream closed"))
+    api = AsyncMock(return_value=ClaudeResult(text="from api", backend="api"))
+    with patch.object(cli, "_sdk_with_recovery", failing), patch.object(cli, "_run_api", api):
         result = await cli.run("hi")
 
-    assert result.text == "from api"
-    api_mock.assert_awaited_once()
+    assert result.backend == "api"
 
 
 async def test_forced_api_mode_still_uses_api(monkeypatch):
-    """SWARM_CLAUDE_BACKEND=api is explicit — the viability check must not veto it."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-oat01-abc123")
     monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "api")
 
     cli = ClaudeCLI(model="haiku")
-    api_mock = AsyncMock(return_value=ClaudeResult(text="forced", backend="api"))
-    cli_mock = AsyncMock()
-
-    with patch.object(cli, "_run_cli", cli_mock), patch.object(cli, "_run_api", api_mock):
+    sdk = AsyncMock()
+    api = AsyncMock(return_value=ClaudeResult(text="from api", backend="api"))
+    with patch.object(cli, "_sdk_with_recovery", sdk), patch.object(cli, "_run_api", api):
         result = await cli.run("hi")
 
-    assert result.text == "forced"
-    cli_mock.assert_not_awaited()
+    assert result.backend == "api"
+    sdk.assert_not_awaited()

@@ -15,7 +15,7 @@ from theswarm.tools.claude import ClaudeCLI
 
 
 def _timeout(seconds: int) -> Exception:
-    """An error shaped like the one `_run_cli` raises on expiry."""
+    """An error shaped like the one a Claude call raises on expiry."""
     return RuntimeError(f"CLI timed out after {seconds}s")
 
 

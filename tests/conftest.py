@@ -34,13 +34,11 @@ def _no_target_venv_for_tests(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_real_claude_binary(monkeypatch):
-    """`auto` is sdk → cli → api since V2 M1: a test in auto mode that fakes
-    only the CLI would launch the real bundled Claude binary — a real call
-    on CI, a hang until the SDK timeout where the network is blocked (the
-    local suite stalled on test_auth_failure_retries_without_the_env_token).
-    The SDK leg answers "unavailable" and auto falls through to the CLI, as
-    those tests expect. A test that fakes ``_sdk_query`` itself wins: its
-    monkeypatch comes after this one."""
+    """No test launches the real bundled Claude binary — a real call on CI,
+    a hang until the SDK timeout where the network is blocked (the local
+    suite once stalled on an auto-mode test that faked only the CLI). The
+    SDK seam answers "unavailable"; a test that fakes ``_sdk_query`` itself
+    wins: its monkeypatch comes after this one."""
     from theswarm.tools import claude as claude_mod
 
     def unavailable(prompt, options):
