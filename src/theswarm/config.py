@@ -93,6 +93,7 @@ class AgentState(TypedDict, total=False):
     e2e_output: str
     e2e_counts: dict
     e2e_failure_excerpt: str  # the lines of a failed E2E run that explain it
+    e2e_repaired_from: str  # the setup errors QA rewrote its own E2E file for
     security_scan: dict
     issue_stats: dict
     demo_report: dict | None

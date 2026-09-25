@@ -369,7 +369,17 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   stray `solana-te` held it on the owner's laptop: the readiness probe read a
   flat 400 for 90s and `e2e=0(pass)` for four cycles while 8001/8002 worked.
   The port is chosen once per process because the generated E2E file bakes
-  it into its URLs.
+  it into its URLs. Until 2026-09-25 the prompt never *told* it: `{{port}}`
+  in a `.format` template is `{port}` afterwards, the `.replace` that
+  followed matched nothing, and the model guessed 8000 — right on prod by
+  luck, wrong anywhere the port moved.
+- **QA runs the E2E file it wrote, and repairs it once** when not one test
+  sets up (every test an error, none passed or failed). The file is written
+  blind; two cycles in five on 2026-09-25 reported `0 passed, 0 failed, 24
+  errors` in under two seconds against a server answering 200. The repair
+  call gets pytest's lines and the file, keeps every assertion, and the
+  rerun is the verdict (`e2e_repaired_from` on the report card). A failed
+  *assertion* is a verdict on the target and is never repaired.
 - **On SELF_REPO approved PRs merge at the end of the cycle** (#173), after
   QA and the report — never in the review phase, whose redeploy would end the
   cycle. A merge that fails stays open (#164 became unmergeable the moment its
