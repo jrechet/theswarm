@@ -183,6 +183,19 @@ WORKTREES_DIR = ".worktrees"
 _worktree_locks: dict[tuple[int, str], asyncio.Lock] = {}
 
 
+def dev_parallelism() -> int:
+    """How many Dev tasks one iteration runs at once (M5b); 1 = one at a time.
+
+    `SWARM_DEV_PARALLELISM`. Above 1 each task worktree gets its own venv:
+    an editable install into a shared one would make one task test the
+    other's code.
+    """
+    try:
+        return max(1, int(os.environ.get("SWARM_DEV_PARALLELISM", "1")))
+    except ValueError:
+        return 1
+
+
 def workspace_root(path: str) -> str:
     """The clone a task worktree belongs to; any other path is its own root."""
     marker = os.sep + WORKTREES_DIR + os.sep

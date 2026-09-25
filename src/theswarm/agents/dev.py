@@ -7,6 +7,7 @@ In real mode, clones the repo, calls claude CLI to implement, pushes a PR.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import re
@@ -292,6 +293,7 @@ async def _mark_in_progress(github, task: dict) -> None:
 
 async def _pick_targeted(
     github, target_issue: int, attempted: list[int] | None = None,
+    exclude: list[int] | None = None,
 ) -> dict | None:
     """Issue-driven flow (P1): resolve the pinned issue to a workable task.
 
@@ -311,11 +313,13 @@ async def _pick_targeted(
         log.info("Target issue #%s not found or closed", target_issue)
         return None
 
+    excluded = set(exclude or [])
     labels = _label_names(target)
     if "role:dev" in labels and "status:review" not in labels:
         # Pressed Play on a directly implementable task: take it whatever
         # its status label says (backlog, ready, or orphaned in-progress).
-        return target
+        # A sibling Dev of this iteration already has it: nothing for this one.
+        return None if target.get("number") in excluded else target
 
     # Children follow the same rule as the target above: role:dev and not
     # already in review, whatever the status label says.
@@ -340,6 +344,7 @@ async def _pick_targeted(
         and child.get("state") != "closed"
         and "role:dev" in _label_names(child)
         and "status:review" not in _label_names(child)
+        and child.get("number") not in excluded
     ]
     # Least-tried first; among equals, ready before in-progress. The order
     # of those two keys matters: a task that failed here is requeued to
@@ -373,12 +378,24 @@ async def pick_task(state: AgentState) -> dict:
         return stub_result(Role.DEV, "pick_task",
                            "pick first issue with labels role:dev + status:ready")
 
+    # Dev graphs running side by side in one iteration (M5b) pick one at a
+    # time, and never a task a sibling already claimed: the label flip to
+    # in-progress is not a lock, two pickers can read "ready" together.
+    lock = state.get("pick_lock")
+    async with (lock if lock is not None else contextlib.nullcontext()):
+        return await _pick_and_claim(state, github)
+
+
+async def _pick_and_claim(state: AgentState, github) -> dict:
+    claimed = state.get("claimed_tasks")
     target_issue = state.get("target_issue")
     if target_issue:
         attempted = state.get("attempted_tasks")
-        task = await _pick_targeted(github, target_issue, attempted)
+        task = await _pick_targeted(github, target_issue, attempted, exclude=claimed)
         if task is None:
             return {"task": None, "tokens_used": 0}
+        if claimed is not None:
+            claimed.append(task["number"])
         # Recorded before the work starts, not after: an iteration that dies
         # mid-implementation is precisely the one that must not be repeated
         # ahead of everything else. The list is the dev loop's own, mutated
@@ -390,10 +407,13 @@ async def pick_task(state: AgentState) -> dict:
         return {"task": task, "tokens_used": 0}
 
     # Look for tasks labeled for dev work
+    taken = set(claimed or [])
     for labels in [["role:dev", "status:ready"], ["status:ready"]]:
-        issues = await github.get_issues(labels=labels)
+        issues = [i for i in await github.get_issues(labels=labels) if i.get("number") not in taken]
         if issues:
             task = issues[0]
+            if claimed is not None:
+                claimed.append(task["number"])
             log.info("Picked task: #%d %s", task["number"], task["title"])
             await _mark_in_progress(github, task)
             return {"task": task, "tokens_used": 0}

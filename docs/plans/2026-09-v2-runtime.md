@@ -518,6 +518,13 @@ temps.
   parallèles et les captures QA parallèles restent à livrer. Le partage du
   venv tient à concurrence 1 : à 2, une installation éditable de l'une
   ferait tester le code de l'autre — chaque worktree aura alors son venv.
+  *Sous-tâches parallèles (2026-09-25)* : `SWARM_DEV_PARALLELISM` (défaut
+  1) ; au-delà, l'itération Dev lance autant de graphes Dev à la fois, par
+  `asyncio.gather` dans le nœud plutôt que par `Send` — les graphes Dev ont
+  chacun leur état, aucun réducteur n'est nécessaire côté `AgentState`. Les
+  sélecteurs passent un par un et sautent ce qu'un frère a pris ; chaque
+  worktree a son venv. Reste : le cycle de prod à largeur 2 (acceptation),
+  et les captures QA parallèles.
 
 **Acceptation.**
 - Test de régression du cas `16f3b8af2cca` / `2878898cc504` : deux tâches

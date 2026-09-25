@@ -491,8 +491,18 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   and the Claude child's PATH) — one install per clone, not per task.
   Worktree bookkeeping is serialised per clone. A retry of a task whose
   worktree a crash left behind drops it first (git refuses a second
-  checkout of a branch). Parallel sub-tasks are the second half (not
-  shipped).
+  checkout of a branch). **Second half — parallel sub-tasks**
+  (`SWARM_DEV_PARALLELISM`, default 1 = the single path, unchanged): above
+  1 a Dev iteration runs that many Dev graphs at once
+  (`cycle_graph._dev_iter_parallel`), each on its own task and worktree.
+  The pickers take turns behind one lock and skip what a sibling claimed
+  (`pick_lock`, `claimed_tasks` in `AgentState` — LangGraph drops input
+  keys a schema does not declare): the in-progress label is not a lock.
+  A branch that raises is its task's failure (already handed back), not
+  the iteration's; a quota still ends the cycle. Side by side, each
+  worktree has its own `.venv-swarm` — an editable install into a shared
+  one would make one task test the other's code. Not yet run in prod
+  with a width of 2 (the plan's acceptance).
 - **V2 runtime M6 — the harness is an eval suite.** `evals/<target>.yaml`
   lists the canonical features (five on concert-tour-app); `theswarm.evals`
   picks the feature of the day (rotation by day of year), scores a run

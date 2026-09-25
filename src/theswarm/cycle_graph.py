@@ -236,6 +236,93 @@ async def techlead_breakdown(state: CycleState, runtime: Runtime[CycleRuntime]) 
     return {**_accounted(state, "techlead_breakdown", tokens, cost), **budget}
 
 
+async def _dev_iter_parallel(
+    rt: CycleRuntime, state: CycleState, updates: dict, iteration: int,
+    attempted: list[int], width: int,
+) -> dict:
+    """Up to ``width`` Dev graphs at once, each on its own task and worktree
+    (V2 runtime, M5b; ``SWARM_DEV_PARALLELISM``).
+
+    The pickers take turns behind one lock and skip what a sibling already
+    claimed. A branch that raises is that task's failure, not the
+    iteration's: ``implement_task`` has already handed its task back. A
+    quota (``ClaudeFatalError``) still ends the cycle.
+    """
+    lock = asyncio.Lock()
+    claimed: list[int] = []
+    graphs = [
+        _invoke_agent(_cycle().build_dev_graph(), {
+            **rt.base_state,
+            "phase": Phase.DEVELOPMENT.value,
+            "attempted_tasks": attempted,
+            "pick_lock": lock,
+            "claimed_tasks": claimed,
+        })
+        for _ in range(width)
+    ]
+    await rt.progress("Dev", f"Up to {width} tasks side by side")
+    try:
+        results = await _run_phase(
+            rt, "dev_iter", "Dev", asyncio.gather(*graphs, return_exceptions=True),
+        )
+    except PhaseTimeout:
+        for graph in graphs:
+            graph.cancel()
+        await rt.progress("Dev", f"Iteration {iteration} timed out — moving on")
+        return {**updates, "dev_outcome": "skip"}
+
+    tokens, cost = 0, 0.0
+    prs = list(state.get("prs", []))
+    satisfied = list(state.get("already_satisfied", []))
+    without = list(state.get("attempted_without_pr", []))
+    worked = failed = repeated = opened = 0
+    for result in results:
+        if isinstance(result, ClaudeFatalError):
+            await rt.progress("Dev", f"Fatal Claude error — aborting cycle: {str(result)[:160]}")
+            raise result
+        if isinstance(result, BaseException):
+            failed += 1
+            await rt.progress(
+                "Dev", f"A task failed ({type(result).__name__}: {str(result)[:120]}) — handed back",
+            )
+            continue
+        tokens += result.get("tokens_used", 0)
+        cost += result.get("cost_usd", 0.0)
+        pr, task = result.get("pr"), result.get("task")
+        if pr:
+            worked += 1
+            opened += 1
+            prs.append(pr)
+            await rt.progress("Dev", f"PR #{pr['number']} opened: {pr['url']}")
+            continue
+        if task is None:
+            continue
+        worked += 1
+        number = task["number"]
+        if result.get("already_satisfied"):
+            satisfied.append(number)
+            await rt.progress("Dev", f"Task #{number} already satisfied on main — closed")
+        else:
+            await rt.progress("Dev", f"No PR produced for task #{number}")
+        if number in without:
+            repeated += 1
+        else:
+            without.append(number)
+
+    updates.update(_accounted(state, f"dev_iter{iteration}", tokens, cost))
+    updates.update(_within_budget(rt, state, Role.DEV, tokens))
+    updates.update({"prs": prs, "already_satisfied": satisfied, "attempted_without_pr": without})
+    if worked == 0 and failed == 0:
+        await rt.progress("Dev", "No more ready tasks — ending dev loop")
+        return {**updates, "dev_outcome": "end"}
+    if worked == 0:
+        return {**updates, "dev_outcome": "skip"}
+    if not opened and repeated == worked:
+        await rt.progress("Dev", "Every task produced no changes twice — ending dev loop")
+        return {**updates, "dev_outcome": "end"}
+    return {**updates, "dev_outcome": "review"}
+
+
 async def dev_iter(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     """One Dev iteration. Sets ``dev_outcome`` for the router: review the
     PRs, skip to the next iteration, or end the loop."""
@@ -256,6 +343,12 @@ async def dev_iter(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     # an in-place mutation is invisible to the checkpoint.
     attempted = list(state.get("attempted_tasks", []))
     updates["attempted_tasks"] = attempted
+
+    from theswarm.tools.git import dev_parallelism
+
+    width = dev_parallelism()
+    if width > 1:
+        return await _dev_iter_parallel(rt, state, updates, iteration, attempted, width)
 
     async def _invoke():
         return await _run_phase(
