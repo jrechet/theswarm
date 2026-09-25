@@ -329,6 +329,21 @@ class SQLiteCycleRepository:
         )
         await self._db.commit()
 
+    async def origin_of(self, cycle_id: str) -> str:
+        """The first cycle of a resume chain, whose id is the graph thread
+        every continuation runs on (V2 runtime, M4)."""
+        seen = {cycle_id}
+        current = cycle_id
+        while True:
+            cursor = await self._db.execute(
+                "SELECT id FROM cycles WHERE resumed_as = ? LIMIT 1", (current,),
+            )
+            row = await cursor.fetchone()
+            if row is None or row[0] in seen:
+                return current
+            current = row[0]
+            seen.add(current)
+
     async def set_error(self, cycle_id: str, error: str) -> None:
         """Say why a cycle ended the way it did, on its row."""
         await self._db.execute(

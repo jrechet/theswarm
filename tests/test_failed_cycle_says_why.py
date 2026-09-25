@@ -252,3 +252,88 @@ def test_the_harness_fail_line_without_a_reason_is_unchanged():
     assert harness.failure_reasons("failed", new_prs=[], left=[347]) == [
         "cycle failed", "no pull request produced", "1 sub-task(s) left unbuilt",
     ]
+
+
+# ── Continuations (found on 46ff31375dce) ──────────────────────────────
+
+
+def test_a_continuation_s_reason_is_the_depth_cap_even_with_no_phase_recorded():
+    """46ff31375dce had finished its dev loop, but no phase checkpoint was
+    recorded under its id: the reason is the cap, not "nothing finished"."""
+    items = [_item("46ff31375dce", triggered_by="auto-resume:1", resume_from=None)]
+
+    reasons = cycle_resumer.not_resumed_reasons(items, cycle_resumer.plan_resumes(items))
+
+    assert "already an automatic resume" in reasons["46ff31375dce"]
+
+
+async def test_a_continuation_reads_its_origin_s_graph_thread(repo):
+    """A continuation runs on the thread of the cycle it continues (V2 M4)."""
+    from types import SimpleNamespace
+
+    await repo.save(_running("092596248fb9"))
+    await repo.mark_resumed("092596248fb9", "46ff31375dce")
+    await repo.save(_running("46ff31375dce", triggered_by="auto-resume:1"))
+    await repo.reap_orphans(max_age_seconds=0)  # the origin is failed, not running
+    await repo.save(_running("46ff31375dce", triggered_by="auto-resume:1"))
+
+    asked: list[str] = []
+
+    class Checkpoints:
+        async def last_ok(self, cycle_id):
+            return SimpleNamespace(next_phase="qa")
+
+    class Threads:
+        async def aget_tuple(self, config):
+            thread_id = config["configurable"]["thread_id"]
+            asked.append(thread_id)
+            if thread_id != "092596248fb9":
+                return None
+            return SimpleNamespace(checkpoint={"channel_values": {"target_issue": 344}})
+
+    (item,) = await cycle_resumer.collect_interrupted(repo, Checkpoints(), graph_checkpointer=Threads())
+
+    assert asked == ["092596248fb9"]
+    assert item["not_resumable"] == "" and item["issue_number"] == 344
+
+
+async def test_the_origin_of_a_chain_is_its_first_cycle(repo):
+    for cycle_id in ("aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc"):
+        await repo.save(_running(cycle_id))
+    await repo.mark_resumed("aaaaaaaaaaaa", "bbbbbbbbbbbb")
+    await repo.mark_resumed("bbbbbbbbbbbb", "cccccccccccc")
+
+    assert await repo.origin_of("cccccccccccc") == "aaaaaaaaaaaa"
+    assert await repo.origin_of("aaaaaaaaaaaa") == "aaaaaaaaaaaa"
+
+
+async def test_a_continuation_records_its_phases(monkeypatch):
+    """The resume launcher never passed the phase-checkpoint repository:
+    46ff31375dce and 1bb1bfcb0d96 recorded no phase at all."""
+    from types import SimpleNamespace
+
+    import theswarm.api as api
+    from theswarm.application.services.cycle_resumer import ResumePlan
+    from theswarm.presentation.web import server
+
+    launched: dict = {}
+
+    async def fake_run(cycle_id, repo, *args, **kwargs):
+        launched.update(kwargs)
+
+    monkeypatch.setattr(api, "run_api_cycle", fake_run)
+
+    class Repo:
+        async def mark_resumed(self, old, new):
+            pass
+
+    checkpoints = object()
+    app = SimpleNamespace(state=SimpleNamespace(checkpoint_repo=checkpoints))
+    plan = ResumePlan(cycle_id="092596248fb9", repo="jrechet/concert-tour-app",
+                      resume_from="dev_loop", depth=1)
+
+    await server._launch_resume(app, plan, [], None, Repo(), None)
+    import asyncio
+    await asyncio.sleep(0)
+
+    assert launched["checkpoint_repo"] is checkpoints

@@ -126,7 +126,9 @@ async def collect_interrupted(cycle_repo, checkpoint_repo, graph_checkpointer=No
         issue_number = None
         not_resumable = ""
         if resume_from and graph_checkpointer is not None:
-            thread = await _graph_thread(graph_checkpointer, str(cycle.id))
+            # A continuation runs on the thread of the cycle it continues.
+            thread_id = await _thread_id_of(cycle_repo, str(cycle.id))
+            thread = await _graph_thread(graph_checkpointer, thread_id)
             if thread is None:
                 log.info("Cycle %s has no graph checkpoint — not resumed", cycle.id)
                 resume_from = None
@@ -147,16 +149,31 @@ async def collect_interrupted(cycle_repo, checkpoint_repo, graph_checkpointer=No
 NO_GRAPH_THREAD = "no graph checkpoint (it predates the durable cycle)"
 
 
+async def _thread_id_of(cycle_repo, cycle_id: str) -> str:
+    """The graph thread a cycle runs on: its resume chain's first cycle."""
+    origin_of = getattr(cycle_repo, "origin_of", None)
+    if origin_of is None:
+        return cycle_id
+    try:
+        return await origin_of(cycle_id)
+    except Exception:  # noqa: BLE001 — fall back to the cycle's own id
+        log.exception("Finding the origin of cycle %s failed", cycle_id)
+        return cycle_id
+
+
 def _why_not_resumed(item: dict, max_depth: int) -> str:
+    # The cap first: whatever else is true of a continuation, the cap is why
+    # it stays down (46ff31375dce had finished its dev loop, and still no
+    # phase was on record under its id).
+    if resume_depth(item.get("triggered_by") or "") >= max_depth:
+        return ("it was already an automatic resume, and a second interruption "
+                "needs a person to look")
     if item.get("not_resumable"):
         return str(item["not_resumable"])
     if not item.get("resume_from"):
         return "no phase had finished yet, there was nothing to continue"
     if not (item.get("repo") or "").strip():
         return "its repository is unknown"
-    if resume_depth(item.get("triggered_by") or "") >= max_depth:
-        return ("it was already an automatic resume, and a second interruption "
-                "needs a person to look")
     return f"more than {MAX_RESUMES_PER_BOOT} cycles were interrupted at once"
 
 

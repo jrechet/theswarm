@@ -484,6 +484,9 @@ async def _launch_resume(app, plan, allowed_repos, bus, cycle_repo, project_repo
             base_path=getattr(app.state, "base_path", ""),
             project_repo=project_repo,
             cycle_repo=cycle_repo,
+            # Without it a continuation recorded no phase at all (46ff31375dce,
+            # 1bb1bfcb0d96), and the next boot read "nothing finished".
+            checkpoint_repo=getattr(app.state, "checkpoint_repo", None),
             project_id=plan.repo,
             resume_from=plan.resume_from,
             resume_cycle_id=plan.cycle_id,
