@@ -231,9 +231,17 @@ def ci_verdict(checks_output: str) -> str:
     made the first green run look red: concert-tour-app has no workflows,
     yet both PRs were sound and merged.
     """
-    if not checks_output.strip():
+    # The swarm's own verdict is a commit status too (`theswarm/review`,
+    # V2 M8): read as CI, it made concert-tour-app, which has no workflow at
+    # all, report "CI green" on every approval and "CI RED" on every
+    # REQUEST_CHANGES (ac30a0a1a126).
+    lines = [
+        line for line in checks_output.splitlines()
+        if line.strip() and line.split("\t", 1)[0].strip() != "theswarm/review"
+    ]
+    if not lines:
         return "none"
-    return "RED" if "fail" in checks_output else "green"
+    return "RED" if any("\tfail" in line for line in lines) else "green"
 
 
 def duration_seconds(started_at: str, completed_at: str) -> float:

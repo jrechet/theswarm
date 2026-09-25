@@ -1,12 +1,16 @@
 """An approved pull request merges only on green CI.
 
 The TechLead merged every APPROVE without reading the PR's CI, and neither
-branch protection stops it: concert-tour-app's main requires no status
-check, and TheSwarm's exempts the admin token the swarm merges with. No red
-PR has merged yet (every merged PR on concert-tour-app was green on
-2026-09-25), but ac30a0a1a126 opened one whose CI was red: an APPROVE on it
-would have landed a red main. Red goes back to the Dev with the failing
-checks named; pending is waited for, bounded, then left open.
+branch protection stops it: TheSwarm's main exempts the admin token the
+swarm merges with, and concert-tour-app has no CI and no required check at
+all. Red goes back to the Dev with the failing checks named; pending is
+waited for, bounded, then left open; a repository without CI merges as
+before.
+
+The harness had the same blind spot the other way round: it read the
+swarm's own `theswarm/review` status as CI, so concert-tour-app, which has
+no workflow, reported "CI green" on every approval and "CI RED" on every
+REQUEST_CHANGES (ac30a0a1a126).
 """
 
 from __future__ import annotations
@@ -282,3 +286,35 @@ def test_a_merge_pass_shares_one_wait():
     assert wait.left() == 40
     clock.now += 100
     assert wait.left() == 0
+
+
+# ── The harness's CI field ─────────────────────────────────────────────
+
+
+def _harness():
+    import importlib.util
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    spec = importlib.util.spec_from_file_location("cycle_e2e_ci", root / "scripts/cycle_e2e.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_harness_does_not_read_the_swarm_s_own_verdict_as_ci():
+    harness = _harness()
+    changes_requested = "theswarm/review\tfail\t0\t\tChanges requested: the diff only touches .gitignore\n"
+    approved = "theswarm/review\tpass\t0\t\tAPPROVE\n"
+
+    assert harness.ci_verdict(changes_requested) == "none"
+    assert harness.ci_verdict(approved) == "none"
+
+
+def test_the_harness_still_reads_real_ci():
+    harness = _harness()
+    output = ("theswarm/review\tpass\t0\t\tAPPROVE\n"
+              "tests\tfail\t2m1s\thttps://github.com/o/r/actions/runs/1\t\n")
+
+    assert harness.ci_verdict(output) == "RED"
+    assert harness.ci_verdict("tests\tpass\t2m1s\thttps://x\t\n") == "green"

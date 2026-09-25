@@ -1,9 +1,9 @@
 """Read a pull request's CI before merging it.
 
 The TechLead merged every APPROVE without looking, and branch protection
-does not stop it on either repository the swarm works on: concert-tour-app's
-main requires no status check, and TheSwarm's exempts the admin token the
-swarm merges with. A red PR goes back to the Dev; a PR whose CI is still
+does not stop it: TheSwarm's main exempts the admin token the swarm merges
+with. (concert-tour-app has no CI at all: there the gate reads "none" and
+the merge goes ahead as before.) A red PR goes back to the Dev; a PR whose CI is still
 running is waited for, bounded, then left open for the next pass.
 
 The swarm's own `theswarm/review` status is its verdict, not CI, and is
