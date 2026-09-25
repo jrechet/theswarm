@@ -7,10 +7,10 @@ services:
       - .env
     environment:
       - BASE_PATH=/swarm
-      # V2 runtime, M1: Claude calls go through the Agent SDK (same binary,
-      # same subscription identity as `claude -p`, typed message stream).
-      # `auto` stays CLI-first until three harness cycles pass on the SDK;
-      # the rollback is this one line back to `cli` (plan invariant I13).
+      # V2 runtime: Claude calls go through the Agent SDK (its bundled
+      # Claude Code binary, the subscription identity of the mounted
+      # ~/.claude, a typed message stream). The `claude -p` CLI backend was
+      # retired in M7; the way back is a revert, not this line.
       - SWARM_CLAUDE_BACKEND=sdk
       # Identity for the swarm's Dev agent git commits. Without these
       # `git commit` fails with 'Author identity unknown' (rc=128).
@@ -21,9 +21,9 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      # Claude Code CLI needs write access to ~/.claude for session/telemetry
-      # state on every `claude -p` invocation; :ro makes the CLI error out
-      # and falls back to the API (which fails when credits are low).
+      # Claude Code (the SDK's bundled binary) needs write access to
+      # ~/.claude for session/telemetry state on every call; :ro makes it
+      # error out. This mount is prod's identity (V2 invariant I1).
       - /home/debian/.claude:/home/botuser/.claude
       - /home/debian/.claude.json:/home/botuser/.claude.json
       - /home/debian/swarm-data:/home/botuser/.swarm-data

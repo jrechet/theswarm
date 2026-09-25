@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import shutil
 import time
 
 from fastapi import APIRouter, Request
@@ -56,6 +55,14 @@ def _derive_status(checks: dict[str, str]) -> str:
     if values <= _OK_VALUES:
         return "ok"
     return "error"
+
+
+def _sdk_binary() -> str | None:
+    """Path of the Claude Code binary the Agent SDK runs, None when absent."""
+    from theswarm.tools.claude import sdk_binary_location
+
+    location = sdk_binary_location()
+    return location.split(":", 1)[1] if location else None
 
 
 @router.get("/health")
@@ -151,12 +158,13 @@ async def readiness(request: Request) -> JSONResponse:
         else {"status": "warn", "detail": "no GitHub client — running in stub mode"}
     )
 
-    # 4) Claude CLI binary — result cached for 60s to avoid hammering the CLI
-    #    every time the readiness page auto-refreshes (every 8s).
+    # 4) The Claude Code binary the Agent SDK runs (bundled with the wheel
+    #    since V2 M0; the npm install left the image in M7). Cached for 60s
+    #    so the readiness page's 8s refresh does not hammer it.
     now = time.time()
-    binary = shutil.which("claude")
+    binary = _sdk_binary()
     if binary is None:
-        checks["claude_cli"] = {"status": "warn", "detail": "claude binary missing — API fallback only"}
+        checks["claude_cli"] = {"status": "warn", "detail": "Claude Code binary missing — API fallback only"}
     elif _CLAUDE_READINESS_CACHE["value"] is not None and now < _CLAUDE_READINESS_CACHE["expires_at"]:
         checks["claude_cli"] = _CLAUDE_READINESS_CACHE["value"]
     else:
@@ -304,13 +312,13 @@ async def readiness_page(request: Request) -> HTMLResponse:
 
 @router.get("/diagnostics/claude")
 async def diagnostics_claude() -> JSONResponse:
-    """Probe the Claude Code CLI: binary, version, auth reachability.
+    """Probe the Claude Code binary the SDK runs: path, version, auth reachability.
 
     Intentionally no secrets returned — path/version/stderr only, capped
-    output. Lets us tell from a curl whether the CLI fallback is broken.
+    output. Lets us tell from a curl whether Claude is reachable at all.
     """
     home = os.environ.get("HOME", "")
-    binary = shutil.which("claude")
+    binary = _sdk_binary()
     claude_dir = os.path.join(home, ".claude") if home else ""
     claude_json = os.path.join(home, ".claude.json") if home else ""
 

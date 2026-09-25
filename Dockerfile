@@ -32,16 +32,12 @@ FROM python:3.12-slim AS runner
 
 WORKDIR /app
 
-# git for tools/git.py, curl for healthcheck, Node.js for the Claude Code CLI
-# (Node ≥18 is required by @anthropic-ai/claude-code; NodeSource ships 20.x).
+# git for tools/git.py, curl for the healthcheck. No Node: the Claude Agent
+# SDK's wheel bundles its own Claude Code binary (V2 runtime; the npm install
+# of @anthropic-ai/claude-code left in M7, after fourteen prod cycles on it).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl git ca-certificates gnupg \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && npm install -g @anthropic-ai/claude-code \
-    && apt-get purge -y gnupg \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/* /root/.npm
+        curl git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # uv at runtime: the Dev and QA agents build the target's venv with
 # `uv venv --seed` (V2 M5); seconds instead of the minute python -m venv

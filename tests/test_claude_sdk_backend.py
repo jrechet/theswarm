@@ -391,18 +391,16 @@ async def test_an_exhausted_window_is_fatal(sdk):
             await sdk.run("hi")
 
 
-async def test_forced_sdk_never_falls_back_to_the_cli_or_the_api(sdk, monkeypatch):
+async def test_forced_sdk_never_falls_back_to_the_api(sdk, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-real")
 
     async def run_sdk(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None, output_schema=None):
         raise _CLIUnavailable("CLINotFoundError: no binary")
 
     with patch.object(sdk, "_run_sdk", side_effect=run_sdk), \
-         patch.object(sdk, "_run_cli", new=AsyncMock()) as cli, \
          patch.object(sdk, "_run_api", new=AsyncMock()) as api:
         with pytest.raises(RuntimeError, match="Claude SDK"):
             await sdk.run("hi")
-    assert cli.await_count == 0
     assert api.await_count == 0
 
 
@@ -435,19 +433,6 @@ async def test_the_sdk_raising_mid_stream_is_a_failed_call(sdk, monkeypatch):
 
     with pytest.raises(RuntimeError, match="ProcessError"):
         await sdk.run("hi")
-
-
-async def test_forcing_the_cli_never_touches_the_sdk(monkeypatch):
-    """The way back (I13): SWARM_CLAUDE_BACKEND=cli runs the CLI alone, now
-    that `auto` prefers the SDK."""
-    monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "cli")
-    cli = ClaudeCLI(model="haiku")
-    with patch.object(cli, "_cli_with_auth_recovery", new=AsyncMock(
-        return_value=claude_mod.ClaudeResult(text="from cli", backend="cli"),
-    )), patch.object(cli, "_run_sdk", new=AsyncMock()) as sdk_spy:
-        result = await cli.run("hi")
-    assert result.backend == "cli"
-    assert sdk_spy.await_count == 0
 
 
 def test_the_structured_answer_is_never_refused():

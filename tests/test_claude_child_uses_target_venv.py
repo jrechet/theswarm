@@ -79,11 +79,6 @@ def test_the_sdk_options_carry_the_workspace(in_theswarm_venv, workspace):
     assert opts.env["VIRTUAL_ENV"] == os.path.join(workspace, TARGET_VENV_DIR)
 
 
-def test_the_cli_child_carries_the_workspace():
-    source = inspect.getsource(claude_mod.ClaudeCLI._run_cli)
-    assert "_child_env(drop_oauth_env=drop_oauth_env, workdir=workdir)" in source
-
-
 @pytest.mark.parametrize("command", [
     "uv pip install -q -r requirements.txt --python /app/.venv/bin/python",
     "/app/.venv/bin/python -m pip install -r requirements.txt",

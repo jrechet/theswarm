@@ -1,15 +1,17 @@
-"""Claude wrapper for SWARM — prefers Claude Code CLI, falls back to Anthropic API.
+"""Claude wrapper for SWARM — the Claude Agent SDK, the Anthropic API as fallback.
 
-Rationale: the CLI authenticates via the user's Claude Code subscription (OAuth
-session in ``~/.claude/``), so prompts run against the Pro/Max quota instead of
-the separately-metered API credit balance. The API path remains as a fallback
-for environments where the CLI is unavailable (binary missing, no session),
-and can be forced via ``SWARM_CLAUDE_BACKEND=api``.
+Rationale: the SDK's bundled Claude Code authenticates via the user's Claude
+Code subscription (the OAuth session in ``~/.claude/`` or
+``CLAUDE_CODE_OAUTH_TOKEN``), so prompts run against the Pro/Max quota
+instead of the separately-metered API credit balance (V2 runtime, I1). The
+API path remains as a fallback when a usable API key exists, and can be
+forced via ``SWARM_CLAUDE_BACKEND=api``.
 
 Set ``SWARM_CLAUDE_BACKEND``:
-  - ``auto`` (default): try CLI first, fall back to API on any CLI failure.
-  - ``cli``: CLI only — CLI failures propagate.
-  - ``api``: API only — skip CLI entirely.
+  - ``auto`` (default): the SDK, then the API when a usable key exists.
+  - ``sdk``: the SDK only — its failures propagate.
+  - ``api``: the API only.
+  - ``cli``: retired in V2 M7 (the ``claude -p`` subprocess); runs on the SDK.
 """
 
 from __future__ import annotations
@@ -107,7 +109,7 @@ class ClaudeResult:
     total_tokens: int = 0
     cost_usd: float = 0.0
     model: str = ""
-    backend: str = ""  # "cli", "api" or "sdk"
+    backend: str = ""  # "sdk" or "api" ("cli" before V2 M7)
     session_id: str = ""  # SDK only: the Claude Code session, resumable
     num_turns: int = 0  # SDK only: assistant turns taken
     # SDK only: the validated answer when the call asked for a schema
@@ -147,18 +149,6 @@ def _is_auth_failure(error: BaseException) -> bool:
     """True when a CLI failure looks like bad credentials rather than a hiccup."""
     text = str(error).lower()
     return any(marker in text for marker in _AUTH_FAILURE_MARKERS)
-
-
-def _envelope_error(stdout: bytes) -> str:
-    """Pull the CLI's error message out of its JSON envelope on stdout."""
-    try:
-        envelope = json.loads(stdout.decode(errors="replace").strip())
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return ""
-    if not isinstance(envelope, dict):
-        return ""
-    message = envelope.get("result") or envelope.get("api_error_status")
-    return str(message)[:300] if message else ""
 
 
 class _CLIUnavailable(Exception):
@@ -697,7 +687,7 @@ def _text_event(text: str) -> str:
 
 @dataclass
 class ClaudeCLI:
-    """Runs a prompt through Claude Code CLI first, Anthropic API as fallback.
+    """Runs a prompt through the Claude Agent SDK, the Anthropic API as fallback.
 
     The class name is kept for backward compatibility — callers import
     ``ClaudeCLI`` across the codebase.
@@ -783,15 +773,15 @@ class ClaudeCLI:
         permission_mode: str | None = None,
         output_schema: dict | None = None,
     ) -> ClaudeResult:
-        """Run a prompt. Tries CLI first, falls back to API on failure.
+        """Run a prompt on the SDK; ``auto`` falls back to the API with a key.
 
         ``output_schema`` (a JSON Schema, draft-07) asks the SDK backend for
         a validated answer in ``ClaudeResult.structured``; the text backends
         ignore it and the caller falls back to its text parser (M3).
 
-        Honors ``SWARM_CLAUDE_BACKEND`` (``auto`` | ``cli`` | ``api``).
+        Honors ``SWARM_CLAUDE_BACKEND`` (``auto`` | ``sdk`` | ``api``).
 
-        ``permission_mode`` is the CLI's ``--permission-mode``. Print mode
+        ``permission_mode`` is Claude Code's permission mode. Print mode
         grants nothing by itself: an ``Edit`` in the workspace is refused
         and Claude falls back to describing the change — which is how a
         five-minute implementation ended as "no file changes" (#125). The
@@ -837,73 +827,34 @@ class ClaudeCLI:
         if backend == "api":
             return await self._run_api(prompt, workdir=workdir, timeout=timeout)
 
+        if backend == "cli":
+            # Retired in V2 runtime M7, after fourteen prod cycles on the SDK
+            # and none back on the CLI. An environment that still asks for it
+            # runs on the SDK rather than failing every call.
+            log.warning("SWARM_CLAUDE_BACKEND=cli is retired (V2 M7) — using the SDK")
+            backend = "sdk"
+
         if backend == "sdk":
             return await self._sdk_with_recovery(
                 prompt, workdir=workdir, timeout=timeout,
                 permission_mode=permission_mode, output_schema=output_schema,
             )
 
-        if backend == "auto":
-            # sdk → cli → api (V2 runtime M1, after three consecutive green
-            # harness cycles on the sdk backend). A quota is fatal on every
-            # backend and a spent timeout would only be spent again; any
-            # other SDK failure (not installed, a broken stream, no
-            # structured answer) falls through to the CLI chain, whose text
-            # the callers still parse.
-            try:
-                return await self._sdk_with_recovery(
-                    prompt, workdir=workdir, timeout=timeout,
-                    permission_mode=permission_mode, output_schema=output_schema,
-                )
-            except SDKTimeoutError:
-                raise
-            except RuntimeError as sdk_error:
-                log.warning("Claude SDK failed (%s) — falling back to the CLI", sdk_error)
-
+        # auto: sdk → api. A quota is fatal on every backend, a spent
+        # timeout would only be spent again, and the API helps only when it
+        # can authenticate: with no usable key the SDK's own failure is the
+        # one worth reading.
         try:
-            return await self._cli_with_auth_recovery(
+            return await self._sdk_with_recovery(
                 prompt, workdir=workdir, timeout=timeout,
-                permission_mode=permission_mode,
+                permission_mode=permission_mode, output_schema=output_schema,
             )
-        except _CLIUnavailable as exc:
-            first_error = exc
-
-        # Out of subscription window: every later call fails identically until
-        # the reset the CLI names. Abort the cycle now, keeping its wording so
-        # the failure says when work can resume.
-        quota = _quota_exhausted(first_error)
-        if quota is not None:
-            raise ClaudeFatalError(f"Claude subscription exhausted: {quota}")
-
-        if backend == "cli":
-            raise RuntimeError(
-                f"Claude CLI unavailable (forced): {first_error}"
-            ) from first_error
-
-        # Auto mode. Falling back to the API only helps when the API can
-        # authenticate; with an OAuth session token it always 401s, so a
-        # transient CLI hiccup would become a fatal cycle error. Retry the
-        # CLI once instead and surface its real failure.
-        if not _api_backend_viable():
-            log.warning(
-                "Claude CLI failed (%s) and the API fallback cannot authenticate "
-                "(no usable ANTHROPIC_API_KEY) — retrying the CLI once",
-                first_error,
-            )
-            try:
-                return await self._cli_with_auth_recovery(
-                    prompt, workdir=workdir,
-                    timeout=self._retry_timeout(timeout, first_error, workdir=workdir),
-                    permission_mode=permission_mode,
-                )
-            except _CLIUnavailable as retry_error:
-                raise RuntimeError(
-                    "Claude CLI failed twice and no usable API credential is "
-                    f"available (ANTHROPIC_API_KEY is unset or an OAuth token): "
-                    f"{retry_error}"
-                ) from retry_error
-
-        log.warning("Claude CLI unavailable (%s) — falling back to API", first_error)
+        except SDKTimeoutError:
+            raise
+        except RuntimeError as sdk_error:
+            if not _api_backend_viable():
+                raise
+            log.warning("Claude SDK failed (%s) — falling back to the API", sdk_error)
         return await self._run_api(prompt, workdir=workdir, timeout=timeout)
 
     # ── SDK backend ──────────────────────────────────────────────────
@@ -1155,63 +1106,6 @@ class ClaudeCLI:
 
         raise RuntimeError(f"Claude SDK failed: {first}") from first
 
-    async def _cli_with_auth_recovery(
-        self, prompt: str, *, workdir: str | None, timeout: int | None,
-        permission_mode: str | None = None,
-    ) -> ClaudeResult:
-        """Run the CLI, recovering from a stale env token on any attempt.
-
-        A stale CLAUDE_CODE_OAUTH_TOKEN outranks the session on disk, so it
-        breaks every call while ~/.claude still holds valid, self-refreshing
-        credentials — which took prod down twice. The recovery used to guard
-        only the first attempt, so an auth error surfacing on the *retry* went
-        unhandled: prod cycle c3ab6da6f5d9 timed out, earned its grown retry,
-        and that retry died on an expired token with no second chance.
-        """
-        try:
-            return await self._run_cli(
-                prompt, workdir=workdir, timeout=timeout,
-                permission_mode=permission_mode,
-            )
-        except _CLIUnavailable as exc:
-            # A stale env token does not always fail loudly. In prod it made
-            # the CLI *hang*: `claude -p` returned rc=124 after 90s with the
-            # token set and rc=0 instantly without it. Recovery keyed only on
-            # auth *errors* never fired, so every call burned its full
-            # timeout, retried, hung again, and the cycle died slowly. Treat
-            # a timeout as a candidate too whenever the override is present.
-            if not ((_is_auth_failure(exc) or _is_timeout(exc))
-                    and os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")):
-                raise
-            log.warning(
-                "Claude CLI failed (%s) — retrying without the "
-                "CLAUDE_CODE_OAUTH_TOKEN env override", exc,
-            )
-            try:
-                return await self._run_cli(
-                    prompt, workdir=workdir, timeout=timeout,
-                    drop_oauth_env=True, permission_mode=permission_mode,
-                )
-            except _CLIUnavailable as without_token:
-                # The drop is a probe, not a diagnosis: it only helps when the
-                # session on disk is valid. When that session is dead too —
-                # the normal state right after `claude setup-token`, and in
-                # any container where the env token is the only credential —
-                # the probe fails instantly with an auth error and says
-                # nothing about the first failure. Surfacing it replaced a
-                # timeout with an auth error, and `_retry_timeout` only grows
-                # on a timeout: the retry got the same budget that had just
-                # run out. Local cycle 20260919T125902Z died that way — a
-                # 240s breakdown call timed out, the probe answered in two
-                # seconds, the retry got 240s again, and the phase blew its
-                # 600s budget. Keep the first failure; it is the one that
-                # describes what actually went wrong.
-                log.warning(
-                    "Claude CLI also failed without the env token (%s) — "
-                    "keeping the original failure", without_token,
-                )
-                raise exc from without_token
-
     def _retry_timeout(
         self, timeout: int | None, error: Exception, workdir: str | None = None,
     ) -> int:
@@ -1238,108 +1132,6 @@ class ClaudeCLI:
             "(floor for later calls in this cycle)", effective, grown,
         )
         return grown
-
-    async def _run_cli(
-        self,
-        prompt: str,
-        *,
-        workdir: str | None,
-        timeout: int | None,
-        drop_oauth_env: bool = False,
-        permission_mode: str | None = None,
-    ) -> ClaudeResult:
-        """Invoke ``claude -p`` and parse the JSON envelope.
-
-        Fails via ``_CLIUnavailable`` so the caller can fall back to API.
-        """
-        binary = shutil.which("claude")
-        if binary is None:
-            raise _CLIUnavailable("claude binary not on PATH")
-
-        effective_timeout = self._effective_timeout(timeout, workdir)
-        model_id = self._resolve_model()
-
-        cmd = [
-            binary, "-p", prompt,
-            "--model", model_id,
-            "--output-format", "json",
-        ]
-        if permission_mode:
-            cmd += ["--permission-mode", permission_mode]
-
-        prompt_chars = len(prompt or "")
-        log.info(
-            "Claude CLI: model=%s workdir=%s timeout=%ds prompt_chars=%d",
-            model_id, workdir, effective_timeout, prompt_chars,
-        )
-        if prompt_chars > 30_000:
-            log.warning(
-                "Claude CLI prompt is large (%d chars) — expect slow response. "
-                "Consider trimming context.",
-                prompt_chars,
-            )
-
-        cli_env = _child_env(drop_oauth_env=drop_oauth_env, workdir=workdir)
-
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                stdin=asyncio.subprocess.DEVNULL,
-                cwd=workdir,
-                env=cli_env,
-            )
-        except FileNotFoundError as exc:
-            raise _CLIUnavailable(f"spawn failed: {exc}") from exc
-
-        try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=effective_timeout,
-            )
-        except asyncio.TimeoutError as exc:
-            proc.kill()
-            raise _CLIUnavailable(f"CLI timed out after {effective_timeout}s") from exc
-
-        if proc.returncode != 0:
-            # The CLI reports failures as a JSON envelope on *stdout* and
-            # often leaves stderr empty, so reporting stderr alone produced
-            # a bare "exit 1:" that hid the cause for three debugging rounds
-            # (the real message was "OAuth access token has expired").
-            err = stderr.decode(errors="replace").strip()[:500]
-            detail = err or _envelope_error(stdout) or "no output"
-            raise _CLIUnavailable(f"exit {proc.returncode}: {detail}")
-
-        raw = stdout.decode(errors="replace").strip()
-        try:
-            envelope = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise _CLIUnavailable(f"JSON parse failed: {exc}") from exc
-
-        if envelope.get("is_error"):
-            msg = envelope.get("result") or envelope.get("api_error_status") or "unknown"
-            raise _CLIUnavailable(f"CLI reported error: {msg}")
-
-        usage = envelope.get("usage") or {}
-        input_tokens = int(usage.get("input_tokens", 0))
-        output_tokens = int(usage.get("output_tokens", 0))
-        cost_usd = float(envelope.get("total_cost_usd", 0.0))
-        text = envelope.get("result", "") or ""
-
-        log.info(
-            "Claude CLI result: $%.4f  model=%s  in=%d out=%d",
-            cost_usd, model_id, input_tokens, output_tokens,
-        )
-
-        return ClaudeResult(
-            text=text,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=input_tokens + output_tokens,
-            cost_usd=cost_usd,
-            model=model_id,
-            backend="cli",
-        )
 
     async def _run_api(
         self,
