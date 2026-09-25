@@ -557,10 +557,43 @@ async def qa(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     tokens, cost = qa_state.get("tokens_used", 0), qa_state.get("cost_usd", 0.0)
     budget = _within_budget(rt, state, Role.QA, tokens)
     await rt.phase_checkpoint("qa", bool(qa_state), {"tokens": tokens, "cost": cost})
+    report = qa_state.get("demo_report")
+    if isinstance(report, dict):
+        # The QA graph sees the base state only; the cycle knows what it
+        # delivered. The PO's evening report reads this first.
+        report = {**report, "user_stories": _stories_of(state)}
     return {
         **_accounted(state, "qa", tokens, cost), **budget,
-        "demo_report": qa_state.get("demo_report"),
+        "demo_report": report,
     }
+
+
+def _stories_of(state: CycleState) -> list[dict]:
+    """What the cycle delivered, one entry per task: its PR (merged or still
+    open), then the tasks the Dev found already on main.
+
+    QA's report always said `"user_stories": []`; the PO then rebuilt the
+    day from the commit log (cycle b0251cf1141f).
+    """
+    from theswarm.agents.techlead import _task_of_pr
+
+    merged = set(state.get("merged_prs", []))
+    stories: list[dict] = []
+    seen: set[int] = set()
+    for pr in state.get("prs", []):
+        if not isinstance(pr, dict) or not isinstance(pr.get("number"), int) or pr["number"] in seen:
+            continue
+        seen.add(pr["number"])
+        stories.append({
+            "task": _task_of_pr(pr),
+            "title": pr.get("title", ""),
+            "pr": pr["number"],
+            "url": pr.get("url", ""),
+            "status": "merged" if pr["number"] in merged else "open",
+        })
+    for task in sorted(set(state.get("already_satisfied", []))):
+        stories.append({"task": task, "title": "", "pr": None, "url": "", "status": "already on main"})
+    return stories
 
 
 async def po_evening(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
