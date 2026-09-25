@@ -73,3 +73,22 @@ async def test_reaped_cycle_has_orphan_summary_phase(repo):
     last = saved.phases[-1]
     assert last.phase == "system_orphan"
     assert "Orphaned by container restart" in last.summary
+
+
+async def test_the_phase_in_flight_is_closed_with_the_cycle(repo):
+    """A reaped cycle kept its interrupted phase 'running' next to the reap's
+    own failed one; the deploy gate read that as a live cycle (2026-09-25)."""
+    from theswarm.domain.cycles.entities import PhaseExecution
+    from theswarm.domain.cycles.value_objects import PhaseStatus
+
+    await repo.save(Cycle(
+        id=CycleId("46ff31375dce"), project_id="p", status=CycleStatus.RUNNING,
+        triggered_by="test", started_at=datetime.now(timezone.utc),
+        phases=(PhaseExecution(phase="qa", agent="qa", started_at=datetime.now(timezone.utc)),),
+    ))
+
+    await repo.reap_orphans(max_age_seconds=0)
+
+    cycle = await repo.get(CycleId("46ff31375dce"))
+    assert [p.status for p in cycle.phases] == [PhaseStatus.FAILED, PhaseStatus.FAILED]
+    assert cycle.phases[0].completed_at is not None
