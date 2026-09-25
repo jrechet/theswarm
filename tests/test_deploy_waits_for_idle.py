@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import pathlib
-import re
 import subprocess
 
 import yaml
@@ -67,6 +66,32 @@ def test_an_api_that_does_not_answer_never_blocks():
     assert "No cycle running" in out.stdout
 
 
-def test_both_json_spacings_are_read():
-    pattern = re.compile(r'"status": ?"(running|queued)"')
-    assert pattern.search('{"status":"running"}') and pattern.search('{"status": "queued"}')
+def test_a_failed_cycle_with_a_phase_left_running_does_not_block():
+    """The first gate grepped `"status":"running"` anywhere in the answer, and
+    five reaped cycles on prod still carry a phase marked running (the reap
+    added its own phase and left the interrupted one as it was): every
+    deploy waited the full 30 minutes (2026-09-25, run 36129085739)."""
+    body = json.dumps({"cycles": [{
+        "id": "46ff31375dce", "status": "failed",
+        "phases": [{"phase": "qa", "status": "running"}],
+    }]}, separators=(",", ":"))
+
+    out = _run(body)
+
+    assert "No cycle running" in out.stdout
+
+
+def test_a_queued_cycle_is_waited_for():
+    body = json.dumps({"cycles": [{"id": "a", "status": "queued", "phases": []}]})
+
+    out = _run(body, max_wait=0)
+
+    assert "::warning::A cycle is still running" in out.stdout
+
+
+def test_a_bare_list_answer_is_read_too():
+    body = json.dumps([{"id": "a", "status": "running"}])
+
+    out = _run(body, max_wait=0)
+
+    assert "::warning::A cycle is still running" in out.stdout
