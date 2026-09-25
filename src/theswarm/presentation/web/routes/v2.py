@@ -8,6 +8,8 @@ for silent registration when a repo is opened for the first time.
 
 from __future__ import annotations
 
+import re
+
 import os
 
 import asyncio
@@ -564,7 +566,20 @@ async def _stage_context(request: Request, record) -> dict:
         "pinned": pinned,
         "feed": feed,
         "trace_url": trace_url(getattr(record, "trace_id", "")),
+        "resumed_from": resumed_from(getattr(record, "description", "")),
     }
+
+
+_RESUME_OF_RE = re.compile(r"^Resume of ([0-9a-f]{12}) from ")
+
+
+def resumed_from(description: str) -> str:
+    """The cycle a continuation resumes (its description, set by the boot
+    resumer: "Resume of <id> from <phase>"), "" for any other cycle. Since
+    a continuation shows its pinned issue as its title (#214), this is the
+    only place left that says where its first phases ran."""
+    match = _RESUME_OF_RE.match(description or "")
+    return match.group(1) if match else ""
 
 
 def trace_url(trace_id: str, seq_url: str | None = None) -> str:

@@ -11,6 +11,11 @@
         {% elif record.issue_number %}Issue <span class="font-mono">#{{ record.issue_number }}</span>
         {% else %}{{ record.description or "Cycle" }}{% endif %}
       </h1>
+      {% if resumed_from %}
+      <p class="font-mono text-[11px] text-faint mt-1" data-testid="resumed-from">
+        resumed after a restart · <a href="{{ base }}/cycles/{{ resumed_from }}" class="hover:text-soft focus-visible:outline-2 focus-visible:outline-honey">earlier phases in {{ resumed_from[:8] }} ↗</a>
+      </p>
+      {% endif %}
     </div>
     <div class="flex items-center gap-3 shrink-0 pt-1">
       <span id="status-pill" data-status="{{ record.status.value }}"
