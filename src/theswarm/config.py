@@ -38,7 +38,6 @@ class AgentState(TypedDict, total=False):
     codenames: dict[str, str]
     phase: str
     # Ports / clients
-    llm: Any           # reserved for future langchain model
     github: Any        # GitHubClient
     claude: Any        # ClaudeCLI
     workspace: Any     # str — local clone path
