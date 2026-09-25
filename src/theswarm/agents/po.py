@@ -11,8 +11,10 @@ import logging
 from datetime import datetime
 
 from langgraph.graph import END, StateGraph
+from pydantic import ValidationError
 
 from theswarm.agents.base import load_context, stub_result, traced_node
+from theswarm.agents.schemas import DailyPlan
 from theswarm.config import AgentState, Phase, Role
 
 log = logging.getLogger(__name__)
@@ -121,19 +123,11 @@ async def select_daily_issues(state: AgentState) -> dict:
         max_stories=MAX_DAILY_STORIES,
     )
 
-    result = await claude.run(prompt, workdir=state.get("workspace"), timeout=PLANNING_TIMEOUT_SECONDS)
-
-    # Parse Claude's response
-    selected = []
-    daily_plan = ""
-    try:
-        data = json.loads(result.text)
-        selected = data.get("selected", [])
-        daily_plan = data.get("daily_plan", "")
-    except (json.JSONDecodeError, TypeError):
-        # If Claude didn't return valid JSON, use text as the plan
-        log.warning("PO: could not parse planning JSON, using raw text")
-        daily_plan = result.text
+    result = await claude.run(
+        prompt, workdir=state.get("workspace"), timeout=PLANNING_TIMEOUT_SECONDS,
+        output_schema=DailyPlan.model_json_schema(),
+    )
+    selected, daily_plan = _plan_of(result)
 
     # Label selected issues as status:ready
     for item in selected:
@@ -156,6 +150,34 @@ async def select_daily_issues(state: AgentState) -> dict:
         "tokens_used": result.total_tokens,
         "cost_usd": result.cost_usd,
     }
+
+
+def _plan_of(result) -> tuple[list[dict], str]:
+    """The stories to make ready and the plan text, from Claude's answer.
+
+    The validated structure when the SDK returned one (V2 M3); otherwise the
+    first JSON object in the text that carries the plan's keys, fenced or
+    wrapped in prose; the raw text as the plan, and nothing selected, last.
+    """
+    structured = getattr(result, "structured", None)
+    if isinstance(structured, dict):
+        try:
+            plan = DailyPlan.model_validate(structured)
+            return [story.model_dump() for story in plan.selected], plan.daily_plan
+        except ValidationError:
+            log.warning("PO: the structured plan did not validate — reading the text")
+    text = getattr(result, "text", "") or ""
+    from theswarm.agents.techlead import _salvage_objects
+
+    for candidate in _salvage_objects(text):
+        if "selected" in candidate or "daily_plan" in candidate:
+            try:
+                plan = DailyPlan.model_validate(candidate)
+            except ValidationError:
+                continue
+            return [story.model_dump() for story in plan.selected], plan.daily_plan
+    log.warning("PO: could not parse planning JSON, using raw text")
+    return [], text
 
 
 async def write_daily_plan(state: AgentState) -> dict:

@@ -64,3 +64,22 @@ class DevOutcome(BaseModel):
     reason: str = ""
     already_satisfied_file: str = ""
     files: list[FileBlock] = Field(default_factory=list)
+
+
+class PlannedStory(BaseModel):
+    number: int
+    title: str = ""
+    reason: str = ""
+
+
+class DailyPlan(BaseModel):
+    """The PO's morning pick: the stories to make ready, and the plan text.
+
+    Parsed out of prose until 2026-09-25, when "PO: could not parse planning
+    JSON, using raw text" left `selected` empty — nothing was made ready,
+    and a non-targeted cycle's Dev had nothing to pick.
+    """
+
+    selected: list[PlannedStory] = Field(default_factory=list)
+    daily_plan: str = ""
+
