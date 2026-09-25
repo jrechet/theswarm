@@ -412,7 +412,7 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   fatal everywhere, a spent SDK timeout (`SDKTimeoutError`, a
   `RuntimeError`) is not spent a second time, and any other SDK failure
   goes to the API only with a usable key — otherwise its own error
-  surfaces. The way back from the SDK is a revert of M7 (#203 or later);
+  surfaces. The way back from the SDK is a revert of M7b (#203);
   prod pins `sdk` in `docker-compose.yml`.
 - **V2 runtime M2 — one OpenTelemetry trace per cycle, in Seq.** Root span
   `cycle` (`api.py`), a span per phase (`cycle._run_phase`), per graph
