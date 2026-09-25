@@ -124,11 +124,13 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   VIRTUAL_ENV, TheSwarm's venv off PATH (`tools/claude._python_for_target`),
   the Dev builds the venv before its first call, and the policy hook refuses
   any Bash command that names TheSwarm's own `sys.prefix`.
-- Phase budgets: implementation call 600s, dep install 300s, `dev_iter` 30 min.
+- Phase budgets (`cycle_budgets.PHASE_TIMEOUTS`): implementation call 600s,
+  dep install 300s, `dev_iter` 40 min, `techlead_review` 30 min.
   If a task fails, it must be requeued to `status:ready` (see `implement_task`) or
   the backlog drains with nothing shipped.
 - `commit_all` uses `git add -A` in the target workspace: runtime artifacts
-  (test.db*, coverage) must be excluded before commit — known gap.
+  (test.db*, coverage, `.venv-swarm/`, `.worktrees/`) never reach a commit —
+  closed in V2 M5a by the clone's `.git/info/exclude` (`tools/git.exclude_locally`).
 - The cycle tracker is in-memory, but a restart no longer loses a running
   cycle (V2 runtime M4, closes the practical side of #5): the boot resumer
   continues it under a new tracker id, `/c/{old}` redirects to it while it
@@ -193,14 +195,17 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   recording that as a cancel lost cycle 04fc7fff85a0 to the deploy of #192
   — the resume was a race between the teardown and the SIGKILL. A
   cancellation nobody asked for propagates and leaves the row `running`.
-- **On `SELF_REPO` the TechLead approves but never merges** — a merge to
-  main redeploys this service and kills the cycle mid-review. Approved PRs
-  come back as `held_prs`; a person merges them between cycles.
-- **Phases are announced**, not guessed: `cycle.py` sends
-  `on_progress(PHASE_ROLE, name)` through `_announce`, the bridge turns it
-  into the real `PhaseChanged` and the theater's graph reads that history.
-  A new phase or sub-phase needs an `_announce` call and a `PHASE_OWNER`
-  entry, or the graph will not know who owns it.
+- **On `SELF_REPO` the TechLead approves but does not merge in the review
+  phase** — a merge to main redeploys this service mid-cycle. Approved PRs
+  come back as `held_prs` and the `merge_held` node merges them at the end
+  of the cycle, after QA and the report (#173; see below).
+- **Phases are announced**, not guessed: the cycle graph's nodes send
+  `on_progress(PHASE_ROLE, name)` through `CycleRuntime.announce`/`enter`
+  (`cycle_graph.py`), the bridge turns it into the real `PhaseChanged` and
+  the theater's graph reads that history. A new phase or sub-phase needs an
+  announce call and an entry in `CYCLE_NODE_ROLES`
+  (`domain/cycles/value_objects.py`, which `PHASE_OWNER` is built from),
+  or the graph will not know who owns it (`test_cycle_announces_phases.py`).
 - `ClaudeCLI` **remembers the largest budget that already expired** and
   never offers it again within a cycle (`_timeout_floor`, ceiling 780s —
   `dev_iter` is 30 min so one call plus its retry fit). The task picker
