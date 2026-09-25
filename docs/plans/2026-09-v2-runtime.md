@@ -472,6 +472,23 @@ reconstruire.
   installer les dépendances de la cible dans le venv de TheSwarm par son
   propre Bash : chaque enfant Claude reçoit désormais le `.venv-swarm` du
   workspace en tête de PATH, jamais celui de TheSwarm.
+  *Suite (2026-09-25, après-midi)* : deux déploiements rapprochés ont tué
+  `092596248fb9` puis sa continuation `46ff31375dce`, en QA, après la
+  fusion de ses trois PR (#348-#350). Quatre trous, bouchés :
+  (1) une fusion faite à vide se déployait dix minutes plus tard en plein
+  cycle — l'étape « Wait for running cycles » de `cd.yml` attend
+  jusqu'à 30 min (#221 ; sa première version comptait aussi les phases
+  restées `running` dans les cycles moissonnés et attendait toujours
+  30 min, #225 lit le statut du cycle seul et la moisson ferme la phase
+  en vol) ; (2) le lanceur de reprise ne passait pas le dépôt des
+  checkpoints de phase — aucune continuation n'en écrivait — et la
+  collecte cherchait le fil de graphe d'une continuation sous son propre
+  id, alors qu'elle tourne sur celui de son origine (`origin_of`, #224) ;
+  (3) un cycle échoué ne disait pourquoi que dans la mémoire du tracker
+  (`cycles.error`, v030, écrit par `CycleFailed`, la moisson et
+  `record_not_resumed`, #224 — vérifié en prod : les trois cycles
+  arrêtés par la fenêtre d'abonnement portent leur erreur) ; (4) il
+  coûtait 0 $ (`spent_so_far`, le `total_cost` du checkpoint, #228).
 
 **Liberté.** Découpage en modules, mode de stream, façon de passer les
 ports, un fichier SQLite ou une table dédiée dans le fichier principal
@@ -540,6 +557,19 @@ temps.
   exécuté, là où le run quotidien du matin (largeur 1) en passait 21 ; la
   cause n'a pas pu être lue (le workspace est effacé en fin de cycle, et
   la sortie n'est pas journalisée).
+  *Cause trouvée (2026-09-25)* : le fichier E2E est écrit à l'aveugle et
+  ne pouvait monter aucun test ; le prompt ne donnait même pas le port
+  (`{{port}}` après `.format` restait `{port}`). QA le répare une fois
+  quand chaque test échoue au montage (#223). *Dépendances entre
+  sous-tâches (#227)* : à largeur 2, les deux premières sœurs prêtes
+  partaient ensemble et écrivaient le code l'une de l'autre (#322/#323
+  dans `9d3174f41829`, #325 jamais fusionnée). Le découpage nomme
+  maintenant ce dont chaque tâche dépend (`depends_on`, positions
+  antérieures seulement), le TechLead l'écrit sur l'issue (« Depends on:
+  #N ») et les sélecteurs laissent une tâche attendre tant qu'une
+  dépendance est ouverte. La largeur 2 ne parallélise donc plus que des
+  tâches indépendantes. Sur SELF_REPO, où les PR approuvées fusionnent en
+  fin de cycle, une tâche dépendante attend le cycle suivant.
 
 **Acceptation.**
 - Test de régression du cas `16f3b8af2cca` / `2878898cc504` : deux tâches
@@ -599,6 +629,18 @@ grâce à l'exemption des admins : décision owner à prendre (section 8). Le
 critère d'acceptation « une régression volontaire est détectée » est à
 exercer en prod (un dispatch `all=true` puis un cycle cassé) après le
 déploiement.
+
+*Mesure corrigée (2026-09-25)* : le champ `ci` du harness lisait le
+statut `theswarm/review` que le TechLead pose depuis M8 — concert-tour-app
+n'a aucune CI, et « CI RED » voulait dire « changements demandés »
+(#226). Un run qu'un redémarrage ou la fenêtre d'abonnement a terminé
+est `interrupted` : jamais mesuré, jamais une régression, dessiné en
+pointillé (#228). Le conteneur de prod partage la fenêtre d'abonnement
+avec le Claude Code du owner : deux runs de 12:40 sont morts en huit
+secondes dessus. Une PR approuvée ne fusionne que sur une CI verte
+(`agents/ci_gate.py`, #226) ; une story se ferme quand sa dernière
+sous-tâche fusionne, et un parent se lit exactement (« Parent: #32 »
+n'est plus dans « Parent: #321 », #229).
 
 ### M7 — Nettoyage
 
@@ -698,6 +740,10 @@ dépendance) ; l'ordre entre M1 et M2.
 | Image et montages | `Dockerfile` (sans Node depuis M7), `docker-compose.yml` (`/home/debian/.claude` monté, volume `swarm-workspaces`) |
 | CI et chemins ignorés | `.github/workflows/ci.yml` — `paths-ignore` |
 | Dépendances externes | `docs/DEPENDENCIES.md` |
+| Garde CI avant fusion | `src/theswarm/agents/ci_gate.py` — `ci_verdict`, `wait_for_ci`, `SharedWait` ; `GitHubClient.get_ci_checks` |
+| Pourquoi un cycle a échoué, ce qu'il a coûté | `cycles.error` (v030) ; `cycle_resumer.record_not_resumed`, `spent_so_far`, `origin_of` |
+| Dépendances entre sous-tâches, parent exact | `Breakdown.depends_on` ; `dev.depends_on` ; `tools/github.is_child_of`, `parent_of` ; `techlead.close_finished_stories` |
+| Attente du déploiement | `.github/workflows/cd.yml` — « Wait for running cycles » |
 
 ---
 
