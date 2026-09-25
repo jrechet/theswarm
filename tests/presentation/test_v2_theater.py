@@ -176,3 +176,27 @@ async def test_play_now_lands_on_the_theater(web):
     assert r.status_code == 303
     assert "/swarm/c/" in r.headers["location"]
     assert "/cycles/" not in r.headers["location"]
+
+
+def test_a_continuation_names_the_cycle_it_resumes():
+    from theswarm.presentation.web.routes.v2 import resumed_from
+
+    assert resumed_from("Resume of 747bb89eced2 from dev_loop") == "747bb89eced2"
+    assert resumed_from("Add a venue filter") == ""
+    assert resumed_from("") == ""
+
+
+async def test_the_theater_of_a_continuation_links_its_earlier_phases(web):
+    from theswarm.api import CycleRequest, CycleStatus, get_cycle_tracker
+
+    client, _ = web
+    tracker = get_cycle_tracker()
+    record = tracker.create(CycleRequest(
+        repo="jrechet/concert-tour-app", description="Resume of 747bb89eced2 from dev_loop",
+    ))
+    tracker.update_status(record.id, CycleStatus.RUNNING)
+
+    html = (await client.get(f"/c/{record.id}")).text
+
+    assert 'data-testid="resumed-from"' in html
+    assert "/swarm/cycles/747bb89eced2" in html
