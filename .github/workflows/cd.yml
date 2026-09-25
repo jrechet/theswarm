@@ -69,7 +69,8 @@ jobs:
     if: inputs.action == 'deploy'
     runs-on: [self-hosted, jre-server]
     environment: int
-    timeout-minutes: 15
+    # 30 min of waiting for a running cycle, then the deploy itself.
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -92,6 +93,32 @@ jobs:
           swarm_access_key: ${{ secrets.SWARM_ACCESS_KEY }}
           swarm_session_secret: ${{ secrets.SWARM_SESSION_SECRET }}
           swarm_webhook_secret: ${{ secrets.SWARM_WEBHOOK_SECRET }}
+      - name: Wait for running cycles
+        # A deploy restarts the service and interrupts a running cycle. The
+        # boot resumer brings it back once (V2 M4), but the node in flight
+        # is lost, and a second deploy in the same cycle loses the cycle:
+        # a merge made while prod was idle landed ten minutes later in the
+        # middle of 2f5114ae7713 (2026-09-25). Wait for idle, bounded; an API
+        # that does not answer never blocks a deploy.
+        env:
+          SWARM_ACCESS_KEY: ${{ secrets.SWARM_ACCESS_KEY }}
+          SWARM_BASE: https://bots.jrec.fr/swarm
+          MAX_WAIT_SECONDS: 1800
+        run: |
+          deadline=$(( $(date +%s) + MAX_WAIT_SECONDS ))
+          while :; do
+            body=$(curl -s --max-time 20 -H "Authorization: Bearer $SWARM_ACCESS_KEY" "$SWARM_BASE/api/cycles" || true)
+            if ! printf '%s' "$body" | grep -Eq '"status": ?"(running|queued)"'; then
+              echo "No cycle running — deploying."
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::warning::A cycle is still running after $((MAX_WAIT_SECONDS / 60)) min — deploying anyway; it will resume."
+              break
+            fi
+            echo "A cycle is running — waiting before the deploy."
+            sleep 30
+          done
       - name: Deploy
         run: |
           export TS_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
