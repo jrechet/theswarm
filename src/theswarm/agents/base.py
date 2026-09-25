@@ -155,9 +155,13 @@ def venv_home(workspace: str) -> str:
     A worktree is a checkout of the same project; building a venv and
     reinstalling for every task would cost a cold install each time (M5b).
     """
-    from theswarm.tools.git import workspace_root
+    from theswarm.tools.git import dev_parallelism, workspace_root
 
-    return workspace_root(workspace) if workspace else workspace
+    if not workspace:
+        return workspace
+    # Tasks side by side each get their own: an editable install into a
+    # shared venv would make one task's tests import the other's code.
+    return workspace if dev_parallelism() > 1 else workspace_root(workspace)
 
 
 def target_venv_python(workspace: str) -> str:

@@ -48,6 +48,11 @@ class AgentState(TypedDict, total=False):
     # dev loop and mutated in place, so it survives an iteration that raises
     # rather than returning state — which is exactly the case that matters.
     attempted_tasks: list[int]
+    # Parallel Dev tasks in one iteration (V2 M5b): the lock serialises the
+    # pickers, the list holds what this iteration already claimed. Shared by
+    # reference between the Dev graphs of one iteration, never checkpointed.
+    pick_lock: Any
+    claimed_tasks: list[int]
     branch: str | None
     context: str
     result: str | None

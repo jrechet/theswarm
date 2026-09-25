@@ -283,10 +283,12 @@ def _python_for_target(env: dict[str, str], workdir: str | None) -> None:
     ]
     env["VIRTUAL_ENV"] = ""
     if workdir:
-        from theswarm.tools.git import workspace_root
+        from theswarm.tools.git import dev_parallelism, workspace_root
 
-        # A task worktree uses its clone's venv (M5b).
-        venv = os.path.join(workspace_root(workdir), TARGET_VENV_DIR)
+        # A task worktree uses its clone's venv (M5b), or its own when tasks
+        # run side by side (agents/base.venv_home).
+        home = workdir if dev_parallelism() > 1 else workspace_root(workdir)
+        venv = os.path.join(home, TARGET_VENV_DIR)
         if os.path.isdir(os.path.join(venv, "bin")):
             parts.insert(0, os.path.join(venv, "bin"))
             env["VIRTUAL_ENV"] = venv
