@@ -149,6 +149,29 @@ TARGET_VENV_DIR = ".venv-swarm"
 TARGET_VENV_TIMEOUT_SECONDS = 120
 
 
+def note_text_fallback(kind: str, result: object = None, *, produced: bool = True) -> None:
+    """Record that a decision was read out of prose, not a structured answer.
+
+    V2 runtime M3 asks the SDK for validated JSON; the text parsers
+    (`--- FILE:` blocks, the ALREADY_SATISFIED phrase, the breakdown and
+    review parsers) remain for an answer without structure — the API
+    backend's text, or an SDK call that returned none. M7 wanted to drop them
+    once "their counter stayed at zero", and there was no counter: this is
+    it. Seq: `@Message like 'Text fallback used%'`; traces: the
+    `swarm.text_fallback` attribute on the call's span.
+    """
+    backend = str(getattr(result, "backend", "") or "?")
+    log.info("Text fallback used: %s (backend=%s, produced=%s)", kind, backend, produced)
+    try:
+        from opentelemetry import trace
+
+        current = trace.get_current_span()
+        if current.is_recording():
+            current.set_attribute("swarm.text_fallback", kind)
+    except Exception:  # noqa: BLE001 - counting never breaks a call
+        pass
+
+
 def venv_home(workspace: str) -> str:
     """Where the target venv lives: the clone, even for a task worktree.
 
