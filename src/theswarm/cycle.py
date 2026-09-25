@@ -100,7 +100,10 @@ async def _merge_held_prs(github, held: list[int], on_progress) -> list[int]:
     branches = {p["number"]: p.get("head") for p in open_prs}
 
     shas = {p["number"]: p.get("head_sha", "") for p in open_prs}
+    by_number = {p["number"]: p for p in open_prs}
+    merged_tasks: list[int] = []
     from theswarm.agents import ci_gate
+    from theswarm.agents.techlead import _task_of_pr, close_finished_stories
 
     ci_wait = ci_gate.SharedWait()
     for pr_number in held:
@@ -122,6 +125,9 @@ async def _merge_held_prs(github, held: list[int], on_progress) -> list[int]:
             continue
         merged.append(pr_number)
         log.info("Merged approved PR #%d at end of cycle", pr_number)
+        task = _task_of_pr({"number": pr_number, **by_number.get(pr_number, {})})
+        if task is not None:
+            merged_tasks.append(task)
         branch = branches.get(pr_number)
         if branch:
             try:
@@ -129,9 +135,12 @@ async def _merge_held_prs(github, held: list[int], on_progress) -> list[int]:
             except Exception:
                 log.warning("Could not delete branch %s after merge", branch)
 
+    closed_stories = await close_finished_stories(github, merged_tasks)
     if on_progress is not None and merged:
         try:
             await on_progress("TechLead", f"Merged approved PRs {merged}")
+            if closed_stories:
+                await on_progress("TechLead", f"Stories done: {closed_stories}")
         except Exception:
             pass
     return merged
@@ -266,15 +275,14 @@ async def _requeue_unfinished(config) -> list[int]:
     target = getattr(config, "target_issue", None)
     if not target:
         return []
-    from theswarm.tools.github import GitHubClient
+    from theswarm.tools.github import GitHubClient, is_child_of
 
     try:
         github = GitHubClient(config.github_repo)
-        marker = f"Parent: #{target}"
         children = await github.get_issues(labels=["role:dev", "status:in-progress"])
         requeued: list[int] = []
         for child in children:
-            if marker not in (child.get("body") or ""):
+            if not is_child_of(child.get("body"), target):
                 continue
             number = child["number"]
             await github.add_labels(number, ["status:ready"])

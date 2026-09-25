@@ -25,13 +25,12 @@ async def load_pinned_issue(repo: str, issue_number: int | None) -> PinnedIssue:
     if not repo or issue_number is None:
         return PinnedIssue()
     try:
-        from theswarm.tools.github import GitHubClient, issue_status
+        from theswarm.tools.github import GitHubClient, is_child_of, issue_status
 
         client = GitHubClient(repo)
         issue = await client.get_issue(issue_number)
         if issue is None:
             return PinnedIssue()
-        marker = f"Parent: #{issue_number}"
         everything = await client.get_issues(state="all")
         children = tuple(
             {
@@ -40,7 +39,7 @@ async def load_pinned_issue(repo: str, issue_number: int | None) -> PinnedIssue:
                 "status": issue_status(child),
             }
             for child in everything
-            if marker in (child.get("body") or "")
+            if is_child_of(child.get("body"), issue_number)
         )
         done = sum(1 for c in children if c["status"] == "review")
         return PinnedIssue(issue=issue, children=children, done=done)

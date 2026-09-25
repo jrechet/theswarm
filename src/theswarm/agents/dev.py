@@ -33,6 +33,7 @@ from theswarm.agents.base import (
     stub_result,
 )
 from theswarm.config import AgentState, Role
+from theswarm.tools.github import is_child_of
 
 log = logging.getLogger(__name__)
 
@@ -248,7 +249,7 @@ async def _sibling_prs(github, task: dict) -> str:
         children = await github.get_issues(labels=["role:dev"], state="all")
         siblings = {
             c["number"] for c in children
-            if f"Parent: #{parent}" in (c.get("body") or "") and c["number"] != task["number"]
+            if is_child_of(c.get("body"), parent) and c["number"] != task["number"]
         }
         if not siblings:
             return ""
@@ -354,14 +355,13 @@ async def _pick_targeted(
     #
     # Ready children come first (a clean start beats resuming someone else's
     # half-done work); in-progress ones are the recovery path.
-    parent_marker = f"Parent: #{target_issue}"
     candidates = await github.get_issues(labels=["role:dev"])
     # The label and state filters are re-applied here rather than trusted to
     # the query: what makes a child workable is a property of the child, not
     # of how it was fetched.
     mine = [
         child for child in candidates
-        if parent_marker in (child.get("body") or "")
+        if is_child_of(child.get("body"), target_issue)
         and child.get("state") != "closed"
         and "role:dev" in _label_names(child)
         and "status:review" not in _label_names(child)

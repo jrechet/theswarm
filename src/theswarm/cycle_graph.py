@@ -473,6 +473,8 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
         await rt.progress(
             "TechLead", f"PR #{number} conflicts with main — back to the Dev to merge it",
         )
+    for number in tl_state.get("closed_stories", []):
+        await rt.progress("TechLead", f"Story #{number} done — every sub-task merged")
     for number in tl_state.get("ci_red_prs", []):
         await rt.progress("TechLead", f"PR #{number}: approved, CI red — back to the Dev")
     for number in tl_state.get("ci_pending_prs", []):

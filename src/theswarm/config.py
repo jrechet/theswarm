@@ -82,6 +82,7 @@ class AgentState(TypedDict, total=False):
     conflicted_prs: list[int]  # approved, unmergeable: sent back for the Dev to merge main
     ci_red_prs: list[int]  # approved, CI red: not merged, sent back to the Dev
     ci_pending_prs: list[int]  # approved, CI still running past the wait: left open
+    closed_stories: list[int]  # stories whose last sub-task merged this pass: closed
     reviewed_prs: list[str]  # "number@head_sha" reviewed this cycle — once, unless the head moves
     skipped_prs: list[int]  # review call failed — left for the next pass, not marked reviewed
     # QA-specific
