@@ -162,6 +162,10 @@ class Observed:
     backend: str = ""
     tests_unavailable: bool = False
     already_satisfied: tuple[int, ...] = ()  # sub-tasks the Dev closed as already built
+    # What GitHub says is merged once the cycle ended. A PR can be approved
+    # and still sit open: cycle 9d3174f41829's #325 conflicted with its
+    # sibling and never merged, under a run scored "built".
+    merged: tuple[int, ...] = ()
 
 
 def outcome_of(run: dict) -> str:
@@ -219,6 +223,8 @@ def score(feature: Feature | None, observed: Observed) -> dict[str, Any]:
         "outcome": outcome,
         "state": observed.state,
         "prs": list(observed.prs),
+        "merged": list(observed.merged),
+        "unmerged": [pr for pr in observed.prs if pr not in set(observed.merged)],
         "unfinished": list(observed.unfinished),
         "already_satisfied": list(observed.already_satisfied),
         "feature": feature.id if feature else "",
@@ -273,7 +279,7 @@ def trend(entries: list[dict], window: int = TREND_WINDOW) -> dict[str, Any]:
     if not recent:
         return {"runs": [], "count": 0, "pass_rate": None, "avg_cost_usd": None,
                 "avg_duration_s": None, "by_backend": {}, "already_delivered": 0,
-                "last": None}
+                "left_open": 0, "last": None}
     measured = [e for e in recent if is_measured(e)]
     passed = sum(1 for e in measured if e.get("passed"))
     costs = [float(e["cost_usd"]) for e in recent if e.get("cost_usd") is not None]
@@ -291,5 +297,8 @@ def trend(entries: list[dict], window: int = TREND_WINDOW) -> dict[str, Any]:
         "avg_duration_s": (sum(durations) / len(durations)) if durations else None,
         "by_backend": by_backend,
         "already_delivered": len(recent) - len(measured),
+        # Built runs whose PRs did not all merge (records before the field
+        # carry no `unmerged` and count as nothing left open).
+        "left_open": sum(1 for e in measured if e.get("unmerged")),
         "last": recent[-1],
     }

@@ -250,3 +250,21 @@ def test_a_manifest_is_exhausted_only_when_every_feature_is_delivered():
     assert evals.exhausted(manifest, built)
     assert not evals.exhausted(manifest, built[:-1])
     assert not evals.exhausted(manifest, [])
+
+
+def test_the_score_says_which_prs_merged():
+    record = evals.score(None, evals.Observed(state="completed", prs=(325, 326, 327), merged=(326, 327)))
+
+    assert record["passed"] is True  # the M6 meaning is kept
+    assert record["merged"] == [326, 327] and record["unmerged"] == [325]
+
+
+def test_the_trend_counts_runs_that_left_prs_open():
+    runs = [
+        {"passed": True, "outcome": "built", "prs": [1, 2], "merged": [2], "unmerged": [1]},
+        {"passed": True, "outcome": "built", "prs": [3], "merged": [3], "unmerged": []},
+        {"passed": True, "outcome": "built", "prs": [4]},  # a record from before the field
+    ]
+
+    assert evals.trend(runs)["left_open"] == 1
+    assert evals.trend([])["left_open"] == 0

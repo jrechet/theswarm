@@ -175,6 +175,8 @@ def test_run_one_scores_and_appends_a_full_record(tmp_path, monkeypatch):
 
     assert passed is True
     assert record["prs"] == [77] and record["feature"] == "f1"
+    # GitHub's own answer, not the cycle's report: #77 reads MERGED.
+    assert record["merged"] == [77] and record["unmerged"] == []
     assert record["ci"] == "green" and record["review_decisions"] == ["APPROVE"]
     assert record["cost_usd"] == 3.25 and record["duration_s"] == 1500
     assert record["within_cost"] is True and record["within_time"] is True
