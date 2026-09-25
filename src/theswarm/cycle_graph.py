@@ -205,7 +205,14 @@ async def prepare(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     rt = runtime.context
     if rt.config.is_real_mode and rt.base_state.get("github"):
         await rt.progress("System", "Checking branch protection…")
-        await rt.base_state["github"].ensure_branch_protection()
+        try:
+            await rt.base_state["github"].ensure_branch_protection()
+        finally:
+            # One heartbeat and never another: without this the watchdog
+            # judged "System" idle for the rest of the cycle ("Agent 'System'
+            # idle for 300s (warning 1/3)" in Seq on 2026-09-25).
+            if rt.watchdog is not None:
+                rt.watchdog.retire("System")
     return {}
 
 
