@@ -20,6 +20,7 @@ from datetime import datetime
 from langgraph.graph import END, StateGraph
 
 from theswarm.agents.base import (
+    TARGET_VENV_DIR,
     ensure_target_venv,
     traced_node,
     _test_runner_missing,
@@ -317,6 +318,31 @@ async def write_e2e_tests(state: AgentState) -> dict:
     }
 
 
+async def _ensure_pytest_cov(claude, workspace: str, python: str) -> bool:
+    """True when pytest-cov imports in the target's python, installing it
+    into the swarm's own `.venv-swarm` when it is missing there.
+
+    concert-tour-app does not list the plugin, so every QA report read
+    coverage `not_run` under a passing suite (2026-09-25). QA already puts
+    pytest-playwright in that venv for its E2E run; any other interpreter —
+    a system python, TheSwarm's own venv — is never installed into.
+    """
+    check = await claude.run_tests(workspace, [python, "-c", "import pytest_cov"], timeout=30)
+    if check["passed"]:
+        return True
+    if os.path.basename(os.path.dirname(os.path.dirname(python))) != TARGET_VENV_DIR:
+        return False
+    install = await claude.run_tests(
+        workspace, [python, "-m", "pip", "install", "-q", "pytest-cov"], timeout=120,
+    )
+    if not install["passed"]:
+        log.warning("QA: pytest-cov did not install into %s — coverage not run: %s",
+                    python, (install.get("output") or "")[-300:])
+        return False
+    log.info("QA: installed pytest-cov into %s for the coverage gate", python)
+    return True
+
+
 async def run_unit_tests(state: AgentState) -> dict:
     """Run pytest unit tests once, with coverage folded into the same run.
 
@@ -351,10 +377,7 @@ async def run_unit_tests(state: AgentState) -> dict:
     # A target without pytest-cov must still get its verdict — the coverage
     # flags are only added once the plugin actually imports, so a missing
     # plugin doesn't turn a normal test run into an ImportError.
-    cov_check = await claude.run_tests(
-        workspace, [python, "-c", "import pytest_cov"], timeout=30,
-    )
-    cov_available = cov_check["passed"]
+    cov_available = await _ensure_pytest_cov(claude, workspace, python)
 
     # Run the whole test tree except tests/e2e — the generated E2E file needs
     # a live server and runs in its own node. Target repos rarely have a
