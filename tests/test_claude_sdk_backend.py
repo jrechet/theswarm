@@ -509,3 +509,16 @@ def test_each_profile_sees_only_the_tools_its_policy_allows():
         assert sorted(opts.tools) == sorted(_SDK_PROFILE_TOOLS[profile]), profile
     text = cli._sdk_options("text", None, "claude-haiku-4-5", drop_oauth_env=False, resume=None)
     assert text.tools == []
+
+
+@pytest.mark.parametrize("raw,expected", [("", 200), ("1", 1), ("0", 200), ("x", 200), ("12", 12)])
+def test_the_edit_turn_ceiling_can_be_lowered_for_a_deliberate_regression(monkeypatch, raw, expected):
+    """V2 runtime M6 acceptance: a day with SWARM_SDK_MAX_TURNS_EDIT=1 must
+    read as failed eval runs, then recover when the variable is removed."""
+    from theswarm.tools.claude import ClaudeCLI
+
+    monkeypatch.setenv("SWARM_SDK_MAX_TURNS_EDIT", raw)
+    opts = ClaudeCLI(model="haiku")._sdk_options(
+        "edit", "/ws", "claude-haiku-4-5", drop_oauth_env=False, resume=None,
+    )
+    assert opts.max_turns == expected

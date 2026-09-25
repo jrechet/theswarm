@@ -519,6 +519,21 @@ _SDK_DISALLOWED_TOOLS = ["WebSearch", "WebFetch", "Task"]
 # A ceiling on assistant turns so a call cannot loop until the phase
 # timeout; the external timeout stays the real budget.
 _SDK_MAX_TURNS: dict[str, int] = {"edit": 200, "read": 40, "text": 8}
+
+
+def _max_turns(profile: str) -> int:
+    """The turn ceiling of a profile, overridable per profile by env.
+
+    ``SWARM_SDK_MAX_TURNS_EDIT`` (``_READ``, ``_TEXT``): the lever of the
+    eval suite's deliberate regression (V2 runtime M6 acceptance — a day
+    with ``SWARM_SDK_MAX_TURNS_EDIT=1`` must read as failed runs, then
+    recover when it is removed). A value that is not a positive integer is
+    ignored.
+    """
+    raw = os.environ.get(f"SWARM_SDK_MAX_TURNS_{profile.upper()}", "").strip()
+    if raw.isdigit() and int(raw) > 0:
+        return int(raw)
+    return _SDK_MAX_TURNS[profile]
 _SDK_FILE_TOOLS = ("Read", "Edit", "MultiEdit", "Write", "NotebookEdit")
 _SDK_PATH_TOOLS = _SDK_FILE_TOOLS + ("Glob", "Grep")
 _SDK_BASH_DENY: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -950,7 +965,7 @@ class ClaudeCLI:
             disallowed_tools=list(_SDK_DISALLOWED_TOOLS),
             can_use_tool=can_use_tool,
             hooks={"PreToolUse": [HookMatcher(hooks=[_permission_hook(profile, workdir)])]},
-            max_turns=_SDK_MAX_TURNS[profile],
+            max_turns=_max_turns(profile),
             resume=resume,
             output_format=(
                 {"type": "json_schema", "schema": output_schema} if output_schema else None
