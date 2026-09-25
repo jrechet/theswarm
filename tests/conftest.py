@@ -48,6 +48,15 @@ def _no_real_claude_binary(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _own_pr_verdicts_not_yet_refused(monkeypatch):
+    """The TechLead learns once per process that GitHub refuses verdicts on
+    the swarm's own PRs; a test that teaches it must not teach the next."""
+    from theswarm.agents import techlead
+
+    monkeypatch.setattr(techlead, "_OWN_PR_VERDICTS_REFUSED", False)
+
+
+@pytest.fixture(autouse=True)
 def _no_task_worktrees_for_tests(monkeypatch):
     """One worktree per Dev task (V2 M5b) needs a real clone; the Dev's
     fakes mock create_branch/resume_branch. Tests of the worktree flow

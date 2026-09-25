@@ -406,6 +406,11 @@ def _changes_comment(pr: dict, summary: str, issues: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# GitHub refuses APPROVE and REQUEST_CHANGES on a PR the same identity
+# opened ("Can not approve your own pull request", 422) — and the swarm
+# opens and reviews with one token. Learned once per process.
+_OWN_PR_VERDICTS_REFUSED = False
+
 _REVIEW_STATUS_CONTEXT = "theswarm/review"
 _REVIEW_STATUS_STATE = {"APPROVE": "success", "REQUEST_CHANGES": "failure", "COMMENT": "success"}
 
@@ -557,17 +562,37 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
     # "Decision: APPROVE" on PR #104 — and GitHub refuses REQUEST_CHANGES on
     # one's own PR anyway, where it accepts COMMENT.
     event = decision if decision in ("APPROVE", "REQUEST_CHANGES") else "COMMENT"
+    global _OWN_PR_VERDICTS_REFUSED
+    if _OWN_PR_VERDICTS_REFUSED and event != "COMMENT":
+        # Learned on an earlier review: this identity opened the PR, GitHub
+        # takes only a COMMENT review from it. The decision rides in the
+        # body and in the theswarm/review commit status (M8).
+        body = f"**Decision: {decision}**\n\n{body}"
+        event = "COMMENT"
     review_submitted = False
     try:
         await github.create_pr_review(pr_number, body=body, event=event)
         log.info("PR #%d: %s", pr_number, event)
         review_submitted = True
     except Exception as e:
-        # Common case: can't approve own PR (same GitHub token for all agents in MVP)
-        log.warning("Could not submit %s review for PR #%d (%s) — posting as comment",
-                    event, pr_number, e)
-        await github.add_comment(pr_number, f"**Tech Lead Review** ({event})\n\n{body}")
-        review_submitted = True  # comment counts as reviewed
+        if "own pull request" in str(e).lower() and event != "COMMENT":
+            # The swarm opens and reviews with one identity: every verdict
+            # on its own PRs was a 422 and a warning (ten on 2026-09-25).
+            _OWN_PR_VERDICTS_REFUSED = True
+            log.info("PR #%d: GitHub takes no %s from the PR's own author — "
+                     "posting the verdict as a COMMENT review from now on", pr_number, event)
+            try:
+                await github.create_pr_review(
+                    pr_number, body=f"**Decision: {decision}**\n\n{body}", event="COMMENT",
+                )
+                review_submitted = True
+            except Exception as again:
+                e = again
+        if not review_submitted:
+            log.warning("Could not submit %s review for PR #%d (%s) — posting as comment",
+                        event, pr_number, e)
+            await github.add_comment(pr_number, f"**Tech Lead Review** ({event})\n\n{body}")
+            review_submitted = True  # comment counts as reviewed
 
     sent_back = False
     if decision == "REQUEST_CHANGES":
