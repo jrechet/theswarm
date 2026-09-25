@@ -512,6 +512,23 @@ def _after_review(state: CycleState) -> str:
     return "dev_iter" if state.get("iteration", 0) < _cycle().MAX_DEV_ITERATIONS else "dev_loop_end"
 
 
+async def _close_stories_already_built(rt: CycleRuntime, state: CycleState) -> None:
+    """A story whose last sub-tasks were closed as already on main.
+
+    A merge closes the story it finishes (the TechLead's merge pass); a task
+    the Dev closes as already satisfied merges nothing, so its story stayed
+    open: csv-export's #354 on 2026-09-25, all three tasks already built.
+    """
+    satisfied = sorted(set(state.get("already_satisfied", [])))
+    github = rt.base_state.get("github") if satisfied else None
+    if github is None:
+        return
+    from theswarm.agents.techlead import close_finished_stories
+
+    for number in await close_finished_stories(github, satisfied):
+        await rt.progress("TechLead", f"Story #{number} done — every sub-task already on main")
+
+
 async def dev_loop_end(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     """Hand back anything still marked in-progress. The loop can end with
     work claimed but unfinished — the iteration cap, a task that produced
@@ -535,6 +552,7 @@ async def dev_loop_end(state: CycleState, runtime: Runtime[CycleRuntime]) -> dic
             "Dev",
             "Handing back " + ", ".join(f"#{n}" for n in requeued) + " — claimed but not finished",
         )
+    await _close_stories_already_built(rt, state)
     await rt.phase_checkpoint("dev_loop", True, {
         "prs_opened": [p.get("number") for p in state.get("prs", []) if isinstance(p, dict)],
         "reviews": len(state.get("reviews", [])),

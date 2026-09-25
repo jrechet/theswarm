@@ -224,3 +224,56 @@ async def test_the_sweep_closes_with_apply():
     closed = await _sweep().sweep("o/r", apply=True, client=github)
 
     assert closed == [344] and [n for n, _ in github.closed] == [344]
+
+
+# ── Sub-tasks already on main ──────────────────────────────────────────
+
+
+async def test_the_dev_loop_closes_a_story_whose_tasks_were_already_built(monkeypatch):
+    """csv-export's #354: the Dev closed #355-#357 as already satisfied,
+    nothing merged, and the story stayed open."""
+    from types import SimpleNamespace
+
+    from theswarm import cycle, cycle_graph
+
+    github = _csv_export(s345="closed", s346="closed", s347="closed")
+    progress: list[str] = []
+
+    async def say(role, message):
+        progress.append(message)
+
+    async def nothing_to_requeue(config):
+        return []
+
+    async def checkpoint(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(cycle, "_requeue_unfinished", nothing_to_requeue)
+    rt = SimpleNamespace(
+        config=SimpleNamespace(workspace_dir=""), dev_claims_open=True,
+        base_state={"github": github}, progress=say, phase_checkpoint=checkpoint,
+    )
+
+    await cycle_graph.dev_loop_end({"already_satisfied": [345, 346, 347]}, SimpleNamespace(context=rt))
+
+    assert [n for n, _ in github.closed] == [344]
+    assert any("Story #344 done" in m for m in progress)
+
+
+async def test_the_dev_loop_leaves_stories_alone_when_nothing_was_already_built(monkeypatch):
+    from types import SimpleNamespace
+
+    from theswarm import cycle, cycle_graph
+
+    github = _csv_export()
+
+    async def nothing(*_a, **_kw):
+        return []
+
+    monkeypatch.setattr(cycle, "_requeue_unfinished", nothing)
+    rt = SimpleNamespace(config=SimpleNamespace(workspace_dir=""), dev_claims_open=True,
+                         base_state={"github": github}, progress=nothing, phase_checkpoint=nothing)
+
+    await cycle_graph.dev_loop_end({}, SimpleNamespace(context=rt))
+
+    assert github.closed == []
