@@ -180,3 +180,100 @@ def test_the_state_declares_closed_stories():
     from theswarm.config import AgentState
 
     assert "closed_stories" in AgentState.__annotations__
+
+
+# ── The sweep ──────────────────────────────────────────────────────────
+
+
+def _sweep():
+    import importlib.util
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    spec = importlib.util.spec_from_file_location("sweep_stories", root / "scripts/sweep_finished_stories.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _backlog():
+    github = _csv_export(s347="closed")
+    github.issues[337] = _issue(337, "Filter by venue", labels=("status:in-progress",))
+    github.issues[341] = _issue(341, "Parent: #337", state="open")
+    return github
+
+
+async def test_every_finished_story_is_found_without_a_merge():
+    from theswarm.agents.techlead import finished_stories
+
+    assert await finished_stories(_backlog()) == [(344, [345, 346, 347])]
+
+
+async def test_the_sweep_lists_without_closing_by_default(capsys):
+    github = _backlog()
+
+    listed = await _sweep().sweep("o/r", apply=False, client=github)
+
+    assert listed == [344] and github.closed == []
+    assert "#344" in capsys.readouterr().out
+
+
+async def test_the_sweep_closes_with_apply():
+    github = _backlog()
+
+    closed = await _sweep().sweep("o/r", apply=True, client=github)
+
+    assert closed == [344] and [n for n, _ in github.closed] == [344]
+
+
+# ── Sub-tasks already on main ──────────────────────────────────────────
+
+
+async def test_the_dev_loop_closes_a_story_whose_tasks_were_already_built(monkeypatch):
+    """csv-export's #354: the Dev closed #355-#357 as already satisfied,
+    nothing merged, and the story stayed open."""
+    from types import SimpleNamespace
+
+    from theswarm import cycle, cycle_graph
+
+    github = _csv_export(s345="closed", s346="closed", s347="closed")
+    progress: list[str] = []
+
+    async def say(role, message):
+        progress.append(message)
+
+    async def nothing_to_requeue(config):
+        return []
+
+    async def checkpoint(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(cycle, "_requeue_unfinished", nothing_to_requeue)
+    rt = SimpleNamespace(
+        config=SimpleNamespace(workspace_dir=""), dev_claims_open=True,
+        base_state={"github": github}, progress=say, phase_checkpoint=checkpoint,
+    )
+
+    await cycle_graph.dev_loop_end({"already_satisfied": [345, 346, 347]}, SimpleNamespace(context=rt))
+
+    assert [n for n, _ in github.closed] == [344]
+    assert any("Story #344 done" in m for m in progress)
+
+
+async def test_the_dev_loop_leaves_stories_alone_when_nothing_was_already_built(monkeypatch):
+    from types import SimpleNamespace
+
+    from theswarm import cycle, cycle_graph
+
+    github = _csv_export()
+
+    async def nothing(*_a, **_kw):
+        return []
+
+    monkeypatch.setattr(cycle, "_requeue_unfinished", nothing)
+    rt = SimpleNamespace(config=SimpleNamespace(workspace_dir=""), dev_claims_open=True,
+                         base_state={"github": github}, progress=nothing, phase_checkpoint=nothing)
+
+    await cycle_graph.dev_loop_end({}, SimpleNamespace(context=rt))
+
+    assert github.closed == []
