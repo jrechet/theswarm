@@ -11,7 +11,7 @@ on:
         type: string
         default: 'jrechet/concert-tour-app'
       feature:
-        description: 'Feature text handed to the composer (empty: the eval manifest''s feature of the day)'
+        description: 'A feature id from evals/<repo>.yaml (scored), or free text (unscored); empty: the manifest''s feature of the day'
         type: string
         default: ''
       all:

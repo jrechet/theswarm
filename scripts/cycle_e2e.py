@@ -435,6 +435,19 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
     return False, result
 
 
+def _known_feature(manifest, typed: str, feature_id: str = ""):
+    """The manifest feature a typed `--feature` names, by id or exact text."""
+    if manifest is None:
+        return None
+    if feature_id:
+        return manifest.by_id(feature_id)
+    wanted = typed.strip()
+    by_id = manifest.by_id(wanted)
+    if by_id is not None:
+        return by_id
+    return next((f for f in manifest.features if f.text.strip() == wanted), None)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
@@ -452,7 +465,11 @@ def main() -> int:
     manifest = evals.manifest_for(args.repo)
     plan: list[tuple[str, "evals.Feature | None"]] = []
     if args.feature:
-        plan.append((args.feature, manifest.by_id(args.feature_id) if manifest and args.feature_id else None))
+        # A manifest id ("venue-filter") or a manifest feature's exact text
+        # runs as that feature, scored against its globs and budgets; any
+        # other text runs unscored, as before. The workflow has one input.
+        known = _known_feature(manifest, args.feature, args.feature_id)
+        plan.append((known.text if known else args.feature, known))
     elif args.all:
         if manifest is None:
             sys.exit(f"no eval manifest for {args.repo} under {evals.EVALS_DIR}/")

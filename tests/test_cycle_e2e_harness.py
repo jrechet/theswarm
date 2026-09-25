@@ -374,3 +374,34 @@ def test_an_exhausted_manifest_is_announced(tmp_path, monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert "::warning::every feature of evals/concert-tour-app.yaml is already on" in out
+
+
+@pytest.mark.parametrize("typed,expected", [
+    ("chronological-order", "chronological-order"),
+    ("Sort the tour dates chronologically with the next concert first", "chronological-order"),
+    ("  chronological-order  ", "chronological-order"),
+    ("Something nobody declared", None),
+])
+def test_a_typed_feature_naming_the_manifest_is_scored_as_that_feature(typed, expected):
+    from theswarm import evals
+
+    manifest = evals.load_manifest(pathlib.Path("evals/concert-tour-app.yaml"))
+    found = cycle_e2e._known_feature(manifest, typed)
+
+    assert (found.id if found else None) == expected
+
+
+def test_a_dispatch_by_id_runs_the_manifest_text(tmp_path, monkeypatch):
+    ran: list[tuple[str, str | None]] = []
+    monkeypatch.setattr(cycle_e2e, "KEY", "k")
+    monkeypatch.setattr(cycle_e2e, "run_one", lambda repo, text, feature, budget, history: (
+        ran.append((text, feature.id if feature else None)) or (True, {})))
+    monkeypatch.setattr(cycle_e2e.sys, "argv", ["cycle_e2e.py", "--repo", "jrechet/concert-tour-app",
+                                                "--feature", "sold-out-badge",
+                                                "--history", str(tmp_path / "runs.jsonl")])
+
+    assert cycle_e2e.main() == 0
+
+    (text, feature_id), = ran
+    assert feature_id == "sold-out-badge"
+    assert text.startswith('Show a "sold out" badge')
