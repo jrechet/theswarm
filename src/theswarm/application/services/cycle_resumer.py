@@ -37,6 +37,7 @@ class ResumePlan:
     repo: str
     resume_from: str
     depth: int
+    issue_number: int | None = None  # the pinned issue the cycle was built for
 
     @property
     def triggered_by(self) -> str:
@@ -91,6 +92,7 @@ def plan_resumes(
         plans.append(ResumePlan(
             cycle_id=cycle_id, repo=repo,
             resume_from=resume_from, depth=depth + 1,
+            issue_number=item.get("issue_number"),
         ))
         if len(plans) >= max_per_boot:
             break
@@ -117,23 +119,39 @@ async def collect_interrupted(cycle_repo, checkpoint_repo, graph_checkpointer=No
             log.exception("Reading checkpoints for %s failed", cycle.id)
             continue
         resume_from = last_ok.next_phase if last_ok else None
+        issue_number = None
         if resume_from and graph_checkpointer is not None:
-            if not await _has_graph_thread(graph_checkpointer, str(cycle.id)):
+            thread = await _graph_thread(graph_checkpointer, str(cycle.id))
+            if thread is None:
                 log.info("Cycle %s has no graph checkpoint — not resumed", cycle.id)
                 resume_from = None
+            else:
+                issue_number = _target_issue_of(thread)
         items.append({
             "cycle_id": str(cycle.id),
             "repo": cycle.project_id,
             "triggered_by": cycle.triggered_by,
             "resume_from": resume_from,
+            "issue_number": issue_number,
         })
     return items
 
 
-async def _has_graph_thread(graph_checkpointer, cycle_id: str) -> bool:
+async def _graph_thread(graph_checkpointer, cycle_id: str):
+    """The cycle's latest graph checkpoint tuple, None when it has none."""
     try:
-        found = await graph_checkpointer.aget_tuple({"configurable": {"thread_id": cycle_id}})
+        return await graph_checkpointer.aget_tuple({"configurable": {"thread_id": cycle_id}})
     except Exception:  # noqa: BLE001 — an unreadable thread is a missing one
         log.exception("Reading the graph checkpoint for %s failed", cycle_id)
-        return False
-    return found is not None
+        return None
+
+
+async def _has_graph_thread(graph_checkpointer, cycle_id: str) -> bool:
+    return await _graph_thread(graph_checkpointer, cycle_id) is not None
+
+
+def _target_issue_of(thread) -> int | None:
+    """The pinned issue the checkpointed cycle was running for, if any."""
+    checkpoint = getattr(thread, "checkpoint", None) or {}
+    value = (checkpoint.get("channel_values") or {}).get("target_issue")
+    return int(value) if isinstance(value, int) else None
