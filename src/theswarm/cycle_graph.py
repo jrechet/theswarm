@@ -81,6 +81,10 @@ class CycleState(TypedDict, total=False):
     result: dict | None
     learnings_written: bool
     cycle_logged: bool
+    # The pinned issue (▶ Play, the label door, the harness). A value, kept
+    # so a resume targets it too: the first resume (83b584194589) came back
+    # untargeted and its Dev built #212, an unrelated backlog issue.
+    target_issue: int | None
 
 
 @dataclass
@@ -680,11 +684,12 @@ def build_cycle_graph(checkpointer=None):
     return graph.compile(checkpointer=checkpointer)
 
 
-def initial_state(cycle_id: str, date: str) -> CycleState:
+def initial_state(cycle_id: str, date: str, target_issue: int | None = None) -> CycleState:
     return {
         "schema_version": CYCLE_STATE_SCHEMA_VERSION,
         "cycle_id": cycle_id,
         "date": date,
+        "target_issue": target_issue,
         "iteration": 0,
         "dev_outcome": "",
         "dev_claims_open": False,
@@ -751,7 +756,8 @@ async def run_cycle_graph(
         final = await graph.ainvoke(None, thread, context=runtime, durability="sync")
     else:
         final = await graph.ainvoke(
-            initial_state(cycle_id, date), thread, context=runtime, durability="sync",
+            initial_state(cycle_id, date, getattr(runtime.config, "target_issue", None)),
+            thread, context=runtime, durability="sync",
         )
     return final.get("result") or {}
 

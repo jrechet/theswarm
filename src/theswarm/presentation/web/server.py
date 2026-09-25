@@ -474,6 +474,7 @@ async def _launch_resume(app, plan, allowed_repos, bus, cycle_repo, project_repo
         tracker = get_cycle_tracker()
         record = tracker.create(CycleRequest(
             repo=plan.repo, description=plan.description,
+            issue_number=plan.issue_number,
         ))
         task = asyncio.create_task(run_api_cycle(
             record.id, plan.repo, plan.description, "",
@@ -487,6 +488,7 @@ async def _launch_resume(app, plan, allowed_repos, bus, cycle_repo, project_repo
             resume_from=plan.resume_from,
             resume_cycle_id=plan.cycle_id,
             triggered_by=plan.triggered_by,
+            issue_number=plan.issue_number,
         ))
         tracker.set_task(record.id, task)
         try:

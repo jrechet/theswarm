@@ -475,8 +475,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `/api/cycles/{old}` returns it, the harness follows it (and waits out the
   404s of a stop-first rolling update instead of calling the cycle lost),
   and `/c/{old}` redirects to the continuation's theater. The
-  continuation's trigger is `auto-resume:1` — before, every cycle row said
-  `web` and the one-resume cap (`MAX_RESUME_DEPTH`) never held.
+  continuation is started on the pinned issue its checkpoint kept
+  (`CycleState.target_issue`: the first resume, 83b584194589, came back
+  untargeted and its Dev built #212 from the backlog). The continuation's
+  trigger is `auto-resume:1` — before, every cycle row said `web` and the
+  one-resume cap (`MAX_RESUME_DEPTH`) never held.
   `/api/cycles/{id}` also carries the tracker's `result` on the database
   answer: the harness read cost, backend and review decisions from it, and
   every eval run before this scored them empty.
