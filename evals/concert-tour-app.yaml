@@ -4,8 +4,9 @@
 # budget), skipping the features whose last run built them or found them
 # built — the target keeps what the swarm merges; the whole series on a
 # manual dispatch. Each run is scored — PR opened, CI on that PR, review
-# decisions, cost, duration, files touched — and appended to
-# docs/harness-runs.jsonl; the repo page shows the trend.
+# decisions, cost, duration, files touched — and posted to the swarm's
+# /api/evals/runs; the repo page shows the trend. When every feature here
+# is delivered the harness warns: add new ones below.
 # `expected_paths` are globs the PR's files must match (empty: not
 # judged); tighten them as the target's layout settles.
 repo: jrechet/concert-tour-app
@@ -36,6 +37,52 @@ features:
     text: |-
       Add a JSON endpoint listing the upcoming concerts
       GET /api/concerts/upcoming returns the concerts whose date is today or later, soonest first, as JSON.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  # Added 2026-09-25: the first five were all built (the rotation then runs
+  # a delivered feature and measures nothing new — the harness warns when
+  # every feature here is delivered). Each is small, independent of the
+  # others, and checkable from its PR.
+  - id: venue-filter
+    text: |-
+      Filter the concert list by venue
+      GET /api/v1/concerts accepts ?venue=<name> and returns only that venue's concerts; the match ignores case.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: pagination
+    text: |-
+      Paginate the concert list
+      GET /api/v1/concerts accepts ?page= and ?page_size= (default 20, at most 100) and returns the total count in an X-Total-Count header.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: csv-export
+    text: |-
+      Export the concerts as CSV
+      GET /api/v1/concerts/export.csv returns every concert as CSV with a header row: date, city, venue, tour.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: tour-summary
+    text: |-
+      Summarise a tour
+      GET /api/v1/tours/{id}/summary returns the number of dates, the first and the last date, and the number of distinct cities of that tour; 404 for an unknown tour.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: past-concerts-toggle
+    text: |-
+      Hide past concerts by default
+      The concert list shows only today's and future concerts; a "Show past concerts" toggle brings the past ones back.
+    expected_paths: ["**/*.py", "**/*.html", "**/*.js", "**/*.css"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: ical-feed
+    text: |-
+      Subscribe to a tour in a calendar
+      GET /api/v1/tours/{id}/calendar.ics returns the tour's dates as an iCalendar feed, one event per concert with its city and venue.
     expected_paths: ["**/*.py"]
     max_cost_usd: 8
     max_duration_s: 3600

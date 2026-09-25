@@ -465,7 +465,12 @@ def main() -> int:
     else:
         if manifest is None:
             sys.exit(f"no --feature given and no eval manifest for {args.repo}")
-        feature = evals.next_feature(manifest, past_runs(args.repo, args.history))
+        history = past_runs(args.repo, args.history)
+        if evals.exhausted(manifest, history):
+            # A GitHub Actions annotation: it shows on the run's summary page.
+            print(f"::warning::every feature of evals/{args.repo.split('/')[-1]}.yaml is "
+                  f"already on {args.repo} — the run measures nothing new; add features")
+        feature = evals.next_feature(manifest, history)
         of_the_day = evals.feature_of_the_day(manifest)
         if feature != of_the_day:
             print(f"  [{of_the_day.id}] is already on {args.repo} — running [{feature.id}] instead")
