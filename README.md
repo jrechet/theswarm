@@ -70,7 +70,7 @@ Defaults are conservative. Override per project at `/projects/{id}/autonomy`. Hi
 - **Per-phase hard timeouts** — a hung agent cannot brick a cycle.
 - **One-retry on transient Dev errors** + orphan cycle reaper (leaves stale state clean).
 - **Circuit-breaker** on GitHub client (sprint G demo).
-- **Pre-flight `/health/ready`** — clicking *Run cycle* checks Claude CLI, GitHub, repo permissions before launching.
+- **Pre-flight `/health/ready`** — clicking *Run cycle* checks Claude Code (the Agent SDK's bundled binary), GitHub, repo permissions before launching.
 - **Cancel button** on running cycles.
 - **Tight CLI timeouts** — prevent runaway `claude` spawn.
 
@@ -104,7 +104,7 @@ Live updates via SSE. **Sprint composer** on every project page: describe the ne
 
 - **Mattermost** — `@swarm-po` DM bot with intent classifier (Haiku NLU), interactive button callbacks for story approval.
 - **GitHub** — async PyGithub wrapper, webhook handler with HMAC-SHA256 verification, label-driven state machine.
-- **Anthropic** — Claude CLI (subscription) preferred over API credits; falls back to Messages API. Per-phase model routing.
+- **Anthropic** — the Claude Agent SDK on the owner's subscription (its bundled Claude Code binary; the `claude -p` CLI backend was retired in V2 M7); falls back to the Messages API only with a usable API key. Per-phase model routing.
 - **Seq** — CLEF-formatted logs at `SEQ_URL` for production observability.
 
 ---
@@ -115,7 +115,7 @@ Live updates via SSE. **Sprint composer** on every project page: describe the ne
 
 - Python 3.12+
 - [`uv`](https://docs.astral.sh/uv/)
-- `ANTHROPIC_API_KEY` (or Claude CLI subscription)
+- A Claude subscription session (`~/.claude`, or `CLAUDE_CODE_OAUTH_TOKEN` on a laptop); `ANTHROPIC_API_KEY` only for the API fallback
 - `GITHUB_TOKEN` for real mode (stub mode works without)
 
 ### Install
@@ -349,7 +349,7 @@ docker compose up
 docker stack deploy -c docker-compose.yml theswarm
 ```
 
-Routes through Traefik at `PathPrefix(/swarm)`. Container mounts host's `~/.claude` for Claude CLI subscription auth.
+Routes through Traefik at `PathPrefix(/swarm)`. Container mounts host's `~/.claude`: the subscription identity the Agent SDK's bundled Claude Code runs on (V2 invariant I1).
 
 ### CI/CD
 
