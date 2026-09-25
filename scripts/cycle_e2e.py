@@ -414,6 +414,7 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
         already_satisfied=satisfied,
         merged=tuple(merged),
         qa=evals.qa_of(cycle_result.get("demo_report")),
+        error=str(record.get("error") or ""),
     )
     result = {"repo": repo, **evals.score(feature, observed)}
     result["cycle_id"] = cycle_id
@@ -436,6 +437,13 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
         satisfied = ", ".join(f"#{n}" for n in result["already_satisfied"])
         message = (f"already delivered — the Dev found every sub-task on main "
                    f"({satisfied}); nothing was built, nothing measured")
+        print(f"\nNOT MEASURED — {message}")
+        annotate("warning", f"{repo}"
+                 + (f" [{feature.id}]" if feature else "") + f": {message}")
+        return True, result
+
+    if result["outcome"] == evals.OUTCOME_INTERRUPTED:
+        message = f"interrupted — {result['error']}; the deploy was measured, not the swarm"
         print(f"\nNOT MEASURED — {message}")
         annotate("warning", f"{repo}"
                  + (f" [{feature.id}]" if feature else "") + f": {message}")

@@ -157,7 +157,18 @@ def qa_of(demo_report: dict | None) -> dict[str, str]:
 OUTCOME_BUILT = "built"
 OUTCOME_FAILED = "failed"
 OUTCOME_ALREADY_DELIVERED = "already_delivered"
+# A restart ended the cycle and it was not continued: the run measured the
+# deploy, not the swarm (csv-export, 2026-09-25: killed twice, the second
+# time in QA, after its three PRs had merged). Never measured, never a
+# regression; drawn and counted apart.
+OUTCOME_INTERRUPTED = "interrupted"
 DELIVERED = frozenset({OUTCOME_BUILT, OUTCOME_ALREADY_DELIVERED})
+_OUTCOMES = frozenset({OUTCOME_BUILT, OUTCOME_FAILED, OUTCOME_ALREADY_DELIVERED, OUTCOME_INTERRUPTED})
+_NOT_MEASURED = frozenset({OUTCOME_ALREADY_DELIVERED, OUTCOME_INTERRUPTED})
+
+# How a cycle's error starts when a restart ended it
+# (`cycle_resumer.RESTART_REASON`, written by the boot reap).
+INTERRUPTED_PREFIX = "Interrupted by a restart"
 
 
 @dataclass(frozen=True)
@@ -183,18 +194,20 @@ class Observed:
     # ("pass" | "fail" | "not_run"). The E2E run of 9d3174f41829 ended in 24
     # errors and no eval record said so.
     qa: dict[str, str] = field(default_factory=dict)
+    # The cycle's own error, as the API answers it (the row's since v030).
+    error: str = ""
 
 
 def outcome_of(run: dict) -> str:
     """A record's outcome; records from before the field read off `passed`."""
     outcome = run.get("outcome")
-    if outcome in (OUTCOME_BUILT, OUTCOME_FAILED, OUTCOME_ALREADY_DELIVERED):
+    if outcome in _OUTCOMES:
         return str(outcome)
     return OUTCOME_BUILT if run.get("passed") else OUTCOME_FAILED
 
 
 def is_measured(run: dict) -> bool:
-    return outcome_of(run) != OUTCOME_ALREADY_DELIVERED
+    return outcome_of(run) not in _NOT_MEASURED
 
 
 def files_match(files: tuple[str, ...] | list[str], expected: tuple[str, ...]) -> bool | None:
@@ -223,6 +236,8 @@ def score(feature: Feature | None, observed: Observed) -> dict[str, Any]:
         outcome = OUTCOME_BUILT
     elif finished and not observed.prs and observed.already_satisfied:
         outcome = OUTCOME_ALREADY_DELIVERED
+    elif observed.state != "completed" and observed.error.startswith(INTERRUPTED_PREFIX):
+        outcome = OUTCOME_INTERRUPTED
     else:
         outcome = OUTCOME_FAILED
     within_cost = (
@@ -259,6 +274,7 @@ def score(feature: Feature | None, observed: Observed) -> dict[str, Any]:
         ),
         "backend": observed.backend,
         "tests_unavailable": observed.tests_unavailable,
+        "error": observed.error,
     }
 
 
@@ -297,7 +313,7 @@ def trend(entries: list[dict], window: int = TREND_WINDOW) -> dict[str, Any]:
     if not recent:
         return {"runs": [], "count": 0, "pass_rate": None, "avg_cost_usd": None,
                 "avg_duration_s": None, "by_backend": {}, "already_delivered": 0,
-                "left_open": 0, "qa_red": 0, "last": None}
+                "interrupted": 0, "left_open": 0, "qa_red": 0, "last": None}
     measured = [e for e in recent if is_measured(e)]
     passed = sum(1 for e in measured if e.get("passed"))
     costs = [float(e["cost_usd"]) for e in recent if e.get("cost_usd") is not None]
@@ -314,7 +330,8 @@ def trend(entries: list[dict], window: int = TREND_WINDOW) -> dict[str, Any]:
         "avg_cost_usd": (sum(costs) / len(costs)) if costs else None,
         "avg_duration_s": (sum(durations) / len(durations)) if durations else None,
         "by_backend": by_backend,
-        "already_delivered": len(recent) - len(measured),
+        "already_delivered": sum(1 for e in recent if outcome_of(e) == OUTCOME_ALREADY_DELIVERED),
+        "interrupted": sum(1 for e in recent if outcome_of(e) == OUTCOME_INTERRUPTED),
         # Built runs whose PRs did not all merge (records before the field
         # carry no `unmerged` and count as nothing left open).
         "left_open": sum(1 for e in measured if e.get("unmerged")),
