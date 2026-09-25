@@ -27,6 +27,7 @@ class GetCycleStatusQuery:
             prs_opened=list(cycle.prs_opened),
             prs_merged=list(cycle.prs_merged),
             resumed_as=getattr(cycle, "resumed_as", ""),
+            error=getattr(cycle, "error", ""),
             phases=[
                 PhaseDTO(
                     phase=p.phase,

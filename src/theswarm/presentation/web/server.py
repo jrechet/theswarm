@@ -484,6 +484,9 @@ async def _launch_resume(app, plan, allowed_repos, bus, cycle_repo, project_repo
             base_path=getattr(app.state, "base_path", ""),
             project_repo=project_repo,
             cycle_repo=cycle_repo,
+            # Without it a continuation recorded no phase at all (46ff31375dce,
+            # 1bb1bfcb0d96), and the next boot read "nothing finished".
+            checkpoint_repo=getattr(app.state, "checkpoint_repo", None),
             project_id=plan.repo,
             resume_from=plan.resume_from,
             resume_cycle_id=plan.cycle_id,
@@ -595,7 +598,9 @@ async def start_server(
         log.exception("Collecting interrupted cycles failed (continuing startup)")
 
     try:
-        reaped = await cycle_repo.reap_orphans(max_age_seconds=0)
+        from theswarm.application.services.cycle_resumer import RESTART_REASON
+
+        reaped = await cycle_repo.reap_orphans(max_age_seconds=0, reason=RESTART_REASON)
         if reaped:
             log.info("Reaped %d orphan running cycle(s) on startup", reaped)
     except Exception:
@@ -771,7 +776,10 @@ async def start_server(
     # Continue it from the last phase that completed, under the guards in
     # cycle_resumer (one automatic resume per cycle, a few per boot).
     if interrupted:
-        from theswarm.application.services.cycle_resumer import plan_resumes
+        from theswarm.application.services.cycle_resumer import (
+            plan_resumes,
+            record_not_resumed,
+        )
 
         plans = plan_resumes(interrupted)
         log.info(
@@ -780,6 +788,9 @@ async def start_server(
         )
         for plan in plans:
             await _launch_resume(app, plan, github_repos, bus, cycle_repo, project_repo)
+        # The ones left behind say why, on their row and in the API — not
+        # only in the "resuming 0" line above (46ff31375dce, 2026-09-25).
+        await record_not_resumed(cycle_repo, interrupted, plans)
 
     # ── WS listener for DMs ──────────────────────────────────────
     if swarm_po_chat:

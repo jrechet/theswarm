@@ -113,10 +113,19 @@ from theswarm.infrastructure.persistence.migrations.v028_eval_runs import (
 from theswarm.infrastructure.persistence.migrations.v029_cycle_resumed_as import (
     ALTERS as MIGRATION_V029_ALTERS,
 )
+from theswarm.infrastructure.persistence.migrations.v030_cycle_error import (
+    ALTERS as MIGRATION_V030_ALTERS,
+)
 
 log = logging.getLogger(__name__)
 
 _DEFAULT_DB = "~/.swarm-data/theswarm.db"
+
+# A cycle's error is a reason, not a traceback.
+ERROR_MAX_CHARS = 1000
+
+# What the periodic reaper says of a row no task stands behind.
+ORPHAN_REASON = "Orphaned by container restart — background task did not survive."
 
 
 async def init_db(db_path: str = _DEFAULT_DB) -> aiosqlite.Connection:
@@ -174,11 +183,11 @@ async def _ensure_memory_entries_columns(db: aiosqlite.Connection) -> None:
 
 
 async def _ensure_cycles_columns(db: aiosqlite.Connection) -> None:
-    """Columns added to ``cycles`` after v001, only if missing (v027, v029)."""
+    """Columns added to ``cycles`` after v001, only if missing (v027, v029, v030)."""
     cursor = await db.execute("PRAGMA table_info(cycles)")
     rows = await cursor.fetchall()
     existing = {row[1] for row in rows}
-    for column_name, alter_sql in MIGRATION_V027_ALTERS + MIGRATION_V029_ALTERS:
+    for column_name, alter_sql in MIGRATION_V027_ALTERS + MIGRATION_V029_ALTERS + MIGRATION_V030_ALTERS:
         if column_name not in existing:
             await db.execute(alter_sql)
 
@@ -320,7 +329,31 @@ class SQLiteCycleRepository:
         )
         await self._db.commit()
 
-    async def reap_orphans(self, *, max_age_seconds: int = 7200) -> int:
+    async def origin_of(self, cycle_id: str) -> str:
+        """The first cycle of a resume chain, whose id is the graph thread
+        every continuation runs on (V2 runtime, M4)."""
+        seen = {cycle_id}
+        current = cycle_id
+        while True:
+            cursor = await self._db.execute(
+                "SELECT id FROM cycles WHERE resumed_as = ? LIMIT 1", (current,),
+            )
+            row = await cursor.fetchone()
+            if row is None or row[0] in seen:
+                return current
+            current = row[0]
+            seen.add(current)
+
+    async def set_error(self, cycle_id: str, error: str) -> None:
+        """Say why a cycle ended the way it did, on its row."""
+        await self._db.execute(
+            "UPDATE cycles SET error = ? WHERE id = ?", (error[:ERROR_MAX_CHARS], cycle_id),
+        )
+        await self._db.commit()
+
+    async def reap_orphans(
+        self, *, max_age_seconds: int = 7200, reason: str = ORPHAN_REASON,
+    ) -> int:
         """Mark stale 'running' cycles as 'failed'.
 
         A cycle stays 'running' only while its in-process task is alive.
@@ -352,7 +385,7 @@ class SQLiteCycleRepository:
             "status": "failed",
             "tokens_used": 0,
             "cost_usd": 0.0,
-            "summary": "Orphaned by container restart — background task did not survive.",
+            "summary": reason,
         }
         for cycle_id, phases_json_raw in rows:
             try:
@@ -369,9 +402,9 @@ class SQLiteCycleRepository:
             ]
             phases.append(orphan_phase)
             await self._db.execute(
-                "UPDATE cycles SET status = 'failed', completed_at = ?, phases_json = ? "
-                "WHERE id = ?",
-                (completed, json.dumps(phases), cycle_id),
+                "UPDATE cycles SET status = 'failed', completed_at = ?, phases_json = ?, "
+                "error = ? WHERE id = ?",
+                (completed, json.dumps(phases), reason[:ERROR_MAX_CHARS], cycle_id),
             )
         await self._db.commit()
         return len(rows)
@@ -395,8 +428,8 @@ class SQLiteCycleRepository:
             """INSERT OR REPLACE INTO cycles
                (id, project_id, status, triggered_by, started_at, completed_at,
                 total_tokens, total_cost_usd, prs_opened_json, prs_merged_json,
-                phases_json, budgets_json, trace_id, resumed_as)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                phases_json, budgets_json, trace_id, resumed_as, error)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(cycle.id), cycle.project_id, cycle.status.value,
                 cycle.triggered_by,
@@ -406,6 +439,7 @@ class SQLiteCycleRepository:
                 json.dumps(list(cycle.prs_opened)),
                 json.dumps(list(cycle.prs_merged)),
                 phases_json, budgets_json, cycle.trace_id, cycle.resumed_as,
+                cycle.error[:ERROR_MAX_CHARS],
             ),
         )
         await self._db.commit()
@@ -444,6 +478,7 @@ class SQLiteCycleRepository:
             prs_merged=tuple(json.loads(row["prs_merged_json"])),
             trace_id=(row["trace_id"] or "") if "trace_id" in row.keys() else "",
             resumed_as=(row["resumed_as"] or "") if "resumed_as" in row.keys() else "",
+            error=(row["error"] or "") if "error" in row.keys() else "",
         )
 
 

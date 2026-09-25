@@ -254,6 +254,20 @@ def review_decisions(result: dict) -> list[str]:
     return [str(r.get("decision", "")) for r in (result or {}).get("reviews", []) or []]
 
 
+def failure_reasons(state: str, *, new_prs, left, error: str = "") -> list[str]:
+    """What the FAIL line says. The cycle's own error comes with its state:
+    "cycle failed" alone sent the reader to Seq for 46ff31375dce, which a
+    second deploy had killed and the resumer rightly left alone."""
+    reasons = []
+    if state != "completed":
+        reasons.append(f"cycle {state}" + (f": {error}" if error else ""))
+    if not new_prs:
+        reasons.append("no pull request produced")
+    if left:
+        reasons.append(f"{len(left)} sub-task(s) left unbuilt")
+    return reasons
+
+
 def cycle_record(cycle_id: str) -> dict:
     status, body = _api(f"/api/cycles/{cycle_id}")
     return body if status == 200 and isinstance(body, dict) else {}
@@ -419,13 +433,8 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
                  + (f" [{feature.id}]" if feature else "") + f": {message}")
         return True, result
 
-    reasons = []
-    if state != "completed":
-        reasons.append(f"cycle {state}")
-    if not new_prs:
-        reasons.append("no pull request produced")
-    if left:
-        reasons.append(f"{len(left)} sub-task(s) left unbuilt")
+    reasons = failure_reasons(state, new_prs=new_prs, left=left,
+                              error=str(record.get("error") or ""))
     print("\nFAIL — " + "; ".join(reasons))
     if result["regression"]:
         print("\n⚠ REGRESSION — this target passed last run and fails now")

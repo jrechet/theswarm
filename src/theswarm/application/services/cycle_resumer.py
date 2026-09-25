@@ -28,6 +28,10 @@ MAX_RESUME_DEPTH = 1
 # A restart during a busy period must not launch a herd of cycles at once.
 MAX_RESUMES_PER_BOOT = 3
 
+# What an interrupted cycle's row says once the boot reap has failed it; a
+# cycle that is not continued gets the reason after it.
+RESTART_REASON = "Interrupted by a restart (a deploy or a crash)"
+
 
 @dataclass(frozen=True)
 class ResumePlan:
@@ -120,11 +124,15 @@ async def collect_interrupted(cycle_repo, checkpoint_repo, graph_checkpointer=No
             continue
         resume_from = last_ok.next_phase if last_ok else None
         issue_number = None
+        not_resumable = ""
         if resume_from and graph_checkpointer is not None:
-            thread = await _graph_thread(graph_checkpointer, str(cycle.id))
+            # A continuation runs on the thread of the cycle it continues.
+            thread_id = await _thread_id_of(cycle_repo, str(cycle.id))
+            thread = await _graph_thread(graph_checkpointer, thread_id)
             if thread is None:
                 log.info("Cycle %s has no graph checkpoint — not resumed", cycle.id)
                 resume_from = None
+                not_resumable = NO_GRAPH_THREAD
             else:
                 issue_number = _target_issue_of(thread)
         items.append({
@@ -133,8 +141,68 @@ async def collect_interrupted(cycle_repo, checkpoint_repo, graph_checkpointer=No
             "triggered_by": cycle.triggered_by,
             "resume_from": resume_from,
             "issue_number": issue_number,
+            "not_resumable": not_resumable,
         })
     return items
+
+
+NO_GRAPH_THREAD = "no graph checkpoint (it predates the durable cycle)"
+
+
+async def _thread_id_of(cycle_repo, cycle_id: str) -> str:
+    """The graph thread a cycle runs on: its resume chain's first cycle."""
+    origin_of = getattr(cycle_repo, "origin_of", None)
+    if origin_of is None:
+        return cycle_id
+    try:
+        return await origin_of(cycle_id)
+    except Exception:  # noqa: BLE001 — fall back to the cycle's own id
+        log.exception("Finding the origin of cycle %s failed", cycle_id)
+        return cycle_id
+
+
+def _why_not_resumed(item: dict, max_depth: int) -> str:
+    # The cap first: whatever else is true of a continuation, the cap is why
+    # it stays down (46ff31375dce had finished its dev loop, and still no
+    # phase was on record under its id).
+    if resume_depth(item.get("triggered_by") or "") >= max_depth:
+        return ("it was already an automatic resume, and a second interruption "
+                "needs a person to look")
+    if item.get("not_resumable"):
+        return str(item["not_resumable"])
+    if not item.get("resume_from"):
+        return "no phase had finished yet, there was nothing to continue"
+    if not (item.get("repo") or "").strip():
+        return "its repository is unknown"
+    return f"more than {MAX_RESUMES_PER_BOOT} cycles were interrupted at once"
+
+
+def not_resumed_reasons(
+    interrupted: list[dict],
+    plans: list[ResumePlan],
+    *,
+    max_depth: int = MAX_RESUME_DEPTH,
+) -> dict[str, str]:
+    """Why each interrupted cycle that is not continued was left, by id.
+
+    A continued one needs no reason: its row points at the continuation.
+    """
+    planned = {plan.cycle_id for plan in plans}
+    return {
+        item["cycle_id"]: f"{RESTART_REASON}; not resumed — {_why_not_resumed(item, max_depth)}"
+        for item in interrupted
+        if item.get("cycle_id") and item["cycle_id"] not in planned
+    }
+
+
+async def record_not_resumed(cycle_repo, interrupted: list[dict], plans: list[ResumePlan]) -> None:
+    """Write each left-behind cycle's reason on its row (after the reap)."""
+    for cycle_id, reason in not_resumed_reasons(interrupted, plans).items():
+        log.info("Cycle %s: %s", cycle_id, reason)
+        try:
+            await cycle_repo.set_error(cycle_id, reason)
+        except Exception:  # noqa: BLE001 — a reason is not worth a failed boot
+            log.exception("Recording why cycle %s was not resumed failed", cycle_id)
 
 
 async def _graph_thread(graph_checkpointer, cycle_id: str):

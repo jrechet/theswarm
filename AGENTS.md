@@ -195,6 +195,19 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   recording that as a cancel lost cycle 04fc7fff85a0 to the deploy of #192
   — the resume was a race between the teardown and the SIGKILL. A
   cancellation nobody asked for propagates and leaves the row `running`.
+- **A failed cycle's reason is on its row** (`cycles.error`, v030): the
+  exception from `CycleFailed`, or the boot reap's `RESTART_REASON`, plus
+  why the resumer left it (`cycle_resumer.record_not_resumed`: already an
+  automatic resume, nothing finished, no graph thread, the per-boot cap).
+  The tracker kept the text in memory only, and 46ff31375dce, killed by a
+  second deploy on 2026-09-25, read "failed" in the API and the harness
+  with the reason in one log line.
+- **A deploy waits for the running cycle** (`cd.yml`, "Wait for running
+  cycles", up to 30 min, then deploys anyway). A merge made while prod was
+  idle used to land four to ten minutes later in the middle of the next
+  cycle (092596248fb9, 2f5114ae7713 on 2026-09-25); the resume saves the
+  finished phases, not the node in flight, and one resume per cycle means
+  a second deploy ends it.
 - **On `SELF_REPO` the TechLead approves but does not merge in the review
   phase** — a merge to main redeploys this service mid-cycle. Approved PRs
   come back as `held_prs` and the `merge_held` node merges them at the end
