@@ -528,8 +528,18 @@ temps.
   `asyncio.gather` dans le nœud plutôt que par `Send` — les graphes Dev ont
   chacun leur état, aucun réducteur n'est nécessaire côté `AgentState`. Les
   sélecteurs passent un par un et sautent ce qu'un frère a pris ; chaque
-  worktree a son venv. Reste : le cycle de prod à largeur 2 (acceptation),
-  et les captures QA parallèles.
+  worktree a son venv. Captures QA parallèles livrées le même jour (voir
+  M4, « Parallélisme QA »).
+  *Acceptation (2026-09-25)* : le cas `16f3b8af2cca` / `2878898cc504` est
+  un test sur de vrais dépôts (deux tâches, deux branches, aucun commit
+  perdu) ; le `site-packages` de TheSwarm est inchangé après chaque cycle
+  depuis #190 ; un cycle de prod à largeur 2 (`9d3174f41829`) a fait deux
+  tâches côte à côte, trois PR, harness PASS, puis retour à 1 ; ses deux
+  serveurs de démo QA (ports 8001 et 8002) étaient prêts à 9 ms d'écart.
+  À surveiller : l'E2E de QA de ce cycle a fini en 24 erreurs, 0 test
+  exécuté, là où le run quotidien du matin (largeur 1) en passait 21 ; la
+  cause n'a pas pu être lue (le workspace est effacé en fin de cycle, et
+  la sortie n'est pas journalisée).
 
 **Acceptation.**
 - Test de régression du cas `16f3b8af2cca` / `2878898cc504` : deux tâches
