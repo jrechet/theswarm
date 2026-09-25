@@ -627,7 +627,14 @@ depuis le 2026-09-23, aucun retour à `cli`. *Livré en deux temps* :
 (« Skill-Embedded MCPs »), donc il a une référence hors tests et la V1
 n'est pas touchée. Le repli `--- FILE:` reste aussi : aucun compteur ne
 prouve qu'il n'a jamais servi, et le backend `api` rend du texte. **M7b**
-retire le backend CLI et Node/npm de l'image.
+retire le backend CLI et Node/npm de l'image : `_run_cli`,
+`_cli_with_auth_recovery` et le lecteur d'enveloppe JSON partent ; `auto`
+devient `sdk → api` (l'API seulement avec une clé utilisable) ;
+`SWARM_CLAUDE_BACKEND=cli` tourne sur le SDK avec un avertissement ; la
+santé et le diagnostic lisent le binaire embarqué du SDK. Les tests propres
+à la CLI partent, ce qu'ils gardaient pour les deux backends passe au SDK.
+Le chemin de retour depuis le SDK est désormais un revert (I13 tenait
+jusque-là).
 
 ### M8 — Déclencheurs GitHub natifs (produit)
 
