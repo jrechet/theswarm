@@ -268,6 +268,14 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   object that carries a `decision`, fenced or bare, and steps over braces
   in prose (`{id}`) and example payloads. Slicing first-`{`-to-last-`}`
   filed an APPROVE with three issues as COMMENT (#126).
+- **An approved PR merges only on green CI** (`agents/ci_gate.py`). The
+  TechLead merged every APPROVE unread, and no protection stops it:
+  concert-tour-app's main requires no check, TheSwarm's exempts the admin
+  token the swarm merges with. Red goes back to the Dev (`CI_RED_MARKER`
+  beside `CHANGES_MARKER`, the failing checks named); still running is
+  waited for, one `CI_WAIT_SECONDS` (300s) per merge pass, then left open;
+  unreadable CI merges as before. The swarm's own `theswarm/review` status
+  is not CI. The end-of-cycle merge on SELF_REPO reads the same gate.
 - **A REQUEST_CHANGES review closes the loop**: the review is copied onto
   the *issue* behind `CHANGES_MARKER`, the label flips back to
   `status:ready`, and the next attempt resumes the branch the review is

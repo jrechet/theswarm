@@ -99,7 +99,19 @@ async def _merge_held_prs(github, held: list[int], on_progress) -> list[int]:
         open_prs = []
     branches = {p["number"]: p.get("head") for p in open_prs}
 
+    shas = {p["number"]: p.get("head_sha", "") for p in open_prs}
+    from theswarm.agents import ci_gate
+
+    ci_wait = ci_gate.SharedWait()
     for pr_number in held:
+        # Main's protection exempts the admin token the swarm merges with:
+        # nothing but this stops a red PR landing on main.
+        verdict = await ci_gate.wait_for_ci(
+            github, shas.get(pr_number, ""), wait_seconds=ci_wait.left(),
+        )
+        if verdict.state in ("red", "pending"):
+            log.warning("PR #%d was approved but its CI is %s — left open", pr_number, verdict.state)
+            continue
         try:
             await github.merge_pr(pr_number, merge_method="squash")
         except Exception as exc:

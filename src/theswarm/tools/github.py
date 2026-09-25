@@ -271,6 +271,31 @@ class GitHubClient:
             kwargs["target_url"] = target_url
         await self._run(commit.create_status, **kwargs)
 
+    async def get_ci_checks(self, ref: str) -> list[dict]:
+        """Every CI signal on `ref`, flattened: commit statuses, then check runs.
+
+        Each is ``{"name", "state", "summary"}``; a check run still going has
+        its ``status`` (queued, in_progress) as its state, a finished one its
+        ``conclusion``. Read by `agents.ci_gate` before a merge.
+        """
+        await self._fresh()
+        commit = await self._run(self._repo.get_commit, ref)
+        combined = await self._run(commit.get_combined_status)
+        runs = await self._run(lambda: list(commit.get_check_runs()))
+        checks = [
+            {"name": s.context, "state": s.state, "summary": s.description or ""}
+            for s in combined.statuses
+        ]
+        checks += [
+            {
+                "name": run.name,
+                "state": run.conclusion or run.status,
+                "summary": (getattr(run.output, "title", "") or "") if run.output else "",
+            }
+            for run in runs
+        ]
+        return checks
+
     async def get_pr_files(self, pr_number: int) -> list[dict]:
         """Return the list of changed files in a PR with patch diffs."""
         await self._fresh()
