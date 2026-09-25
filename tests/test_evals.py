@@ -268,3 +268,24 @@ def test_the_trend_counts_runs_that_left_prs_open():
 
     assert evals.trend(runs)["left_open"] == 1
     assert evals.trend([])["left_open"] == 0
+
+
+def test_qa_gates_are_read_from_the_demo_report():
+    report = {"quality_gates": {
+        "unit_tests": {"status": "pass"}, "e2e_tests": {"status": "fail", "failure_excerpt": "E x"},
+        "security": {"status": "not_run"}, "coverage": {"status": "pass"}, "extra": {"status": "?"},
+    }}
+
+    assert evals.qa_of(report) == {"unit_tests": "pass", "e2e_tests": "fail",
+                                   "security": "not_run", "coverage": "pass"}
+    assert evals.qa_of(None) == {} and evals.qa_of({}) == {}
+
+
+def test_the_score_and_the_trend_carry_qa():
+    record = evals.score(None, evals.Observed(state="completed", prs=(1,), merged=(1,),
+                                              qa={"e2e_tests": "fail"}))
+    assert record["qa"] == {"e2e_tests": "fail"}
+
+    runs = [record, {"passed": True, "outcome": "built", "qa": {"e2e_tests": "pass"}},
+            {"passed": True, "outcome": "built"}]
+    assert evals.trend(runs)["qa_red"] == 1

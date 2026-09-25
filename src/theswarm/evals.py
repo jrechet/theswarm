@@ -136,6 +136,19 @@ def exhausted(manifest: Manifest, runs: list[dict]) -> bool:
     return all(feature.id in delivered for feature in manifest.features)
 
 
+QA_GATES = ("unit_tests", "e2e_tests", "security", "coverage")
+
+
+def qa_of(demo_report: dict | None) -> dict[str, str]:
+    """Gate → status from a cycle's demo report; {} when there is none."""
+    gates = (demo_report or {}).get("quality_gates") or {}
+    return {
+        gate: str(gates[gate].get("status"))
+        for gate in QA_GATES
+        if isinstance(gates.get(gate), dict) and gates[gate].get("status")
+    }
+
+
 # ── Scoring ──────────────────────────────────────────────────────────
 
 # What a run says about the swarm. `already_delivered` measured nothing:
@@ -166,6 +179,10 @@ class Observed:
     # and still sit open: cycle 9d3174f41829's #325 conflicted with its
     # sibling and never merged, under a run scored "built".
     merged: tuple[int, ...] = ()
+    # QA's gates as the cycle's demo report states them: gate → status
+    # ("pass" | "fail" | "not_run"). The E2E run of 9d3174f41829 ended in 24
+    # errors and no eval record said so.
+    qa: dict[str, str] = field(default_factory=dict)
 
 
 def outcome_of(run: dict) -> str:
@@ -225,6 +242,7 @@ def score(feature: Feature | None, observed: Observed) -> dict[str, Any]:
         "prs": list(observed.prs),
         "merged": list(observed.merged),
         "unmerged": [pr for pr in observed.prs if pr not in set(observed.merged)],
+        "qa": dict(observed.qa),
         "unfinished": list(observed.unfinished),
         "already_satisfied": list(observed.already_satisfied),
         "feature": feature.id if feature else "",
@@ -279,7 +297,7 @@ def trend(entries: list[dict], window: int = TREND_WINDOW) -> dict[str, Any]:
     if not recent:
         return {"runs": [], "count": 0, "pass_rate": None, "avg_cost_usd": None,
                 "avg_duration_s": None, "by_backend": {}, "already_delivered": 0,
-                "left_open": 0, "last": None}
+                "left_open": 0, "qa_red": 0, "last": None}
     measured = [e for e in recent if is_measured(e)]
     passed = sum(1 for e in measured if e.get("passed"))
     costs = [float(e["cost_usd"]) for e in recent if e.get("cost_usd") is not None]
@@ -300,5 +318,7 @@ def trend(entries: list[dict], window: int = TREND_WINDOW) -> dict[str, Any]:
         # Built runs whose PRs did not all merge (records before the field
         # carry no `unmerged` and count as nothing left open).
         "left_open": sum(1 for e in measured if e.get("unmerged")),
+        # Runs where a QA gate failed (records before the field: none).
+        "qa_red": sum(1 for e in recent if "fail" in (e.get("qa") or {}).values()),
         "last": recent[-1],
     }
