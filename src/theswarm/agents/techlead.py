@@ -764,9 +764,8 @@ async def close_finished_stories(github, merged_tasks: list[int]) -> list[int]:
     """
     if not merged_tasks:
         return []
-    from theswarm.tools.github import is_child_of, parent_of
+    from theswarm.tools.github import parent_of
 
-    closed: list[int] = []
     try:
         parents = set()
         for number in merged_tasks:
@@ -776,22 +775,50 @@ async def close_finished_stories(github, merged_tasks: list[int]) -> list[int]:
                 parents.add(parent)
         if not parents:
             return []
-        children = await github.get_issues(labels=["role:dev"], state="all")
-        done = set(merged_tasks)
-        for parent in sorted(parents):
-            mine = [c for c in children if is_child_of(c.get("body"), parent)]
-            if not mine or any(c.get("state") != "closed" and c["number"] not in done for c in mine):
-                continue
-            story = await github.get_issue(parent)
-            if story is None or story.get("state") == "closed":
-                continue
-            listed = ", ".join(f"#{c['number']}" for c in sorted(mine, key=lambda c: c["number"]))
-            await github.close_issue(parent, comment=f"Every sub-task is done ({listed}): closing the story.")
-            await github.remove_label(parent, "status:in-progress")
-            log.info("Story #%d closed: its sub-tasks %s are done", parent, listed)
-            closed.append(parent)
+        finished = await finished_stories(github, done=set(merged_tasks), parents=parents)
+        return await close_stories(github, finished)
     except Exception:  # noqa: BLE001 — tidying never undoes a merge
         log.exception("Closing finished stories failed (merges stand)")
+        return []
+
+
+async def finished_stories(
+    github, *, done: set[int] | frozenset[int] = frozenset(), parents=None,
+) -> list[tuple[int, list[int]]]:
+    """(story, its sub-tasks) for each story whose sub-tasks are all closed.
+
+    `done` counts as closed already (a PR merged a moment ago); `parents`
+    limits the answer to those stories, None reads every story that has
+    sub-tasks. One listing call, whatever the number of stories.
+    """
+    from theswarm.tools.github import parent_of
+
+    by_parent: dict[int, list[dict]] = {}
+    for child in await github.get_issues(labels=["role:dev"], state="all"):
+        parent = parent_of(child.get("body"))
+        if parent is not None:
+            by_parent.setdefault(parent, []).append(child)
+    wanted = sorted(by_parent if parents is None else parents)
+    return [
+        (parent, sorted(c["number"] for c in by_parent[parent]))
+        for parent in wanted
+        if by_parent.get(parent)
+        and all(c.get("state") == "closed" or c["number"] in done for c in by_parent[parent])
+    ]
+
+
+async def close_stories(github, finished: list[tuple[int, list[int]]]) -> list[int]:
+    """Close the stories `finished_stories` found, skipping closed ones."""
+    closed: list[int] = []
+    for parent, children in finished:
+        story = await github.get_issue(parent)
+        if story is None or story.get("state") == "closed":
+            continue
+        listed = ", ".join(f"#{n}" for n in children)
+        await github.close_issue(parent, comment=f"Every sub-task is done ({listed}): closing the story.")
+        await github.remove_label(parent, "status:in-progress")
+        log.info("Story #%d closed: its sub-tasks %s are done", parent, listed)
+        closed.append(parent)
     return closed
 
 
