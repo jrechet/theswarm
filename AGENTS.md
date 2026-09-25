@@ -292,7 +292,14 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `pages: ["/", "/r/jrechet/theswarm"]` (its own `/docs` 404s, #144), and
   `setup: ["bash scripts/build-css.sh"]` — the QA workspace is a plain clone
   and `static/v2/app.css` is generated, not checked in, so V2 pages rendered
-  unstyled (Times, blue links) until this ran first.
+  unstyled (Times, blue links) until this ran first. **The captures run in
+  two lanes, side by side** (`qa.run_captures`, V2 M5b): the screenshot
+  walk on `e2e_port()+1` and the video walk on `+2` each launch their own
+  demo server and read nothing of each other, so QA spends the longer of
+  the two. `SWARM_QA_CAPTURE_CONCURRENCY` (default 2: two demo servers and
+  two browsers in a 2 GB container) — set it to 1 on a heavy target, or
+  when a cycle's QA dies of memory. The per-story captures read
+  `story_preview_urls`, which nothing sets yet: they are no-ops.
 - **The GitHub circuit breaker ignores 4xx** (`tools/github._is_client_error`):
   a 422 "cannot review your own pull request" is a fact about the request,
   not an outage. Four of them opened the breaker and blocked the memory save

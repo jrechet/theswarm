@@ -438,6 +438,11 @@ reconstruire.
   clés (`demo_launch_error`, `tokens_used`) et `AgentState` n'a pas de
   réducteurs ; en donner change la sémantique d'accumulation de tous les
   graphes. À faire avec l'isolation, où le sous-graphe QA est retouché.
+  *Livré (2026-09-25)* sans `Send` ni réducteur : un nœud `captures` lance
+  deux voies en `asyncio.gather` — captures d'écran (port `+1`), vidéos
+  (port `+2`) — chacune avec son serveur de démo ; les réponses se
+  fusionnent (jetons additionnés, première erreur de lancement gardée).
+  `SWARM_QA_CAPTURE_CONCURRENCY`, défaut 2 ; à 1, l'ordre d'avant.
 - Le verrou par repo et le timeout dur de cycle restent hors du graphe.
 
 **Acceptation.**

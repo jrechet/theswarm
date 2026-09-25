@@ -6,6 +6,7 @@ Pipeline: load_context → write_e2e_tests → run_unit_tests → run_e2e_tests
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import tempfile
@@ -1201,6 +1202,67 @@ async def generate_demo_report(state: AgentState) -> dict:
     }
 
 
+# ── Captures, side by side (V2 runtime, M5b) ────────────────────────────
+
+
+def _capture_concurrency() -> int:
+    """How many capture lanes run at once: ``SWARM_QA_CAPTURE_CONCURRENCY``.
+
+    Default 2, the plan's choice for a 2 GB container: two demo servers and
+    two browsers at a time. 1 runs the lanes one after the other, in the
+    order the four nodes used to run.
+    """
+    try:
+        return max(1, int(os.environ.get("SWARM_QA_CAPTURE_CONCURRENCY", "2")))
+    except ValueError:
+        return 2
+
+
+def _merge_captures(*parts: dict) -> dict:
+    """One update from the lanes' answers: tokens add up, the first demo
+    launch error is the one the report explains, every other key is its
+    own lane's (they do not overlap)."""
+    merged: dict = {}
+    tokens = 0
+    for part in parts:
+        for key, value in part.items():
+            if key == "tokens_used":
+                tokens += value or 0
+            elif key == "demo_launch_error":
+                merged[key] = merged.get(key) or value
+            else:
+                merged[key] = value
+    merged["tokens_used"] = tokens
+    return merged
+
+
+async def run_captures(state: AgentState) -> dict:
+    """The demo captures, in two lanes that each own their demo server.
+
+    The screenshot walk launches on ``e2e_port() + 1`` and the video walk on
+    ``+ 2``; neither reads the other's answer, so they run side by side and
+    QA spends the longer of the two instead of their sum. The per-story
+    captures ride in the lane of their kind. A lane that raises still lets
+    the other finish (no demo server is left orphaned), then the error
+    surfaces as it did from the sequential nodes.
+    """
+    async def screenshots_lane() -> dict:
+        shots = await capture_demo_screenshots(state)
+        return _merge_captures(shots, await capture_before_after_per_story({**state, **shots}))
+
+    async def video_lane() -> dict:
+        stories = await record_story_video(state)
+        return _merge_captures(stories, await record_demo_video({**state, **stories}))
+
+    if _capture_concurrency() < 2:
+        return _merge_captures(await screenshots_lane(), await video_lane())
+    lanes = await asyncio.gather(screenshots_lane(), video_lane(), return_exceptions=True)
+    for lane in lanes:
+        if isinstance(lane, BaseException):
+            raise lane
+    return _merge_captures(*lanes)
+
+
 # ── Graph ───────────────────────────────────────────────────────────────
 
 
@@ -1213,10 +1275,7 @@ def build_qa_graph() -> StateGraph:
     graph.add_node("run_e2e", traced_node("run_e2e", run_e2e_tests))
     graph.add_node("run_security", traced_node("run_security", run_security_scan))
     graph.add_node("collect_issues", traced_node("collect_issues", collect_issue_status))
-    graph.add_node("capture_screenshots", traced_node("capture_screenshots", capture_demo_screenshots))
-    graph.add_node("capture_before_after_per_story", traced_node("capture_before_after_per_story", capture_before_after_per_story))
-    graph.add_node("record_story_video", traced_node("record_story_video", record_story_video))
-    graph.add_node("record_video", traced_node("record_video", record_demo_video))
+    graph.add_node("captures", traced_node("captures", run_captures))
     graph.add_node("generate_report", traced_node("generate_report", generate_demo_report))
 
     graph.set_entry_point("load_context")
@@ -1225,11 +1284,8 @@ def build_qa_graph() -> StateGraph:
     graph.add_edge("run_unit", "run_e2e")
     graph.add_edge("run_e2e", "run_security")
     graph.add_edge("run_security", "collect_issues")
-    graph.add_edge("collect_issues", "capture_screenshots")
-    graph.add_edge("capture_screenshots", "capture_before_after_per_story")
-    graph.add_edge("capture_before_after_per_story", "record_story_video")
-    graph.add_edge("record_story_video", "record_video")
-    graph.add_edge("record_video", "generate_report")
+    graph.add_edge("collect_issues", "captures")
+    graph.add_edge("captures", "generate_report")
     graph.add_edge("generate_report", END)
 
     # No checkpointer of its own, and none inherited: invoked inside a node
