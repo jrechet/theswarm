@@ -7,6 +7,9 @@ services:
       - .env
     environment:
       - BASE_PATH=/swarm
+      # uv's cache on the persistent volume: what QA runs through
+      # `uv tool run` (semgrep, pinned) is downloaded once, not per container.
+      - UV_CACHE_DIR=/home/botuser/.swarm-data/uv-cache
       # V2 runtime: Claude calls go through the Agent SDK (its bundled
       # Claude Code binary, the subscription identity of the mounted
       # ~/.claude, a typed message stream). The `claude -p` CLI backend was

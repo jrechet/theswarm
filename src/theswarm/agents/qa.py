@@ -559,6 +559,29 @@ async def run_e2e_tests(state: AgentState) -> dict:
     return result
 
 
+# semgrep is not in the image: QA's scan failed "No such file or directory"
+# on every prod cycle until 2026-09-25. It runs through uv on demand, pinned,
+# with the cache on the persistent data volume (UV_CACHE_DIR) so a container
+# downloads it once. SWARM_QA_SEMGREP=0 turns the scan off.
+SEMGREP_VERSION = "1.178.0"
+SEMGREP_TIMEOUT_SECONDS = 300  # the first run downloads semgrep and its rules
+
+
+def _semgrep_command(target: str = "src/") -> list[str] | None:
+    """How to run the OWASP scan here, None when it cannot or must not run."""
+    import shutil
+
+    if os.environ.get("SWARM_QA_SEMGREP", "1").strip().lower() in ("0", "false", "no"):
+        return None
+    args = ["scan", "--config=p/owasp-top-ten", target, "--json", "--quiet", "--metrics=off"]
+    if shutil.which("semgrep"):
+        return ["semgrep", *args]
+    uv = shutil.which("uv")
+    if uv:
+        return [uv, "tool", "run", "--from", f"semgrep=={SEMGREP_VERSION}", "semgrep", *args]
+    return None
+
+
 async def run_security_scan(state: AgentState) -> dict:
     """Run semgrep OWASP scan on the workspace.
 
@@ -579,12 +602,11 @@ async def run_security_scan(state: AgentState) -> dict:
     semgrep_status = "not_run"
 
     # Run semgrep OWASP top 10
+    command = _semgrep_command()
     try:
-        semgrep_result = await claude.run_tests(
-            workspace,
-            ["semgrep", "scan", "--config=p/owasp-top-ten", "src/", "--json", "--quiet"],
-            timeout=120,
-        )
+        if command is None:
+            raise FileNotFoundError("semgrep: not on PATH, no uv to run it, or SWARM_QA_SEMGREP=0")
+        semgrep_result = await claude.run_tests(workspace, command, timeout=SEMGREP_TIMEOUT_SECONDS)
         semgrep_status = "pass"
         # Parse semgrep JSON output for HIGH severity findings
         try:
