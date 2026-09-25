@@ -644,6 +644,11 @@ async def merge_approved_prs(state: AgentState) -> dict:
     merged = []
     rejected = []
     conflicted = []
+    ci_red: list[int] = []
+    ci_pending: list[int] = []
+    from theswarm.agents.ci_gate import SharedWait
+
+    ci_wait = SharedWait()
     for review in reviews:
         pr_number = review["pr_number"]
         decision = review.get("decision", "")
@@ -663,6 +668,16 @@ async def merge_approved_prs(state: AgentState) -> dict:
                     head_branch = p.get("head")
                     open_pr = p
                     break
+
+            gate = await _ci_gate_before_merge(
+                github, pr_number, head_branch, open_pr, wait_seconds=ci_wait.left(),
+            )
+            if gate == "red":
+                ci_red.append(pr_number)
+                continue
+            if gate == "pending":
+                ci_pending.append(pr_number)
+                continue
 
             await github.merge_pr(pr_number, merge_method="squash")
             merged.append(pr_number)
@@ -694,14 +709,48 @@ async def merge_approved_prs(state: AgentState) -> dict:
         summary.append(f"Changes requested: {rejected}")
     if conflicted:
         summary.append(f"Conflicts sent back: {conflicted}")
+    if ci_red:
+        summary.append(f"CI red, sent back: {ci_red}")
+    if ci_pending:
+        summary.append(f"CI still running, left open: {ci_pending}")
 
     return {
         "result": " | ".join(summary) if summary else "No PRs to process",
         "merged_prs": merged,
         "held_prs": [],
         "conflicted_prs": conflicted,
+        "ci_red_prs": ci_red,
+        "ci_pending_prs": ci_pending,
         "tokens_used": 0,
     }
+
+
+async def _ci_gate_before_merge(
+    github, pr_number: int, head_branch, open_pr: dict, *, wait_seconds: float,
+) -> str:
+    """green / none: merge. red: sent back to the Dev. pending: left open."""
+    from theswarm.agents import ci_gate
+
+    verdict = await ci_gate.wait_for_ci(
+        github, open_pr.get("head_sha", ""), wait_seconds=wait_seconds,
+    )
+    if verdict.state == "pending":
+        log.info("PR #%d: CI still running after %ds — left open, not merged",
+                 pr_number, ci_gate.CI_WAIT_SECONDS)
+    if verdict.state != "red":
+        return verdict.state
+    names = ", ".join(c.get("name", "") for c in verdict.failing)
+    log.warning("PR #%d: approved, but CI is red (%s) — not merged, back to the Dev",
+                pr_number, names)
+    pr = {"number": pr_number, "head": head_branch or "", **open_pr}
+    try:
+        await _send_back_to_dev(
+            github, pr, ci_gate.CI_RED_MARKER + "\n" + ci_gate.CI_RED_SUMMARY,
+            ci_gate.failing_issues(verdict),
+        )
+    except Exception:
+        log.exception("Could not send PR #%d back for its red CI", pr_number)
+    return "red"
 
 
 # ── Routing ─────────────────────────────────────────────────────────────
