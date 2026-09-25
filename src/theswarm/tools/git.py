@@ -272,6 +272,32 @@ async def add_worktree(workspace: str, branch_name: str, *, resume: bool = False
     return path
 
 
+async def merge_main(workdir: str) -> list[str]:
+    """Merge the latest origin/main into the checked-out branch.
+
+    Returns the files left in conflict ([] when the merge went through, a
+    merge commit made). A sibling PR merged first leaves this one
+    unmergeable (#325 in cycle 9d3174f41829, two tasks side by side on the
+    same files): the Dev merges main into its branch here, then resolves
+    what git could not. A later `commit_all` concludes the merge.
+    """
+    await github_app.ensure_github_token()
+    await _run_git(*_auth_args(), "fetch", "origin", "main", cwd=workdir, check=False)
+    try:
+        await _run_git(*_identity_args(), "merge", "--no-edit", "origin/main", cwd=workdir)
+        log.info("Merged origin/main into %s cleanly", workdir)
+        return []
+    except RuntimeError:
+        conflicted = await _run_git(
+            "diff", "--name-only", "--diff-filter=U", cwd=workdir, check=False,
+        )
+        files = [line.strip() for line in conflicted.splitlines() if line.strip()]
+        if not files:
+            raise  # not a conflict: an ordinary failure, surfaced as such
+        log.info("Merging origin/main left %d file(s) in conflict: %s", len(files), files)
+        return files
+
+
 async def remove_worktree(path: str) -> None:
     """Retire a task worktree; its branch stays. A clone root is left alone."""
     root = workspace_root(path)

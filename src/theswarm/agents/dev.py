@@ -197,7 +197,7 @@ async def _changes_requested(github, issue_number: int) -> dict | None:
     """
     if github is None:
         return None
-    from theswarm.agents.techlead import CHANGES_MARKER
+    from theswarm.agents.techlead import CHANGES_MARKER, CONFLICT_MARKER
 
     try:
         comments = await github.get_issue_comments(issue_number)
@@ -209,9 +209,11 @@ async def _changes_requested(github, issue_number: int) -> dict | None:
     body = notes[-1]
     match = _CHANGES_PR_RE.search(body)
     return {
-        "text": body.replace(CHANGES_MARKER, "").strip(),
+        "text": body.replace(CHANGES_MARKER, "").replace(CONFLICT_MARKER, "").strip(),
         "pr_number": int(match.group(1)) if match else 0,
         "branch": match.group(2) if match else "",
+        # Approved but unmergeable: main moved past the branch.
+        "conflict": CONFLICT_MARKER in body,
     }
 
 
@@ -467,13 +469,39 @@ async def implement_task(state: AgentState) -> dict:
         else:
             await git_ops.create_branch(workspace, branch_name)
 
+        conflicts_section = ""
+        if resuming and note.get("conflict"):
+            # Approved, then overtaken by main. Merge it first: a clean merge
+            # needs nobody — the gates run and the push updates the PR; only
+            # what git could not reconcile goes to Claude.
+            conflicted = await git_ops.merge_main(workspace)
+            if not conflicted:
+                log.info("Task #%d: main merged cleanly into %s", task["number"], branch_name)
+                return {
+                    "result": "merged main into the branch",
+                    "tokens_used": 0,
+                    "cost_usd": 0.0,
+                    "branch": branch_name,
+                    "diff_stat": await git_ops.get_diff_stat(workspace),
+                    "workspace": workspace,
+                }
+            conflicts_section = (
+                "## Merge conflicts to resolve first\n\n"
+                "origin/main is merged into your branch; git could not reconcile "
+                "these files, which contain conflict markers (<<<<<<<, =======, "
+                ">>>>>>>):\n\n"
+                + "\n".join(f"- {path}" for path in conflicted)
+                + "\n\nResolve each one keeping the intent of both sides, remove "
+                "every marker, and make sure the tests still pass.\n\n"
+            )
+
         # Build the prompt
         context = state.get("context", "")
         prompt = DEV_TASK_PROMPT.format(
             task_title=task["title"],
             task_body=task["body"],
             context=context,
-            changes=_changes_section(note),
+            changes=conflicts_section + _changes_section(note),
             siblings=await _sibling_prs(github, task),
         )
 
