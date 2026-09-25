@@ -287,6 +287,24 @@ async def _open_pr_for_branch(github, branch: str) -> dict | None:
         return None
 
 
+_DEPENDS_ON_RE = re.compile(r"^Depends on:\s*(.+)$", re.MULTILINE)
+
+
+def depends_on(task: dict) -> list[int]:
+    """The issues a task waits for, as the TechLead wrote them on it."""
+    match = _DEPENDS_ON_RE.search(task.get("body") or "")
+    return [int(n) for n in re.findall(r"#(\d+)", match.group(1))] if match else []
+
+
+def _waiting_on(task: dict, open_numbers: set[int]) -> list[int]:
+    """The task's dependencies still open: not merged, not closed."""
+    return [n for n in depends_on(task) if n in open_numbers]
+
+
+async def _open_task_numbers(github) -> set[int]:
+    return {i["number"] for i in await github.get_issues(labels=["role:dev"]) if i.get("state") != "closed"}
+
+
 async def _mark_in_progress(github, task: dict) -> None:
     await asyncio.gather(
         github.add_labels(task["number"], ["status:in-progress"]),
@@ -349,6 +367,16 @@ async def _pick_targeted(
         and "status:review" not in _label_names(child)
         and child.get("number") not in excluded
     ]
+    # A task whose dependency is still open waits, whoever holds it: a
+    # sibling Dev that just claimed it, a PR in review, or nobody yet. Two
+    # sub-tasks of one story built side by side each wrote the other's code
+    # (#322/#323 in 9d3174f41829, and #325 never merged).
+    still_open = {c["number"] for c in candidates if c.get("state") != "closed"}
+    waiting = {c["number"]: _waiting_on(c, still_open) for c in mine}
+    for number, deps in waiting.items():
+        if deps:
+            log.info("Task #%d waits for %s", number, ", ".join(f"#{n}" for n in deps))
+    mine = [c for c in mine if not waiting[c["number"]]]
     # Least-tried first; among equals, ready before in-progress. The order
     # of those two keys matters: a task that failed here is requeued to
     # `ready`, and when its siblings sit in `in-progress` — left there by a
@@ -411,8 +439,13 @@ async def _pick_and_claim(state: AgentState, github) -> dict:
 
     # Look for tasks labeled for dev work
     taken = set(claimed or [])
+    open_numbers: set[int] | None = None
     for labels in [["role:dev", "status:ready"], ["status:ready"]]:
         issues = [i for i in await github.get_issues(labels=labels) if i.get("number") not in taken]
+        if any(depends_on(i) for i in issues):
+            if open_numbers is None:
+                open_numbers = await _open_task_numbers(github)
+            issues = [i for i in issues if not _waiting_on(i, open_numbers)]
         if issues:
             task = issues[0]
             if claimed is not None:

@@ -53,14 +53,26 @@ Break this user story into 2-4 technical tasks. Each task should be:
 Return a JSON array:
 [
     {{
+        "title": "Add the Resource model and schema",
+        "body": "Create ... in src/models/....\\n\\nAcceptance criteria:\\n- [ ] ...",
+        "labels": ["role:dev", "status:ready"],
+        "depends_on": []
+    }},
+    {{
         "title": "Implement POST /api/v1/resource endpoint",
         "body": "Create the endpoint in src/routers/....\\n\\nAcceptance criteria:\\n- [ ] ...",
-        "labels": ["role:dev", "status:ready"]
+        "labels": ["role:dev", "status:ready"],
+        "depends_on": [1]
     }}
 ]
 
 Rules:
 - Tasks should be ordered by dependency (implement models before endpoints)
+- `depends_on` lists the 1-based positions of EARLIER tasks in this array \
+that must be merged before this task can start: an endpoint over a new \
+schema depends on the schema task, a test task depends on the code it tests. \
+Two developers may build tasks without a dependency between them at the same \
+time, so leave it empty only when a task truly stands alone
 - Include a test-writing task if the story requires new tests
 - Keep task titles in imperative form
 - Return ONLY the JSON array, no markdown fences.
@@ -227,11 +239,17 @@ async def breakdown_stories(state: AgentState) -> dict:
             continue
 
         # Create sub-issues for each task
-        for task in tasks:
+        created: dict[int, int] = {}  # position in the breakdown -> issue number
+        for position, task in enumerate(tasks, start=1):
             title = task.get("title", "")
             body = task.get("body", "")
             labels = task.get("labels", ["role:dev", "status:ready"])
 
+            # What it waits for, as issue numbers: earlier positions only,
+            # so a dependency is always created (and picked) first.
+            waits_for = _dependency_numbers(task.get("depends_on"), position, created)
+            if waits_for:
+                body += "\n\nDepends on: " + ", ".join(f"#{n}" for n in waits_for)
             # Reference the parent issue
             body += f"\n\nParent: #{issue['number']}"
 
@@ -242,6 +260,7 @@ async def breakdown_stories(state: AgentState) -> dict:
                     labels=labels,
                 )
                 tasks_created += 1
+                created[position] = new_issue["number"]
                 log.info("TechLead: created task #%d: %s", new_issue["number"], title)
             except Exception as e:
                 log.error("TechLead: failed to create task: %s", e)
@@ -788,6 +807,20 @@ def _salvage_objects(text: str) -> list[dict]:
             elif depth < 0:
                 depth = 0
     return objects
+
+
+def _dependency_numbers(depends_on, position: int, created: dict[int, int]) -> list[int]:
+    """The issue numbers of the earlier tasks a task depends on, each once.
+
+    Its own position, later ones, unknown ones and tasks whose issue could
+    not be created are dropped: a dependency must exist before its task.
+    """
+    numbers: list[int] = []
+    for dep in depends_on or []:
+        if isinstance(dep, int) and 0 < dep < position and dep in created:
+            if created[dep] not in numbers:
+                numbers.append(created[dep])
+    return numbers
 
 
 def _tasks_from_structure(result) -> list[dict] | None:
