@@ -678,22 +678,24 @@ dépendance) ; l'ordre entre M1 et M2.
 
 ## 7. Repères dans le code
 
+*Mis à jour le 2026-09-25, après M7.*
+
 | Sujet | Où |
 |---|---|
-| Wrapper Claude (CLI + API) | `src/theswarm/tools/claude.py` — `ClaudeCLI.run`, `_run_cli`, `_run_api`, `_timeout_floor`, `ClaudeFatalError` |
-| Orchestration impérative | `src/theswarm/cycle.py` — `run_cycle`, `_run_phase`, `_announce`, `PHASE_TIMEOUTS`, `repo_lock` |
+| Wrapper Claude (SDK + API ; la CLI est retirée en M7) | `src/theswarm/tools/claude.py` — `ClaudeCLI.run`, `_sdk_with_recovery`, `_run_sdk`, `decide_tool_use`, `_run_api`, `_timeout_floor`, `ClaudeFatalError`, `SDKTimeoutError` |
+| Orchestration (graphe durable depuis M4) | `src/theswarm/cycle_graph.py` — les nœuds, `_run_phase`, `_dev_iter_parallel`, `run_cycle_graph` ; `src/theswarm/cycle.py` — `run_daily_cycle`, `repo_lock`, `cycle_slot` ; `src/theswarm/cycle_budgets.py` — `PHASE_TIMEOUTS` |
 | Graphes d'agents | `src/theswarm/agents/{po,techlead,dev,qa}.py` — `build_*_graph()` |
 | Schéma d'état | `src/theswarm/config.py` — `AgentState`, `CycleConfig`, `SELF_REPO` |
 | Garde du schéma | `tests/test_agent_state_schema.py` |
-| Bridge et phases | `src/theswarm/application/services/progress_bridge.py` — `ProgressBridge`, `PHASE_OWNER`, `record_phase` |
-| Resumer actuel | `src/theswarm/application/services/cycle_resumer.py` |
+| Bridge et phases | `src/theswarm/application/services/progress_bridge.py` — `ProgressBridge`, `PHASE_OWNER` (tiré de `domain/cycles/value_objects.CYCLE_NODE_ROLES`), `record_phase` |
+| Reprise | `src/theswarm/application/services/cycle_resumer.py` ; `presentation/web/server._launch_resume` (`resumed_as`, `auto-resume:1`) |
 | Tracker et timeout dur | `src/theswarm/api.py` |
 | Connexion SQLite partagée | `src/theswarm/infrastructure/persistence/sqlite_repos.py` — `init_db` |
 | Parsing de verdict | `src/theswarm/agents/techlead.py` — `_DECISION_RE`, `_FENCE_RE` ; `agents/dev.py` — `ALREADY_SATISFIED_RE` |
-| Git et worktrees | `src/theswarm/tools/git.py` — `resume_branch`, `commit_all` |
-| Harness | `.github/workflows/harness.yml`, `scripts/cycle_e2e.py`, `docs/harness-runs.jsonl` |
+| Git et worktrees | `src/theswarm/tools/git.py` — `add_worktree`, `remove_worktree`, `prune_worktrees`, `workspace_root`, `dev_parallelism`, `commit_all` |
+| Harness et évals | `.github/workflows/harness.yml`, `scripts/cycle_e2e.py`, `evals/<repo>.yaml`, `src/theswarm/evals.py`, `POST /api/evals/runs` (table `eval_runs`) |
 | Chaîne des secrets | `.github/actions/write-env/action.yml` → `.env` → `docker-compose.yml` |
-| Image et montages | `Dockerfile`, `docker-compose.yml` (`/home/debian/.claude` monté) |
+| Image et montages | `Dockerfile` (sans Node depuis M7), `docker-compose.yml` (`/home/debian/.claude` monté, volume `swarm-workspaces`) |
 | CI et chemins ignorés | `.github/workflows/ci.yml` — `paths-ignore` |
 | Dépendances externes | `docs/DEPENDENCIES.md` |
 
@@ -707,8 +709,8 @@ L'agent applique le défaut, écrit un handoff, continue.
 |---|---|
 | Seq n'accepte pas OTLP dans la version installée | Exporter les spans comme événements de log structurés ; proposer la montée de version |
 | Conteneur par cycle via le socket Docker | Non ; venv par workspace |
-| `SkillMCPManager` : brancher via `mcp_servers` ou supprimer | Supprimer en M7 |
-| Parallélisme Dev par défaut en prod | 1, jusqu'à trois cycles verts à 2 |
+| `SkillMCPManager` : brancher via `mcp_servers` ou supprimer | Supprimer en M7 s'il n'a aucune référence hors tests — il en a une (le registre V1 de `/api/features`), il est donc **gardé** (M7a, 2026-09-25) |
+| Parallélisme Dev par défaut en prod | 1, jusqu'à trois cycles verts à 2 (`SWARM_DEV_PARALLELISM` ; un premier cycle vert à 2 le 2026-09-25, `9d3174f41829`) |
 | Cadence d'usage de l'abonnement (harness + évals) | Une feature par jour ; la série complète à la main |
 | La protection de branche de `main` exige une PR mais exempte les admins : les écritures directes des agents et du harness passent avec un jeton admin (refusées à 14:37, acceptées à 15:33 le 2026-09-23) | Les runs d'évals passent par l'API quoi qu'il arrive. Rapport du jour, mémoire et historique des cycles attendent une décision : garder l'exemption des admins, exempter explicitement le bot, ou passer par PR |
 | Charger `project` dans `setting_sources` (hooks du repo cible) | **Non** (tranché en M1, 2026-09-23) : un `.claude/settings.json` du repo cible peut porter le même hook `Stop` qui a vidé les revues ; la doc du repo arrive par le contexte du prompt |
