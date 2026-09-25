@@ -149,9 +149,20 @@ TARGET_VENV_DIR = ".venv-swarm"
 TARGET_VENV_TIMEOUT_SECONDS = 120
 
 
+def venv_home(workspace: str) -> str:
+    """Where the target venv lives: the clone, even for a task worktree.
+
+    A worktree is a checkout of the same project; building a venv and
+    reinstalling for every task would cost a cold install each time (M5b).
+    """
+    from theswarm.tools.git import workspace_root
+
+    return workspace_root(workspace) if workspace else workspace
+
+
 def target_venv_python(workspace: str) -> str:
     """Path of the workspace's venv interpreter, whether or not it exists."""
-    return os.path.join(workspace, TARGET_VENV_DIR, "bin", "python")
+    return os.path.join(venv_home(workspace), TARGET_VENV_DIR, "bin", "python")
 
 
 def _target_venv_enabled() -> bool:
@@ -178,6 +189,7 @@ async def ensure_target_venv(workspace: str) -> str:
     """
     if not _target_venv_enabled() or not workspace or not os.path.isdir(workspace):
         return ""
+    workspace = venv_home(workspace)
     venv_python = target_venv_python(workspace)
     if os.path.isfile(venv_python):
         return venv_python

@@ -167,6 +167,126 @@ async def clone_repo(repo_url: str, dest: str) -> str:
     return dest
 
 
+# ── One worktree per Dev task (V2 runtime, M5b) ─────────────────────────
+#
+# The clone's own checkout stays on main; each task gets
+# `<clone>/.worktrees/<branch>` on its own branch, where Claude edits, the
+# gate tests, and the commit and push happen. Two tasks in one clone used to
+# reset and check out over each other (16f3b8af2cca vs 2878898cc504: two
+# commits, no PR). `.worktrees/` is in the clone's .git/info/exclude, which
+# every worktree shares, so no `git add -A` ever stages another task's tree.
+
+WORKTREES_DIR = ".worktrees"
+
+# Worktree bookkeeping (add, remove, prune) touches the clone's shared
+# admin files: one at a time per clone, per event loop.
+_worktree_locks: dict[tuple[int, str], asyncio.Lock] = {}
+
+
+def workspace_root(path: str) -> str:
+    """The clone a task worktree belongs to; any other path is its own root."""
+    marker = os.sep + WORKTREES_DIR + os.sep
+    return path.split(marker, 1)[0] if marker in path else path
+
+
+def worktree_path(workspace: str, branch_name: str) -> str:
+    """Where the worktree of `branch_name` lives under its clone."""
+    return os.path.join(workspace_root(workspace), WORKTREES_DIR, branch_name.replace("/", "--"))
+
+
+def _worktree_lock(root: str) -> asyncio.Lock:
+    key = (id(asyncio.get_running_loop()), root)
+    lock = _worktree_locks.get(key)
+    if lock is None:
+        lock = _worktree_locks[key] = asyncio.Lock()
+    return lock
+
+
+async def _drop_worktrees_of(root: str, branch_name: str, path: str) -> None:
+    """Remove whatever worktree holds `branch_name` or sits at `path`.
+
+    A crash, a timeout or a resumed cycle can leave one behind, and git
+    refuses a second checkout of a branch ("already checked out at ...").
+    """
+    listing = await _run_git("worktree", "list", "--porcelain", cwd=root, check=False)
+    held: list[str] = []
+    current = ""
+    for line in listing.splitlines():
+        if line.startswith("worktree "):
+            current = line[len("worktree "):].strip()
+        elif line.strip() == f"branch refs/heads/{branch_name}" and current != root:
+            held.append(current)
+    for stale in {*held, path}:
+        await _run_git("worktree", "remove", "--force", stale, cwd=root, check=False)
+        if os.path.isdir(stale) and stale != root and workspace_root(stale) == root:
+            shutil.rmtree(stale, ignore_errors=True)
+    await _run_git("worktree", "prune", cwd=root, check=False)
+
+
+async def add_worktree(workspace: str, branch_name: str, *, resume: bool = False) -> str:
+    """Give one task its own worktree on `branch_name`; return its path.
+
+    Fresh: the branch starts at main as just pulled, like `create_branch`.
+    Resume: at the remote branch a review sent back (#121), like
+    `resume_branch` -- and fresh when that branch is gone from origin.
+    """
+    root = workspace_root(workspace)
+    path = worktree_path(root, branch_name)
+    await github_app.ensure_github_token()
+    async with _worktree_lock(root):
+        await _drop_worktrees_of(root, branch_name, path)
+        start = "main"
+        if resume:
+            remote = await _run_git(
+                *_auth_args(), "ls-remote", "--heads", "origin", branch_name,
+                cwd=root, check=False,
+            )
+            if remote.strip():
+                await _run_git(*_auth_args(), "fetch", "origin", branch_name, cwd=root)
+                start = "FETCH_HEAD"
+            else:
+                log.warning("Branch %s is gone from origin -- starting fresh", branch_name)
+        if start == "main":
+            # The clone's own checkout is only ever main in this mode; a
+            # clone left on a task branch by the older in-place flow is put
+            # back first, or the pull would advance that branch instead.
+            await _run_git("reset", "--hard", cwd=root, check=False)
+            await _run_git("checkout", "main", cwd=root, check=False)
+            await _run_git(*_auth_args(), "pull", "--ff-only", cwd=root, check=False)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        await _run_git("worktree", "add", "-B", branch_name, path, start, cwd=root)
+    log.info("Worktree for %s at %s (from %s)", branch_name, path, start)
+    return path
+
+
+async def remove_worktree(path: str) -> None:
+    """Retire a task worktree; its branch stays. A clone root is left alone."""
+    root = workspace_root(path)
+    if root == path:
+        return
+    async with _worktree_lock(root):
+        await _run_git("worktree", "remove", "--force", path, cwd=root, check=False)
+        if os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+        await _run_git("worktree", "prune", cwd=root, check=False)
+    log.info("Removed worktree %s", path)
+
+
+async def prune_worktrees(workspace: str) -> int:
+    """Retire every task worktree of a clone -- the end of a dev loop.
+
+    Returns how many were removed. Branches stay; only the checkouts go.
+    """
+    root = workspace_root(workspace)
+    base = os.path.join(root, WORKTREES_DIR)
+    if not os.path.isdir(base):
+        return 0
+    names = sorted(os.listdir(base))
+    for name in names:
+        await remove_worktree(os.path.join(base, name))
+    return len(names)
+
+
 async def create_branch(workdir: str, branch_name: str, base: str = "main") -> None:
     """Create (or reset) a branch at the tip of base and check it out.
 

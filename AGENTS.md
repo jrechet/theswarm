@@ -481,7 +481,18 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   repositories share one bound**: `SWARM_MAX_CONCURRENT_CYCLES` (default
   1, `cycle.cycle_slot`), held with the repo lock by the API and the
   gateway; a second repo now queues like a second cycle on the same repo.
-  Worktree-per-task and parallel sub-tasks are M5b (not shipped).
+  **M5b, first half — one git worktree per Dev task**
+  (`tools/git.add_worktree`, `SWARM_DEV_WORKTREES`, on by default, off in
+  the suite whose Dev fakes mock `create_branch`): the Dev implements,
+  gates, commits and pushes in `<clone>/.worktrees/<branch>`, the clone
+  itself stays on main, and the worktree is retired once the PR is open
+  (the branch stays), on no change, on failure, and at `dev_loop_end` for
+  stragglers. A worktree uses its clone's `.venv-swarm` (`base.venv_home`,
+  and the Claude child's PATH) — one install per clone, not per task.
+  Worktree bookkeeping is serialised per clone. A retry of a task whose
+  worktree a crash left behind drops it first (git refuses a second
+  checkout of a branch). Parallel sub-tasks are the second half (not
+  shipped).
 - **V2 runtime M6 — the harness is an eval suite.** `evals/<target>.yaml`
   lists the canonical features (five on concert-tour-app); `theswarm.evals`
   picks the feature of the day (rotation by day of year), scores a run

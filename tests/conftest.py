@@ -33,6 +33,15 @@ def _no_target_venv_for_tests(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_task_worktrees_for_tests(monkeypatch):
+    """One worktree per Dev task (V2 M5b) needs a real clone; the Dev's
+    fakes mock create_branch/resume_branch. Tests of the worktree flow
+    re-enable it with ``monkeypatch.setenv("SWARM_DEV_WORKTREES", "1")``."""
+    if "SWARM_DEV_WORKTREES" not in os.environ:
+        monkeypatch.setenv("SWARM_DEV_WORKTREES", "0")
+
+
+@pytest.fixture(autouse=True)
 def _auth_open_for_tests(monkeypatch):
     """Keep the auth wall (issue #38) down for the suite.
 
