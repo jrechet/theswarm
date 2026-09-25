@@ -522,7 +522,7 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   building its own venv, three PRs, harness PASS, TheSwarm's venv
   untouched. Prod stays at 1 until the owner chooses otherwise.
 - **V2 runtime M6 — the harness is an eval suite.** `evals/<target>.yaml`
-  lists the canonical features (five on concert-tour-app); `theswarm.evals`
+  lists the canonical features (eleven on concert-tour-app since 2026-09-25: the first five were all built; `evals.exhausted` makes the harness warn when that happens again); `theswarm.evals`
   picks the feature of the day (rotation by day of year), scores a run
   (`passed` keeps its pre-M6 meaning — completed, a PR, nothing unbuilt —
   and the PR's CI, the review decisions, cost, duration, `within_cost`,

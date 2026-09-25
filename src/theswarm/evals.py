@@ -125,6 +125,17 @@ def next_feature(manifest: Manifest, runs: list[dict], day: date | None = None) 
     return manifest.features[start]
 
 
+def exhausted(manifest: Manifest, runs: list[dict]) -> bool:
+    """True when the target already has every feature of the manifest.
+
+    The rotation then runs a delivered feature, which scores
+    already_delivered and measures nothing new: the manifest needs new
+    features. The first five were all built by 2026-09-25.
+    """
+    delivered = delivered_features(runs)
+    return all(feature.id in delivered for feature in manifest.features)
+
+
 # ── Scoring ──────────────────────────────────────────────────────────
 
 # What a run says about the swarm. `already_delivered` measured nothing:

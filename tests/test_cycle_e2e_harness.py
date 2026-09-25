@@ -354,3 +354,23 @@ def test_the_scored_record_is_posted_to_the_api(monkeypatch):
 def test_a_refused_post_is_reported_not_raised(monkeypatch):
     monkeypatch.setattr(cycle_e2e, "_api", lambda path, payload=None: (503, {"error": "no database"}))
     assert cycle_e2e.post_run({"repo": "o/r"}) is False
+
+
+def test_an_exhausted_manifest_is_announced(tmp_path, monkeypatch, capsys):
+    """Every feature delivered: the run still goes (and scores
+    already_delivered), but the summary page says to add features."""
+    from theswarm import evals
+
+    manifest = evals.load_manifest(pathlib.Path("evals/concert-tour-app.yaml"))
+    monkeypatch.setattr(cycle_e2e, "KEY", "k")
+    monkeypatch.setattr(cycle_e2e, "past_runs", lambda repo, history: [
+        {"repo": repo, "feature": f.id, "passed": True, "outcome": "built"} for f in manifest.features
+    ])
+    monkeypatch.setattr(cycle_e2e, "run_one", lambda *a, **kw: (True, {}))
+    monkeypatch.setattr(cycle_e2e.sys, "argv", ["cycle_e2e.py", "--repo", "jrechet/concert-tour-app",
+                                                "--history", str(tmp_path / "runs.jsonl")])
+
+    assert cycle_e2e.main() == 0
+
+    out = capsys.readouterr().out
+    assert "::warning::every feature of evals/concert-tour-app.yaml is already on" in out

@@ -13,11 +13,24 @@ from theswarm.evals import Feature, Observed, feature_of_the_day, files_match, s
 MANIFEST = Path("evals/concert-tour-app.yaml")
 
 
-def test_the_shipped_manifest_loads_and_names_five_features():
+ORIGINAL_FIVE = ("remaining-tickets", "city-search", "chronological-order",
+                 "sold-out-badge", "upcoming-json")
+
+
+def _first_five() -> evals.Manifest:
+    """The manifest as it shipped with M6: the date-pinned rotation tests
+    below were written against five features, and the shipped file grows."""
+    shipped = evals.load_manifest(MANIFEST)
+    return evals.Manifest(repo=shipped.repo, features=shipped.features[:5])
+
+
+def test_the_shipped_manifest_loads_with_unique_features():
     manifest = evals.load_manifest(MANIFEST)
     assert manifest.repo == "jrechet/concert-tour-app"
-    assert len(manifest.features) == 5
-    assert len({f.id for f in manifest.features}) == 5
+    assert tuple(f.id for f in manifest.features[:5]) == ORIGINAL_FIVE
+    assert len(manifest.features) > 5  # fresh ones after the first five were built
+    assert len({f.id for f in manifest.features}) == len(manifest.features)
+    assert all(f.text and f.max_cost_usd > 0 for f in manifest.features)
     assert manifest.by_id("remaining-tickets").title == "Show the remaining ticket count on each concert card"
     assert evals.manifest_for("jrechet/concert-tour-app") is not None
     assert evals.manifest_for("nobody/nothing") is None
@@ -25,7 +38,8 @@ def test_the_shipped_manifest_loads_and_names_five_features():
 
 def test_rotation_visits_every_feature_and_is_stable_per_day():
     manifest = evals.load_manifest(MANIFEST)
-    seen = {feature_of_the_day(manifest, date(2026, 9, d)).id for d in range(1, 11)}
+    days = range(1, len(manifest.features) + 1)
+    seen = {feature_of_the_day(manifest, date(2026, 9, d)).id for d in days}
     assert seen == {f.id for f in manifest.features}
     assert feature_of_the_day(manifest, date(2026, 9, 23)) == feature_of_the_day(manifest, date(2026, 9, 23))
 
@@ -192,7 +206,7 @@ SEPT_23 = date(2026, 9, 23)  # day 266: city-search is the feature of the day
 
 def test_a_same_day_redispatch_skips_the_feature_just_built():
     """The fourth dispatch of 2026-09-23 asked for the city search again."""
-    manifest = evals.load_manifest(MANIFEST)
+    manifest = _first_five()
     assert feature_of_the_day(manifest, SEPT_23).id == "city-search"
     runs = [{"feature": "city-search", "passed": True, "outcome": "built"}]
 
@@ -200,14 +214,14 @@ def test_a_same_day_redispatch_skips_the_feature_just_built():
 
 
 def test_the_feature_of_the_day_runs_when_the_target_does_not_have_it():
-    manifest = evals.load_manifest(MANIFEST)
+    manifest = _first_five()
     runs = [{"feature": "chronological-order", "passed": True, "outcome": "built"}]
     assert evals.next_feature(manifest, runs, SEPT_23).id == "city-search"
     assert evals.next_feature(manifest, [], SEPT_23).id == "city-search"
 
 
 def test_already_delivered_and_old_passing_records_count_as_delivered():
-    manifest = evals.load_manifest(MANIFEST)
+    manifest = _first_five()
     runs = [
         {"feature": "city-search", "passed": True},  # before the outcome field
         {"feature": "chronological-order", "passed": False, "outcome": "already_delivered"},
@@ -224,6 +238,15 @@ def test_a_feature_that_failed_since_it_was_built_comes_back():
 
 
 def test_when_the_target_has_every_feature_the_feature_of_the_day_runs():
-    manifest = evals.load_manifest(MANIFEST)
+    manifest = _first_five()
     runs = [{"feature": f.id, "passed": True, "outcome": "built"} for f in manifest.features]
     assert evals.next_feature(manifest, runs, SEPT_23).id == "city-search"
+
+
+def test_a_manifest_is_exhausted_only_when_every_feature_is_delivered():
+    manifest = _first_five()
+    built = [{"feature": f.id, "passed": True, "outcome": "built"} for f in manifest.features]
+
+    assert evals.exhausted(manifest, built)
+    assert not evals.exhausted(manifest, built[:-1])
+    assert not evals.exhausted(manifest, [])
