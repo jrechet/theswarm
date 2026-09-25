@@ -582,7 +582,13 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   width 2 (cycle `9d3174f41829`, 2026-09-25, `docker service update
   --env-add`, then `--env-rm`): two worktrees five seconds apart, each
   building its own venv, three PRs, harness PASS, TheSwarm's venv
-  untouched. Prod stays at 1 until the owner chooses otherwise.
+  untouched. **Prod runs at 2 since 2026-09-25** (`docker-compose.yml`), the
+  plan's rule met: three cycles built green at width 2 — `9d3174f41829`,
+  `d7a0e052f1ad` (tour-summary, three PRs), `b0251cf1141f` (#323, its PR
+  #325 brought back from a conflict and merged) — and `ca002877ad71` ran
+  clean with nothing left to build. Since #227 width 2 only runs sub-tasks
+  that do not depend on each other; a chained breakdown runs in order.
+  `SWARM_DEV_PARALLELISM=1` in the compose file is the way back.
 - **V2 runtime M6 — the harness is an eval suite.** `evals/<target>.yaml`
   lists the canonical features (eleven on concert-tour-app since 2026-09-25: the first five were all built; `evals.exhausted` makes the harness warn when that happens again); `theswarm.evals`
   picks the feature of the day (rotation by day of year), scores a run
