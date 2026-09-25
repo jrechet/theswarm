@@ -571,6 +571,13 @@ meilleur ou pire.
 **Acceptation.** Le dashboard affiche la tendance ; une régression
 volontaire (par exemple `max_turns=1` sur l'implémentation, un jour) est
 détectée comme run raté puis annulée.
+*Acceptée le 2026-09-25* : `SWARM_SDK_MAX_TURNS_EDIT=1` posé sur le
+service (`docker service update --env-add`, #201), un run du harness :
+les deux tentatives de l'itération Dev s'arrêtent sur « Reached maximum
+number of turns (1) », le run `bd03e92eddbb` est enregistré raté (aucune
+PR, trois sous-tâches non construites) et la page du repo le compte dans
+« Reliability · last 11 harness runs » ; la variable est retirée aussitôt
+après (`--env-rm`). Le run quotidien suivant montre le retour au vert.
 
 **Pièges.** Un cycle d'éval est un vrai cycle : il tient le verrou du repo
 et consomme l'abonnement. Ne jamais l'exécuter sur `SELF_REPO` sans
@@ -613,6 +620,14 @@ déploiement.
 
 **Acceptation.** Suite verte, image plus petite, harness vert, `AGENTS.md`
 débarrassé des landmines devenues fausses (avec la date).
+*Porte franchie le 2026-09-25* : quatorze cycles de prod sur `sdk`
+depuis le 2026-09-23, aucun retour à `cli`. *Livré en deux temps* :
+**M7a** retire `infrastructure/llm` (vide) et la clé `llm` d'`AgentState` ;
+`SkillMCPManager` **reste** — le registre V1 de `/api/features` le cite
+(« Skill-Embedded MCPs »), donc il a une référence hors tests et la V1
+n'est pas touchée. Le repli `--- FILE:` reste aussi : aucun compteur ne
+prouve qu'il n'a jamais servi, et le backend `api` rend du texte. **M7b**
+retire le backend CLI et Node/npm de l'image.
 
 ### M8 — Déclencheurs GitHub natifs (produit)
 
