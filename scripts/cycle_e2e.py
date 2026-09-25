@@ -391,6 +391,7 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
         tests_unavailable=bool(cycle_result.get("tests_unavailable")),
         already_satisfied=satisfied,
         merged=tuple(merged),
+        qa=evals.qa_of(cycle_result.get("demo_report")),
     )
     result = {"repo": repo, **evals.score(feature, observed)}
     result["cycle_id"] = cycle_id

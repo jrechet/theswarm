@@ -46,6 +46,7 @@
       {%- endif %}
       {%- if evals.already_delivered %} · <span class="text-faint">{{ evals.already_delivered }} already delivered</span>{% endif %}
       {%- if evals.left_open %} · <span class="text-rust" data-testid="evals-left-open">{{ evals.left_open }} with PRs left open</span>{% endif %}
+      {%- if evals.qa_red %} · <span class="text-rust" data-testid="evals-qa-red">QA red on {{ evals.qa_red }}</span>{% endif %}
       {%- if evals.avg_cost_usd is not none %} · ${{ "%.2f" | format(evals.avg_cost_usd) }} avg{% endif %}
       {%- if evals.avg_duration_s %} · {{ (evals.avg_duration_s / 60) | round | int }} min avg{% endif %}
       {%- if evals.last and evals.last.regression %} · <span class="text-rust font-semibold">regression on the last run</span>{% endif %}
@@ -54,7 +55,7 @@
       {% for run in evals.runs %}
       {%- set delivered_before = run.outcome == 'already_delivered' %}
       <li class="w-3.5 h-3.5 rounded-sm {% if run.passed %}bg-moss{% elif delivered_before %}bg-faint{% else %}bg-rust{% endif %}{% if run.within_cost is false or run.within_time is false %} ring-2 ring-honey{% endif %}"
-          title="{{ run.feature or 'feature' }} — {{ 'built' if run.passed else ('already delivered' if delivered_before else 'failed') }}{% if run.cost_usd is defined %} · ${{ '%.2f' | format(run.cost_usd) }}{% endif %}{% if run.duration_s %} · {{ (run.duration_s / 60) | round | int }} min{% endif %}{% if run.ci and run.ci != 'none' %} · CI {{ run.ci }}{% endif %}{% if run.unmerged %} · not merged: {% for pr in run.unmerged %}#{{ pr }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}"></li>
+          title="{{ run.feature or 'feature' }} — {{ 'built' if run.passed else ('already delivered' if delivered_before else 'failed') }}{% if run.cost_usd is defined %} · ${{ '%.2f' | format(run.cost_usd) }}{% endif %}{% if run.duration_s %} · {{ (run.duration_s / 60) | round | int }} min{% endif %}{% if run.ci and run.ci != 'none' %} · CI {{ run.ci }}{% endif %}{% if run.unmerged %} · not merged: {% for pr in run.unmerged %}#{{ pr }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}{% if run.qa %}{% for gate, status in run.qa.items() if status == 'fail' %}{{ ' · QA ' if loop.first }}{{ gate }} {{ status }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}"></li>
       {% endfor %}
     </ol>
   </section>

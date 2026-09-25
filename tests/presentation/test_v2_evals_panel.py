@@ -123,3 +123,16 @@ async def test_a_built_run_with_a_pr_left_open_says_so(web, tmp_path, monkeypatc
 
     assert "1 with PRs left open" in html
     assert "not merged: #325" in html
+
+
+async def test_a_run_with_a_red_qa_gate_says_so(web, tmp_path, monkeypatch):
+    """Cycle 9d3174f41829's E2E run ended in 24 errors under a "built" run."""
+    _write(tmp_path, monkeypatch, [
+        {"repo": REPO, "passed": True, "outcome": "built", "backend": "sdk",
+         "prs": [1], "merged": [1], "unmerged": [], "qa": {"unit_tests": "pass", "e2e_tests": "fail"}},
+    ])
+
+    html = (await _page(web)).text
+
+    assert "QA red on 1" in html
+    assert "QA e2e_tests fail" in html
