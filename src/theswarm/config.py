@@ -79,6 +79,7 @@ class AgentState(TypedDict, total=False):
     reviews: list[dict]
     merged_prs: list[int]
     held_prs: list[int]  # approved, deliberately left unmerged (SELF_REPO)
+    conflicted_prs: list[int]  # approved, unmergeable: sent back for the Dev to merge main
     reviewed_prs: list[str]  # "number@head_sha" reviewed this cycle — once, unless the head moves
     skipped_prs: list[int]  # review call failed — left for the next pass, not marked reviewed
     # QA-specific

@@ -365,6 +365,15 @@ CHANGES_MARKER = "<!-- swarm:changes-requested -->"
 # Two rounds on the same task is a conversation; a third is a spin. After
 # the cap the task stays in review and says so, for a person to pick up.
 CHANGES_REQUESTED_CAP = 2
+# An approved PR that main has moved past (a sibling merged first, cycle
+# 9d3174f41829's #325): the note that sends it back carries this too, and
+# the Dev merges origin/main before anything else.
+CONFLICT_MARKER = "<!-- swarm:merge-conflict -->"
+CONFLICT_SUMMARY = (
+    "This PR was approved but conflicts with main: another change merged "
+    "first. Merge origin/main into this branch and resolve every conflict "
+    "keeping the intent of both sides; do not start over."
+)
 
 _TASK_IN_TITLE_RE = re.compile(r"\[#(\d+)\]")
 _CLOSES_RE = re.compile(r"\bCloses #(\d+)", re.IGNORECASE)
@@ -417,8 +426,13 @@ async def _publish_review_status(github, pr: dict, decision: str, summary: str) 
         log.warning("Could not publish the review status on PR #%s: %s", pr.get("number"), exc)
 
 
-async def _send_back_to_dev(github, pr: dict, summary: str, issues: list[dict]) -> bool:
-    """Hand a reviewed-down task back to the queue. True when it went back."""
+async def _send_back_to_dev(
+    github, pr: dict, summary: str, issues: list[dict], *, conflict: bool = False,
+) -> bool:
+    """Hand a reviewed-down task back to the queue. True when it went back.
+
+    ``conflict``: the PR was approved but cannot merge; the note carries
+    CONFLICT_MARKER so the Dev merges main first."""
     number = _task_of_pr(pr)
     if number is None:
         return False  # a PR nobody's task owns: the review on it is the whole story
@@ -436,7 +450,10 @@ async def _send_back_to_dev(github, pr: dict, summary: str, issues: list[dict]) 
         )
         log.info("Task #%d: %d rounds of changes — left for a person", number, rounds + 1)
         return False
-    await github.add_comment(number, _changes_comment(pr, summary, issues))
+    note = _changes_comment(pr, summary, issues)
+    if conflict:
+        note = CONFLICT_MARKER + "\n" + note
+    await github.add_comment(number, note)
     await github.add_labels(number, ["status:ready"])
     await github.remove_label(number, "status:review")
     log.info("Task #%d sent back to the Dev after REQUEST_CHANGES on PR #%d",
@@ -599,6 +616,7 @@ async def merge_approved_prs(state: AgentState) -> dict:
 
     merged = []
     rejected = []
+    conflicted = []
     for review in reviews:
         pr_number = review["pr_number"]
         decision = review.get("decision", "")
@@ -608,6 +626,7 @@ async def merge_approved_prs(state: AgentState) -> dict:
             rejected.append(pr_number)
             continue
 
+        open_pr: dict = {}
         try:
             # Get the PR's head branch before merging
             open_prs = await github.get_open_prs()
@@ -615,6 +634,7 @@ async def merge_approved_prs(state: AgentState) -> dict:
             for p in open_prs:
                 if p["number"] == pr_number:
                     head_branch = p.get("head")
+                    open_pr = p
                     break
 
             await github.merge_pr(pr_number, merge_method="squash")
@@ -626,18 +646,33 @@ async def merge_approved_prs(state: AgentState) -> dict:
                 await github.delete_branch(head_branch)
                 log.info("Deleted branch %s after merge", head_branch)
         except Exception as e:
-            log.error("Failed to merge PR #%d: %s", pr_number, e)
+            if "merge conflict" not in str(e).lower():
+                log.error("Failed to merge PR #%d: %s", pr_number, e)
+                continue
+            # Approved, but main moved past it. Retrying the merge every
+            # review pass changes nothing (#325 failed at 07:51 and again at
+            # 10:15); the task goes back to the Dev, who merges main.
+            log.warning("PR #%d conflicts with main — sending its task back to the Dev", pr_number)
+            pr = {"number": pr_number, "head": head_branch or "", **open_pr}
+            try:
+                if await _send_back_to_dev(github, pr, CONFLICT_SUMMARY, [], conflict=True):
+                    conflicted.append(pr_number)
+            except Exception:
+                log.exception("Could not send PR #%d back for its conflict", pr_number)
 
     summary = []
     if merged:
         summary.append(f"Merged: {merged}")
     if rejected:
         summary.append(f"Changes requested: {rejected}")
+    if conflicted:
+        summary.append(f"Conflicts sent back: {conflicted}")
 
     return {
         "result": " | ".join(summary) if summary else "No PRs to process",
         "merged_prs": merged,
         "held_prs": [],
+        "conflicted_prs": conflicted,
         "tokens_used": 0,
     }
 

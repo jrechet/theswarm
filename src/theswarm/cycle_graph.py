@@ -458,6 +458,10 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
             await rt.progress(
                 "TechLead", f"PR #{r['pr_number']}: changes requested — task back to the Dev",
             )
+    for number in tl_state.get("conflicted_prs", []):
+        await rt.progress(
+            "TechLead", f"PR #{number} conflicts with main — back to the Dev to merge it",
+        )
     for number in tl_state.get("skipped_prs", []):
         await rt.progress(
             "TechLead", f"Review of PR #{number} unavailable — left for the next pass",
