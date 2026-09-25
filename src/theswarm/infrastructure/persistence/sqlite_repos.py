@@ -344,6 +344,14 @@ class SQLiteCycleRepository:
             current = row[0]
             seen.add(current)
 
+    async def set_spend(self, cycle_id: str, cost_usd: float) -> None:
+        """Record what a cycle spent, never lowering what is already there."""
+        await self._db.execute(
+            "UPDATE cycles SET total_cost_usd = MAX(COALESCE(total_cost_usd, 0), ?) WHERE id = ?",
+            (float(cost_usd), cycle_id),
+        )
+        await self._db.commit()
+
     async def set_error(self, cycle_id: str, error: str) -> None:
         """Say why a cycle ended the way it did, on its row."""
         await self._db.execute(
