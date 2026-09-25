@@ -411,6 +411,35 @@ async def run_unit_tests(state: AgentState) -> dict:
     }
 
 
+# The lines of a pytest run that say *why*: the error detail under a test
+# (`E   ...`), a setup or collection error, and the short summary.
+_EXCERPT_LINE = re.compile(
+    r"^(E\s|ERROR\b|FAILED\b|_+ ERROR at |_+ ERROR collecting|"
+    r"\S*(Error|Exception): |fixture '.*' not found)"
+)
+
+
+def _failure_excerpt(output: str, *, max_lines: int = 14, max_chars: int = 1500) -> str:
+    """The few lines of a failed pytest run that explain it, in order.
+
+    Cycle 9d3174f41829's QA ended "0 passed, 0 failed, 24 errors" and
+    nothing kept the reason: the output lived in QA's state, and the
+    workspace was deleted with the cycle. This is what gets logged and put
+    in the demo report instead.
+    """
+    kept: list[str] = []
+    for raw in (output or "").splitlines():
+        line = raw.rstrip()
+        if not line or not _EXCERPT_LINE.search(line.strip()):
+            continue
+        if kept and kept[-1] == line:
+            continue
+        kept.append(line)
+        if len(kept) >= max_lines:
+            break
+    return "\n".join(kept)[:max_chars]
+
+
 async def run_e2e_tests(state: AgentState) -> dict:
     """Start the app, run Playwright E2E tests, then stop the app."""
     claude = state.get("claude")
@@ -520,6 +549,11 @@ async def run_e2e_tests(state: AgentState) -> dict:
         "e2e_counts": e2e_counts,
         "tokens_used": 0,
     }
+    if not e2e_passed and not demo_launch_error:
+        excerpt = _failure_excerpt(e2e_output)
+        if excerpt:
+            log.warning("QA E2E failure excerpt:\n%s", excerpt)
+            result["e2e_failure_excerpt"] = excerpt
     if demo_launch_error:
         result["demo_launch_error"] = demo_launch_error
     return result
@@ -1016,6 +1050,8 @@ async def generate_demo_report(state: AgentState) -> dict:
                 "passed": e2e_counts.get("passed", 0),
                 "failed": e2e_counts.get("failed", 0),
                 "status": "pass" if (e2e_all_pass and e2e_total > 0) else ("fail" if e2e_total > 0 else "not_run"),
+                # Why it failed, kept past the cycle: the workspace is not.
+                "failure_excerpt": state.get("e2e_failure_excerpt", ""),
                 "reason": demo_launch_error,
             },
             "security": {
