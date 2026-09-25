@@ -353,6 +353,7 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
 
     ci: dict[int, str] = {}
     files: list[str] = []
+    merged: list[int] = []
     for pr in new_prs:
         verdict = ci_verdict(_gh("pr", "checks", str(pr), "--repo", repo))
         ci[pr] = verdict
@@ -363,6 +364,8 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
         pr_state = _gh("pr", "view", str(pr), "--repo", repo,
                        "--json", "state", "--jq", ".state")
         print(f"    #{pr}: {pr_state.lower()}, CI {verdict}, {len(pr_files(repo, pr))} file(s)")
+        if pr_state.strip().upper() == "MERGED":
+            merged.append(pr)
 
     left = unfinished_children(repo, issue)
     record = cycle_record(cycle_id)
@@ -387,6 +390,7 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
         backend=str(cycle_result.get("backend") or ""),
         tests_unavailable=bool(cycle_result.get("tests_unavailable")),
         already_satisfied=satisfied,
+        merged=tuple(merged),
     )
     result = {"repo": repo, **evals.score(feature, observed)}
     result["cycle_id"] = cycle_id

@@ -108,3 +108,18 @@ async def test_a_window_of_already_delivered_runs_says_nothing_was_measured(web,
     assert response.status_code == 200
     assert "nothing measured" in response.text
     assert "% built" not in response.text
+
+
+async def test_a_built_run_with_a_pr_left_open_says_so(web, tmp_path, monkeypatch):
+    """Cycle 9d3174f41829 scored "built" with three PRs; #325 never merged."""
+    _write(tmp_path, monkeypatch, [
+        {"repo": REPO, "passed": True, "outcome": "built", "feature": "", "backend": "sdk",
+         "prs": [325, 326, 327], "merged": [326, 327], "unmerged": [325]},
+        {"repo": REPO, "passed": True, "outcome": "built", "feature": "", "backend": "sdk",
+         "prs": [336], "merged": [336], "unmerged": []},
+    ])
+
+    html = (await _page(web)).text
+
+    assert "1 with PRs left open" in html
+    assert "not merged: #325" in html
