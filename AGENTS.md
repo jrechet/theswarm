@@ -524,7 +524,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `scripts/cycle_e2e.py --repo X` with no feature runs the day's; `--all`
   the series (a manual dispatch, `all=true`); a typed `--feature` runs as
   before. A failed run posts to Mattermost when the workflow has the token
-  (`MATTERMOST_URL`/`MATTERMOST_BOT_TOKEN`). **The scored record is posted
+  (`MATTERMOST_URL`/`MATTERMOST_BOT_TOKEN`). **A deliberate regression**
+  is one env var away: `SWARM_SDK_MAX_TURNS_EDIT=1` (also `_READ`, `_TEXT`;
+  `tools/claude._max_turns`) caps the Dev's implementation at one turn —
+  the eval suite must read the day as failed runs and recover once it is
+  removed. **The scored record is posted
   to `POST /api/evals/runs`** (table `eval_runs`, migration v028) and the
   repo page reads the trend from there; the `docs/harness-runs.jsonl` line
   is still written, but it is not a delivery path to count on. On
