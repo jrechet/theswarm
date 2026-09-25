@@ -46,6 +46,7 @@ class CycleDTO:
     prs_merged: list[int]
     phases: list[PhaseDTO]
     resumed_as: str = ""
+    error: str = ""
 
     @property
     def duration_seconds(self) -> int | None:

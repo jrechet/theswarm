@@ -86,6 +86,9 @@ class Cycle:
     # The cycle that continued this one after a restart (its tracker id),
     # "" when none did (V2 runtime, M4; migration v029).
     resumed_as: str = ""
+    # Why it failed: the exception, or the restart that ended it and why it
+    # was not resumed (migration v030). "" for a cycle that did not fail.
+    error: str = ""
 
     @property
     def total_tokens(self) -> int:

@@ -119,6 +119,8 @@ class CyclePersistenceHandler:
                 status=CycleStatus.FAILED,
                 completed_at=event.occurred_at,
                 phases=tuple(phases),
+                # The tracker forgets it at the next restart; the row does not.
+                error=event.error,
             )
             await self._cycle_repo.save(cycle)
         except Exception:

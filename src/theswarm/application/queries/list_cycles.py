@@ -27,6 +27,8 @@ class ListCyclesQuery:
                 total_cost_usd=c.total_cost_usd,
                 prs_opened=list(c.prs_opened),
                 prs_merged=list(c.prs_merged),
+                resumed_as=getattr(c, "resumed_as", ""),
+                error=getattr(c, "error", ""),
                 phases=[
                     PhaseDTO(
                         phase=p.phase,

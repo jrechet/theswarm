@@ -517,10 +517,11 @@ def _cycle_dto_to_unified_json(c) -> dict:
         "prs_opened": list(c.prs_opened),
         "prs_merged": list(c.prs_merged),
         "phases": phases_out,
-        # The SQLite `Cycle`/`CycleDTO` carries neither field — only cycles
-        # started through the headless tracker (`CycleRecord`) have them.
+        # The SQLite `Cycle`/`CycleDTO` has no issue number — only cycles
+        # started through the headless tracker (`CycleRecord`) do. Its error
+        # is the row's (migration v030): the reason outlives the tracker.
         "issue_number": None,
-        "error": None,
+        "error": getattr(c, "error", "") or None,
         "result": {},
         # Set when a restart interrupted this cycle and the boot resumer
         # continued it under another id (V2 runtime, M4): follow it.
