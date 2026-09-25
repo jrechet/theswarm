@@ -450,7 +450,7 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
         return True, result
 
     if result["outcome"] == evals.OUTCOME_INTERRUPTED:
-        message = f"interrupted — {result['error']}; the deploy was measured, not the swarm"
+        message = f"interrupted — {result['error']}; nothing about the swarm was measured"
         print(f"\nNOT MEASURED — {message}")
         annotate("warning", f"{repo}"
                  + (f" [{feature.id}]" if feature else "") + f": {message}")

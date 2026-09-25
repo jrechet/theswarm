@@ -169,6 +169,12 @@ _NOT_MEASURED = frozenset({OUTCOME_ALREADY_DELIVERED, OUTCOME_INTERRUPTED})
 # How a cycle's error starts when a restart ended it
 # (`cycle_resumer.RESTART_REASON`, written by the boot reap).
 INTERRUPTED_PREFIX = "Interrupted by a restart"
+# ...or when the Claude subscription's session window ran out: the only
+# failure `ClaudeFatalError` stands for. The two runs of 2026-09-25 12:40
+# (csv-export, tour-summary) ended in eight seconds on it and scored as
+# failures of the swarm.
+QUOTA_PREFIX = "ClaudeFatalError:"
+NOT_MEASURED_ERRORS = (INTERRUPTED_PREFIX, QUOTA_PREFIX)
 
 
 @dataclass(frozen=True)
@@ -236,7 +242,7 @@ def score(feature: Feature | None, observed: Observed) -> dict[str, Any]:
         outcome = OUTCOME_BUILT
     elif finished and not observed.prs and observed.already_satisfied:
         outcome = OUTCOME_ALREADY_DELIVERED
-    elif observed.state != "completed" and observed.error.startswith(INTERRUPTED_PREFIX):
+    elif observed.state != "completed" and observed.error.startswith(NOT_MEASURED_ERRORS):
         outcome = OUTCOME_INTERRUPTED
     else:
         outcome = OUTCOME_FAILED

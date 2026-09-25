@@ -38,6 +38,15 @@ def test_the_prefix_is_the_resumer_s_own_words():
     assert cycle_resumer.RESTART_REASON.startswith(evals.INTERRUPTED_PREFIX)
 
 
+def test_an_exhausted_subscription_window_is_interrupted_too():
+    error = ("ClaudeFatalError: Claude subscription exhausted: SDK result success: "
+             "You've hit your session limit · resets 1:20pm (UTC)")
+
+    record = evals.score(None, _observed(prs=(), merged=(), error=error))
+
+    assert record["outcome"] == evals.OUTCOME_INTERRUPTED
+
+
 def test_any_other_failure_is_still_a_failure():
     record = evals.score(None, _observed(error="RuntimeError: phase qa timed out"))
 

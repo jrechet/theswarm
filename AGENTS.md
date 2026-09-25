@@ -206,7 +206,10 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   continuation's thread is its origin's, so the chain is counted once),
   and **the eval scores it `interrupted`**, not `failed`: never measured,
   never a regression, drawn dashed on the repo panel. It had merged all
-  three PRs and was scored a $0.00 failure.
+  three PRs and was scored a $0.00 failure. A run the **subscription
+  window** ended (`ClaudeFatalError`) is `interrupted` too: two harness
+  runs at 12:40 that day died in eight seconds on it. The prod container
+  shares that window with the owner's own Claude Code.
 - **A deploy waits for the running cycle** (`cd.yml`, "Wait for running
   cycles", up to 30 min, then deploys anyway). A merge made while prod was
   idle used to land four to ten minutes later in the middle of the next
