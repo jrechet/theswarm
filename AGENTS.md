@@ -301,6 +301,13 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   from the first iteration. The learned CLI timeout floor is also kept per
   workspace across cycles (`tools/claude._REPO_FLOORS`). Before both, every
   self-cycle spent its first sixteen minutes re-timing-out on #89 (#99).
+- **A story closes when its last sub-task merges**
+  (`techlead.close_finished_stories`, after both merge paths): a merged PR
+  closes its task, and nothing closed the story above it — #344 and a
+  dozen older stories sat open "in-progress" on concert-tour-app. **A
+  parent is matched exactly** (`tools/github.is_child_of`/`parent_of`):
+  "Parent: #32" is a substring of "Parent: #321", and on TheSwarm (issues
+  #1-#230) a Play on #22 took #220-#229's children.
 - **A sub-task waits for what it depends on** (`Breakdown.depends_on`,
   earlier positions only → "Depends on: #N" on the issue →
   `dev.depends_on`). Both pickers leave a task alone while a dependency is

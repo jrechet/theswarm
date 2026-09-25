@@ -668,6 +668,7 @@ async def merge_approved_prs(state: AgentState) -> dict:
     from theswarm.agents.ci_gate import SharedWait
 
     ci_wait = SharedWait()
+    merged_tasks: list[int] = []
     for review in reviews:
         pr_number = review["pr_number"]
         decision = review.get("decision", "")
@@ -701,6 +702,9 @@ async def merge_approved_prs(state: AgentState) -> dict:
             await github.merge_pr(pr_number, merge_method="squash")
             merged.append(pr_number)
             log.info("Merged PR #%d", pr_number)
+            task = _task_of_pr({"number": pr_number, **open_pr})
+            if task is not None:
+                merged_tasks.append(task)
 
             # Clean up the feature branch
             if head_branch:
@@ -721,9 +725,13 @@ async def merge_approved_prs(state: AgentState) -> dict:
             except Exception:
                 log.exception("Could not send PR #%d back for its conflict", pr_number)
 
+    closed_stories = await close_finished_stories(github, merged_tasks)
+
     summary = []
     if merged:
         summary.append(f"Merged: {merged}")
+    if closed_stories:
+        summary.append(f"Stories done: {closed_stories}")
     if rejected:
         summary.append(f"Changes requested: {rejected}")
     if conflicted:
@@ -740,8 +748,51 @@ async def merge_approved_prs(state: AgentState) -> dict:
         "conflicted_prs": conflicted,
         "ci_red_prs": ci_red,
         "ci_pending_prs": ci_pending,
+        "closed_stories": closed_stories,
         "tokens_used": 0,
     }
+
+
+async def close_finished_stories(github, merged_tasks: list[int]) -> list[int]:
+    """Close each story whose sub-tasks are all done. Returns those closed.
+
+    A merged PR closes its task ("Closes #N"), and nothing closed the story
+    above it: #344 (csv-export, three PRs merged) and a dozen older stories
+    sat open "in-progress" on concert-tour-app. A task whose PR merged this
+    pass counts as done even before GitHub closes it, a moment later. Best
+    effort: a failure here never fails the merge that came before it.
+    """
+    if not merged_tasks:
+        return []
+    from theswarm.tools.github import is_child_of, parent_of
+
+    closed: list[int] = []
+    try:
+        parents = set()
+        for number in merged_tasks:
+            task = await github.get_issue(number)
+            parent = parent_of((task or {}).get("body"))
+            if parent is not None:
+                parents.add(parent)
+        if not parents:
+            return []
+        children = await github.get_issues(labels=["role:dev"], state="all")
+        done = set(merged_tasks)
+        for parent in sorted(parents):
+            mine = [c for c in children if is_child_of(c.get("body"), parent)]
+            if not mine or any(c.get("state") != "closed" and c["number"] not in done for c in mine):
+                continue
+            story = await github.get_issue(parent)
+            if story is None or story.get("state") == "closed":
+                continue
+            listed = ", ".join(f"#{c['number']}" for c in sorted(mine, key=lambda c: c["number"]))
+            await github.close_issue(parent, comment=f"Every sub-task is done ({listed}): closing the story.")
+            await github.remove_label(parent, "status:in-progress")
+            log.info("Story #%d closed: its sub-tasks %s are done", parent, listed)
+            closed.append(parent)
+    except Exception:  # noqa: BLE001 — tidying never undoes a merge
+        log.exception("Closing finished stories failed (merges stand)")
+    return closed
 
 
 async def _ci_gate_before_merge(

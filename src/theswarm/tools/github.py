@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Any
@@ -31,6 +32,23 @@ class GitHubAccessError(RuntimeError):
         super().__init__(f"GitHub access to '{repo}' failed: {reason}")
         self.repo = repo
         self.reason = reason
+
+
+# "Parent: #N" as the TechLead writes it on a sub-task. The number must end
+# where the digits end: "Parent: #32" is a substring of "Parent: #321", and
+# on TheSwarm (issues #1-#230) a Play on #22 took #220-#229's children.
+_PARENT_LINE = re.compile(r"Parent:\s*#(\d+)(?!\d)")
+
+
+def parent_of(body: str | None) -> int | None:
+    """The story a sub-task belongs to, None when its body names none."""
+    match = _PARENT_LINE.search(body or "")
+    return int(match.group(1)) if match else None
+
+
+def is_child_of(body: str | None, parent: int) -> bool:
+    """True when the body's "Parent: #N" is exactly `parent`."""
+    return any(int(n) == int(parent) for n in _PARENT_LINE.findall(body or ""))
 
 
 async def verify_access(repo: str) -> None:
