@@ -34,6 +34,7 @@ class ReportGenerator:
         agent_learnings: tuple[str, ...] = (),
         screenshots: tuple[dict, ...] | list[dict] = (),
         held_prs: tuple[int, ...] = (),
+        qa_gates: dict | None = None,
     ) -> DemoReport:
         """Create a report from a cycle.
 
@@ -51,9 +52,14 @@ class ReportGenerator:
 
         ``held_prs``: PRs TechLead approved but left for a human to merge
         (SELF_REPO) — reported separately from ``prs_merged``.
+
+        ``qa_gates``: QA's `demo_report["quality_gates"]` (unit, E2E,
+        security, coverage). The report is the one record of a cycle that
+        outlives the container; without these it said only "the cycle
+        completed" (1418b48f3180, 2026-09-26: coverage 96.8%, an E2E failure).
         """
         summary = self._build_summary(cycle, held_prs)
-        gates = self._build_quality_gates(cycle)
+        gates = self._build_quality_gates(cycle) + _qa_quality_gates(qa_gates)
 
         artifacts: list[Artifact] = []
         seen_paths: set[str] = set()
@@ -140,3 +146,44 @@ class ReportGenerator:
                 ))
 
         return tuple(gates)
+
+
+_QA_STATUS = {
+    "pass": QualityStatus.PASS,
+    "fail": QualityStatus.FAIL,
+    "warn": QualityStatus.WARN,
+    "not_run": QualityStatus.SKIP,
+}
+
+
+def _qa_quality_gates(qa_gates: dict | None) -> tuple[QualityGate, ...]:
+    """QA's gates as report gates, in QA's order; odd entries are skipped."""
+    gates = []
+    for name, gate in (qa_gates or {}).items():
+        if not isinstance(gate, dict):
+            continue
+        status = _QA_STATUS.get(str(gate.get("status", "")), QualityStatus.WARN)
+        value = gate.get("percent") if name == "coverage" else None
+        gates.append(QualityGate(
+            name=name, status=status, detail=_qa_gate_detail(name, gate, status),
+            value=float(value) if isinstance(value, (int, float)) else None,
+        ))
+    return tuple(gates)
+
+
+def _qa_gate_detail(name: str, gate: dict, status: QualityStatus) -> str:
+    if status == QualityStatus.SKIP:
+        reason = gate.get("reason") or ""
+        return f"not run: {reason}" if reason else "not run"
+    if name == "security":
+        return f"{gate.get('semgrep_high', 0)} HIGH findings"
+    if name == "coverage":
+        return f"{gate.get('percent', 0)}% (threshold {gate.get('threshold', 70)}%)"
+    if "passed" not in gate:
+        return str(gate.get("reason") or "")
+    detail = f"{gate.get('passed', 0)} passed, {gate.get('failed', 0)} failed"
+    if gate.get("failure_excerpt"):
+        detail += " — " + str(gate["failure_excerpt"])
+    if gate.get("repaired_from"):
+        detail += f" (file repaired once: {gate['repaired_from']})"
+    return detail
