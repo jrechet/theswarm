@@ -675,7 +675,15 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   TechLead's verdict is a commit status** `theswarm/review` on the PR's
   head (success / failure; a PAT can set statuses where a Check needs an
   App), best effort. `/r/{owner}/{name}/memory` renders
-  `AGENT_MEMORY.jsonl` by category, linked from the repo page.
+  `AGENT_MEMORY.jsonl` by category, linked from the repo page. **Both
+  doors answer 202 first and work after** (`webhooks._after_answering`,
+  a background task; `drain_background` for tests): GitHub gives a
+  delivery ten seconds, and the first live label (hook 686683585 on
+  concert-tour-app, 2026-09-27 19:50) started its cycle in a second and
+  then took fifteen taking the label off with a fresh client — GitHub
+  recorded the delivery as failed although the cycle ran. The door went
+  live that day: secret set, hook created, smoke test 200/401, label →
+  cycle 01475dd2c4d5 on #329.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.
