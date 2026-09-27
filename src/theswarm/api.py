@@ -206,13 +206,15 @@ async def _emit_demo_ready(
         thumb_rel_preview = ""
         demo_dict = result.get("demo_report") or {}
         screenshots: list[dict] = []
+        videos: list[dict] = []
         if isinstance(demo_dict, dict):
             thumb_rel_preview = demo_dict.get("thumbnail_path", "") or ""
             screenshots = demo_dict.get("screenshots") or []
+            videos = demo_dict.get("videos") or []
 
         report = ReportGenerator().generate(
             cycle, thumbnail_rel_path=thumb_rel_preview,
-            screenshots=screenshots, held_prs=held,
+            screenshots=screenshots, held_prs=held, videos=videos,
             qa_gates=demo_dict.get("quality_gates") if isinstance(demo_dict, dict) else None,
         )
 
