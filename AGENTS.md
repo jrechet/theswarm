@@ -217,7 +217,10 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `claude_quota_resets_at` (a warning, never a 503 — the process is
   fine), and the harness reads that first and starts nothing: on
   2026-09-27 it had created its story issue and a cycle that died in
-  51 s (62f353165e62).
+  51 s (62f353165e62). **The wall outlives a deploy** (table
+  `quota_wall`, v031, primed at boot by `quota_wall.prime`): four
+  deploys followed that wall the same morning, and each new container
+  read `claude: ok` until a call ran into it again.
 - **A deploy waits for the running cycle** (`cd.yml`, "Wait for running
   cycles", up to 30 min, then deploys anyway). A merge made while prod was
   idle used to land four to ten minutes later in the middle of the next

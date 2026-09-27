@@ -13,6 +13,7 @@ harness starts nothing.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from datetime import datetime, timedelta, timezone
@@ -29,6 +30,12 @@ _FORMATS = ("%b %d, %I:%M%p", "%b %d, %I%p", "%I:%M%p", "%I%p")
 
 _until: datetime | None = None
 _reason: str = ""
+
+# The store that outlives the process (`SQLiteQuotaWallRepository`), primed
+# at boot; a raised wall is written in the background, best effort, like the
+# CLI timeout floors — a deploy used to forget the wall.
+_STORE: object | None = None
+_WRITES: set[asyncio.Task] = set()
 
 
 def _now(now: datetime | None) -> datetime:
@@ -62,6 +69,49 @@ def reset_time_of(message: str, now: datetime | None = None) -> datetime | None:
     return None
 
 
+async def prime(store: object) -> None:
+    """Restore a wall still standing from the store, and keep it for writes."""
+    global _STORE, _until, _reason
+    _STORE = store
+    try:
+        stored = await store.load()
+    except Exception as exc:  # noqa: BLE001 — a missing table is not worth a boot failure
+        log.warning("Could not load the Claude quota wall: %s", exc)
+        return
+    if stored is None:
+        return
+    until, reason = stored
+    if until > datetime.now(timezone.utc) and (_until is None or until > _until):
+        _until, _reason = until, reason
+        log.info("Claude subscription window still closed until %s (from the store)",
+                 until.isoformat(timespec="minutes"))
+
+
+def _persist(until: datetime, message: str) -> None:
+    store = _STORE
+    if store is None:
+        return
+
+    async def _write() -> None:
+        try:
+            await store.save(until, message)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Could not persist the Claude quota wall: %s", exc)
+
+    try:
+        task = asyncio.get_running_loop().create_task(_write())
+    except RuntimeError:
+        return  # no loop (a sync caller): the in-process wall still holds
+    _WRITES.add(task)
+    task.add_done_callback(_WRITES.discard)
+
+
+async def drain_writes() -> None:
+    """Await the pending store writes — for tests and a clean shutdown."""
+    while _WRITES:
+        await asyncio.gather(*tuple(_WRITES), return_exceptions=True)
+
+
 def raise_wall(message: str, now: datetime | None = None) -> datetime:
     """Remember that the window is closed; returns when it reopens.
 
@@ -75,6 +125,7 @@ def raise_wall(message: str, now: datetime | None = None) -> datetime:
         _until, _reason = until, message
         log.warning("Claude subscription window closed until %s — no call is spent before then: %s",
                     until.isoformat(timespec="minutes"), message)
+        _persist(until, message)
     return _until
 
 
@@ -92,5 +143,5 @@ def reason() -> str:
 
 
 def clear() -> None:
-    global _until, _reason
-    _until, _reason = None, ""
+    global _until, _reason, _STORE
+    _until, _reason, _STORE = None, "", None

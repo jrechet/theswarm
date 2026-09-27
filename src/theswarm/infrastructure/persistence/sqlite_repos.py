@@ -116,6 +116,9 @@ from theswarm.infrastructure.persistence.migrations.v029_cycle_resumed_as import
 from theswarm.infrastructure.persistence.migrations.v030_cycle_error import (
     ALTERS as MIGRATION_V030_ALTERS,
 )
+from theswarm.infrastructure.persistence.migrations.v031_quota_wall import (
+    SQL as MIGRATION_V031,
+)
 
 log = logging.getLogger(__name__)
 
@@ -164,6 +167,7 @@ async def init_db(db_path: str = _DEFAULT_DB) -> aiosqlite.Connection:
     await db.executescript(MIGRATION_V026)
     await _ensure_cycles_columns(db)
     await db.executescript(MIGRATION_V028)
+    await db.executescript(MIGRATION_V031)
     await db.commit()
     return db
 

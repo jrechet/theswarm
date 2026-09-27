@@ -565,6 +565,13 @@ async def start_server(
 
     await prime_repo_floors(SQLiteTimeoutFloorRepository(conn))
 
+    # The closed subscription window, if a call ran into it before the last
+    # deploy: /health says so and the harness starts nothing.
+    from theswarm.infrastructure.persistence.quota_wall_repo import SQLiteQuotaWallRepository
+    from theswarm.tools import quota_wall
+
+    await quota_wall.prime(SQLiteQuotaWallRepository(conn))
+
     project_repo = SQLiteProjectRepository(conn)
     cycle_repo = SQLiteCycleRepository(conn)
     activity_repo = SQLiteActivityRepository(conn)
