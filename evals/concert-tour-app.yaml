@@ -86,3 +86,45 @@ features:
     expected_paths: ["**/*.py"]
     max_cost_usd: 8
     max_duration_s: 3600
+  - id: price-range
+    text: |-
+      Filter the concerts by ticket price
+      GET /api/v1/concerts accepts min_price and max_price (inclusive); a concert without a price is excluded when either is given, and min_price above max_price is a 422.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: occupancy
+    text: |-
+      Show how full a concert is
+      GET /api/v1/concerts/{id}/occupancy returns tickets sold, the venue's capacity and the percentage sold (null when the capacity is unknown); 404 for an unknown concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: country-stats
+    text: |-
+      Count the concerts per country
+      GET /api/v1/stats/countries returns each country with its number of concerts, most concerts first; cancelled concerts are not counted.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: tour-revenue
+    text: |-
+      Report a tour's ticket revenue
+      GET /api/v1/tours/{id}/revenue returns the sum of ticket price times tickets sold over the tour's concerts, cancelled ones excluded, and the number of concerts it counted; 404 for an unknown tour.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: next-concert
+    text: |-
+      Tell a fan when the next concert is
+      GET /api/v1/concerts/next returns the soonest concert from now on that is not cancelled, with its venue and city; 404 when there is none.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: tour-status-filter
+    text: |-
+      List the tours by status
+      GET /api/v1/tours accepts status (planned, active, completed) and returns only the tours with that status; an unknown status is a 422.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
