@@ -209,7 +209,15 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   three PRs and was scored a $0.00 failure. A run the **subscription
   window** ended (`ClaudeFatalError`) is `interrupted` too: two harness
   runs at 12:40 that day died in eight seconds on it. The prod container
-  shares that window with the owner's own Claude Code.
+  shares that window with the owner's own Claude Code. **The wall is
+  remembered** (`tools/quota_wall`, per process): a call that runs into
+  it records the reset time the message names ("resets Sep 29, 4am
+  (UTC)"; 30 min when it names none), every later call refuses without
+  being spent until then, `/health` reports `claude: quota_wall` and
+  `claude_quota_resets_at` (a warning, never a 503 — the process is
+  fine), and the harness reads that first and starts nothing: on
+  2026-09-27 it had created its story issue and a cycle that died in
+  51 s (62f353165e62).
 - **A deploy waits for the running cycle** (`cd.yml`, "Wait for running
   cycles", up to 30 min, then deploys anyway). A merge made while prod was
   idle used to land four to ten minutes later in the middle of the next
