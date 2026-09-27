@@ -102,6 +102,27 @@ Prod: <https://bots.jrec.fr/swarm> — logs: <https://logs.jrec.fr> (Seq).
 Done means: merged on `main`, deploy landed, behavior re-verified on prod
 (trigger a real cycle and read the phase timeline).
 
+## CI/CD disponibles
+
+Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
+`https://forge.jrec.fr/jrechet/theswarm` (suiveur).
+
+- **GitHub Actions** (`.github/workflows/`) : `ci.yml` (tests + smoke E2E sur
+  `ubuntu-latest`, dépôt public donc jamais de runner self-hosted pour la CI de
+  PR), `cd.yml` (build GHCR + déploiement, job `deploy` sur
+  `[self-hosted, jre-server]`) et `harness.yml` (sonde E2E planifiée). Seul
+  GitHub déploie. Suivi d'un run : `gh run list --branch <branche>`,
+  `gh run view <id> --log-failed`.
+- **Forge** : `.github/workflows/mirror-to-forge.yml` recopie chaque branche et
+  tag sur la forge (secret `FORGE_TOKEN`, posé par le propriétaire). La forge
+  n'exécute que `.forgejo/workflows/ci.yml` (tests puis smoke E2E, enchaînés,
+  sur `[self-hosted, jre-server]`) : jamais de déploiement, jamais le harness.
+  Ne pas y ajouter d'action propre à GitHub. Suivi :
+  `ssh jrec.fr '~/dev/server-app/forgejo/forge-tool.sh runs theswarm'`.
+- **Un seul endroit déploie** : GitHub, tant qu'il reste la référence. Une
+  modification de la CI se fait dans les deux fichiers (`ci.yml` des deux
+  côtés), mêmes commandes.
+
 ## Operational landmines (learned in production)
 
 - One aiosqlite connection is shared by every repo; aiosqlite serializes per

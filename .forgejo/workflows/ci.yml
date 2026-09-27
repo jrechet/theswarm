@@ -1,0 +1,77 @@
+# CI de la forge forge.jrec.fr (Forgejo Actions). Pendant de .github/workflows/ci.yml :
+# memes commandes uv/pytest, mais SANS deploiement (cd.yml reste sur GitHub, seule
+# plateforme qui deploie) et sans le harness planifie (harness.yml).
+# La presence de ce dossier fait ignorer .github/workflows/ par Forgejo.
+# Les deux jobs s enchainent au lieu de tourner en parallele : le serveur (disques
+# mecaniques) heberge aussi la prod et les runners GitHub.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/daily-plans/**'
+      - 'docs/daily-reports/**'
+      - 'docs/cycle-history.jsonl'
+      - 'docs/harness-runs.jsonl'
+      - 'AGENT_MEMORY.jsonl'
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  tests:
+    runs-on: [self-hosted, jre-server]
+    # 9-12 min sur un runner GitHub ; plus large ici (disques lents, caches froids).
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: 'latest'
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: uv sync --dev
+      - name: Verify package imports
+        run: |
+          uv run python -c "import theswarm"
+          uv run python -c "import theswarm_common"
+      - name: Run tests with coverage
+        run: uv run pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --ignore=tests/e2e -p no:playwright
+
+  e2e-smoke:
+    name: E2E smoke walk
+    needs: tests
+    runs-on: [self-hosted, jre-server]
+    # Image Playwright de la meme version que uv.lock : Chromium et ses dependances
+    # systeme sont deja la, pas d apt-get (tres lent sur ces disques) a chaque job.
+    container: mcr.microsoft.com/playwright/python:v1.58.0-noble
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: 'latest'
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: uv sync --dev
+      - name: Install Playwright browsers
+        run: uv run playwright install chromium
+      - name: Run dashboard route smoke walk
+        run: |
+          uv run pytest tests/e2e/test_dashboard_e2e.py::TestRouteSmokeWalk \
+            -v --tb=short --browser chromium
