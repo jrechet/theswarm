@@ -1055,6 +1055,16 @@ class ClaudeCLI:
         call: the caller skips the step (invariant I6), never the CLI or
         the API — forced means forced.
         """
+        from theswarm.tools import quota_wall
+
+        until = quota_wall.wall_until()
+        if until is not None:
+            # A wall with a clock on it, raised by an earlier call: nothing
+            # is spent against it before the clock says so.
+            raise ClaudeFatalError(
+                f"Claude subscription exhausted until {until.isoformat(timespec='minutes')}"
+                f" — no call made: {quota_wall.reason()}"
+            )
         try:
             return await self._run_sdk(
                 prompt, workdir=workdir, timeout=timeout, permission_mode=permission_mode,
@@ -1065,6 +1075,7 @@ class ClaudeCLI:
 
         quota = _quota_exhausted(first)
         if quota is not None:
+            quota_wall.raise_wall(quota)
             raise ClaudeFatalError(f"Claude subscription exhausted: {quota}")
 
         if isinstance(first, _SDKTimeout):
@@ -1083,6 +1094,7 @@ class ClaudeCLI:
             except _CLIUnavailable as again:
                 quota = _quota_exhausted(again)
                 if quota is not None:
+                    quota_wall.raise_wall(quota)
                     raise ClaudeFatalError(f"Claude subscription exhausted: {quota}")
                 raise SDKTimeoutError(f"Claude SDK failed twice: {again}") from again
 

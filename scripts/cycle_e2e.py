@@ -135,6 +135,17 @@ def wait_for_health(budget_s: int = HEALTH_WAIT_SECONDS, *, api=None, sleep=time
         sleep(10)
 
 
+def quota_wall_until(*, api=None) -> str:
+    """When the swarm's Claude subscription window reopens, "" while it is open.
+
+    `/health` reports it once a call has run into the wall; a run started
+    against it creates its issue, starts a cycle and dies in under a minute
+    (62f353165e62, 2026-09-27).
+    """
+    status, body = (api or _api)("/health")
+    return str(body.get("claude_quota_resets_at") or "") if status == 200 else ""
+
+
 def start_cycle(repo: str, issue: int) -> str:
     if not wait_for_health():
         sys.exit(f"FAIL start: {BASE}/health never answered 200 in {HEALTH_WAIT_SECONDS}s")
@@ -371,6 +382,13 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
           + (f"  [{feature.id}]" if feature else ""))
     if not wait_for_health():
         sys.exit(f"FAIL start: {BASE}/health never answered 200 in {HEALTH_WAIT_SECONDS}s")
+    wall = quota_wall_until()
+    if wall:
+        message = (f"the Claude subscription window is closed until {wall}; "
+                   "no issue created, no cycle started, nothing measured")
+        print(f"\nNOT MEASURED — {message}")
+        annotate("warning", f"{repo}" + (f" [{feature.id}]" if feature else "") + f": {message}")
+        return True, {}
     seen = prs_before(repo)
     issue = create_issue(repo, feature_text)
     cycle_id = start_cycle(repo, issue)
