@@ -481,6 +481,15 @@ _EXCERPT_LINE = re.compile(
 )
 
 
+# The whole E2E run, for the excerpt: `run_tests` keeps 5000 characters by
+# default, and the daily run of 2026-09-26 (1418b48f3180) kept the summary's
+# FAILED line and none of the `E   …` lines that said why.
+E2E_OUTPUT_TAIL_CHARS = 200_000
+# One assertion dump (a whole JSON body in `E +  where …`) must not eat the
+# excerpt: each kept line is cut here.
+_EXCERPT_LINE_CHARS = 300
+
+
 def _failure_excerpt(output: str, *, max_lines: int = 14, max_chars: int = 1500) -> str:
     """The few lines of a failed pytest run that explain it, in order.
 
@@ -494,6 +503,8 @@ def _failure_excerpt(output: str, *, max_lines: int = 14, max_chars: int = 1500)
         line = raw.rstrip()
         if not line or not _EXCERPT_LINE.search(line.strip()):
             continue
+        if len(line) > _EXCERPT_LINE_CHARS:
+            line = line[:_EXCERPT_LINE_CHARS] + "…"
         if kept and kept[-1] == line:
             continue
         kept.append(line)
@@ -519,7 +530,8 @@ async def _pytest_e2e(claude, workspace: str, python: str, test_file: str) -> tu
     target's CI, not here.
     """
     result = await claude.run_tests(
-        workspace, [python, "-m", "pytest", test_file, "-v", "--tb=short"], timeout=120,
+        workspace, [python, "-m", "pytest", test_file, "-v", "--tb=short"],
+        timeout=120, tail_chars=E2E_OUTPUT_TAIL_CHARS,
     )
     return result["output"], result["passed"]
 
