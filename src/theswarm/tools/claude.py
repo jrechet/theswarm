@@ -1217,8 +1217,14 @@ class ClaudeCLI:
         command: list[str],
         *,
         timeout: int = 300,
+        tail_chars: int = 5000,
     ) -> dict:
-        """Run a shell test command and return pass/fail + output."""
+        """Run a shell test command and return pass/fail + output.
+
+        The output is its last `tail_chars` characters: enough for a prompt,
+        not always for the reason a run failed (QA's E2E excerpt asks for
+        more, 2026-09-26).
+        """
         log.info("Running tests in %s: %s", workdir, " ".join(command))
 
         proc = await asyncio.create_subprocess_exec(
@@ -1237,6 +1243,6 @@ class ClaudeCLI:
         output = stdout.decode(errors="replace")
         return {
             "passed": proc.returncode == 0,
-            "output": output[-5000:],
+            "output": output[-tail_chars:],
             "exit_code": proc.returncode,
         }
