@@ -630,6 +630,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   another lacks that run's line — which is also why two runs' appends
   conflicted in the publish step until `.gitattributes` gave the file
   `merge=union`.
+  **A story whose cycle never reached the breakdown is closed by the
+  harness** (`close_dead_story`, the cycle named in the comment): three
+  sat open on concert-tour-app after the subscription window ran out
+  (#351, #352, #378), with no sub-task and nothing built. The harness
+  matches `Parent: #N` exactly, like the server since #229.
 - **V2 runtime M8 — the GitHub-native doors.** The webhook route
   (`/webhooks/github`, outside the auth wall) is installed **only** when
   `SWARM_WEBHOOK_SECRET` is set (server.py; the repository webhook on

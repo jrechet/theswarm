@@ -29,6 +29,7 @@ import fnmatch
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import time
@@ -76,6 +77,15 @@ def create_issue(repo: str, feature: str) -> int:
     return number
 
 
+# "Parent: #N" as the TechLead writes it; the number ends where the digits
+# end, or "Parent: #37" is inside "Parent: #378" (the server's #229).
+_PARENT_RE = re.compile(r"Parent:\s*#(\d+)(?!\d)")
+
+
+def _child_of(body: str | None, parent: int) -> bool:
+    return any(int(n) == parent for n in _PARENT_RE.findall(body or ""))
+
+
 def unfinished_children(repo: str, parent: int) -> list[int]:
     """Sub-tasks of `parent` still open and not in review.
 
@@ -86,10 +96,9 @@ def unfinished_children(repo: str, parent: int) -> list[int]:
     raw = _gh("issue", "list", "--repo", repo, "--state", "open",
               "--limit", "60", "--json", "number,body,labels")
     open_issues = json.loads(raw or "[]")
-    marker = f"Parent: #{parent}"
     return sorted(
         i["number"] for i in open_issues
-        if marker in (i.get("body") or "")
+        if _child_of(i.get("body"), parent)
         and "status:review" not in {l["name"] for l in i.get("labels", [])}
     )
 
@@ -101,11 +110,22 @@ def closed_children(repo: str, parent: int) -> list[int]:
     feature already delivered."""
     raw = _gh("issue", "list", "--repo", repo, "--state", "closed",
               "--limit", "60", "--json", "number,body")
-    marker = f"Parent: #{parent}"
     return sorted(
         i["number"] for i in json.loads(raw or "[]")
-        if marker in (i.get("body") or "")
+        if _child_of(i.get("body"), parent)
     )
+
+
+def close_dead_story(repo: str, issue: int, cycle_id: str, why: str) -> None:
+    """Close the story a cycle never broke down: nothing was built, no
+    sub-task exists, and the feature is asked for again on a fresh issue.
+    Three such stories sat open on concert-tour-app after the subscription
+    window ran out (#351, #352, #378)."""
+    _gh("issue", "close", str(issue), "--repo", repo, "--reason", "not planned",
+        "--comment", (f"Closing: cycle {cycle_id} ended before the breakdown ({why[:200]}); "
+                      "nothing was built and no sub-task exists. The harness will ask for "
+                      "this feature again on a fresh issue."))
+    print(f"  issue #{issue} closed — the cycle ended before the breakdown")
 
 
 def prs_before(repo: str) -> set[int]:
@@ -400,13 +420,16 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
     record = cycle_record(cycle_id)
     cycle_result = record.get("result") or {}
     satisfied = tuple(int(n) for n in cycle_result.get("already_satisfied") or ())
+    closed = closed_children(repo, issue) if not new_prs else []
     if not new_prs:
-        unexplained = sorted(set(closed_children(repo, issue)) - set(satisfied))
+        unexplained = sorted(set(closed) - set(satisfied))
         if unexplained:
             print(f"  closed, not built: {', '.join(f'#{n}' for n in unexplained)}")
             left = sorted(set(left) | set(unexplained))
     if left:
         print(f"  unfinished : {', '.join(f'#{n}' for n in left)}")
+    if state != "completed" and not new_prs and not left and not closed:
+        close_dead_story(repo, issue, cycle_id, str(record.get("error") or f"cycle {state}"))
     observed = evals.Observed(
         state=state,
         prs=tuple(new_prs),
