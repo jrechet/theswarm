@@ -362,8 +362,16 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   demo server and read nothing of each other, so QA spends the longer of
   the two. `SWARM_QA_CAPTURE_CONCURRENCY` (default 2: two demo servers and
   two browsers in a 2 GB container) — set it to 1 on a heavy target, or
-  when a cycle's QA dies of memory. The per-story captures read
-  `story_preview_urls`, which nothing sets yet: they are no-ops.
+  when a cycle's QA dies of memory. **The demo shows the feature**
+  (`agents/qa_feature_pages.py`, 2026-09-27): the GET routes the cycle's
+  PRs add, or whose body a diff touches, with the router's prefix and
+  `{params}` filled with 1, join both walks after the declared pages; the
+  walk's screenshot of such a page (label `feature_pr_<n>_…`) is that
+  PR's story capture, and the stored report lists a story per delivered
+  task with it (`ReportGenerator.stories_of`) — before, every demo showed
+  the dashboard and the homepage whatever was built, and no report ever
+  carried a story or the video. The before/after machinery
+  (`story_preview_urls`) still waits for preview URLs nothing sets.
 - **The GitHub circuit breaker ignores 4xx** (`tools/github._is_client_error`):
   a 422 "cannot review your own pull request" is a fact about the request,
   not an outage. Four of them opened the breaker and blocked the memory save

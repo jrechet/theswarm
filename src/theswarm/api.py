@@ -215,6 +215,7 @@ async def _emit_demo_ready(
         report = ReportGenerator().generate(
             cycle, thumbnail_rel_path=thumb_rel_preview,
             screenshots=screenshots, held_prs=held, videos=videos,
+            stories=ReportGenerator.stories_of(demo_dict) if isinstance(demo_dict, dict) else (),
             qa_gates=demo_dict.get("quality_gates") if isinstance(demo_dict, dict) else None,
         )
 
