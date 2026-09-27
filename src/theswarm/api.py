@@ -213,6 +213,7 @@ async def _emit_demo_ready(
         report = ReportGenerator().generate(
             cycle, thumbnail_rel_path=thumb_rel_preview,
             screenshots=screenshots, held_prs=held,
+            qa_gates=demo_dict.get("quality_gates") if isinstance(demo_dict, dict) else None,
         )
 
         if report_repo is not None:
