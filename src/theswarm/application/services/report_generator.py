@@ -35,6 +35,7 @@ class ReportGenerator:
         screenshots: tuple[dict, ...] | list[dict] = (),
         held_prs: tuple[int, ...] = (),
         qa_gates: dict | None = None,
+        videos: tuple[dict, ...] | list[dict] = (),
     ) -> DemoReport:
         """Create a report from a cycle.
 
@@ -52,6 +53,12 @@ class ReportGenerator:
 
         ``held_prs``: PRs TechLead approved but left for a human to merge
         (SELF_REPO) — reported separately from ``prs_merged``.
+
+        ``videos``: QA's `demo_report["videos"]` (each ``type``/``label``/
+        ``path``/``size_bytes``), attached as VIDEO artifacts after the
+        thumbnail and the screenshots — the repo card and the player read
+        the first one. No report carried one before 2026-09-27: the video
+        was recorded every cycle and never shown.
 
         ``qa_gates``: QA's `demo_report["quality_gates"]` (unit, E2E,
         security, coverage). The report is the one record of a cycle that
@@ -88,6 +95,19 @@ class ReportGenerator:
                 path=path,
                 mime_type=mime,
                 size_bytes=shot.get("size_bytes", 0),
+            ))
+
+        for video in videos:
+            path = video.get("path", "") if isinstance(video, dict) else ""
+            if not path or path in seen_paths:
+                continue
+            seen_paths.add(path)
+            artifacts.append(Artifact(
+                type=ArtifactType.VIDEO,
+                label=video.get("label", "demo_recording"),
+                path=path,
+                mime_type=video.get("mime_type") or "video/webm",
+                size_bytes=video.get("size_bytes", 0),
             ))
 
         return DemoReport(
