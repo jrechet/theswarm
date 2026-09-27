@@ -33,8 +33,9 @@ env:
 jobs:
   tests:
     runs-on: [self-hosted, jre-server]
-    # 9-12 min sur un runner GitHub ; plus large ici (disques lents, caches froids).
-    timeout-minutes: 60
+    # 9-12 min sur un runner GitHub ; bien plus large ici : disques lents, caches froids,
+    # et un serveur charge par d autres CI a fait depasser 60 min (run 3, 27/09/2026).
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
