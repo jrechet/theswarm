@@ -33,6 +33,11 @@ def _no_api_fallback(monkeypatch):
     "exit 1: You've hit your session limit · resets 9:50am (UTC)",
     "exit 1: usage limit reached",
     "CLI reported error: quota exceeded",
+    # The 7-day window, as the SDK reported it on harness cycle 62f353165e62
+    # (2026-09-27): unrecognised, the run scored a failed regression.
+    "SDK result success: You've hit your weekly limit · resets Sep 29, 4am (UTC)",
+    # Whatever the next plan calls its window.
+    "SDK result success: You've hit your monthly limit · resets Oct 1, 4am (UTC)",
 ])
 def test_quota_messages_are_recognised(message):
     assert _quota_exhausted(_CLIUnavailable(message)) == message
@@ -77,6 +82,27 @@ async def test_the_reset_time_survives_into_the_message():
     with patch.object(cli, "_run_sdk", side_effect=out_of_quota):
         with pytest.raises(ClaudeFatalError, match="resets 9:50am"):
             await cli.run("hi")
+
+
+async def test_the_weekly_limit_is_fatal_too():
+    """Cycle 62f353165e62 (2026-09-27) hit the 7-day window: the wrapper raised a
+    plain RuntimeError, the cycle failed in 51 s and the eval called it a
+    regression of the swarm. It is the same wall with a longer clock."""
+    cli = ClaudeCLI(model="haiku")
+    attempts = 0
+
+    async def out_of_quota(prompt, **_kw):
+        nonlocal attempts
+        attempts += 1
+        raise _CLIUnavailable(
+            "SDK result success: You've hit your weekly limit · resets Sep 29, 4am (UTC)",
+        )
+
+    with patch.object(cli, "_run_sdk", side_effect=out_of_quota):
+        with pytest.raises(ClaudeFatalError, match="weekly limit · resets Sep 29"):
+            await cli.run("hi")
+
+    assert attempts == 1
 
 
 async def test_a_timeout_still_gets_its_retry():
