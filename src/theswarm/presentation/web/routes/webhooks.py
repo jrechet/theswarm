@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import logging
 import time
 
@@ -51,14 +53,20 @@ async def github_webhook(request: Request) -> Response:
     payload = await request.json()
     event = handler.parse_event(event_type, payload)
 
-    # V2 M8 — the GitHub-native doors, for the owner only
+    # V2 M8 — the GitHub-native doors, for the owner only. GitHub gives a
+    # webhook ten seconds; the work (a cycle to start, a label to take off
+    # with a fresh client, a note to write) took fifteen on 2026-09-27 and
+    # the delivery was recorded as failed although the cycle ran. Answer
+    # first, work after.
     if handler.is_go_label(event):
-        await _handle_go_label(request, event)
-        return Response(content="ok", status_code=200)
+        _after_answering(request, _handle_go_label(request, event),
+                         f"{event.label} on {event.repo_full_name}#{event.issue_number}")
+        return Response(content="accepted", status_code=202)
     instruction = handler.swarm_instruction(event)
     if instruction is not None:
-        await _handle_instruction(request, event, instruction)
-        return Response(content="ok", status_code=200)
+        _after_answering(request, _handle_instruction(request, event, instruction),
+                         f"instruction on {event.repo_full_name}#{event.issue_number}")
+        return Response(content="accepted", status_code=202)
 
     # Sprint F P1 — /swarm implement on an issue comment
     if handler.is_implement_command(event):
@@ -93,6 +101,29 @@ async def github_webhook(request: Request) -> Response:
                     break
 
     return Response(content="ok", status_code=200)
+
+
+def _after_answering(request, work, what: str) -> None:
+    """Run a door's work once GitHub has its answer, and keep the task so a
+    test (or a shutdown) can wait for it."""
+    tasks: set[asyncio.Task] = request.app.state.__dict__.setdefault("webhook_tasks", set())
+    task = asyncio.create_task(_guarded(work, what))
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+
+
+async def _guarded(work, what: str) -> None:
+    try:
+        await work
+    except Exception:  # noqa: BLE001 — the delivery is answered; the failure is ours to read
+        log.exception("Webhook: %s failed after the answer", what)
+
+
+async def drain_background(app) -> None:
+    """Await the doors' pending work — for tests and a clean shutdown."""
+    tasks = getattr(app.state, "webhook_tasks", None) or set()
+    while tasks:
+        await asyncio.gather(*tuple(tasks), return_exceptions=True)
 
 
 def _owner_only(request, event) -> bool:

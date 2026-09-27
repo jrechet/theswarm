@@ -138,8 +138,9 @@ async def test_the_go_label_starts_a_targeted_cycle_and_is_removed(web):
     with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle", started), \
          patch("theswarm.tools.github.GitHubClient", return_value=gh):
         response = await client.post("/webhooks/github", content=body, headers=headers)
+        await webhooks_mod.drain_background(app)  # the door answers first, works after
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     started.assert_awaited_once()
     args = started.await_args.args
     assert args[1:4] == ("jrechet", "concert-tour-app", 41)
@@ -152,7 +153,8 @@ async def test_a_label_from_someone_else_starts_nothing(web):
     body, headers = _signed(_labeled(sender="stranger"), "issues")
     with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle", started):
         response = await client.post("/webhooks/github", content=body, headers=headers)
-    assert response.status_code == 200
+        await webhooks_mod.drain_background(app)
+    assert response.status_code == 202
     started.assert_not_awaited()
 
 
@@ -175,6 +177,7 @@ async def test_two_labels_in_a_minute_are_one_cycle(web):
          patch("theswarm.tools.github.GitHubClient", return_value=gh):
         await client.post("/webhooks/github", content=body, headers=headers)
         await client.post("/webhooks/github", content=body, headers=headers)
+        await webhooks_mod.drain_background(app)
     assert started.await_count == 1
 
 
@@ -195,8 +198,9 @@ async def test_an_instruction_on_a_pr_goes_to_the_dev_as_a_changes_note(web):
     with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle", started), \
          patch("theswarm.tools.github.GitHubClient", return_value=gh):
         response = await client.post("/webhooks/github", content=body, headers=headers)
+        await webhooks_mod.drain_background(app)
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     note = gh.add_comment.await_args.args
     assert note[0] == 5
     assert CHANGES_MARKER in note[1]
@@ -218,6 +222,7 @@ async def test_an_instruction_on_a_pr_without_a_task_is_answered_not_run(web):
     with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle", started), \
          patch("theswarm.tools.github.GitHubClient", return_value=gh):
         await client.post("/webhooks/github", content=body, headers=headers)
+        await webhooks_mod.drain_background(app)
     started.assert_not_awaited()
     assert "can't tell which task" in gh.create_pr_comment.await_args.args[1]
 
