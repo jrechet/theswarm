@@ -910,7 +910,7 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
     base_url = f"http://127.0.0.1:{port}"
 
     try:
-        pages_to_capture = _pages_to_capture(workspace)
+        pages_to_capture = _pages_to_capture(workspace, state.get("feature_pages") or [])
 
         for path, label in pages_to_capture:
             url = f"{base_url}{path}"
@@ -1077,7 +1077,7 @@ async def record_demo_video(state: AgentState) -> dict:
         page = recorder._recording_page
 
         # Walk through the app pages
-        pages_to_visit = _pages_to_capture(workspace)
+        pages_to_visit = _pages_to_capture(workspace, state.get("feature_pages") or [])
 
         for path, _label in pages_to_visit:
             url = f"{base_url}{path}"
@@ -1182,6 +1182,32 @@ async def record_story_video(state: AgentState) -> dict:
     return {"story_videos": story_videos, "tokens_used": 0}
 
 
+async def _saved_artifacts(state: AgentState, today: str) -> list[dict]:
+    """Write the walk's screenshots and videos to the artifact store; one
+    dict (type, label, path, size_bytes) per artifact saved."""
+    all_artifacts = list(state.get("demo_artifacts", [])) + list(state.get("video_artifacts", []))
+    if not all_artifacts:
+        return []
+    from theswarm.infrastructure.recording.artifact_store import LocalArtifactStore
+    from theswarm.domain.cycles.value_objects import CycleId
+
+    store = LocalArtifactStore()
+    cycle_id = CycleId(today.replace("-", ""))
+    saved: list[dict] = []
+    for artifact, data in all_artifacts:
+        try:
+            rel_path = await store.save(cycle_id, artifact, data)
+            saved.append({
+                "type": artifact.type.value,
+                "label": artifact.label,
+                "path": rel_path,
+                "size_bytes": len(data),
+            })
+        except Exception as e:
+            log.warning("QA: failed to save artifact '%s': %s", artifact.label, e)
+    return saved
+
+
 async def generate_demo_report(state: AgentState) -> dict:
     """Build the structured demo report from test results and issue stats."""
     today = datetime.now().strftime("%Y-%m-%d")
@@ -1272,28 +1298,7 @@ async def generate_demo_report(state: AgentState) -> dict:
     }
 
     # Attach demo artifact paths to the report
-    demo_artifacts = state.get("demo_artifacts", [])
-    video_artifacts = state.get("video_artifacts", [])
-    all_artifacts = demo_artifacts + video_artifacts
-
-    artifact_paths: list[dict] = []
-    if all_artifacts:
-        from theswarm.infrastructure.recording.artifact_store import LocalArtifactStore
-        from theswarm.domain.cycles.value_objects import CycleId
-
-        store = LocalArtifactStore()
-        cycle_id = CycleId(today.replace("-", ""))
-        for artifact, data in all_artifacts:
-            try:
-                rel_path = await store.save(cycle_id, artifact, data)
-                artifact_paths.append({
-                    "type": artifact.type.value,
-                    "label": artifact.label,
-                    "path": rel_path,
-                    "size_bytes": len(data),
-                })
-            except Exception as e:
-                log.warning("QA: failed to save artifact '%s': %s", artifact.label, e)
+    artifact_paths = await _saved_artifacts(state, today)
 
     screenshot_paths = [a for a in artifact_paths if a["type"] == "screenshot"]
     video_paths = [a for a in artifact_paths if a["type"] == "video"]
@@ -1334,7 +1339,16 @@ async def generate_demo_report(state: AgentState) -> dict:
                 "after": await _save_group(bucket.get("after", [])),
             }
 
+    # The walk's own screenshot of a feature page is that PR's story capture:
+    # the before/after machinery above waits for preview URLs nothing sets.
+    from theswarm.agents.qa_feature_pages import pr_of_label
+
+    for shot in screenshot_paths:
+        pr_number = pr_of_label(shot.get("label", ""))
+        if pr_number is not None:
+            story_screenshots.setdefault(pr_number, {"before": [], "after": []})["after"].append(shot)
     demo_report["story_screenshots"] = story_screenshots
+    demo_report["feature_pages"] = list(state.get("feature_pages") or [])
 
     # F3 — persist per-story walkthrough videos and surface paths per PR.
     story_videos: dict = state.get("story_videos", {}) or {}
@@ -1483,6 +1497,11 @@ async def run_captures(state: AgentState) -> dict:
     the other finish (no demo server is left orphaned), then the error
     surfaces as it did from the sequential nodes.
     """
+    # The feature's own pages, read off the cycle's PRs, join both walks:
+    # the demo used to show the declared pages whatever was built.
+    feature_pages = await _feature_pages_of(state)
+    state = {**state, "feature_pages": feature_pages}
+
     async def screenshots_lane() -> dict:
         shots = await capture_demo_screenshots(state)
         return _merge_captures(shots, await capture_before_after_per_story({**state, **shots}))
@@ -1492,12 +1511,29 @@ async def run_captures(state: AgentState) -> dict:
         return _merge_captures(stories, await record_demo_video({**state, **stories}))
 
     if _capture_concurrency() < 2:
-        return _merge_captures(await screenshots_lane(), await video_lane())
-    lanes = await asyncio.gather(screenshots_lane(), video_lane(), return_exceptions=True)
-    for lane in lanes:
-        if isinstance(lane, BaseException):
-            raise lane
-    return _merge_captures(*lanes)
+        merged = _merge_captures(await screenshots_lane(), await video_lane())
+    else:
+        lanes = await asyncio.gather(screenshots_lane(), video_lane(), return_exceptions=True)
+        for lane in lanes:
+            if isinstance(lane, BaseException):
+                raise lane
+        merged = _merge_captures(*lanes)
+    return {**merged, "feature_pages": feature_pages}
+
+
+async def _feature_pages_of(state: AgentState) -> list[tuple[str, str]]:
+    """The pages the cycle's PRs touched, or none when there are no PRs to read."""
+    prs = [p for p in (state.get("prs") or []) if isinstance(p, dict)]
+    github = state.get("github")
+    if not prs or github is None:
+        return []
+    from theswarm.agents import qa_feature_pages
+
+    try:
+        return await qa_feature_pages.feature_pages(github, prs)
+    except Exception as exc:  # noqa: BLE001 — a page is a courtesy, never a failed demo
+        log.warning("QA: could not read the feature's pages off its PRs: %s", exc)
+        return []
 
 
 # ── Graph ───────────────────────────────────────────────────────────────
@@ -1745,10 +1781,17 @@ def _guessed_pages(workspace: str) -> list[tuple[str, str]]:
     return pages
 
 
-def _pages_to_capture(workspace: str) -> list[tuple[str, str]]:
-    """Pages for the screenshot pass and the video walk: declared, or guessed."""
+def _pages_to_capture(workspace: str, extra: list[tuple[str, str]] | tuple = ()) -> list[tuple[str, str]]:
+    """Pages for the screenshot pass and the video walk: declared, or guessed,
+    then the feature's own pages (`qa_feature_pages`), each path once."""
     declared = _demo_pages(workspace)
-    return declared if declared is not None else _guessed_pages(workspace)
+    pages = list(declared if declared is not None else _guessed_pages(workspace))
+    seen = {path for path, _ in pages}
+    for path, label in extra or ():
+        if path not in seen:
+            seen.add(path)
+            pages.append((path, label))
+    return pages
 
 
 async def _page_status(url: str) -> int | None:

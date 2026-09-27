@@ -568,7 +568,13 @@ async def qa(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     try:
         qa_state = await _run_phase(
             rt, "qa", "QA",
-            _invoke_agent(_cycle().build_qa_graph(), {**rt.base_state, "phase": Phase.DEMO.value}),
+            _invoke_agent(_cycle().build_qa_graph(), {
+                **rt.base_state, "phase": Phase.DEMO.value,
+                # What the cycle delivered: QA reads the feature's pages off
+                # its PRs and the demo walks them.
+                "prs": [p for p in state.get("prs", []) if isinstance(p, dict)],
+                "merged_prs": list(state.get("merged_prs", [])),
+            }),
         )
     except PhaseTimeout:
         qa_state = {}

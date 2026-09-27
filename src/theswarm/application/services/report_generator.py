@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from theswarm.domain.cycles.entities import Cycle
 from theswarm.domain.cycles.value_objects import CycleStatus, PhaseStatus
-from theswarm.domain.reporting.entities import DemoReport, ReportSummary
+from theswarm.domain.reporting.entities import DemoReport, ReportSummary, StoryReport
 from theswarm.domain.reporting.value_objects import (
     Artifact,
     ArtifactType,
@@ -36,6 +36,7 @@ class ReportGenerator:
         held_prs: tuple[int, ...] = (),
         qa_gates: dict | None = None,
         videos: tuple[dict, ...] | list[dict] = (),
+        stories: tuple[StoryReport, ...] | list[StoryReport] = (),
     ) -> DemoReport:
         """Create a report from a cycle.
 
@@ -112,6 +113,7 @@ class ReportGenerator:
 
         return DemoReport(
             id=f"rpt-{uuid.uuid4().hex[:8]}",
+            stories=tuple(stories),
             cycle_id=cycle.id,
             project_id=cycle.project_id,
             created_at=datetime.now(timezone.utc),
@@ -132,6 +134,39 @@ class ReportGenerator:
             prs_held=len(held_prs),
             cost_usd=cycle.total_cost_usd,
         )
+
+    @staticmethod
+    def stories_of(demo: dict) -> tuple[StoryReport, ...]:
+        """The cycle's stories from QA's report: one per delivered task
+        (`user_stories`), with the walk's captures of its feature pages
+        (`story_screenshots`) and its walkthrough (`story_videos`).
+
+        No stored report carried a story before 2026-09-27: the player's
+        per-story slides and the card's per-story captures read an empty
+        tuple every time.
+        """
+        if not isinstance(demo, dict):
+            return ()
+        shots = demo.get("story_screenshots") or {}
+        videos = demo.get("story_videos") or {}
+        stories: list[StoryReport] = []
+        for entry in demo.get("user_stories") or []:
+            if not isinstance(entry, dict):
+                continue
+            pr = entry.get("pr")
+            bucket = _by_pr(shots, pr) or {}
+            video = _by_pr(videos, pr)
+            stories.append(StoryReport(
+                ticket_id=str(entry.get("task") or pr or "?"),
+                title=entry.get("title") or "",
+                status=_STORY_STATUS.get(str(entry.get("status", "")), "in_progress"),
+                pr_number=pr if isinstance(pr, int) else None,
+                pr_url=entry.get("url") or "",
+                screenshots_before=_shot_artifacts(bucket.get("before") or []),
+                screenshots_after=_shot_artifacts(bucket.get("after") or []),
+                video=_video_artifact(video) if isinstance(video, dict) else None,
+            ))
+        return tuple(stories)
 
     def _build_quality_gates(self, cycle: Cycle) -> tuple[QualityGate, ...]:
         gates = []
@@ -207,3 +242,30 @@ def _qa_gate_detail(name: str, gate: dict, status: QualityStatus) -> str:
     if gate.get("repaired_from"):
         detail += f" (file repaired once: {gate['repaired_from']})"
     return detail
+
+
+# What a delivered task's status reads as on the report.
+_STORY_STATUS = {"merged": "completed", "already on main": "completed", "open": "in_progress"}
+
+
+def _by_pr(mapping: dict, pr) -> dict | None:
+    """A per-PR entry, whether the key survived as an int or a string."""
+    if pr is None or not isinstance(mapping, dict):
+        return None
+    value = mapping.get(pr, mapping.get(str(pr)))
+    return value if isinstance(value, dict) else None
+
+
+def _shot_artifacts(entries: list) -> tuple[Artifact, ...]:
+    return tuple(
+        Artifact(type=ArtifactType.SCREENSHOT, label=e.get("label", "screenshot"), path=e["path"],
+                 mime_type="image/png", size_bytes=e.get("size_bytes", 0))
+        for e in entries if isinstance(e, dict) and e.get("path")
+    )
+
+
+def _video_artifact(entry: dict) -> Artifact | None:
+    if not entry.get("path"):
+        return None
+    return Artifact(type=ArtifactType.VIDEO, label=entry.get("label", "walkthrough"), path=entry["path"],
+                    mime_type=entry.get("mime_type") or "video/webm", size_bytes=entry.get("size_bytes", 0))

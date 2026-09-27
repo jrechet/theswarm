@@ -106,6 +106,8 @@ class AgentState(TypedDict, total=False):
     # server to talk to — "" when readiness succeeded. Set by whichever
     # launch node hit it first; later nodes that don't fail leave it as-is.
     demo_launch_error: str
+    prs: list[dict]  # the cycle's PRs (number, head_sha, title, url): QA reads the feature's pages off them
+    feature_pages: list  # (path, label) the feature lives on, from its PRs — they join the demo walks
     story_preview_urls: dict  # F2 — {pr_number: {"before": url_or_none, "after": url}}
     story_artifacts: dict  # F2 — {pr_number: {"before": [...], "after": [...]}}
     story_videos: dict  # F3 — {pr_number: (Artifact, bytes)}
