@@ -172,7 +172,12 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `CLAUDE_CODE_OAUTH_TOKEN`, and an exhausted
   **subscription window** is fatal — retrying it burns the remaining
   iterations in seconds against a wall and reports a credential error that
-  sends the reader hunting for a bug that does not exist.
+  sends the reader hunting for a bug that does not exist. The wall has more
+  than one wording: "session limit" (5 h) and "weekly limit" (7 days) are
+  both `_QUOTA_MARKERS`, plus a "hit your … limit" pattern for the next
+  one — harness cycle 62f353165e62 (2026-09-27) died on the weekly window
+  unrecognised, as a plain `RuntimeError`, and the eval scored a failed
+  regression where `interrupted` was the truth.
 - `GitHubClient._fresh()` rebinds only when App credentials exist. A static
   `GITHUB_TOKEN` never rotates, and rebuilding on a mere difference replaces
   clients built deliberately with a mock — that is how a token in the

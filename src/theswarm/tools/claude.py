@@ -51,14 +51,20 @@ _FATAL_BAD_REQUEST_MARKERS = ("credit balance", "billing", "plans & billing")
 # the stated reset. Prod cycle 980dc1e098bc burned its last two Dev
 # iterations and the whole QA phase against it in 30 seconds, then reported
 # a generic "CLI failed twice" that said nothing about quota.
-_QUOTA_MARKERS = ("session limit", "usage limit", "quota exceeded")
+# The wording follows the window: "session limit" (5 h), "weekly limit"
+# (7 days: harness cycle 62f353165e62 on 2026-09-27 died on it in 51 s and,
+# unrecognised, was scored a failed regression of the swarm instead of
+# `interrupted`), and whatever the next plan calls its window — hence the
+# pattern beside the fixed markers.
+_QUOTA_MARKERS = ("session limit", "weekly limit", "usage limit", "quota exceeded")
+_QUOTA_PATTERN = re.compile(r"hit your [\w-]+ limit")
 
 
 def _quota_exhausted(error: Exception) -> str | None:
     """Return the CLI's own wording (which carries the reset time), else None."""
     message = str(error)
     lowered = message.lower()
-    if any(marker in lowered for marker in _QUOTA_MARKERS):
+    if any(marker in lowered for marker in _QUOTA_MARKERS) or _QUOTA_PATTERN.search(lowered):
         return message
     return None
 
