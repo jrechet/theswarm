@@ -4,8 +4,9 @@
 # La presence de ce dossier fait ignorer .github/workflows/ par Forgejo.
 # Les deux jobs s enchainent au lieu de tourner en parallele : le serveur (disques
 # mecaniques) heberge aussi la prod et les runners GitHub.
-# Les actions hors `actions/*` portent leur URL complete : sans elle, le runner de la
-# forge cherche `astral-sh/setup-uv` sur forge.jrec.fr et echoue.
+# uv est installe par son script et non par astral-sh/setup-uv : avec `version: latest`,
+# cette action interroge l API GitHub via GITHUB_API_URL, qui vaut ici celle de la forge
+# (« user redirect does not exist [name: astral-sh] »). Le cache uv passe par actions/cache.
 
 name: CI
 
@@ -37,10 +38,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
-        uses: https://github.com/astral-sh/setup-uv@v4
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - uses: actions/cache@v4
         with:
-          version: 'latest'
-          enable-cache: true
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
       - name: Set up Python
         run: uv python install ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
@@ -63,10 +68,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
-        uses: https://github.com/astral-sh/setup-uv@v4
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - uses: actions/cache@v4
         with:
-          version: 'latest'
-          enable-cache: true
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
       - name: Set up Python
         run: uv python install ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
