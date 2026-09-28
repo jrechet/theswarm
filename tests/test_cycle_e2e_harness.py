@@ -174,7 +174,9 @@ def test_run_one_scores_and_appends_a_full_record(tmp_path, monkeypatch):
 
     passed, record = cycle_e2e.run_one("o/r", "Do it", feature, 60, history)
 
-    assert passed is True
+    # Built, but QA's E2E run failed on the running app: the harness fails
+    # it (#85) while `passed` keeps the tickets' verdict.
+    assert passed is False and record["behaviour"] == "broken"
     assert record["prs"] == [77] and record["feature"] == "f1"
     # GitHub's own answer, not the cycle's report: #77 reads MERGED.
     assert record["merged"] == [77] and record["unmerged"] == []

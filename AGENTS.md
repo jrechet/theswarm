@@ -320,7 +320,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   QA goes on without an E2E file; only `ClaudeFatalError` (subscription
   window) still aborts. Budgets follow the prompt: a review gets
   `_review_timeout(len(prompt))` (180s floor, +15s per 1k chars, 780s
-  ceiling), E2E generation 240s.
+  ceiling), E2E generation 240s. **A skipped review is counted**, not
+  only logged: `review_skips` in the cycle state and its result (a failed
+  call names its PR; a timed-out phase is `pr: None`), `reviews_skipped`
+  in the eval record, "N reviews skipped" on the repo page — "three
+  timeouts in seven cycles" had been read off logs by hand.
 - **A failed attempt leaves a trace on the issue** (`ATTEMPT_MARKER` comment,
   `agents/dev._note_failed_attempt`), and the picker reads those back: a
   sub-task that failed in an earlier cycle goes behind its untried siblings
@@ -356,9 +360,16 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   video, in place of the guessed `/`, `/docs`, `/health` (+ discovered
   routers) (`_pages_to_capture`); `setup` — shell commands run once per
   workspace before the first launch, each on its own 300s budget, same
-  scrubbed environment, a failing one logged and skipped (`_run_demo_setup`).
+  scrubbed environment, a failing one logged and skipped (`_run_demo_setup`);
+  `seed` — shell commands run once the demo server *answers*, in both
+  capture lanes (not before QA's E2E run), with `{python}`/`{url}`/`{port}`
+  and `DEMO_URL`, one at a time per workspace (`agents/qa_demo_seed.py`):
+  the target fills its own database, idempotently. concert-tour-app's demo
+  database was empty — the dashboard said "Loading…" and the page cycle
+  28371c2016da built (`/api/v1/concerts/1/occupancy`) answered 404 and was
+  skipped; its `scripts/seed_demo.py` (concert-tour-app#396) fixes that.
   Without a declaration: `uvicorn src.main:app`, the guessed page walk, no
-  setup. TheSwarm declares `python -m theswarm serve --port {port} --db
+  setup, no seed. TheSwarm declares `python -m theswarm serve --port {port} --db
   {tmp}/demo.db` with `SWARM_AUTH_DISABLED=1`, `ready_seconds: 90`,
   `pages: ["/", "/r/jrechet/theswarm"]` (its own `/docs` 404s, #144), and
   `setup: ["bash scripts/build-css.sh"]` — the QA workspace is a plain clone
@@ -661,6 +672,19 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   sat open on concert-tour-app after the subscription window ran out
   (#351, #352, #378), with no sub-task and nothing built. The harness
   matches `Parent: #N` exactly, like the server since #229.
+  **The harness judges the behaviour, not only the tickets** (#79 M5,
+  #85). `passed` keeps its meaning (a PR, nothing unbuilt) so the history
+  stays comparable; beside it, `behaviour` reads the two gates that ran
+  against the *running* target: QA's E2E file, and the new
+  `feature_pages` gate (`qa_feature_pages.feature_pages_gate`: the GET
+  routes the PRs added, walked by the screenshot pass, their answers in
+  `feature_page_statuses`). A 5xx is `fail`; a 4xx proves nothing (path
+  parameters are filled with "1" and that row may not exist); no 2xx at
+  all is `not_run`. Either gate failing is `broken` — the harness prints
+  "FAIL — built, but the running app says otherwise", exits non-zero,
+  and a broken build after one that was not is a regression. Both
+  passing is `verified`; anything else `unverified`, which does not fail
+  a run. The repo page counts both and draws a broken build rust-light.
 - **V2 runtime M8 — the GitHub-native doors.** The webhook route
   (`/webhooks/github`, outside the auth wall) is installed **only** when
   `SWARM_WEBHOOK_SECRET` is set (server.py; the repository webhook on

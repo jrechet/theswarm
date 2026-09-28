@@ -66,7 +66,7 @@ class ReportGenerator:
         outlives the container; without these it said only "the cycle
         completed" (1418b48f3180, 2026-09-26: coverage 96.8%, an E2E failure).
         """
-        summary = self._build_summary(cycle, held_prs)
+        summary = self._build_summary(cycle, held_prs, qa_gates)
         gates = self._build_quality_gates(cycle) + _qa_quality_gates(qa_gates)
 
         artifacts: list[Artifact] = []
@@ -123,15 +123,22 @@ class ReportGenerator:
             agent_learnings=tuple(agent_learnings),
         )
 
-    def _build_summary(self, cycle: Cycle, held_prs: tuple[int, ...] = ()) -> ReportSummary:
+    def _build_summary(
+        self, cycle: Cycle, held_prs: tuple[int, ...] = (), qa_gates: dict | None = None,
+    ) -> ReportSummary:
         prs_merged = len(cycle.prs_merged)
         prs_opened = len(cycle.prs_opened)
+        passing, total, coverage, high = _qa_numbers(qa_gates)
 
         return ReportSummary(
             stories_completed=prs_merged,
             stories_total=prs_opened or prs_merged,
             prs_merged=prs_merged,
             prs_held=len(held_prs),
+            tests_passing=passing,
+            tests_total=total,
+            coverage_percent=coverage,
+            security_critical=high,
             cost_usd=cycle.total_cost_usd,
         )
 
@@ -213,6 +220,29 @@ _QA_STATUS = {
     "warn": QualityStatus.WARN,
     "not_run": QualityStatus.SKIP,
 }
+
+
+def _qa_numbers(qa_gates: dict | None) -> tuple[int, int, float, int]:
+    """(tests passing, tests total, coverage %, HIGH findings) from QA's
+    gates — unit and E2E together; a gate that did not run counts nothing.
+    The summary was built from the cycle alone and read "0/0 tests, 0.0 %"
+    one slide before the gates said 361 passed at 97.1 % (28371c2016da)."""
+    gates = qa_gates or {}
+    passing = total = 0
+    for name in ("unit_tests", "e2e_tests"):
+        gate = gates.get(name)
+        if isinstance(gate, dict) and gate.get("status") in ("pass", "fail"):
+            passing += int(gate.get("passed") or 0)
+            total += int(gate.get("total") or 0)
+    coverage_gate = gates.get("coverage")
+    coverage = (
+        float(coverage_gate.get("percent") or 0.0)
+        if isinstance(coverage_gate, dict) and coverage_gate.get("status") in ("pass", "fail")
+        else 0.0
+    )
+    security = gates.get("security")
+    high = int(security.get("semgrep_high") or 0) if isinstance(security, dict) else 0
+    return passing, total, coverage, high
 
 
 def _qa_quality_gates(qa_gates: dict | None) -> tuple[QualityGate, ...]:

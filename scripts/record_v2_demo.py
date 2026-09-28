@@ -93,6 +93,10 @@ def _get(path: str) -> tuple[int, str]:
 
 def _start_server(env: dict[str, str]) -> subprocess.Popen:
     WORK.mkdir(parents=True, exist_ok=True)
+    if _get("/health")[0]:
+        # Something else answers there: its /health would pass for ours, and
+        # the film would be of a stranger (OrbStack held 8096 on the laptop).
+        sys.exit(f"port {PORT} is taken by another server — pick another one")
     log = open(WORK / "server.log", "a")
     proc = subprocess.Popen(
         [str(ROOT / ".venv" / "bin" / "python"), "-m", "theswarm", "serve",

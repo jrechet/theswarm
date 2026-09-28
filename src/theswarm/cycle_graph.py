@@ -69,6 +69,10 @@ class CycleState(TypedDict, total=False):
     reviewed_prs: list[str]
     prs: list[dict]
     reviews: list[dict]
+    # Reviews that did not happen: {"pr", "iteration", "why"} — a review
+    # call that failed (the PR is read next pass) or a review phase that
+    # timed out (pr None). Counted, not only logged (#147).
+    review_skips: list[dict]
     merged_prs: list[int]
     held_prs: list[int]
     records: list[dict]  # {"agent", "tokens", "cost"} per phase, in order
@@ -449,7 +453,13 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
         )
     except PhaseTimeout:
         await rt.progress("TechLead", "Review timed out — leaving PRs for next cycle")
-        return {"reviewed_prs": reviewed}
+        return {
+            "reviewed_prs": reviewed,
+            "review_skips": [
+                *state.get("review_skips", []),
+                {"pr": None, "iteration": iteration, "why": "review phase timed out"},
+            ],
+        }
 
     tokens, cost = tl_state.get("tokens_used", 0), tl_state.get("cost_usd", 0.0)
     updates = {
@@ -479,10 +489,16 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
         await rt.progress("TechLead", f"PR #{number}: approved, CI red — back to the Dev")
     for number in tl_state.get("ci_pending_prs", []):
         await rt.progress("TechLead", f"PR #{number}: approved, CI still running — left open")
-    for number in tl_state.get("skipped_prs", []):
+    skipped = list(tl_state.get("skipped_prs", []))
+    for number in skipped:
         await rt.progress(
             "TechLead", f"Review of PR #{number} unavailable — left for the next pass",
         )
+    if skipped:
+        updates["review_skips"] = [
+            *state.get("review_skips", []),
+            *({"pr": n, "iteration": iteration, "why": "review call failed"} for n in skipped),
+        ]
     if merged:
         await rt.progress("TechLead", f"Merged: {merged}")
     held = list(tl_state.get("held_prs", []))
@@ -689,6 +705,7 @@ async def finish(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
         "prs": prs,
         "already_satisfied": sorted(set(state.get("already_satisfied", []))),
         "reviews": state.get("reviews", []),
+        "review_skips": state.get("review_skips", []),
         "merged_prs": merged,
         "held_prs": held,
         "demo_report": state.get("demo_report"),

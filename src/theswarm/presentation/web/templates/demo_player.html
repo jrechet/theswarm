@@ -83,11 +83,19 @@
             <span class="slide-summary-label">PRs Merged</span>
           </div>
           <div class="slide-summary-item">
+            {% if slide.summary.tests_total %}
             <span class="slide-summary-value">{{ slide.summary.tests_passing }}/{{ slide.summary.tests_total }}</span>
+            {% else %}
+            <span class="slide-summary-value slide-summary-empty">not measured</span>
+            {% endif %}
             <span class="slide-summary-label">Tests</span>
           </div>
           <div class="slide-summary-item">
+            {% if slide.summary.coverage_percent %}
             <span class="slide-summary-value">{{ "%.1f"|format(slide.summary.coverage_percent) }}%</span>
+            {% else %}
+            <span class="slide-summary-value slide-summary-empty">not measured</span>
+            {% endif %}
             <span class="slide-summary-label">Coverage</span>
           </div>
           {% if slide.summary.cost_usd > 0 %}
@@ -98,7 +106,9 @@
           {% endif %}
         </div>
 
-        {% if slide.gates_pass %}
+        {% if slide.gates_pass and slide.gates_not_run %}
+        <div class="slide-gate-badge pass">No gate failed · {{ slide.gates_not_run }} not run</div>
+        {% elif slide.gates_pass %}
         <div class="slide-gate-badge pass">All Quality Gates Pass</div>
         {% else %}
         <div class="slide-gate-badge fail">Quality Gates Failed</div>
