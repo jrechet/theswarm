@@ -888,6 +888,10 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
         )
     except ReadinessTimeout as exc:
         demo_launch_error = await _log_readiness_failure("QA screenshots", server_proc, exc)
+    # This server's boot has run the target's first-boot work (its tables):
+    # the video lane may launch its own now (`run_captures`).
+    if state.get("demo_server_ready") is not None:
+        state["demo_server_ready"].set()
 
     if demo_launch_error:
         # A server that never answered can only refuse every page.goto —
@@ -1030,7 +1034,7 @@ async def record_demo_video(state: AgentState) -> dict:
     import os
     import signal
 
-    from theswarm.infrastructure.recording.playwright_recorder import PlaywrightRecorder
+    from theswarm.infrastructure.recording.playwright_recorder import PlaywrightRecorder, present_json
 
     python = _find_system_python(workspace)
     port = e2e_port() + 2  # avoid conflict with E2E and screenshot servers
@@ -1099,7 +1103,8 @@ async def record_demo_video(state: AgentState) -> dict:
                 log.info("QA: skipped %s (%d)", path or "/", status)
                 continue
             try:
-                await page.goto(url, wait_until="networkidle", timeout=10000)
+                response = await page.goto(url, wait_until="networkidle", timeout=10000)
+                await present_json(page, path or "/", getattr(response, "status", None))
                 await page.wait_for_timeout(1500)  # pause on each page for the video
             except Exception as e:
                 log.warning("QA video: failed to navigate to %s: %s", path, e)
@@ -1527,11 +1532,22 @@ async def run_captures(state: AgentState) -> dict:
     feature_pages = await _feature_pages_of(state)
     state = {**state, "feature_pages": feature_pages}
 
+    # The video lane launches its server once the screenshot lane's has
+    # answered, or that lane ended: two servers booting side by side on a
+    # new database file race on the target's first-boot DDL ("table tours
+    # already exists", one lane dead) — QA's E2E run usually boots the
+    # target first, but not when its file could not be written (#147).
+    first_boot = asyncio.Event()
+
     async def screenshots_lane() -> dict:
-        shots = await capture_demo_screenshots(state)
-        return _merge_captures(shots, await capture_before_after_per_story({**state, **shots}))
+        try:
+            shots = await capture_demo_screenshots({**state, "demo_server_ready": first_boot})
+            return _merge_captures(shots, await capture_before_after_per_story({**state, **shots}))
+        finally:
+            first_boot.set()
 
     async def video_lane() -> dict:
+        await first_boot.wait()
         stories = await record_story_video(state)
         return _merge_captures(stories, await record_demo_video({**state, **stories}))
 

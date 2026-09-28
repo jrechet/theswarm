@@ -47,6 +47,8 @@ def _run(monkeypatch, tmp_path, *, state: str, children, closed=(), error: str =
     monkeypatch.setattr(harness, "closed_children", lambda repo, parent: list(closed))
     monkeypatch.setattr(harness, "cycle_record", lambda cid: {"error": error, "result": {}})
     monkeypatch.setattr(harness, "post_run", lambda record: None)
+    monkeypatch.setattr(harness, "past_runs", lambda repo, history: [])
+    monkeypatch.setattr(harness, "quota_wall_until", lambda: "")
     monkeypatch.setattr(harness, "alert_mattermost", quiet)
     if prs:
         monkeypatch.setattr(harness, "prs_before", lambda repo, _seen=[set(), set(prs)]: _seen.pop(0))
