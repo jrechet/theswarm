@@ -35,7 +35,9 @@ Two UI generations coexist in `presentation/web/`:
 - **V2** — `routes/v2.py` + `templates/v2/` on Tailwind tokens (`static/v2/input.css`,
   Plex fonts vendored, no CDN). Owns `/` (repo picker fed by the GitHub App
   installation plus legacy registered projects), `/r/{owner}/{name}` (composer →
-  GitHub issue, issue board, ▶ Play), `/c/{cycle_id}` (the theater: agent rail from
+  GitHub issue, issue board, ▶ Play — the composer lands on `?new=N` and the page
+  reads that issue by number, highlighted: GitHub's list trails a creation by
+  seconds and the feature just written was missing), `/c/{cycle_id}` (the theater: agent rail from
   `ProgressBridge` live messages, pinned issue breakdown via
   `application/services/pinned_issue.py`, feed from the cycle event store; the
   page polls `/c/{id}/stage` every 3 s and only swaps the DOM on change).

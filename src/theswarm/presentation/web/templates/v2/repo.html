@@ -133,7 +133,7 @@
       </h2>
       <ul class="divide-y divide-rule border-y border-rule">
         {% for issue in group.issues %}
-        <li class="flex items-center gap-4 py-3.5 px-1">
+        <li class="flex items-center gap-4 py-3.5 px-1{% if issue.fresh %} bg-honey-wash/60 rounded-sm{% endif %}"{% if issue.fresh %} data-testid="fresh-issue"{% endif %}>
           <span class="font-mono text-[13px] text-faint shrink-0 w-12">#{{ issue.number }}</span>
           <p class="text-[15px] min-w-0 truncate flex-1">{{ issue.title }}</p>
           {% if issue.building %}
