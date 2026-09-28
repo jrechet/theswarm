@@ -52,6 +52,7 @@ class CyclePersistenceHandler:
                 triggered_by=event.triggered_by,
                 started_at=event.occurred_at,
                 trace_id=getattr(event, "trace_id", "") or "",
+                issue_number=getattr(event, "issue_number", None),
             )
             await self._cycle_repo.save(cycle)
         except Exception:

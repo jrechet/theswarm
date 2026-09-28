@@ -73,10 +73,8 @@ async def test_the_repo_card_then_has_a_video_url():
     from theswarm.presentation.web.routes import v2
 
     report = ReportGenerator().generate(_cycle(), videos=[VIDEO])
-    card = v2._demo_card(report, base="/swarm") if hasattr(v2, "_demo_card") else None
-    if card is None:
-        import inspect
-        source = inspect.getsource(v2)
-        assert 'a.type.value == "video"' in source  # the card reads VIDEO artifacts
-        return
+
+    card = v2._demo_card(SimpleNamespace(base_path="/swarm"), report)
+
+    assert card["video_url"].startswith("/swarm/artifacts/")
     assert card["video_url"].endswith("recording_cf0ac328.webm")

@@ -1,6 +1,36 @@
 {# The stage: everything that moves while a cycle runs. Re-rendered whole
    by the page's poll loop; data-status lets the client stop polling. #}
-<div id="stage-inner" data-status="{{ record.status.value }}">
+<div id="stage-inner" data-status="{{ record.status.value }}"{% if demo_pending %} data-demo-pending{% endif %}>
+
+  {# ── The demo, once the cycle made it ─────────────────────────────── #}
+  {% if demo %}
+  <section aria-labelledby="stage-demo-title" data-testid="stage-demo"
+    class="mb-7 border border-moss/40 rounded-lg bg-moss-wash/40 p-4 flex gap-5 items-center flex-col sm:flex-row">
+    <a href="{{ demo.play_url }}" class="block shrink-0 w-full sm:w-64 rounded-md overflow-hidden border border-rule bg-wash focus-visible:outline-2 focus-visible:outline-honey" aria-label="Watch the demo">
+      {% if demo.video_url %}
+      <video class="block w-full aspect-video object-cover" preload="metadata" muted playsinline autoplay loop
+        {% if demo.thumbnail_url %}poster="{{ demo.thumbnail_url }}"{% endif %}>
+        <source src="{{ demo.video_url }}" type="video/webm">
+      </video>
+      {% elif demo.thumbnail_url %}
+      <img class="block w-full aspect-video object-cover" src="{{ demo.thumbnail_url }}" alt="" width="512" height="288">
+      {% endif %}
+    </a>
+    <div class="min-w-0 flex-1 flex flex-col gap-2">
+      <h2 id="stage-demo-title" class="text-[17px] font-semibold">The demo is ready</h2>
+      <p class="text-[14px] text-soft">
+        {{ demo.prs_merged }} PR{{ 's' if demo.prs_merged != 1 }} merged
+        {%- if demo.prs_held %} · {{ demo.prs_held }} held for review{% endif %}
+        {%- if demo.stories_total %} · {{ demo.stories_completed }}/{{ demo.stories_total }} stories{% endif %}
+        {%- if demo.screenshot_count %} · {{ demo.screenshot_count }} screenshot{{ 's' if demo.screenshot_count != 1 }}{% endif %}
+      </p>
+      <a href="{{ demo.play_url }}" class="self-start text-[14px] font-semibold border border-moss/60 text-moss rounded-md px-3.5 py-1.5 hover:bg-moss-wash transition-colors focus-visible:outline-2 focus-visible:outline-honey">Watch the demo →</a>
+    </div>
+  </section>
+  {% elif demo_pending %}
+  <p class="mb-7 text-[13px] text-soft flex items-center gap-2" data-testid="stage-demo-pending">
+    <span class="w-1.5 h-1.5 rounded-full bg-honey swarm-working" aria-hidden="true"></span>Recording the demo…</p>
+  {% endif %}
 
   {# ── The flow ───────────────────────────────────────────────────── #}
   {# Four agents and the hand-offs between them. Node states come from the
