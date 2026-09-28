@@ -179,3 +179,22 @@ def test_the_state_declares_the_new_keys():
     from theswarm.config import AgentState
 
     assert {"prs", "feature_pages"} <= set(AgentState.__annotations__)
+
+
+def test_a_story_already_on_main_has_a_title_on_the_player():
+    """rpt-04a4c643 (2026-09-28): the slide for #383, found already built,
+    had an empty heading — the cycle knows the task's number, not its title."""
+    (story,) = ReportGenerator.stories_of({"user_stories": [
+        {"task": 383, "title": "", "pr": None, "url": "", "status": "already on main"},
+    ]})
+
+    assert story.title == "#383 — already on main"
+    assert story.status == "completed"
+
+
+def test_a_story_with_a_title_keeps_it():
+    (story,) = ReportGenerator.stories_of({"user_stories": [
+        {"task": 382, "title": "[#382] Add status filtering", "pr": 385, "url": "", "status": "merged"},
+    ]})
+
+    assert story.title == "[#382] Add status filtering"
