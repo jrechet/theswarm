@@ -156,9 +156,13 @@ class ReportGenerator:
             pr = entry.get("pr")
             bucket = _by_pr(shots, pr) or {}
             video = _by_pr(videos, pr)
+            ticket = str(entry.get("task") or pr or "?")
+            status = str(entry.get("status", ""))
             stories.append(StoryReport(
-                ticket_id=str(entry.get("task") or pr or "?"),
-                title=entry.get("title") or "",
+                ticket_id=ticket,
+                # A task found already on main comes without a title: the
+                # player showed an empty heading for #383 (2026-09-28).
+                title=entry.get("title") or f"#{ticket} — {status or 'delivered'}",
                 status=_STORY_STATUS.get(str(entry.get("status", "")), "in_progress"),
                 pr_number=pr if isinstance(pr, int) else None,
                 pr_url=entry.get("url") or "",
