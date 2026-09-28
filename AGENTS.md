@@ -475,7 +475,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   in a `.format` template is `{port}` afterwards, the `.replace` that
   followed matched nothing, and the model guessed 8000 — right on prod by
   luck, wrong anywhere the port moved.
-- **QA runs the E2E file it wrote, and repairs it once** when not one test
+- **QA rewrites its E2E file every cycle that built something** (it lived
+  in the workspace and was reused forever: written once, it tested the API
+  of that day and never a later feature), with the cycle's PRs and pages in
+  the prompt; a cycle with no PR reuses it. **QA runs the E2E file it
+  wrote, and repairs it once** when not one test
   sets up (every test an error, none passed or failed). The file is written
   blind; two cycles in five on 2026-09-25 reported `0 passed, 0 failed, 24
   errors` in under two seconds against a server answering 200. The repair
@@ -696,16 +700,21 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   **The harness judges the behaviour, not only the tickets** (#79 M5,
   #85). `passed` keeps its meaning (a PR, nothing unbuilt) so the history
   stays comparable; beside it, `behaviour` reads the two gates that ran
-  against the *running* target: QA's E2E file, and the new
+  against the *running* target: QA's E2E tests *of the feature*
+  (`feature_e2e`: the `test_feature_*` tests of the file, whose prompt
+  names the cycle's PRs and pages — `qa_feature_pages.feature_e2e_gate`;
+  the rest of the file probes the whole API blind and is reported, not
+  judged: a stale `?status=planning` answered 422 failed a good
+  price-range build on 2026-09-28), and the new
   `feature_pages` gate (`qa_feature_pages.feature_pages_gate`: the GET
   routes the PRs added, walked by the screenshot pass, their answers in
   `feature_page_statuses`). A 5xx is `fail`; a 4xx proves nothing (path
   parameters are filled with "1" and that row may not exist); no 2xx at
   all is `not_run`. Either gate failing is `broken` — the harness prints
   "FAIL — built, but the running app says otherwise", exits non-zero,
-  and a broken build after one that was not is a regression. Both
-  passing is `verified`; anything else `unverified`, which does not fail
-  a run. The repo page counts both and draws a broken build rust-light.
+  and a broken build after one that was not is a regression. One passing
+  and none failing is `verified` (a POST-only feature has no page to walk);
+  anything else `unverified`, which does not fail a run. The repo page counts both and draws a broken build rust-light.
 - **V2 runtime M8 — the GitHub-native doors.** The webhook route
   (`/webhooks/github`, outside the auth wall) is installed **only** when
   `SWARM_WEBHOOK_SECRET` is set (server.py; the repository webhook on

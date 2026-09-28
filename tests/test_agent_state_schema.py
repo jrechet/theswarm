@@ -22,11 +22,11 @@ AGENTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "src" / "theswarm" / 
 # review dict; `text`/`branch`/`conflict` are the pieces of the
 # changes-requested note `_changes_requested` hands to the prompt builder
 # (#121; `conflict` since approved PRs that main moved past go back too).
-# `status`/`pages`/`reason` are the feature-pages gate
-# (`qa_feature_pages.feature_pages_gate`), which rides inside `demo_report`.
+# `status`/`pages`/`reason` are the feature-pages gate and `passed`/`failed`
+# the feature-E2E gate (`qa_feature_pages`), both inside `demo_report`.
 HELPER_ONLY_KEYS = {
     "decision", "summary", "issues", "pr_number", "sent_back", "text", "conflict",
-    "status", "pages", "reason",
+    "status", "pages", "reason", "passed", "failed",
 }
 
 

@@ -231,3 +231,36 @@ def feature_pages_gate(
                           + ", ".join(f"{p['path']} {p['status'] or 'unreachable'}" for p in walked)}
     return {"status": "pass", "pages": walked,
             "reason": f"{len(answered)} of {len(walked)} feature page(s) answered 2xx"}
+
+
+_FEATURE_TEST_RESULT_RE = re.compile(r"::(test_feature\w*)(?:\[[^\]]*\])?\s+(PASSED|FAILED|ERROR)\b")
+_FEATURE_TEST_SUMMARY_RE = re.compile(r"^(FAILED|ERROR) \S+::(test_feature\w*)", re.MULTILINE)
+
+
+def feature_e2e_gate(output: str) -> dict:
+    """QA's verdict on the E2E tests of the feature delivered — the ones its
+    file names `test_feature_*` — out of pytest's `-v` output.
+
+    The rest of the file probes the whole API, written blind; a wrong guess
+    there (a stale `?status=planning`, answered 422) says nothing about what
+    the cycle built. Any feature test failing or erroring is `fail`; at
+    least one passing and none failing is `pass`; none at all is `not_run`.
+    """
+    outcomes: dict[str, str] = {}
+    for match in _FEATURE_TEST_RESULT_RE.finditer(output or ""):
+        key = match.group(0).split("::", 1)[1].split()[0]
+        outcomes[key] = match.group(2)
+    for match in _FEATURE_TEST_SUMMARY_RE.finditer(output or ""):
+        outcomes.setdefault(match.group(2), match.group(1))
+        if outcomes.get(match.group(2)) == "PASSED":
+            outcomes[match.group(2)] = match.group(1)
+    failed = sorted(name for name, outcome in outcomes.items() if outcome in ("FAILED", "ERROR"))
+    passed = [name for name, outcome in outcomes.items() if outcome == "PASSED"]
+    if failed:
+        return {"status": "fail", "passed": len(passed), "failed": len(failed),
+                "reason": "failed: " + ", ".join(failed)}
+    if passed:
+        return {"status": "pass", "passed": len(passed), "failed": 0,
+                "reason": f"{len(passed)} feature test(s) passed"}
+    return {"status": "not_run", "passed": 0, "failed": 0,
+            "reason": "the E2E file names no test_feature_* test"}

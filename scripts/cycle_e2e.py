@@ -409,10 +409,9 @@ def behaviour_notes(demo_report: dict | None) -> list[str]:
         if not isinstance(gate, dict) or not gate.get("status"):
             continue
         detail = gate.get("reason") or gate.get("failure_excerpt") or ""
-        if name == "e2e_tests" and "passed" in gate:
-            detail = f"{gate.get('passed', 0)} passed, {gate.get('failed', 0)} failed" + (
-                f" — {gate['failure_excerpt']}" if gate.get("failure_excerpt") else "")
-        label = "E2E" if name == "e2e_tests" else "feature pages"
+        if name == "feature_e2e" and gate.get("reason"):
+            detail = gate["reason"]
+        label = "feature E2E" if name == "feature_e2e" else "feature pages"
         notes.append(f"{label} {gate['status']}" + (f": {detail}" if detail else ""))
     return notes
 
