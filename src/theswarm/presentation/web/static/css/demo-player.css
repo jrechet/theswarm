@@ -314,6 +314,14 @@
   margin-bottom: 0.25rem;
 }
 
+/* A number QA did not measure: said in words, never a zero. */
+.slide-summary-value.slide-summary-empty {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 2rem;
+}
+
 .slide-summary-label {
   font-size: 0.75rem;
   color: var(--text-secondary);

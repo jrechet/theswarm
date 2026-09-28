@@ -136,7 +136,14 @@ def exhausted(manifest: Manifest, runs: list[dict]) -> bool:
     return all(feature.id in delivered for feature in manifest.features)
 
 
-QA_GATES = ("unit_tests", "e2e_tests", "security", "coverage")
+QA_GATES = ("unit_tests", "e2e_tests", "security", "coverage", "feature_pages")
+
+# The gates that judge the behaviour delivered, on the running target: QA's
+# E2E run and the walk of the pages the PRs added. The others judge the code.
+BEHAVIOUR_GATES = ("e2e_tests", "feature_pages")
+BEHAVIOUR_VERIFIED = "verified"
+BEHAVIOUR_BROKEN = "broken"
+BEHAVIOUR_UNVERIFIED = "unverified"
 
 
 def qa_of(demo_report: dict | None) -> dict[str, str]:
@@ -147,6 +154,23 @@ def qa_of(demo_report: dict | None) -> dict[str, str]:
         for gate in QA_GATES
         if isinstance(gates.get(gate), dict) and gates[gate].get("status")
     }
+
+
+def behaviour_of(qa: dict[str, str]) -> str:
+    """What the running target says about the feature (#85).
+
+    `broken` when either behaviour gate failed — the E2E run QA wrote
+    against the app, or a page the PRs added answering 5xx. `verified` when
+    both passed. Anything else — not run, or a record from before the
+    fields — is `unverified`: nothing contradicts the build, nothing
+    confirms it.
+    """
+    statuses = [qa.get(gate) for gate in BEHAVIOUR_GATES]
+    if "fail" in statuses:
+        return BEHAVIOUR_BROKEN
+    if all(status == "pass" for status in statuses):
+        return BEHAVIOUR_VERIFIED
+    return BEHAVIOUR_UNVERIFIED
 
 
 # ── Scoring ──────────────────────────────────────────────────────────
@@ -202,6 +226,8 @@ class Observed:
     qa: dict[str, str] = field(default_factory=dict)
     # The cycle's own error, as the API answers it (the row's since v030).
     error: str = ""
+    # Reviews that did not happen: a failed review call, a timed-out phase.
+    reviews_skipped: int = 0
 
 
 def outcome_of(run: dict) -> str:
@@ -264,11 +290,15 @@ def score(feature: Feature | None, observed: Observed) -> dict[str, Any]:
         "merged": list(observed.merged),
         "unmerged": [pr for pr in observed.prs if pr not in set(observed.merged)],
         "qa": dict(observed.qa),
+        # The behaviour's verdict, beside the tickets' (`passed`): a build
+        # that nothing ran is not judged on it.
+        "behaviour": behaviour_of(observed.qa) if outcome == OUTCOME_BUILT else BEHAVIOUR_UNVERIFIED,
         "unfinished": list(observed.unfinished),
         "already_satisfied": list(observed.already_satisfied),
         "feature": feature.id if feature else "",
         "ci": ci,
         "review_decisions": list(observed.review_decisions),
+        "reviews_skipped": int(observed.reviews_skipped),
         "cost_usd": round(float(observed.cost_usd), 4),
         "duration_s": int(observed.duration_s),
         "within_cost": within_cost,
@@ -319,7 +349,8 @@ def trend(entries: list[dict], window: int = TREND_WINDOW) -> dict[str, Any]:
     if not recent:
         return {"runs": [], "count": 0, "pass_rate": None, "avg_cost_usd": None,
                 "avg_duration_s": None, "by_backend": {}, "already_delivered": 0,
-                "interrupted": 0, "left_open": 0, "qa_red": 0, "last": None}
+                "interrupted": 0, "left_open": 0, "qa_red": 0,
+                "verified": 0, "broken": 0, "reviews_skipped": 0, "last": None}
     measured = [e for e in recent if is_measured(e)]
     passed = sum(1 for e in measured if e.get("passed"))
     costs = [float(e["cost_usd"]) for e in recent if e.get("cost_usd") is not None]
@@ -343,5 +374,10 @@ def trend(entries: list[dict], window: int = TREND_WINDOW) -> dict[str, Any]:
         "left_open": sum(1 for e in measured if e.get("unmerged")),
         # Runs where a QA gate failed (records before the field: none).
         "qa_red": sum(1 for e in recent if "fail" in (e.get("qa") or {}).values()),
+        # Built runs the running target confirmed, or contradicted.
+        "verified": sum(1 for e in measured if e.get("behaviour") == BEHAVIOUR_VERIFIED),
+        "broken": sum(1 for e in measured if e.get("behaviour") == BEHAVIOUR_BROKEN),
+        # Reviews the window's cycles went without (records before the field: 0).
+        "reviews_skipped": sum(int(e.get("reviews_skipped") or 0) for e in recent),
         "last": recent[-1],
     }

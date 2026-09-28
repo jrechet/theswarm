@@ -198,3 +198,36 @@ def story_preview_urls(pages: dict[int, list[str]], *, port: int) -> dict[int, d
         number: {"before": None, "after": f"http://127.0.0.1:{port}{paths[0]}"}
         for number, paths in pages.items() if paths
     }
+
+
+def feature_pages_gate(
+    pages: list[tuple[str, str]] | tuple,
+    statuses: dict[str, int | None],
+    *,
+    launch_error: str = "",
+) -> dict:
+    """QA's verdict on the feature's own pages, walked on the running target.
+
+    A 5xx is a feature that crashes: `fail`, the page named. A 2xx on at
+    least one page, and no 5xx, is `pass`. A 4xx proves nothing either way
+    — path parameters are filled with "1" and that row may not exist in
+    the demo's database — and neither does a page nobody could reach, so a
+    walk with no 2xx is `not_run`.
+    """
+    if not pages:
+        return {"status": "not_run", "pages": [], "reason": "the PRs add no GET route to walk"}
+    walked = [{"path": path, "status": statuses.get(path)} for path, _ in pages]
+    if launch_error and not any(p["status"] for p in walked):
+        return {"status": "not_run", "pages": walked,
+                "reason": f"the demo server did not start: {launch_error}"}
+    crashed = [p for p in walked if isinstance(p["status"], int) and p["status"] >= 500]
+    if crashed:
+        return {"status": "fail", "pages": walked,
+                "reason": "; ".join(f"{p['path']} answered {p['status']}" for p in crashed)}
+    answered = [p for p in walked if isinstance(p["status"], int) and 200 <= p["status"] < 300]
+    if not answered:
+        return {"status": "not_run", "pages": walked,
+                "reason": "no feature page answered 2xx: "
+                          + ", ".join(f"{p['path']} {p['status'] or 'unreachable'}" for p in walked)}
+    return {"status": "pass", "pages": walked,
+            "reason": f"{len(answered)} of {len(walked)} feature page(s) answered 2xx"}

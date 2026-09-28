@@ -370,6 +370,8 @@ def _build_slides(report) -> list[dict]:
         "date": report.created_at.strftime("%Y-%m-%d %H:%M UTC"),
         "summary": report.summary,
         "gates_pass": report.all_gates_pass,
+        # "No gate failed" is not "all passed" when some never ran.
+        "gates_not_run": sum(1 for g in report.quality_gates if g.status.value == "skip"),
     })
 
     # Top-level walkthrough videos come right after the title

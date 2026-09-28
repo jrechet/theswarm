@@ -15,10 +15,13 @@ target already has); --feature-id picks one; --all runs the series. Every
 run is scored — PR, its CI, the reviews, cost, duration, files touched —
 and appended to docs/harness-runs.jsonl.
 
-Exit code 0 when every cycle finished AND a pull request came out of it,
-or when the Dev found every sub-task already on main (`already_delivered`:
-nothing measured, a warning, never a regression). Anything else prints
-where it stopped and why.
+Exit code 0 when every cycle finished AND a pull request came out of it
+AND the running target did not contradict it, or when the Dev found every
+sub-task already on main (`already_delivered`: nothing measured, a
+warning, never a regression). A build QA's E2E run or the walk of the new
+pages found broken (`behaviour: broken`) is a failure: the tickets say
+done, the app says otherwise. Anything else prints where it stopped and
+why.
 """
 
 from __future__ import annotations
@@ -293,6 +296,11 @@ def review_decisions(result: dict) -> list[str]:
     return [str(r.get("decision", "")) for r in (result or {}).get("reviews", []) or []]
 
 
+def reviews_skipped(result: dict | None) -> int:
+    """Reviews the cycle went without: a failed call, a timed-out phase."""
+    return len((result or {}).get("review_skips") or [])
+
+
 def cycle_cost(record: dict) -> float:
     """What the cycle spent: its result's figure, else its row's (a failed
     cycle has no result, and its spend is on the row since v030)."""
@@ -372,7 +380,8 @@ def past_runs(repo: str, history: pathlib.Path, *, api=None) -> list[dict]:
 
 
 def is_regression(previous: dict | None, current: dict) -> bool:
-    """True only when a target flips from built to failed.
+    """True only when a target flips from built to failed, or from a build
+    the app did not contradict to one it did (`behaviour: broken`).
 
     A first-ever failure (no previous entry) and a repeat failure are both
     unsurprising — only a pass-then-fail transition is worth flagging. An
@@ -380,11 +389,32 @@ def is_regression(previous: dict | None, current: dict) -> bool:
     never a regression and never the run a new one is compared with
     (`evals.last_measured`).
     """
+    if previous is None or evals.outcome_of(previous) != evals.OUTCOME_BUILT:
+        return False
+    if evals.outcome_of(current) == evals.OUTCOME_FAILED:
+        return True
     return (
-        previous is not None
-        and evals.outcome_of(previous) == evals.OUTCOME_BUILT
-        and evals.outcome_of(current) == evals.OUTCOME_FAILED
+        evals.outcome_of(current) == evals.OUTCOME_BUILT
+        and current.get("behaviour") == evals.BEHAVIOUR_BROKEN
+        and previous.get("behaviour") != evals.BEHAVIOUR_BROKEN
     )
+
+
+def behaviour_notes(demo_report: dict | None) -> list[str]:
+    """What the behaviour gates said, one line each, from QA's report."""
+    gates = (demo_report or {}).get("quality_gates") or {}
+    notes: list[str] = []
+    for name in evals.BEHAVIOUR_GATES:
+        gate = gates.get(name)
+        if not isinstance(gate, dict) or not gate.get("status"):
+            continue
+        detail = gate.get("reason") or gate.get("failure_excerpt") or ""
+        if name == "e2e_tests" and "passed" in gate:
+            detail = f"{gate.get('passed', 0)} passed, {gate.get('failed', 0)} failed" + (
+                f" — {gate['failure_excerpt']}" if gate.get("failure_excerpt") else "")
+        label = "E2E" if name == "e2e_tests" else "feature pages"
+        notes.append(f"{label} {gate['status']}" + (f": {detail}" if detail else ""))
+    return notes
 
 
 def annotate(level: str, message: str) -> None:
@@ -455,6 +485,7 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
         ci=ci,
         files=tuple(files),
         review_decisions=tuple(review_decisions(cycle_result)),
+        reviews_skipped=reviews_skipped(cycle_result),
         cost_usd=cycle_cost(record),
         duration_s=duration_seconds(str(record.get("started_at") or ""), str(record.get("completed_at") or "")),
         backend=str(cycle_result.get("backend") or ""),
@@ -477,8 +508,25 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
           + (f"  (over budget)" if result["within_cost"] is False or result["within_time"] is False else "")
           + (f"  files {'ok' if result['files_match'] else 'off-target'}" if result["files_match"] is not None else ""))
 
+    notes = behaviour_notes(cycle_result.get("demo_report"))
+    if result["passed"] and result["behaviour"] == evals.BEHAVIOUR_BROKEN:
+        broken = [n for n in notes if " fail" in n] or notes
+        print("\nFAIL — built, but the running app says otherwise: " + "; ".join(broken))
+        if result["regression"]:
+            print("\n⚠ REGRESSION — the last build here behaved; this one does not")
+        asyncio.run(alert_mattermost(
+            f":red_circle: Harness: built but broken on {repo}"
+            + (f" [{feature.id}]" if feature else "")
+            + f" — {'; '.join(broken)}"
+            + (" — REGRESSION" if result["regression"] else "")
+            + f" (cycle {cycle_id}, issue #{issue})"
+        ))
+        return False, result
+
     if result["passed"]:
-        print("\nPASS — a feature was asked for, and the whole of it was built.")
+        print("\nPASS — a feature was asked for, and the whole of it was built"
+              + (" — behaviour verified on the running app." if result["behaviour"] == evals.BEHAVIOUR_VERIFIED
+                 else " — behaviour unverified" + (f" ({'; '.join(notes)})" if notes else "") + "."))
         return True, result
 
     if result["outcome"] == evals.OUTCOME_ALREADY_DELIVERED:

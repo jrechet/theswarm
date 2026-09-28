@@ -27,7 +27,12 @@ browser does what the owner does. Each one names the cycle it filmed.
 |------|--------|-------|
 | [`v2-play-to-demo.webm`](v2-play-to-demo.webm) | Pick `concert-tour-app` → write "Show how full a concert is" → the issue on the board (highlighted, #387) → ▶ Play → the theater live → 14 min later: 4/4 sub-tasks, PRs #392–#395 reviewed and merged → the latest-demo card → the player (stories, QA gates 325 unit / 36 E2E / 97.1 % coverage, screenshots, video) | `28371c2016da`, 2026-09-28, $2.11 |
 
+| [`qa-feature-pages.webm`](qa-feature-pages.webm) | QA's real captures on concert-tour-app at #393–#395, no cycle: the target's `demo.seed` fills its empty database, the walk reaches the pages the PRs added (`/api/v1/concerts/1/occupancy` 75 % sold, `/concerts/1/lineup`), the report's new `feature_pages` gate says pass (2 of 2 answered 2xx), the player says "not measured" and "N not run" instead of zeros and a green claim | capture-only, 2026-09-28 |
+
 ```bash
+# QA's captures on a local checkout of the target, then the player (no cycle)
+uv run python scripts/record_qa_demo.py --repo jrechet/concert-tour-app \
+    --workspace <checkout> --prs <PR numbers> --name <name>
 # a filmed Play (writes docs/demos/<name>.webm)
 uv run python scripts/record_v2_demo.py --repo jrechet/concert-tour-app \
     --name <name> --feature "<issue title>" --body "<issue body>"

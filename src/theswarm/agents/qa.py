@@ -28,6 +28,7 @@ from theswarm.agents.base import (
     load_context,
     stub_result,
 )
+from theswarm.agents.qa_demo_seed import run_seed
 from theswarm.config import AgentState, Role
 from theswarm.tools.claude import ClaudeFatalError
 
@@ -906,8 +907,15 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
             "tokens_used": 0,
         }
 
-    recorder = PlaywrightRecorder()
     base_url = f"http://127.0.0.1:{port}"
+    # The demo's data, declared by the target, before anything is walked.
+    await run_seed(workspace, _demo_spec(workspace).get("seed"), python=python,
+                   url=base_url, env=_demo_scrubbed_env(workspace))
+    recorder = PlaywrightRecorder()
+    feature_paths = {path for path, _ in state.get("feature_pages") or []}
+    # What each of the feature's own pages answered on the running target:
+    # the report's `feature_pages` gate, a verdict on the behaviour built.
+    feature_statuses: dict[str, int | None] = {}
 
     try:
         pages_to_capture = _pages_to_capture(workspace, state.get("feature_pages") or [])
@@ -915,6 +923,8 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
         for path, label in pages_to_capture:
             url = f"{base_url}{path}"
             status = await _page_status(url)
+            if path in feature_paths:
+                feature_statuses[path] = status
             if status is not None and not (200 <= status < 300):
                 log.info("QA: skipped %s (%d)", path or "/", status)
                 continue
@@ -939,6 +949,7 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
     log.info("QA: captured %d demo screenshots", len(artifacts))
     return {
         "demo_artifacts": artifacts,
+        "feature_page_statuses": feature_statuses,
         "tokens_used": 0,
     }
 
@@ -1068,8 +1079,10 @@ async def record_demo_video(state: AgentState) -> dict:
             "tokens_used": 0,
         }
 
-    recorder = PlaywrightRecorder()
     base_url = f"http://127.0.0.1:{port}"
+    await run_seed(workspace, _demo_spec(workspace).get("seed"), python=python,
+                   url=base_url, env=_demo_scrubbed_env(workspace))
+    recorder = PlaywrightRecorder()
 
     try:
         # Record a walkthrough: navigate through key pages
@@ -1240,11 +1253,22 @@ async def generate_demo_report(state: AgentState) -> dict:
     # a bare "0 screenshots" (cycle 5b1da00155c2: "No module named theswarm").
     demo_launch_error = state.get("demo_launch_error", "")
 
+    from theswarm.agents.qa_feature_pages import feature_pages_gate
+
+    # The pages the PRs added, walked on the running target: a 5xx is a
+    # feature that crashes whatever the tickets say (#85).
+    pages_gate = feature_pages_gate(
+        state.get("feature_pages") or [],
+        state.get("feature_page_statuses") or {},
+        launch_error=demo_launch_error,
+    )
+
     # All quality gates must pass for green
     all_gates_pass = (
         unit_status == "pass" and tests_passed
         and e2e_all_pass and e2e_total > 0
         and semgrep_high == 0 and semgrep_status != "not_run"
+        and pages_gate["status"] != "fail"
     )
 
     demo_report = {
@@ -1291,6 +1315,7 @@ async def generate_demo_report(state: AgentState) -> dict:
                 "status": coverage_status,
                 "reason": coverage_reason,
             },
+            "feature_pages": pages_gate,
         },
         "overall_status": "green" if all_gates_pass else
                           "yellow" if (unit_status == "pass" and tests_passed) else "red",
