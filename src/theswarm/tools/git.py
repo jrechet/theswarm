@@ -25,6 +25,30 @@ DEFAULT_GIT_USER_EMAIL = "swarm-dev@jrec.fr"
 # credential prompt hangs forever — outside the cycle's phase timeouts.
 GIT_COMMAND_TIMEOUT = 300
 
+# What tells git which repository, index or object store to use
+# (`git rev-parse --local-env-vars`, less the `-c` config that git itself
+# passes on to another repository). Every call here names its repository by
+# `cwd`, and one of these inherited from the caller overrides that without a
+# word: a shell that had exported GIT_INDEX_FILE to build a tree by hand
+# (2026-09-28) gave the clone and every task worktree one shared index. Two
+# tasks committing side by side would each commit what the other had just
+# staged; the clone's status showed the second task's file.
+REPO_LOCAL_GIT_ENV: frozenset[str] = frozenset({
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CONFIG",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_GRAFT_FILE",
+    "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_PREFIX",
+    "GIT_SHALLOW_FILE",
+    "GIT_COMMON_DIR",
+})
+
 
 async def _run_git(
     *args: str,
@@ -34,7 +58,7 @@ async def _run_git(
 ) -> str:
     """Run a git command and return stdout."""
     env = {
-        **os.environ,
+        **{k: v for k, v in os.environ.items() if k not in REPO_LOCAL_GIT_ENV},
         # Never prompt for credentials or SSH host confirmation — fail instead.
         "GIT_TERMINAL_PROMPT": "0",
         "GIT_SSH_COMMAND": os.environ.get("GIT_SSH_COMMAND", "ssh -oBatchMode=yes"),

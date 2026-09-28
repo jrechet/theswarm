@@ -190,6 +190,12 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
 - Tests must not assert git argv **by position**: `_auth_args()` prepends
   credential flags whenever `GITHUB_TOKEN` is set, so index-based assertions
   silently depend on the suite's environment.
+- **Git runs on the repository its `cwd` names**: `_run_git` drops
+  `REPO_LOCAL_GIT_ENV` (`GIT_INDEX_FILE`, `GIT_DIR`, … — git's own
+  `--local-env-vars`). A shell that exported `GIT_INDEX_FILE` to build a
+  tree by hand then ran the suite (2026-09-28): the clone and every task
+  worktree shared that one index, and `test_two_tasks_two_branches_no_commit_lost`
+  failed twice "under load" while passing alone — it was the environment.
 - `static/v2/app.css` is generated: never commit it. It slipped in twice —
   the `.gitignore` pattern had no leading `**/`, so a mid-path `/` anchored it
   to the repo root and `git add -A` kept re-adding the file.
