@@ -190,8 +190,26 @@ async def _latest_demo(state, full_name: str) -> dict | None:
     }
 
 
+async def _with_fresh_issue(client, issues: list[dict], number: int | None) -> list[dict]:
+    """The issue the composer just created, on the board even when GitHub's
+    list has not caught up yet: the list trails a creation by seconds, a read
+    by number does not. A closed or unreadable one stays off."""
+    if not number or any(i.get("number") == number for i in issues):
+        return issues
+    try:
+        issue = await client.get_issue(number)
+    except Exception:  # noqa: BLE001 — the board without it, as GitHub has it
+        log.warning("V2: reading the new issue #%s failed", number, exc_info=True)
+        return issues
+    if not issue or issue.get("state", "open") != "open":
+        return issues
+    return [issue, *issues]
+
+
 @router.get("/r/{owner}/{name}", response_class=HTMLResponse)
-async def repo_page(request: Request, owner: str, name: str) -> HTMLResponse:
+async def repo_page(
+    request: Request, owner: str, name: str, new: int | None = None,
+) -> HTMLResponse:
     state = request.app.state
     full_name = f"{owner}/{name}"
     await _ensure_project(state, owner, name)
@@ -201,7 +219,8 @@ async def repo_page(request: Request, owner: str, name: str) -> HTMLResponse:
     try:
         from theswarm.tools.github import GitHubClient
 
-        issues = await GitHubClient(full_name).get_issues()
+        client = GitHubClient(full_name)
+        issues = await _with_fresh_issue(client, await client.get_issues(), new)
     except Exception as exc:  # noqa: BLE001 — surfaced in the page banner
         log.exception("V2: listing issues for %s failed", full_name)
         issues_error = str(exc)[:160]
@@ -216,6 +235,7 @@ async def repo_page(request: Request, owner: str, name: str) -> HTMLResponse:
             and getattr(running, "issue_number", None) == issue.get("number"),
         )
         row["cycle_id"] = getattr(running, "id", "") if row["building"] else ""
+        row["fresh"] = bool(new) and issue.get("number") == new
         by_status.get(status, by_status["backlog"]).append(row)
 
     groups = [
@@ -310,10 +330,13 @@ async def compose_issue(
 
     from theswarm.tools.github import GitHubClient
 
-    await GitHubClient(f"{owner}/{name}").create_issue(
+    created = await GitHubClient(f"{owner}/{name}").create_issue(
         title=title, body=issue_body, labels=["status:backlog"],
     )
     log.info("V2: composed issue %r on %s/%s", title, owner, name)
+    number = created.get("number") if isinstance(created, dict) else None
+    if isinstance(number, int):
+        return RedirectResponse(f"{base}/r/{owner}/{name}?new={number}", status_code=303)
     return back
 
 
