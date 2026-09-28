@@ -5,10 +5,47 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from theswarm.domain.reporting.value_objects import Artifact, ArtifactType
 
 log = logging.getLogger(__name__)
+
+
+# A JSON answer drawn so it can be read in a thumbnail or a video: the
+# request and its status on top, the body pretty-printed below, large. The
+# pages a cycle's PRs add are often API routes, and Chromium drew them as
+# one 13px line on a white page (docs/demos/qa-feature-pages.webm).
+_PRESENT_JSON = """
+([path, status]) => {
+  if (!/json/i.test(document.contentType || "")) return false;
+  const source = document.querySelector("pre") || document.body;
+  let pretty;
+  try { pretty = JSON.stringify(JSON.parse(source.textContent), null, 2); }
+  catch (e) { return false; }
+  document.head.innerHTML = '<meta charset="utf-8"><style>'
+    + 'html,body{margin:0;background:#FAF8F3;color:#1F1C17}'
+    + 'body{padding:40px 56px;font:20px/1.55 ui-monospace,"IBM Plex Mono",Menlo,monospace}'
+    + 'header{font:600 16px/1.4 system-ui,sans-serif;color:#7A6F5E;letter-spacing:.02em;'
+    + 'margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid #E4DDCF}'
+    + 'pre{margin:0;white-space:pre-wrap;word-break:break-word}</style>';
+  const header = document.createElement("header");
+  header.textContent = "GET " + path + (status ? " \u2192 " + status : "");
+  const pre = document.createElement("pre");
+  pre.textContent = pretty;
+  document.body.replaceChildren(header, pre);
+  return true;
+}
+"""
+
+
+async def present_json(page, path: str, status: int | None) -> bool:
+    """Redraw the page if it is a JSON answer; False when it is not."""
+    try:
+        return bool(await page.evaluate(_PRESENT_JSON, [path, status]))
+    except Exception:  # noqa: BLE001 — a demo page as it came is still a demo page
+        log.debug("present_json: could not redraw %s", path, exc_info=True)
+        return False
 
 
 class PlaywrightRecorder:
@@ -54,7 +91,8 @@ class PlaywrightRecorder:
         page = await context.new_page()
 
         try:
-            await page.goto(url, wait_until="networkidle", timeout=15000)
+            response = await page.goto(url, wait_until="networkidle", timeout=15000)
+            await present_json(page, urlparse(url).path or "/", getattr(response, "status", None))
             # Small wait for any JS animations to settle
             await page.wait_for_timeout(500)
             data = await page.screenshot(full_page=True, type="png")

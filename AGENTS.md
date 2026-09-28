@@ -383,7 +383,16 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   demo server and read nothing of each other, so QA spends the longer of
   the two. `SWARM_QA_CAPTURE_CONCURRENCY` (default 2: two demo servers and
   two browsers in a 2 GB container) — set it to 1 on a heavy target, or
-  when a cycle's QA dies of memory. **The demo shows the feature**
+  when a cycle's QA dies of memory. **The video lane launches once the
+  screenshot lane's server has answered** (or that lane ended): two
+  servers booting side by side on a new database file race on the
+  target's first-boot DDL — concert-tour-app lost a lane to "table tours
+  already exists" when nothing had booted it before the captures, which
+  is the case whenever QA could not write its E2E file (#147). **A JSON
+  page is redrawn legible** before it is captured, in both walks
+  (`playwright_recorder.present_json`: "GET /path → 200" over the body,
+  pretty-printed, 20px) — the pages a cycle adds are often API routes,
+  and Chromium drew them as one 13px line on a white page. **The demo shows the feature**
   (`agents/qa_feature_pages.py`, 2026-09-27): the GET routes the cycle's
   PRs add, or whose body a diff touches, with the router's prefix and
   `{params}` filled with 1, join both walks after the declared pages; the

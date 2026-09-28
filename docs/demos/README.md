@@ -29,6 +29,7 @@ browser does what the owner does. Each one names the cycle it filmed.
 
 | [`qa-feature-pages.webm`](qa-feature-pages.webm) | QA's real captures on concert-tour-app at #393–#395, no cycle: the target's `demo.seed` fills its empty database, the walk reaches the pages the PRs added (`/api/v1/concerts/1/occupancy` 75 % sold, `/concerts/1/lineup`), the report's new `feature_pages` gate says pass (2 of 2 answered 2xx), the player says "not measured" and "N not run" instead of zeros and a green claim | capture-only, 2026-09-28 |
 | [`v2-live-feed.webm`](v2-live-feed.webm) | A second real Play, "Tell a fan when the next concert is" (#397): the theater's Activity feed fills live — the Dev's steps and tool calls, PRs, reviews, "Memory compacted" — and the rail's last messages are sentences, not "]" | `57adc6cdea13`, 2026-09-28 |
+| [`qa-legible-pages.webm`](qa-legible-pages.webm) | The same captures after the fix: both lanes side by side on a brand-new database (no first-boot DDL race — the video lane waits for the screenshot lane's server), and the feature's API pages drawn legible ("GET /api/v1/concerts/1/occupancy → 200" over the JSON, pretty-printed, large) — shown full size at the end | capture-only, 2026-09-28 |
 
 ```bash
 # QA's captures on a local checkout of the target, then the player (no cycle)

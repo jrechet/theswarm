@@ -94,7 +94,7 @@ async def store(repo: str, qa_out: dict) -> str:
     return report.id
 
 
-def film_report(p, repo: str, report_id: str, gate: dict) -> Path:
+def film_report(p, repo: str, report_id: str, gate: dict, feature_shots: list[dict] = ()) -> Path:
     browser, context, video_dir = film._film(p, "qa")
     page = context.new_page()
     page.goto(f"{film.BASE}/r/{repo}", wait_until="domcontentloaded")
@@ -116,6 +116,10 @@ def film_report(p, repo: str, report_id: str, gate: dict) -> Path:
         else:
             time.sleep(4)
         page.keyboard.press("ArrowRight")
+    for shot in feature_shots:  # the feature's own pages, full size
+        page.goto(f"{film.BASE}/artifacts/{shot['path']}", wait_until="domcontentloaded")
+        film._caption(page, f"{shot['label']} — captured by QA on the running target")
+        time.sleep(5)
     return film._close(browser, context, video_dir)
 
 
@@ -131,11 +135,6 @@ def main() -> int:
     import os
 
     os.environ.setdefault("GITHUB_TOKEN", film._env()["GITHUB_TOKEN"])  # QA reads the PRs' diffs
-    # One lane after the other. In a cycle, QA's E2E run starts the target
-    # first and its boot creates the tables; here nothing did, and two
-    # servers booting side by side on a new database file race on that DDL
-    # ("table tours already exists", one lane dead).
-    os.environ["SWARM_QA_CAPTURE_CONCURRENCY"] = "1"
     qa_out = asyncio.run(capture(args.repo, workspace, args.prs))
     gate = qa_out["demo_report"]["quality_gates"].get("feature_pages", {})
     print("feature pages gate:", json.dumps(gate), flush=True)
@@ -144,7 +143,9 @@ def main() -> int:
     server = film._start_server(film._env())
     try:
         with sync_playwright() as p:
-            video = film_report(p, args.repo, report_id, gate)
+            shots = [s for s in qa_out["demo_report"].get("screenshots", [])
+                     if str(s.get("label", "")).startswith("feature_pr_")]
+            video = film_report(p, args.repo, report_id, gate, shots)
         out = film.DEMOS_DIR / f"{args.name}.webm"
         film.join([video], out)
     finally:
