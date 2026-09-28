@@ -683,7 +683,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   then took fifteen taking the label off with a fresh client — GitHub
   recorded the delivery as failed although the cycle ran. The door went
   live that day: secret set, hook created, smoke test 200/401, label →
-  cycle 01475dd2c4d5 on #329.
+  cycle 01475dd2c4d5 on #329. **The pre-M8 rule is off** (a cycle per
+  push to main and per opened issue, `SWARM_WEBHOOK_AUTO_CYCLE=1` to
+  want it): the first morning with the webhook live, the harness's story
+  and the TechLead's three sub-issues each started an untargeted cycle,
+  four queued behind the one that mattered (2026-09-28 07:31).
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

@@ -113,3 +113,46 @@ async def test_a_stranger_s_label_is_still_answered_and_starts_nothing(web):
 
     assert response.status_code == 202
     started.assert_not_awaited()
+
+
+# ── The pre-M8 auto-trigger stays off behind the live door ─────────────
+
+
+def _opened(number: int = 380) -> dict:
+    return {
+        "action": "opened",
+        "issue": {"number": number, "title": "List the tours by status", "labels": []},
+        "repository": {"full_name": REPO}, "sender": {"login": "jrechet"},
+    }
+
+
+async def test_an_opened_issue_starts_no_cycle_by_default(web, monkeypatch):
+    """The first morning with the webhook live (2026-09-28 07:31): the
+    harness's story and the TechLead's three sub-issues each started an
+    untargeted cycle through the pre-M8 rule — four cycles queued behind
+    the one that mattered."""
+    monkeypatch.delenv("SWARM_WEBHOOK_AUTO_CYCLE", raising=False)
+    client, app = web
+    project = MagicMock(id="p1", repo=REPO)  # a registered project: the old rule would fire
+    app.state.project_repo = MagicMock(list_all=AsyncMock(return_value=[project]))
+    app.state.run_cycle_handler = MagicMock(handle=AsyncMock())
+    body, headers = _signed(_opened(), "issues")
+
+    response = await client.post("/webhooks/github", content=body, headers=headers)
+    await webhooks_mod.drain_background(app)
+
+    assert response.status_code == 200
+    app.state.run_cycle_handler.handle.assert_not_awaited()
+
+
+async def test_the_auto_cycle_is_a_choice(web, monkeypatch):
+    monkeypatch.setenv("SWARM_WEBHOOK_AUTO_CYCLE", "1")
+    client, app = web
+    project = MagicMock(id="p1", repo=REPO)
+    app.state.project_repo = MagicMock(list_all=AsyncMock(return_value=[project]))
+    app.state.run_cycle_handler = MagicMock(handle=AsyncMock())
+    body, headers = _signed(_opened(), "issues")
+
+    await client.post("/webhooks/github", content=body, headers=headers)
+
+    app.state.run_cycle_handler.handle.assert_awaited_once()

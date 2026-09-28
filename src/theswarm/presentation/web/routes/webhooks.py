@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 import logging
 import time
@@ -73,8 +74,13 @@ async def github_webhook(request: Request) -> Response:
         await _handle_implement_command(request, event)
         return Response(content="ok", status_code=200)
 
+    # Sprint F's rule — a cycle on every push to main and every opened
+    # issue — predates the doors above, and the live webhook delivers
+    # every issue event: on 2026-09-28 the harness's story and the
+    # TechLead's three sub-issues each started an untargeted cycle. Off
+    # unless asked for; the doors are how a cycle starts from GitHub.
     allowed_repos = getattr(request.app.state, "allowed_repos", [])
-    if handler.should_trigger_cycle(event, allowed_repos):
+    if _auto_cycle_enabled() and handler.should_trigger_cycle(event, allowed_repos):
         log.info(
             "Webhook triggering cycle: repo=%s event=%s",
             event.repo_full_name,
@@ -101,6 +107,11 @@ async def github_webhook(request: Request) -> Response:
                     break
 
     return Response(content="ok", status_code=200)
+
+
+def _auto_cycle_enabled() -> bool:
+    """The pre-M8 auto-trigger (a cycle per push and per opened issue)."""
+    return os.environ.get("SWARM_WEBHOOK_AUTO_CYCLE", "").strip().lower() in ("1", "true", "yes")
 
 
 def _after_answering(request, work, what: str) -> None:
