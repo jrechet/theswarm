@@ -12,6 +12,7 @@ import importlib.util
 import pathlib
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -172,15 +173,39 @@ async def test_the_old_theater_leads_to_the_running_continuation(web):
     assert r.headers["location"] == f"/swarm/c/{record.id}"
 
 
-async def test_a_continuation_this_process_forgot_goes_to_the_archive(web):
+async def test_a_continuation_nobody_knows_leaves_the_origin_its_own_theater(web):
+    """The origin is finished (failed: interrupted); with its continuation
+    known to neither the tracker nor the database, its own theater is what
+    there is to show — no longer the V1 archive."""
     client, app = web
     await app.state.cycle_repo.save(_interrupted())
     await app.state.cycle_repo.mark_resumed("old123old123", "gone00gone00")
 
+    with patch("theswarm.tools.github.GitHubClient") as klass:
+        klass.return_value.get_issue = AsyncMock(return_value=None)
+        klass.return_value.get_issues = AsyncMock(return_value=[])
+        r = await client.get("/c/old123old123")
+
+    assert r.status_code == 200
+    assert 'data-status="failed"' in r.text
+
+
+async def test_a_finished_continuation_in_the_database_takes_the_link(web):
+    """After a restart the continuation is finished and forgotten too: the
+    origin's link still leads to it, drawn from its row."""
+    from dataclasses import replace
+
+    client, app = web
+    await app.state.cycle_repo.save(_interrupted())
+    await app.state.cycle_repo.save(replace(
+        _interrupted(), id=CycleId("new456new456"), status=CycleStatus.COMPLETED, error="",
+    ))
+    await app.state.cycle_repo.mark_resumed("old123old123", "new456new456")
+
     r = await client.get("/c/old123old123")
 
     assert r.status_code == 303
-    assert r.headers["location"] == "/swarm/cycles/old123old123"
+    assert r.headers["location"] == "/swarm/c/new456new456"
 
 
 # ── The resumer ────────────────────────────────────────────────────────

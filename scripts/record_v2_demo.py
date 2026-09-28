@@ -27,9 +27,8 @@ player.
         --feature "Show how full a concert is" \\
         --body "GET /api/v1/concerts/{id}/occupancy returns …"
 
-Needs `.env` at the repository root (or SWARM_ENV_FILE) with GITHUB_TOKEN,
-and the stylesheet built (`bash scripts/build-css.sh`) or the pages film
-unstyled;
+Needs `.env` at the repository root (or SWARM_ENV_FILE) with GITHUB_TOKEN
+(the stylesheet is rebuilt before the server starts);
 the Claude identity is the laptop's subscription (`python -m theswarm
 validate` must say identity=subscription). Everything but the video lands in
 tmp/demo-v2/ (ignored by git).
@@ -97,6 +96,10 @@ def _start_server(env: dict[str, str]) -> subprocess.Popen:
         # Something else answers there: its /health would pass for ours, and
         # the film would be of a stranger (OrbStack held 8096 on the laptop).
         sys.exit(f"port {PORT} is taken by another server — pick another one")
+    # The stylesheet is generated from the templates: a stale one films a
+    # new card squashed into a column (the first take of the theater's demo).
+    subprocess.run(["bash", str(ROOT / "scripts" / "build-css.sh")], check=True, cwd=ROOT,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     log = open(WORK / "server.log", "a")
     proc = subprocess.Popen(
         [str(ROOT / ".venv" / "bin" / "python"), "-m", "theswarm", "serve",
@@ -191,30 +194,35 @@ def wait_for_cycle(cycle_id: str, budget_s: int) -> dict:
     sys.exit(f"cycle {cycle_id} did not finish in {budget_s}s")
 
 
-def film_demo(p, repo: str, cycle_id: str) -> tuple[Path, str]:
-    """Theater once done → latest-demo card → the demo player, slide by slide."""
+def film_demo(p, repo: str, cycle_id: str,
+              opening: str = "The cycle is over: the theater ends on the demo") -> tuple[Path, str]:
+    """Theater once done → its demo card → the player, slide by slide → the
+    repo page's reliability panel (what the harness judged)."""
     browser, context, video_dir = _film(p, "demo")
     page = context.new_page()
     page.goto(f"{BASE}/c/{cycle_id}", wait_until="domcontentloaded")
-    _caption(page, "The cycle is over: the theater shows who did what")
-    time.sleep(6)
-    page.goto(f"{BASE}/r/{repo}", wait_until="domcontentloaded")
-    evals_panel = page.locator('[data-testid="evals"]')
-    if evals_panel.count():
-        evals_panel.scroll_into_view_if_needed()
-        _caption(page, "The harness's verdict: built, and judged on the running app")
-        time.sleep(6)
-    card = page.locator('[data-testid="latest-demo"]')
+    _caption(page, opening)
+    card = page.locator('[data-testid="stage-demo"]')
+    try:
+        card.wait_for(timeout=120_000)  # the report lands a moment after the status
+    except Exception:  # noqa: BLE001 — an older server: the repo page's card
+        pass
     play_url = ""
     if card.count():
         card.scroll_into_view_if_needed()
-        _caption(page, "The demo QA recorded, on the repo page")
-        time.sleep(4)
-        link = card.locator('a[href*="/demos/"]').first
-        play_url = link.get_attribute("href") or ""
+        time.sleep(5)
+        play_url = card.locator('a[href*="/demos/"]').first.get_attribute("href") or ""
+        _caption(page, "Watch the demo →")
+        card.locator('a:has-text("Watch the demo")').click()
+        page.wait_for_load_state("domcontentloaded")
+    else:
+        page.goto(f"{BASE}/r/{repo}", wait_until="domcontentloaded")
+        link = page.locator('[data-testid="latest-demo"] a[href*="/demos/"]').first
+        if link.count():
+            play_url = link.get_attribute("href") or ""
+            page.goto(f"{BASE}{play_url}" if play_url.startswith("/") else play_url,
+                      wait_until="domcontentloaded")
     if play_url:
-        page.goto(f"{BASE}{play_url}" if play_url.startswith("/") else play_url,
-                  wait_until="domcontentloaded")
         time.sleep(3)
         for _ in range(14):  # stories, gates, screenshots, video
             if page.locator("video:visible").count():
@@ -226,6 +234,12 @@ def film_demo(p, repo: str, cycle_id: str) -> tuple[Path, str]:
             else:
                 time.sleep(3.5)
             page.keyboard.press("ArrowRight")
+    page.goto(f"{BASE}/r/{repo}", wait_until="domcontentloaded")
+    evals_panel = page.locator('[data-testid="evals"]')
+    if evals_panel.count():
+        evals_panel.scroll_into_view_if_needed()
+        _caption(page, "The harness's verdict: built, and judged on the running app")
+        time.sleep(6)
     return _close(browser, context, video_dir), play_url
 
 
@@ -268,33 +282,45 @@ def main() -> int:
     ap.add_argument("--feature", default="", help="the issue title (a filmed Play)")
     ap.add_argument("--harness-feature", default="",
                     help="an eval feature id: the harness runs it instead of a filmed Play")
+    ap.add_argument("--cycle", default="",
+                    help="a finished cycle in tmp/demo-v2's database: film its theater on a "
+                         "fresh server (the tracker has forgotten it) — no new cycle")
     ap.add_argument("--body", default="", help="the issue body")
     ap.add_argument("--theater-seconds", type=int, default=75)
     ap.add_argument("--budget", type=int, default=3600)
     args = ap.parse_args()
 
-    if not (args.feature or args.harness_feature):
-        sys.exit("--feature or --harness-feature is required")
+    if not (args.feature or args.harness_feature or args.cycle):
+        sys.exit("--feature, --harness-feature or --cycle is required")
 
     server = _start_server(_env())
     try:
         with sync_playwright() as p:
             films: list[Path] = []
             harness_exit = None
-            if args.harness_feature:
+            if args.cycle:
+                cycle_id = args.cycle
+                status, text = _get(f"/api/cycles/{cycle_id}")
+                result = json.loads(text) if status == 200 else {}
+            elif args.harness_feature:
                 cycle_id, harness_exit = run_harness(args.repo, args.harness_feature, args.budget)
                 result = wait_for_cycle(cycle_id, 60)
             else:
                 play_film, cycle_id = film_play(p, args.repo, args.feature, args.body, args.theater_seconds)
                 films.append(play_film)
                 result = wait_for_cycle(cycle_id, args.budget)
-            demo_film, play_url = film_demo(p, args.repo, cycle_id)
+            demo_film, play_url = film_demo(
+                p, args.repo, cycle_id,
+                **({"opening": "After a restart: the finished cycle's theater, drawn from the database"}
+                   if args.cycle else {}),
+            )
             films.append(demo_film)
         out = DEMOS_DIR / f"{args.name}.webm"
         join(films, out)
         summary = {
             "cycle": cycle_id, "status": result.get("status"), "repo": args.repo,
-            "feature": args.feature or args.harness_feature, "harness_exit": harness_exit,
+            "feature": args.feature or args.harness_feature or f"cycle {args.cycle}",
+            "harness_exit": harness_exit,
             "prs": result.get("prs_opened"), "merged": result.get("prs_merged"),
             "error": result.get("error"), "demo_player": play_url,
             "video": str(out.relative_to(ROOT)), "bytes": out.stat().st_size,

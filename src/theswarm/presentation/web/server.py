@@ -730,6 +730,21 @@ async def start_server(
     notify_user_id = os.getenv("SWARM_DEMO_NOTIFY_USER_ID", "")
     wire_demo_notifications(bus, swarm_po_chat, notify_user_id)
 
+    # The demo is announced on the issue that asked for it, with the
+    # player's public link (EXTERNAL_URL): a relative one is no use there.
+    public_url = getattr(settings.server, "external_url", "") or ""
+    if public_url:
+        from theswarm.application.services.demo_announcer import announce_demo
+        from theswarm.domain.reporting.events import DemoReady as _DemoReady
+        from theswarm.tools.github import GitHubClient
+
+        async def _announce(event: _DemoReady) -> None:
+            await announce_demo(event, external_url=public_url, report_repo=report_repo,
+                                github_for=GitHubClient)
+
+        bus.subscribe(_DemoReady, _announce)
+        log.info("Demo announcements on GitHub issues: on (%s)", public_url)
+
     # ── Mattermost callback route ────────────────────────────────
     from theswarm_common.models import AgentEvent
 

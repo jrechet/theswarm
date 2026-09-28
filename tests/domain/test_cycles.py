@@ -260,6 +260,7 @@ def _cycle_with_every_field_set() -> Cycle:
         trace_id="a" * 32,
         resumed_as="next-cycle",
         error="RuntimeError: boom",
+        issue_number=404,
     )
 
 

@@ -159,7 +159,12 @@ async def _latest_demo(state, full_name: str) -> dict | None:
         return None
     if not reports:
         return None
-    report = reports[0]
+    return _demo_card(state, reports[0])
+
+
+def _demo_card(state, report) -> dict:
+    """What a demo card shows of a stored report: the repo page's latest
+    demo, and the theater once its cycle is done."""
     base = state.base_path
 
     def art(path: str) -> str:
@@ -584,8 +589,13 @@ async def _stage_context(request: Request, record) -> dict:
 
     pinned = await load_pinned_issue(record.repo, record.issue_number)
     graph = _graph(record, phases, progress, pinned)
+    demo = await _cycle_demo(request.app.state, record.id)
     return {
         "record": record,
+        "demo": demo,
+        # The report is saved just after the cycle is marked completed: the
+        # page keeps polling until it is there (theater.html).
+        "demo_pending": demo is None and record.status.value == "completed",
         "stations": graph["nodes"],
         "graph": graph,
         "pinned": pinned,
@@ -593,6 +603,20 @@ async def _stage_context(request: Request, record) -> dict:
         "trace_url": trace_url(getattr(record, "trace_id", "")),
         "resumed_from": resumed_from(getattr(record, "description", "")),
     }
+
+
+async def _cycle_demo(state, cycle_id: str) -> dict | None:
+    """The demo of this cycle, once its report is stored; None before, or
+    when the store is missing or unwell (the stage stays)."""
+    report_repo = getattr(state, "report_repo", None)
+    if report_repo is None:
+        return None
+    try:
+        reports = await report_repo.list_by_cycle(cycle_id, limit=1)
+    except Exception:  # noqa: BLE001 — the stage degrades, the page stays
+        log.exception("V2: reading the demo of cycle %s failed", cycle_id)
+        return None
+    return _demo_card(state, reports[0]) if reports else None
 
 
 _RESUME_OF_RE = re.compile(r"^Resume of ([0-9a-f]{12}) from ")
@@ -624,6 +648,45 @@ def _tracker_record(cycle_id: str):
     return get_cycle_tracker().get(cycle_id)
 
 
+_FINISHED = frozenset({"completed", "failed", "cancelled"})
+
+
+async def _archived_record(state, cycle_id: str):
+    """A finished cycle the tracker no longer knows, drawn from its row.
+
+    The tracker is in-memory: after any restart — every deploy — a
+    finished cycle's link fell back to the V1 archive and its demo card
+    was gone. Its stations are done, its feed is in the event store, its
+    demo in the report store, its issue on the row (v032). A row still
+    "running" that the tracker does not know is nobody's cycle any more:
+    None, and the archive view says what the database knows.
+    """
+    from theswarm.api import CycleRecord, CycleStatus as TrackerStatus
+    from theswarm.domain.cycles.value_objects import CycleId
+
+    cycle_repo = getattr(state, "cycle_repo", None)
+    if cycle_repo is None:
+        return None
+    try:
+        cycle = await cycle_repo.get(CycleId(cycle_id))
+    except Exception:  # noqa: BLE001 — the archive view stays the way out
+        log.exception("V2: reading cycle %s failed", cycle_id)
+        return None
+    if cycle is None or cycle.status.value not in _FINISHED:
+        return None
+
+    def iso(moment) -> str:
+        return moment.isoformat() if moment else ""
+
+    return CycleRecord(
+        id=str(cycle.id), repo=cycle.project_id, description="", callback_url="",
+        issue_number=cycle.issue_number, status=TrackerStatus(cycle.status.value),
+        created_at=iso(cycle.started_at), started_at=iso(cycle.started_at),
+        completed_at=iso(cycle.completed_at), error=cycle.error or None,
+        trace_id=cycle.trace_id,
+    )
+
+
 @router.get("/c/{cycle_id}", response_class=HTMLResponse)
 async def theater(request: Request, cycle_id: str):
     state = request.app.state
@@ -633,10 +696,18 @@ async def theater(request: Request, cycle_id: str):
         # the database and stays the archive view.
         cycle = await state.get_cycle_status_query.execute(cycle_id)
         resumed_as = getattr(cycle, "resumed_as", "") if cycle is not None else ""
-        if resumed_as and _tracker_record(resumed_as) is not None:
+        if resumed_as and (
+            _tracker_record(resumed_as) is not None
+            or await _archived_record(state, resumed_as) is not None
+        ):
             # A restart interrupted it and the resumer continued it: the
-            # theater of the continuation is where this cycle now lives.
+            # theater of the continuation — running, or drawn from its row
+            # once finished — is where this cycle now lives.
             return RedirectResponse(f"{state.base_path}/c/{resumed_as}", status_code=303)
+        archived = await _archived_record(state, cycle_id)
+        if archived is not None:
+            context = await _stage_context(request, archived)
+            return state.templates.TemplateResponse("v2/theater.html", context)
         if cycle is not None:
             return RedirectResponse(
                 f"{state.base_path}/cycles/{cycle_id}", status_code=303,
@@ -648,7 +719,7 @@ async def theater(request: Request, cycle_id: str):
 
 @router.get("/c/{cycle_id}/stage", response_class=HTMLResponse)
 async def theater_stage(request: Request, cycle_id: str):
-    record = _tracker_record(cycle_id)
+    record = _tracker_record(cycle_id) or await _archived_record(request.app.state, cycle_id)
     if record is None:
         return HTMLResponse("", status_code=404)
     context = await _stage_context(request, record)

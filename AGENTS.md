@@ -43,10 +43,19 @@ Two UI generations coexist in `presentation/web/`:
   agents' `AgentActivity`, fragments of streamed code left out
   (`progress_bridge.is_telling`; it read Sprint D's AgentThought, which nothing
   emits, and said "Nothing yet" on every cycle until 2026-09-28); the
-  page polls `/c/{id}/stage` every 3 s and only swaps the DOM on change).
+  page polls `/c/{id}/stage` every 3 s and only swaps the DOM on change; **it
+  ends on the demo**: once the cycle's report is stored, the stage shows it —
+  the video, the counts, "Watch the demo →" to the player — and a completed
+  cycle whose report has not landed yet (it is saved just after the status)
+  keeps the page polling, `data-demo-pending`, two minutes at most).
 - **V1** — everything else (`/dashboard`, `/projects/`, `/cycles/`, HTMX
-  fragments, the 14 role surfaces). Demoted, not deleted; the theater sends
-  cycles the in-memory tracker no longer knows to `/cycles/{id}` (archive view).
+  fragments, the 14 role surfaces). Demoted, not deleted. The theater draws a
+  *finished* cycle the in-memory tracker no longer knows from its row —
+  stations done, feed from the event store, demo card from the report store,
+  pinned issue from `cycles.issue_number` (v032, written by `CycleStarted`);
+  before, every deploy sent those links to the V1 archive and their demo was
+  gone. Only a row still `running` that nothing runs goes to `/cycles/{id}`
+  (archive view).
 
 `presentation/web/auth.py` is the wall (pure ASGI, fail-safe closed); doors are
 `routes/auth_routes.py` (access key + GitHub OAuth) and the GitHub App setup in
@@ -139,7 +148,7 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
 - The cycle tracker is in-memory, but a restart no longer loses a running
   cycle (V2 runtime M4, closes the practical side of #5): the boot resumer
   continues it under a new tracker id, `/c/{old}` redirects to it while it
-  runs, and the archive view shows it afterwards.
+  runs, and the theater draws it from its row afterwards.
 - The GitHub App manifest flow is broken (GitHub returns a code it does not
   recognise, no app is created) and **is not needed**: repos come from
   `github_app.list_user_repositories()` with the owner's `GITHUB_TOKEN`, and
@@ -726,6 +735,13 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   want it): the first morning with the webhook live, the harness's story
   and the TechLead's three sub-issues each started an untargeted cycle,
   four queued behind the one that mattered (2026-09-28 07:31).
+  **The demo is announced on the issue that asked for it**
+  (`application/services/demo_announcer.py`, on `DemoReady`, which now
+  carries the cycle's issue): "🎬 The demo is ready — watch it" with the
+  player's public link (`EXTERNAL_URL`; without it nothing is posted — a
+  relative link is useless on GitHub), what was built and the two
+  behaviour gates. Once per cycle (`<!-- swarm:demo <cycle> -->`), only on
+  targeted cycles, a failure logged and nothing else lost.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

@@ -149,7 +149,10 @@ async def test_unknown_cycle_is_a_404(web):
     assert r.status_code == 404
 
 
-async def test_historical_cycle_redirects_to_the_archive_view(web):
+async def test_a_historical_finished_cycle_keeps_its_theater(web):
+    """The tracker forgot it (a restart); it is drawn from its row — the V1
+    archive is only for a row still "running" that nothing runs
+    (test_v2_theater_archive.py)."""
     client, app = web
     from datetime import datetime, timezone
 
@@ -162,10 +165,13 @@ async def test_historical_cycle_redirects_to_the_archive_view(web):
     )
     await app.state.cycle_repo.save(cycle)
 
-    r = await client.get("/c/cafe1234cafe")
+    with patch("theswarm.tools.github.GitHubClient") as klass:
+        klass.return_value.get_issue = AsyncMock(return_value=None)
+        klass.return_value.get_issues = AsyncMock(return_value=[])
+        r = await client.get("/c/cafe1234cafe")
 
-    assert r.status_code == 303
-    assert r.headers["location"] == "/swarm/cycles/cafe1234cafe"
+    assert r.status_code == 200
+    assert 'data-status="completed"' in r.text
 
 
 async def test_play_now_lands_on_the_theater(web):

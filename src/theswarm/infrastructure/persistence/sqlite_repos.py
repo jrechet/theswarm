@@ -119,6 +119,9 @@ from theswarm.infrastructure.persistence.migrations.v030_cycle_error import (
 from theswarm.infrastructure.persistence.migrations.v031_quota_wall import (
     SQL as MIGRATION_V031,
 )
+from theswarm.infrastructure.persistence.migrations.v032_cycle_issue_number import (
+    ALTERS as MIGRATION_V032_ALTERS,
+)
 
 log = logging.getLogger(__name__)
 
@@ -187,11 +190,13 @@ async def _ensure_memory_entries_columns(db: aiosqlite.Connection) -> None:
 
 
 async def _ensure_cycles_columns(db: aiosqlite.Connection) -> None:
-    """Columns added to ``cycles`` after v001, only if missing (v027, v029, v030)."""
+    """Columns added to ``cycles`` after v001, only if missing (v027, v029, v030, v032)."""
     cursor = await db.execute("PRAGMA table_info(cycles)")
     rows = await cursor.fetchall()
     existing = {row[1] for row in rows}
-    for column_name, alter_sql in MIGRATION_V027_ALTERS + MIGRATION_V029_ALTERS + MIGRATION_V030_ALTERS:
+    for column_name, alter_sql in (
+        MIGRATION_V027_ALTERS + MIGRATION_V029_ALTERS + MIGRATION_V030_ALTERS + MIGRATION_V032_ALTERS
+    ):
         if column_name not in existing:
             await db.execute(alter_sql)
 
@@ -440,8 +445,8 @@ class SQLiteCycleRepository:
             """INSERT OR REPLACE INTO cycles
                (id, project_id, status, triggered_by, started_at, completed_at,
                 total_tokens, total_cost_usd, prs_opened_json, prs_merged_json,
-                phases_json, budgets_json, trace_id, resumed_as, error)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                phases_json, budgets_json, trace_id, resumed_as, error, issue_number)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 str(cycle.id), cycle.project_id, cycle.status.value,
                 cycle.triggered_by,
@@ -451,7 +456,7 @@ class SQLiteCycleRepository:
                 json.dumps(list(cycle.prs_opened)),
                 json.dumps(list(cycle.prs_merged)),
                 phases_json, budgets_json, cycle.trace_id, cycle.resumed_as,
-                cycle.error[:ERROR_MAX_CHARS],
+                cycle.error[:ERROR_MAX_CHARS], cycle.issue_number,
             ),
         )
         await self._db.commit()
@@ -491,6 +496,7 @@ class SQLiteCycleRepository:
             trace_id=(row["trace_id"] or "") if "trace_id" in row.keys() else "",
             resumed_as=(row["resumed_as"] or "") if "resumed_as" in row.keys() else "",
             error=(row["error"] or "") if "error" in row.keys() else "",
+            issue_number=row["issue_number"] if "issue_number" in row.keys() else None,
         )
 
 
