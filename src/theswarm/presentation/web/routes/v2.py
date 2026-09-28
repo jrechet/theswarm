@@ -556,6 +556,7 @@ async def _stage_context(request: Request, record) -> dict:
     from theswarm.application.services.progress_bridge import (
         get_live_progress,
         get_phase_history,
+        is_telling,
     )
 
     progress = get_live_progress(record.id)
@@ -565,11 +566,12 @@ async def _stage_context(request: Request, record) -> dict:
     thoughts_query = getattr(request.app.state, "get_agent_thoughts_query", None)
     if thoughts_query is not None:
         try:
-            entries = await thoughts_query.execute(record.id)
+            entries = await thoughts_query.execute(record.id, include_activity=True)
         except Exception:  # noqa: BLE001 — the feed degrades, the page stays
             log.exception("V2: reading thoughts for %s failed", record.id)
             entries = []
         glyphs = {key: glyph for key, glyph, _ in _STATIONS}
+        entries = [e for e in entries if e.kind == "step" or is_telling(e.text)]
         for entry in reversed(entries[-_FEED_LIMIT:]):
             role = _normalize_role(entry.agent) or ""
             feed.append({

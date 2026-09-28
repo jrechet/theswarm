@@ -38,8 +38,34 @@ _LIVE_PROGRESS: "OrderedDict[tuple[str, str], dict]" = OrderedDict()
 _LIVE_PROGRESS_MAX = 500
 
 
+_WORD = re.compile(r"[A-Za-zÀ-ÿ]{3,}")
+# A line of code or data, not a sentence: brackets, quotes, fences, comments,
+# a Python statement, or an assignment.
+_CODE_START = re.compile(
+    r"^(?:[\[\]{}()`\"'#<>]|(?:import|from|def|class|return|async|await|assert|"
+    r"if|elif|else|for|while|with|try|except|raise|yield|lambda|print)\b)",
+)
+_ASSIGNMENT = re.compile(r"^[A-Za-z_][\w.]*(?:\[[^\]]*\])?\s*=\s*\S")
+
+
+def is_telling(message: str) -> bool:
+    """True when a progress line says something a person can read.
+
+    Every line Claude streams reaches the bridge; the theater's rail of
+    28371c2016da ended on the PO saying "]" and QA saying
+    "BASE_URL = 'http://127.0.0.1:8000'".
+    """
+    text = (message or "").strip()
+    if not _WORD.search(text):
+        return False
+    return not (_CODE_START.match(text) or _ASSIGNMENT.match(text))
+
+
 def record_live_progress(cycle_id: str, role: str, message: str) -> None:
-    """Stash the latest progress message for (cycle_id, role)."""
+    """Stash the latest telling progress message for (cycle_id, role); a
+    fragment leaves the one before it in place."""
+    if not is_telling(message):
+        return
     key = (cycle_id, role)
     if key in _LIVE_PROGRESS:
         _LIVE_PROGRESS.move_to_end(key)

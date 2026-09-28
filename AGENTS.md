@@ -39,7 +39,10 @@ Two UI generations coexist in `presentation/web/`:
   reads that issue by number, highlighted: GitHub's list trails a creation by
   seconds and the feature just written was missing), `/c/{cycle_id}` (the theater: agent rail from
   `ProgressBridge` live messages, pinned issue breakdown via
-  `application/services/pinned_issue.py`, feed from the cycle event store; the
+  `application/services/pinned_issue.py`, feed from the cycle event store — the
+  agents' `AgentActivity`, fragments of streamed code left out
+  (`progress_bridge.is_telling`; it read Sprint D's AgentThought, which nothing
+  emits, and said "Nothing yet" on every cycle until 2026-09-28); the
   page polls `/c/{id}/stage` every 3 s and only swaps the DOM on change).
 - **V1** — everything else (`/dashboard`, `/projects/`, `/cycles/`, HTMX
   fragments, the 14 role surfaces). Demoted, not deleted; the theater sends

@@ -120,7 +120,7 @@
       <li class="feed-entry flex gap-3 py-2 px-1 text-[13px] leading-relaxed" data-agent="{{ e.agent }}">
         <span class="font-mono text-[11px] text-faint shrink-0 pt-0.5 w-14">{{ e.time }}</span>
         <span class="font-mono text-[11px] shrink-0 pt-0.5 w-9 {% if e.kind == 'step' %}text-faint{% else %}text-honey-deep{% endif %}">{{ e.glyph }}</span>
-        <span class="min-w-0 {% if e.kind == 'step' %}text-soft{% endif %}">{{ e.text }}</span>
+        <span class="min-w-0 {% if e.kind == 'step' %}text-soft{% elif e.kind in ('pr_opened', 'review') %}font-semibold{% endif %}">{{ e.text }}</span>
       </li>
       {% endfor %}
     </ol>

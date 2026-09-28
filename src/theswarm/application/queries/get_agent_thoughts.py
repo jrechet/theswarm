@@ -22,12 +22,32 @@ class GetAgentThoughtsQuery:
     def __init__(self, cycle_event_store: object | None) -> None:
         self._store = cycle_event_store
 
-    async def execute(self, cycle_id: str) -> list[ThoughtEntry]:
+    async def execute(self, cycle_id: str, *, include_activity: bool = False) -> list[ThoughtEntry]:
+        """Thoughts and steps; with `include_activity`, what the agents said
+        through the ProgressBridge too (`AgentActivity`, kind = its action).
+
+        Nothing has emitted AgentThought/AgentStep since the pipeline moved
+        to the bridge: the V2 theater's feed read only those and said
+        "Nothing yet" to the end of cycle 28371c2016da, over 197 stored
+        activity events.
+        """
         if self._store is None:
             return []
         records = await self._store.list_for_cycle(cycle_id)
         entries: list[ThoughtEntry] = []
         for r in records:
+            if include_activity and r.event_type == "AgentActivity":
+                entries.append(
+                    ThoughtEntry(
+                        kind=str(r.payload.get("action", "progress")),
+                        agent=str(r.payload.get("agent", "")),
+                        text=str(r.payload.get("detail", "")),
+                        detail="",
+                        phase="",
+                        occurred_at=r.occurred_at,
+                    ),
+                )
+                continue
             if r.event_type == "AgentThought":
                 entries.append(
                     ThoughtEntry(
