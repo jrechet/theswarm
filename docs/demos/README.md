@@ -17,6 +17,25 @@ Per the plan rule (§4 of [`theswarm-04.md`](../../theswarm-04.md)):
 | [`sprint-F.webm`](sprint-F.webm) | F — Pluggabilité & polish | P1 webhook, P2 Linear adapter, M3 compaction, F7 speed, F8 comparator |
 | [`sprint-G.webm`](sprint-G.webm) | G — Résilience & fail-safes | G1 checkpoints, G2 adaptive Claude, G3 GitHub breaker, G4 readiness, G5 resume UI |
 
+## V2 — the product, filmed on real cycles
+
+Recorded with [`scripts/record_v2_demo.py`](../../scripts/record_v2_demo.py):
+a local server, a real repository, a real cycle on the subscription — the
+browser does what the owner does. Each one names the cycle it filmed.
+
+| File | Covers | Cycle |
+|------|--------|-------|
+| [`v2-play-to-demo.webm`](v2-play-to-demo.webm) | Pick `concert-tour-app` → write "Show how full a concert is" → the issue on the board (highlighted, #387) → ▶ Play → the theater live → 14 min later: 4/4 sub-tasks, PRs #392–#395 reviewed and merged → the latest-demo card → the player (stories, QA gates 325 unit / 36 E2E / 97.1 % coverage, screenshots, video) | `28371c2016da`, 2026-09-28, $2.11 |
+
+```bash
+# a filmed Play (writes docs/demos/<name>.webm)
+uv run python scripts/record_v2_demo.py --repo jrechet/concert-tour-app \
+    --name <name> --feature "<issue title>" --body "<issue body>"
+# the eval harness instead of the filmed Play, then what it judged
+uv run python scripts/record_v2_demo.py --repo jrechet/concert-tour-app \
+    --name <name> --harness-feature <eval feature id>
+```
+
 ## Recording / re-recording a walkthrough
 
 Every sprint demo is a real Playwright capture of the dashboard tour, with
