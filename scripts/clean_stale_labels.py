@@ -15,6 +15,11 @@ cycles long gone. Each gets what its history says, never a blanket flip:
   it asks for it again;
 - anything else → back to `status:ready`, so Play picks it up again.
 
+With `--close-ready-before`, a `role:dev` task still `status:ready` and
+opened before that date is closed as not planned too (owner, 2026-09-29):
+V2 always targets an issue, but an untargeted cycle would pick up April's
+dashboard tasks for an app that has moved on.
+
 Every change carries a comment saying why. Dry run by default: the plan is
 printed, nothing is written; `--apply` writes it. Never run it while a
 cycle is working on the repository — its issues are legitimately in
@@ -106,9 +111,27 @@ def plan(open_issues: list[dict], closed_issues: list[dict],
     return actions
 
 
+def plan_old_ready(open_issues: list[dict], before: str) -> list[Action]:
+    """`role:dev` tasks still `status:ready`, opened before `before`: closed
+    as not planned. A stale-labelled one is `plan`'s, never both."""
+    actions: list[Action] = []
+    for issue in sorted(open_issues, key=lambda i: i["number"]):
+        labels = _labels(issue)
+        created = issue.get("created_at") or "9999"
+        if ("status:ready" in labels and "role:dev" in labels
+                and not any(label in labels for label in STALE) and created < before):
+            actions.append(Action(issue["number"], issue.get("title", ""), "not_planned",
+                                  f"a ready task opened {created[:10]}, before {before}, and the app "
+                                  "has moved on since", stale=("status:ready",)))
+    return actions
+
+
 def comment(action: Action, labels: tuple[str, ...] = ()) -> str:
     what = {"close": "Closing", "not_planned": "Closing as not planned (reopen it to ask again)",
             "review": "Back to `status:review`", "ready": "Back to `status:ready`"}[action.kind]
+    if labels == ("status:ready",):
+        return (f"{what}: {action.why}. It was still `status:ready`, where an untargeted "
+                f"cycle would pick it up.\n\n{MARKER}")
     was = ", ".join(f"`{label}`" for label in labels) or "a stale status"
     return (f"{what}: {action.why}. It was labelled {was} by a cycle long gone — "
             f"the swarm's board showed it as Stalled.\n\n{MARKER}")
@@ -150,6 +173,8 @@ def main() -> int:
     ap.add_argument("--apply", action="store_true", help="write the plan (default: print it)")
     ap.add_argument("--close-before", default="", help="YYYY-MM-DD: close older stale issues as not planned")
     ap.add_argument("--skip", type=int, nargs="*", default=[], help="issues a running cycle is working on")
+    ap.add_argument("--close-ready-before", default="",
+                    help="YYYY-MM-DD: close role:dev tasks still ready and opened before it, as not planned")
     args = ap.parse_args()
 
     issues = [i for i in _all(args.repo, "issues", "all") if "pull_request" not in i]
@@ -159,6 +184,8 @@ def main() -> int:
         [p for p in prs if p["state"] == "open"], [p for p in prs if p.get("merged_at")],
         close_before=args.close_before,
     )
+    if args.close_ready_before:
+        actions += plan_old_ready([i for i in issues if i["state"] == "open"], args.close_ready_before)
     actions = [a for a in actions if a.issue not in set(args.skip)]
     for a in actions:
         print(f"#{a.issue:<4} {a.kind:<6} {a.why:<46} {a.title[:60]}")

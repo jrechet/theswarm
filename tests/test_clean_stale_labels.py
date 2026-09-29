@@ -81,3 +81,34 @@ def test_an_old_stale_task_is_closed_as_not_planned():
     assert actions[1].kind == "not_planned" and "2026-04-16" in actions[1].why
     assert actions[218].kind == "ready"
     assert "reopen it to ask again" in cleaner.comment(actions[1], ("status:in-progress",))
+
+
+# ── Old ready tasks (owner, 2026-09-29: "close them, not planned") ─────
+# 14 role:dev tasks in status:ready from April and August (#146–#162,
+# #173, #182–#184): V2 always targets an issue, but an untargeted cycle
+# would pick them up — dashboard tasks for an app that has moved on.
+
+
+def test_an_old_ready_task_is_closed_as_not_planned():
+    old = dict(_issue(146, ["status:ready", "role:dev"], "Create tour dashboard backend API"),
+               created_at="2026-04-16T09:00:00Z")
+    recent = dict(_issue(466, ["status:ready", "role:dev"], "Sold-out query"),
+                  created_at="2026-09-29T09:00:00Z")
+    story = dict(_issue(40, ["status:ready"], "A story, not a task"), created_at="2026-04-01T09:00:00Z")
+
+    actions = {a.issue: a for a in cleaner.plan_old_ready([old, recent, story], before="2026-09-01")}
+
+    assert set(actions) == {146}
+    assert actions[146].kind == "not_planned" and "2026-04-16" in actions[146].why
+    text = cleaner.comment(actions[146], actions[146].stale)
+    assert "reopen it to ask again" in text
+    assert "untargeted cycle would pick it up" in text
+    assert "Stalled" not in text  # the board never called it stalled
+
+
+def test_stale_labels_are_not_planned_twice():
+    """An issue both stale-labelled and ready is the stale plan's to handle."""
+    both = dict(_issue(205, ["status:ready", "status:in-progress", "role:dev"], "City filter story"),
+                created_at="2026-04-01T09:00:00Z")
+
+    assert cleaner.plan_old_ready([both], before="2026-09-01") == []
