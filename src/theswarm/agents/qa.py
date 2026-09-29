@@ -164,6 +164,10 @@ real resources, list them, fetch one, update/delete where routes exist
 - Build request bodies from the actual schema fields; use \
 `uuid.uuid4().hex[:8]` to keep unique fields unique
 - Assert status codes AND response body content
+- Assert on data through the JSON API wherever one exists. When a test must \
+read HTML, parse whole elements (count `<article class="…">` tags, match an \
+exact class token) — never count a class name as a substring: \
+`class="concert-card` also matches `concert-card-date`, `concert-card-next`
 - Test error cases the API actually implements: fetching a missing resource \
 (404), sending an invalid body (422), plus auth errors only if the source \
 defines auth

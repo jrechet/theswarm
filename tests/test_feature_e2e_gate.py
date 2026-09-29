@@ -174,3 +174,12 @@ def test_one_confirmation_and_no_contradiction_is_verified():
 def test_nothing_about_the_feature_ran_is_unverified():
     assert evals.behaviour_of({"e2e_tests": "pass", "feature_pages": "not_run"}) == "unverified"
     assert evals.behaviour_of({}) == "unverified"
+
+
+def test_the_prompt_warns_against_counting_html_by_substring():
+    """past-concerts-toggle's feature tests counted `class="concert-card` as
+    a substring — `concert-card-date`, `-next` … match too — and a good
+    build read "broken" until the triage caught it (test_feature_failure_triage)."""
+    prompt = qa.E2E_PROMPT
+
+    assert "substring" in prompt and "JSON" in prompt
