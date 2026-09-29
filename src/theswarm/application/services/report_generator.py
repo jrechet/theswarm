@@ -277,8 +277,22 @@ def _qa_gate_detail(name: str, gate: dict, status: QualityStatus) -> str:
     elif gate.get("reason"):  # the feature's tests: which failed, and who is wrong
         detail += " — " + str(gate["reason"])
     if gate.get("repaired_from"):
-        detail += f" (file repaired once: {gate['repaired_from']})"
+        detail += f" (file repaired once: {_first_error(str(gate['repaired_from']))})"
     return detail
+
+
+_DETAIL_LINE_LIMIT = 160
+
+
+def _first_error(excerpt: str) -> str:
+    """pytest's excerpt said in one line: its first `E` line, else its first
+    line that is not a `___ header ___`. A passing gate carried a dozen
+    "ERROR at setup of …" blocks onto the gates slide (cancel-tour)."""
+    lines = [line.strip() for line in excerpt.splitlines() if line.strip()]
+    errors = [line[1:].strip() for line in lines if line.startswith("E ")]
+    plain = [line for line in lines if not line.startswith("_")]
+    first = (errors or plain or [excerpt.strip()])[0]
+    return first[:_DETAIL_LINE_LIMIT]
 
 
 # What a delivered task's status reads as on the report.
