@@ -210,11 +210,18 @@ def test_what_the_feature_s_own_calls_answered_is_the_verdict(results, status, r
     assert gate["status"] == status and gate["reason"] == reason
 
 
-def test_no_route_but_get_is_not_run():
+def test_no_route_touched_is_not_run():
     gate = fc.feature_calls_gate({"routes": [], "calls": [], "reason": ""}, [])
 
-    assert gate == {"status": "not_run", "calls": [],
-                    "reason": "the PRs add no route but GET — the pages are the demo"}
+    assert gate == {"status": "not_run", "calls": [], "reason": "the PRs touch no route"}
+
+
+def test_get_routes_that_walk_as_is_need_no_call():
+    get_route = {"pr": 470, "method": "GET", "path": "/api/v1/concerts/sold-out"}
+
+    gate = fc.feature_calls_gate({"routes": [get_route], "calls": [], "reason": ""}, [])
+
+    assert gate["status"] == "not_run" and gate["reason"] == "the pages are the demo — every route walks as is"
 
 
 def test_a_script_nobody_could_write_is_not_run_with_its_reason():
@@ -429,3 +436,45 @@ async def test_an_exchange_is_drawn_as_request_and_answer(page):
     request, answer = await page.locator("pre").all_inner_texts()
     assert '"quantity": 2' in request
     assert '"tickets_sold": 122' in answer  # pretty-printed
+
+
+# ── GET routes that need input (artist-search, da79522769b3) ─────────
+# `/api/v1/tours/search` needs `?artist=`: the plain walk got a 422, the
+# feature_pages gate said "not run" and the demo showed the dashboard.
+
+SEARCH_ROUTE = {"pr": 505, "method": "GET", "path": "/api/v1/tours/search"}
+
+
+async def test_get_routes_reach_the_writer():
+    github = AsyncMock()
+    patch_text = ADDS_TICKETS.replace('@router.post("/{concert_id}/tickets", status_code=201)',
+                                      '@router.get("/{concert_id}/tickets/summary")')
+    source = CONCERTS.replace('@router.post("/{concert_id}/tickets", status_code=201)',
+                              '@router.get("/{concert_id}/tickets/summary")')
+    github.get_pr_files = AsyncMock(return_value=[{"filename": "src/routers/concerts.py", "patch": patch_text}])
+    github.get_file_content = AsyncMock(return_value=source)
+
+    routes = await fc.feature_routes(github, [{"number": 505, "head_sha": "abc"}])
+
+    assert routes == [{"pr": 505, "method": "GET", "path": "/api/v1/concerts/{concert_id}/tickets/summary"}]
+
+
+async def test_the_writer_is_told_when_a_get_needs_a_call(tmp_path):
+    claude = _claude([{"method": "GET", "path": "/api/v1/tours/search?artist=neon", "json_body": None,
+                       "caption": "Tours whose artist contains \"neon\""}])
+
+    script = await fc.write_demo_calls(claude, str(tmp_path), [SEARCH_ROUTE])
+
+    prompt = claude.run.await_args.args[0]
+    assert "needs no call" in prompt and "query parameters" in prompt
+    (call,) = script["calls"]
+    assert call["label"] == "feature_pr_505_get_tours_search_artist_neon"
+
+
+def test_a_get_call_of_the_feature_judges_it():
+    results = [{"label": "feature_pr_505_get_tours_search_artist_neon", "method": "GET",
+                "path": "/api/v1/tours/search?artist=neon", "status": 200}]
+
+    gate = fc.feature_calls_gate({"routes": [SEARCH_ROUTE], "calls": results, "reason": ""}, results)
+
+    assert gate["status"] == "pass"
