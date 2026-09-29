@@ -243,6 +243,32 @@ def film_demo(p, repo: str, cycle_id: str,
     return _close(browser, context, video_dir), play_url
 
 
+def film_board(p, repo: str) -> Path:
+    """The repo page's board, group by group — what is building, in review,
+    ready, and what the labels claim that nothing is doing."""
+    browser, context, video_dir = _film(p, "board")
+    page = context.new_page()
+    page.goto(f"{BASE}/r/{repo}", wait_until="domcontentloaded")
+    _caption(page, "The board, read from GitHub: what is actually happening")
+    time.sleep(4)
+    captions = {
+        "in-progress": "Building: what a running cycle is working on",
+        "review": "In review: an issue with an open pull request",
+        "ready": "Ready: sub-tasks waiting for a Dev",
+        "backlog": "Backlog: features written, not started",
+        "stalled": "Stalled: labelled in progress or in review — nothing is working on them",
+    }
+    for key, text in captions.items():
+        heading = page.locator(f"#group-{key}")
+        if heading.count():
+            heading.scroll_into_view_if_needed()
+            page.evaluate("el => window.scrollBy(0, el.getBoundingClientRect().top - 80)",
+                          heading.element_handle())
+            _caption(page, text)
+            time.sleep(5)
+    return _close(browser, context, video_dir)
+
+
 def run_harness(repo: str, feature_id: str, budget: int) -> tuple[str, int]:
     """The eval harness against this local server: it writes the issue,
     starts the cycle, waits, scores it and posts the score here. Returns
@@ -282,6 +308,8 @@ def main() -> int:
     ap.add_argument("--feature", default="", help="the issue title (a filmed Play)")
     ap.add_argument("--harness-feature", default="",
                     help="an eval feature id: the harness runs it instead of a filmed Play")
+    ap.add_argument("--board", action="store_true",
+                    help="film the repo page's board only — no cycle")
     ap.add_argument("--cycle", default="",
                     help="a finished cycle in tmp/demo-v2's database: film its theater on a "
                          "fresh server (the tracker has forgotten it) — no new cycle")
@@ -290,10 +318,21 @@ def main() -> int:
     ap.add_argument("--budget", type=int, default=3600)
     args = ap.parse_args()
 
-    if not (args.feature or args.harness_feature or args.cycle):
-        sys.exit("--feature, --harness-feature or --cycle is required")
+    if not (args.feature or args.harness_feature or args.cycle or args.board):
+        sys.exit("--feature, --harness-feature, --cycle or --board is required")
 
     server = _start_server(_env())
+    if args.board:
+        try:
+            with sync_playwright() as p:
+                video = film_board(p, args.repo)
+            out = DEMOS_DIR / f"{args.name}.webm"
+            join([video], out)
+            print(json.dumps({"video": str(out.relative_to(ROOT)), "bytes": out.stat().st_size}))
+            return 0
+        finally:
+            server.terminate()
+            server.wait(timeout=20)
     try:
         with sync_playwright() as p:
             films: list[Path] = []

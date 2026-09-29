@@ -31,7 +31,13 @@ _GROUPS = (
     ("review", "In review"),
     ("ready", "Ready"),
     ("backlog", "Backlog"),
+    # Labelled building or in review, and nothing is: no running cycle works
+    # on it, no pull request is open for it. concert-tour-app's board read
+    # "Building 17" with nothing running — labels left by cycles long gone.
+    ("stalled", "Stalled"),
 )
+
+_PR_TASK_RE = re.compile(r"\[#(\d+)\]|\bCloses #(\d+)", re.IGNORECASE)
 
 _COMPOSER_TITLE_MAX = 80
 
@@ -231,9 +237,10 @@ async def repo_page(
         issues_error = str(exc)[:160]
 
     running = _running_for_repo(full_name)
+    prs = await _open_pr_briefs(client) if not issues_error else None
     by_status: dict[str, list[dict]] = {key: [] for key, _ in _GROUPS}
     for issue in issues:
-        status = issue_status(issue)
+        status = _board_status(issue, running, prs)
         row = dict(issue)
         row["building"] = bool(
             running is not None
@@ -256,6 +263,36 @@ async def repo_page(
         "latest_demo": await _latest_demo(state, full_name),
         "evals": await _evals_trend(state, full_name),
     })
+
+
+async def _open_pr_briefs(client) -> list[dict] | None:
+    """The open PRs, or None when they cannot be read — then the labels are
+    believed, rather than an issue called stalled on a failed read."""
+    try:
+        return list(await client.get_open_pr_briefs())
+    except Exception:  # noqa: BLE001 — the board keeps the labels' word
+        log.warning("V2: listing open PRs failed", exc_info=True)
+        return None
+
+
+def _board_status(issue: dict, running, prs: list[dict] | None) -> str:
+    """The column an issue belongs in: its label, unless the label claims
+    work nothing is doing (`stalled`)."""
+    from theswarm.tools.github import is_child_of
+
+    status = issue_status(issue)
+    number = issue.get("number")
+    if status == "in-progress":
+        pinned = getattr(running, "issue_number", None) if running is not None else None
+        if pinned is None or not (number == pinned or is_child_of(issue.get("body"), pinned)):
+            return "stalled"
+    if status == "review" and prs is not None:
+        claimed = {int(n) for pr in prs
+                   for pair in _PR_TASK_RE.findall(f"{pr.get('title', '')}\n{pr.get('body', '')}")
+                   for n in pair if n}
+        if number not in claimed:
+            return "stalled"
+    return status
 
 
 async def _evals_trend(state, repo: str) -> dict:

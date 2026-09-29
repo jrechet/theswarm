@@ -141,7 +141,9 @@ async def test_repo_page_groups_issues_by_status(web):
         r = await client.get("/r/jrechet/concert-tour-app")
 
     text = r.text
-    assert text.index("Building") < text.index("Payment flow")
+    # Labelled in progress, and no cycle is running: stalled, not building
+    # (test_v2_board_truth.py).
+    assert text.index("Stalled") < text.index("Payment flow")
     assert text.index("Ready") < text.index("Ship the seating map")
     assert text.index("Backlog") < text.index("Dark mode")
     assert text.count("▶") == 3  # every non-building issue gets Play
