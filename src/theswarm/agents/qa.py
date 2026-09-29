@@ -2235,7 +2235,46 @@ def _find_system_python(workspace: str = "") -> str:
 
 
 def _extract_python_code(text: str) -> str | None:
-    """Extract Python code from Claude's response, handling prose/fences."""
+    """Extract Python code from Claude's response, handling prose/fences —
+    and a sign-off after the code (`_without_trailing_prose`)."""
+    code = _extract_code_block(text)
+    return _without_trailing_prose(code) if code is not None else None
+
+
+_PYTHON_TAIL_RE = re.compile(r"^\s*(def |class |async def |import |from |@)", re.MULTILINE)
+
+
+def _without_trailing_prose(code: str) -> str:
+    """The code without the prose an answer ended with: price-stats' E2E
+    file closed on "Dima here — that's the full E2E suite …" and did not
+    collect. Cut only when the file does not parse, at an unindented line,
+    and only a tail that defines nothing — a syntax error inside the code
+    stays for pytest to report."""
+    import ast
+
+    try:
+        ast.parse(code)
+        return code
+    except SyntaxError as exc:
+        line = exc.lineno or 0
+    lines = code.split("\n")
+    if not 1 < line <= len(lines) or lines[line - 1][:1] in (" ", "\t"):
+        return code
+    tail = "\n".join(lines[line - 1:])
+    head = "\n".join(lines[:line - 1]).rstrip()
+    if _PYTHON_TAIL_RE.search(tail):
+        return code
+    try:
+        ast.parse(head)
+    except SyntaxError:
+        return code
+    log.warning("QA: cut %d line(s) of prose after the code: %s", len(lines) - line + 1,
+                lines[line - 1][:120])
+    return head
+
+
+def _extract_code_block(text: str) -> str | None:
+    """The code of an answer: fences stripped, from its first import."""
     text = text.strip()
 
     # Strip markdown fences
