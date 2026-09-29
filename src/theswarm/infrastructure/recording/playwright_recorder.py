@@ -39,6 +39,30 @@ _PRESENT_JSON = """
 """
 
 
+_TEXT_STYLE = (
+    '<meta charset="utf-8"><style>'
+    "html,body{margin:0;background:#FAF8F3;color:#1F1C17}"
+    'body{padding:40px 56px;font:18px/1.55 ui-monospace,"IBM Plex Mono",Menlo,monospace}'
+    "header{font:600 16px/1.4 system-ui,sans-serif;color:#7A6F5E;letter-spacing:.02em;"
+    "margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid #E4DDCF}"
+    "pre{margin:0;white-space:pre-wrap;word-break:break-word}</style>"
+)
+
+
+async def present_text(page, path: str, status: int | None, content_type: str, body: str) -> None:
+    """Draw an answer a browser would download (`text/calendar`, `text/csv`, …)
+    as the request and its body. Chromium started a download on the
+    ical-feed cycle's `calendar.ics`: no screenshot, no frame of the video."""
+    import html
+
+    kind = (content_type or "").split(";")[0].strip()
+    head = f"GET {path}" + (f" \u2192 {status}" if status else "") + (f" \u00b7 {kind}" if kind else "")
+    await page.set_content(
+        f"<html><head>{_TEXT_STYLE}</head><body><header>{html.escape(head)}</header>"
+        f"<pre>{html.escape(body[:20_000])}</pre></body></html>"
+    )
+
+
 async def present_json(page, path: str, status: int | None) -> bool:
     """Redraw the page if it is a JSON answer; False when it is not."""
     try:
@@ -109,6 +133,25 @@ class PlaywrightRecorder:
         )
 
         log.info("PlaywrightRecorder: screenshot '%s' (%d bytes) from %s", label, len(data), url)
+        return artifact, data
+
+    async def screenshot_text(
+        self, url: str, label: str, *, status: int | None, content_type: str, body: str,
+    ) -> tuple[Artifact, bytes]:
+        """A screenshot of an answer drawn as text (`present_text`)."""
+        browser = await self._ensure_browser()
+        context = await browser.new_context(viewport=self._viewport)
+        page = await context.new_page()
+        try:
+            await present_text(page, urlparse(url).path or "/", status, content_type, body)
+            data = await page.screenshot(full_page=True, type="png")
+        finally:
+            await context.close()
+        artifact = Artifact(
+            type=ArtifactType.SCREENSHOT, label=label, path="", mime_type="image/png",
+            size_bytes=len(data), created_at=datetime.now(timezone.utc),
+        )
+        log.info("PlaywrightRecorder: text screenshot '%s' (%d bytes) from %s", label, len(data), url)
         return artifact, data
 
     async def screenshot_multi(

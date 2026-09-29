@@ -171,6 +171,9 @@ def behaviour_of(qa: dict[str, str]) -> str:
     statuses = [qa.get(gate) for gate in BEHAVIOUR_GATES]
     if "fail" in statuses:
         return BEHAVIOUR_BROKEN
+    # The feature's tests were wrong (QA's triage): nothing is confirmed.
+    if "inconclusive" in statuses:
+        return BEHAVIOUR_UNVERIFIED
     if "pass" in statuses:
         return BEHAVIOUR_VERIFIED
     return BEHAVIOUR_UNVERIFIED

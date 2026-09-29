@@ -219,6 +219,7 @@ _QA_STATUS = {
     "fail": QualityStatus.FAIL,
     "warn": QualityStatus.WARN,
     "not_run": QualityStatus.SKIP,
+    "inconclusive": QualityStatus.WARN,  # the feature's tests were wrong, not the app
 }
 
 
@@ -273,6 +274,8 @@ def _qa_gate_detail(name: str, gate: dict, status: QualityStatus) -> str:
     detail = f"{gate.get('passed', 0)} passed, {gate.get('failed', 0)} failed"
     if gate.get("failure_excerpt"):
         detail += " — " + str(gate["failure_excerpt"])
+    elif gate.get("reason"):  # the feature's tests: which failed, and who is wrong
+        detail += " — " + str(gate["reason"])
     if gate.get("repaired_from"):
         detail += f" (file repaired once: {gate['repaired_from']})"
     return detail
