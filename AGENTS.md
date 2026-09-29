@@ -37,7 +37,12 @@ Two UI generations coexist in `presentation/web/`:
   installation plus legacy registered projects), `/r/{owner}/{name}` (composer →
   GitHub issue, issue board, ▶ Play — the composer lands on `?new=N` and the page
   reads that issue by number, highlighted: GitHub's list trails a creation by
-  seconds and the feature just written was missing), `/c/{cycle_id}` (the theater: agent rail from
+  seconds and the feature just written was missing; the board groups by what is
+  happening, not by the labels: Building is the running cycle's issue and its
+  sub-tasks, In review an issue an open PR names (`[#N]`/`Closes #N`, one
+  `get_open_pr_briefs` listing), and the rest of those labels is Stalled —
+  concert-tour-app read "Building 17" with nothing running; a failed PR read
+  keeps the labels' word), `/c/{cycle_id}` (the theater: agent rail from
   `ProgressBridge` live messages, pinned issue breakdown via
   `application/services/pinned_issue.py`, feed from the cycle event store — the
   agents' `AgentActivity`, fragments of streamed code left out

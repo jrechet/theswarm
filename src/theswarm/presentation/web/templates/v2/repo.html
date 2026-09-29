@@ -134,6 +134,7 @@
     <section aria-labelledby="group-{{ group.key }}">
       <h2 id="group-{{ group.key }}" class="flex items-baseline gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-faint mb-2">
         {{ group.label }} <span class="text-soft">{{ group.issues | length }}</span>
+        {%- if group.key == 'stalled' %}<span class="normal-case tracking-normal text-faint"> · labelled in progress or in review, nothing is working on them — Play picks one up again</span>{% endif %}
       </h2>
       <ul class="divide-y divide-rule border-y border-rule">
         {% for issue in group.issues %}

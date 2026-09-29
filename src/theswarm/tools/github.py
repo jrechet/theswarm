@@ -262,6 +262,16 @@ class GitHubClient:
         )
         return [_pr_to_dict(p) for p in prs]
 
+    async def get_open_pr_briefs(self) -> list[dict]:
+        """Open PRs as number/title/body only: one listing call. The board
+        reads which issues have one; `get_open_prs` reads `mergeable`, a
+        request per PR on a page render."""
+        await self._fresh()
+        prs: list[PullRequest] = await self._run(
+            lambda: list(self._repo.get_pulls(state="open"))
+        )
+        return [{"number": p.number, "title": p.title, "body": p.body or ""} for p in prs]
+
     async def get_pr(self, pr_number: int) -> dict | None:
         """One pull request as the dict `get_open_prs` returns, None if absent."""
         await self._fresh()
