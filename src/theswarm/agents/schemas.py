@@ -86,3 +86,18 @@ class DailyPlan(BaseModel):
     selected: list[PlannedStory] = Field(default_factory=list)
     daily_plan: str = ""
 
+
+class TestFault(BaseModel):
+    """Who is wrong about one failing E2E test of the feature."""
+
+    test: str = Field(description="the test function's name, as pytest printed it")
+    fault: Literal["app", "test"] = Field(
+        description="app: the application misbehaves against the feature; "
+                    "test: the test itself is wrong (a bad assertion, a wrong expectation)")
+    why: str = Field(description="the exact reason, citing the line of the test or of the app")
+
+
+class TestTriage(BaseModel):
+    """QA's triage of the failing feature tests (`qa._triage_feature_failures`)."""
+
+    verdicts: list[TestFault]

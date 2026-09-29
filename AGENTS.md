@@ -407,7 +407,14 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   demo server, E2E run included. The workspace's database outlives
   cycles — the tour-revenue demo showed an E2E leftover at "revenue 0.00,
   0 concerts" until concert-tour-app declared `DATABASE_URL:
-  sqlite:///{tmp}/demo.db` (concert-tour-app#425).
+  sqlite:///{tmp}/demo.db` (concert-tour-app#425). **The E2E server is
+  seeded too**, and the E2E prompt names the seed (`_seed_section`): once
+  each server had its own database, the unseeded E2E one was empty and ten
+  feature tests asked for tour 1 in vain — a false "broken" and regression
+  (ical-feed, 79e1658b2462; the swarm's PO diagnosed it itself). **A
+  download is drawn as text** (`_is_download`, `present_text`: "GET /path
+  → 200 · text/calendar" over the body) — `calendar.ics` made Chromium
+  start a download: no screenshot, no frame in the video.
   Without a declaration: `uvicorn src.main:app`, the guessed page walk, no
   setup, no seed. TheSwarm declares `python -m theswarm serve --port {port} --db
   {tmp}/demo.db` with `SWARM_AUTH_DISABLED=1`, `ready_seconds: 90`,
@@ -733,7 +740,12 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   names the cycle's PRs and pages — `qa_feature_pages.feature_e2e_gate`;
   the rest of the file probes the whole API blind and is reported, not
   judged: a stale `?status=planning` answered 422 failed a good
-  price-range build on 2026-09-28), and the new
+  price-range build on 2026-09-28; **a failing feature test is triaged**
+  first — one call, `qa._triage_feature_failures`, `TestTriage`: every
+  failure the test's own mistake makes the gate `inconclusive` and the
+  verdict `unverified`, never `verified`; nothing is rewritten to pass —
+  past-concerts-toggle's tests counted `class="concert-card` as a
+  substring and found 24 cards for 6), and the new
   `feature_pages` gate (`qa_feature_pages.feature_pages_gate`: the GET
   routes the PRs added, walked by the screenshot pass, their answers in
   `feature_page_statuses`). A 5xx is `fail`; a 4xx proves nothing (path

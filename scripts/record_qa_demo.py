@@ -49,8 +49,11 @@ def _head_sha(repo: str, pr: int) -> str:
     ).stdout.strip()
 
 
-async def capture(repo: str, workspace: str, prs: list[int]) -> dict:
-    """QA's captures and report on the checkout — the real functions."""
+async def capture(repo: str, workspace: str, prs: list[int], with_e2e: bool = False,
+                  keep_e2e_file: bool = False) -> dict:
+    """QA's captures and report on the checkout — the real functions. With
+    `with_e2e`, QA's E2E step first: the file written for the PRs (a real
+    Claude call), run on a seeded server, its failing feature tests triaged."""
     from theswarm.agents import qa
     from theswarm.tools.github import GitHubClient
 
@@ -61,12 +64,21 @@ async def capture(repo: str, workspace: str, prs: list[int]) -> dict:
         "prs": [{"number": n, "head_sha": _head_sha(repo, n)} for n in prs],
         "github_repo": repo,
     }
+    e2e: dict = {}
+    if with_e2e:
+        from theswarm.tools.claude import ClaudeCLI
+
+        state["claude"] = ClaudeCLI(model="sonnet")
+        if not keep_e2e_file:  # else: run the file as it is (a planted test)
+            written = await qa.write_e2e_tests(state)
+            state = {**state, **{k: v for k, v in written.items() if k == "feature_pages"}}
+        e2e = await qa.run_e2e_tests(state)
     captures = await qa.run_captures(state)
-    # No test run here: the unit gate says so instead of a vacuous 0/0 pass.
+    # No unit run here: the unit gate says so instead of a vacuous 0/0 pass.
     report = await qa.generate_demo_report({
-        **state, **captures, "unit_tests_not_run_reason": "a capture-only demo, no cycle",
+        **state, **e2e, **captures, "unit_tests_not_run_reason": "not run by this demo, no cycle",
     })
-    return {**captures, **report}
+    return {**e2e, **captures, **report}
 
 
 async def store(repo: str, qa_out: dict) -> str:
@@ -129,15 +141,29 @@ def main() -> int:
     ap.add_argument("--workspace", required=True, help="a checkout of the target")
     ap.add_argument("--prs", type=int, nargs="+", required=True, help="the PRs the feature is in")
     ap.add_argument("--name", required=True, help="docs/demos/<name>.webm")
+    ap.add_argument("--with-e2e", action="store_true",
+                    help="run QA's E2E step first (writes the file with Claude, runs it, triages)")
+    ap.add_argument("--keep-e2e-file", action="store_true",
+                    help="with --with-e2e: run the workspace's E2E file as it is instead of writing one")
     args = ap.parse_args()
 
     workspace = str(Path(args.workspace).resolve())
     import os
 
-    os.environ.setdefault("GITHUB_TOKEN", film._env()["GITHUB_TOKEN"])  # QA reads the PRs' diffs
-    qa_out = asyncio.run(capture(args.repo, workspace, args.prs))
+    env = film._env()
+    os.environ.setdefault("GITHUB_TOKEN", env["GITHUB_TOKEN"])  # QA reads the PRs' diffs
+    if args.with_e2e:  # the subscription only (V2 invariant I1)
+        os.environ["SWARM_CLAUDE_BACKEND"] = "sdk"
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        if env.get("CLAUDE_CODE_OAUTH_TOKEN"):
+            os.environ.setdefault("CLAUDE_CODE_OAUTH_TOKEN", env["CLAUDE_CODE_OAUTH_TOKEN"])
+    qa_out = asyncio.run(capture(args.repo, workspace, args.prs, with_e2e=args.with_e2e,
+                                 keep_e2e_file=args.keep_e2e_file))
     gate = qa_out["demo_report"]["quality_gates"].get("feature_pages", {})
     print("feature pages gate:", json.dumps(gate), flush=True)
+    if args.with_e2e:
+        print("feature E2E gate:", json.dumps(qa_out["demo_report"]["quality_gates"].get("feature_e2e")),
+              flush=True)
     report_id = asyncio.run(store(args.repo, qa_out))
 
     server = film._start_server(film._env())
