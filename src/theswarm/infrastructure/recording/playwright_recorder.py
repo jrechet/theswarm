@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -61,6 +62,46 @@ async def present_text(page, path: str, status: int | None, content_type: str, b
         f"<html><head>{_TEXT_STYLE}</head><body><header>{html.escape(head)}</header>"
         f"<pre>{html.escape(body[:20_000])}</pre></body></html>"
     )
+
+
+_EXCHANGE_STYLE = _TEXT_STYLE.replace(
+    "</style>",
+    "p.caption{font:600 24px/1.35 system-ui,sans-serif;margin:0 0 20px;color:#1F1C17}"
+    "h2{font:600 12px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;"
+    "color:#7A6F5E;margin:26px 0 10px}"
+    "pre.request{color:#5B4A2E}</style>",
+)
+
+
+def _pretty(body: object) -> str:
+    """A JSON body indented for the screen; anything else as it came."""
+    if body is None or body == "":
+        return ""
+    if not isinstance(body, str):
+        return json.dumps(body, indent=2, ensure_ascii=False)
+    try:
+        return json.dumps(json.loads(body), indent=2, ensure_ascii=False)
+    except ValueError:
+        return body
+
+
+async def present_exchange(page, exchange: dict) -> None:
+    """Draw one call of a feature's demo (`qa_feature_calls`): the request and
+    its status on top, the caption a viewer reads, the body sent and the
+    answer, pretty-printed. sell-tickets had nothing to show but GET pages."""
+    import html
+
+    status = exchange.get("status")
+    head = f"{exchange.get('method', 'GET')} {exchange.get('path', '/')}" + (
+        f" → {status}" if status else " → no answer")
+    parts = [f"<header>{html.escape(head)}</header>"]
+    if exchange.get("caption"):
+        parts.append(f'<p class="caption">{html.escape(exchange["caption"])}</p>')
+    sent = _pretty(exchange.get("request"))
+    if sent:
+        parts.append(f'<h2>Sent</h2><pre class="request">{html.escape(sent)}</pre>')
+    parts.append(f"<h2>Answer</h2><pre>{html.escape(_pretty(exchange.get('body', ''))[:20_000])}</pre>")
+    await page.set_content(f"<html><head>{_EXCHANGE_STYLE}</head><body>{''.join(parts)}</body></html>")
 
 
 async def present_json(page, path: str, status: int | None) -> bool:
@@ -152,6 +193,24 @@ class PlaywrightRecorder:
             size_bytes=len(data), created_at=datetime.now(timezone.utc),
         )
         log.info("PlaywrightRecorder: text screenshot '%s' (%d bytes) from %s", label, len(data), url)
+        return artifact, data
+
+    async def screenshot_exchange(self, exchange: dict) -> tuple[Artifact, bytes]:
+        """A screenshot of one demo call drawn by `present_exchange`."""
+        browser = await self._ensure_browser()
+        context = await browser.new_context(viewport=self._viewport)
+        page = await context.new_page()
+        try:
+            await present_exchange(page, exchange)
+            data = await page.screenshot(full_page=True, type="png")
+        finally:
+            await context.close()
+        label = exchange.get("label") or "feature_call"
+        artifact = Artifact(
+            type=ArtifactType.SCREENSHOT, label=label, path="", mime_type="image/png",
+            size_bytes=len(data), created_at=datetime.now(timezone.utc),
+        )
+        log.info("PlaywrightRecorder: exchange screenshot '%s' (%d bytes)", label, len(data))
         return artifact, data
 
     async def screenshot_multi(

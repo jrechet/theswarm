@@ -759,11 +759,26 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   routes the PRs added, walked by the screenshot pass, their answers in
   `feature_page_statuses`). A 5xx is `fail`; a 4xx proves nothing (path
   parameters are filled with "1" and that row may not exist); no 2xx at
-  all is `not_run`. Either gate failing is `broken` — the harness prints
-  "FAIL — built, but the running app says otherwise", exits non-zero,
-  and a broken build after one that was not is a regression. One passing
-  and none failing is `verified` (a POST-only feature has no page to walk);
-  anything else `unverified`, which does not fail a run. The repo page counts both and draws a broken build rust-light.
+  all is `not_run`. **A feature that is not GET is shown by its own
+  requests** (`feature_calls`, `agents/qa_feature_calls.py`): sell-tickets
+  (68fd55bf81e5) added one POST route, and its demo was four seconds of
+  the API root. When a PR touches a POST/PUT/PATCH/DELETE route, one Claude
+  call (read profile, the workspace, the seed named) writes at most six
+  calls against the seeded data — before, the feature's request with a
+  body built from the schema, after — `run_captures` writes them once,
+  and each lane plays them on its own demo server and database: each
+  exchange a screenshot (`screenshot_exchange`, the feature's own call
+  labelled as its PR's story) and 2.5 s of the video (`present_exchange`:
+  "POST /path → 201", the caption, what was sent, the answer). A call's
+  path must be a path on that server ("/…", never a host). The gate reads
+  only the calls of the feature's routes: 5xx `fail`, 2xx `pass`, a 4xx
+  proves nothing (the body was written from the code), no script
+  `not_run` with the reason. Any behaviour gate failing is `broken` — the
+  harness prints "FAIL — built, but the running app says otherwise",
+  exits non-zero, and a broken build after one that was not is a
+  regression. One passing and none failing is `verified`; anything else
+  `unverified`, which does not fail a run. The repo page counts both and
+  draws a broken build rust-light.
 - **V2 runtime M8 — the GitHub-native doors.** The webhook route
   (`/webhooks/github`, outside the auth wall) is installed **only** when
   `SWARM_WEBHOOK_SECRET` is set (server.py; the repository webhook on

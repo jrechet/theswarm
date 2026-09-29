@@ -35,7 +35,7 @@ def demo_comment(report: Any, play_url: str) -> str:
     gates = [
         f"{gate.name.replace('_', ' ')}: {gate.status.value}"
         for gate in report.quality_gates
-        if gate.name in ("feature_pages", "e2e_tests")
+        if gate.name in ("feature_pages", "feature_calls", "e2e_tests")
     ]
     lines = [
         f"🎬 **The demo is ready** — [watch it]({play_url})",

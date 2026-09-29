@@ -136,13 +136,15 @@ def exhausted(manifest: Manifest, runs: list[dict]) -> bool:
     return all(feature.id in delivered for feature in manifest.features)
 
 
-QA_GATES = ("unit_tests", "e2e_tests", "security", "coverage", "feature_pages", "feature_e2e")
+QA_GATES = ("unit_tests", "e2e_tests", "security", "coverage", "feature_pages", "feature_e2e",
+            "feature_calls")
 
 # The gates that judge the behaviour delivered, on the running target: QA's
-# E2E tests *of the feature* and the walk of the pages the PRs added. The
-# whole-API E2E gate is reported, not judged on: its blind guesses about
-# other endpoints failed a good build (price-range, 2026-09-28).
-BEHAVIOUR_GATES = ("feature_e2e", "feature_pages")
+# E2E tests *of the feature*, the walk of the pages the PRs added, and the
+# feature's own requests played (a POST route has no page). The whole-API
+# E2E gate is reported, not judged on: its blind guesses about other
+# endpoints failed a good build (price-range, 2026-09-28).
+BEHAVIOUR_GATES = ("feature_e2e", "feature_pages", "feature_calls")
 BEHAVIOUR_VERIFIED = "verified"
 BEHAVIOUR_BROKEN = "broken"
 BEHAVIOUR_UNVERIFIED = "unverified"
@@ -161,10 +163,11 @@ def qa_of(demo_report: dict | None) -> dict[str, str]:
 def behaviour_of(qa: dict[str, str]) -> str:
     """What the running target says about the feature (#85).
 
-    `broken` when either behaviour gate failed — a test of the feature QA
-    ran against the app, or a page the PRs added answering 5xx. `verified`
-    when at least one passed and none failed (a POST-only feature has no
-    page to walk; its own tests confirm it). Anything else — not run, or a
+    `broken` when any behaviour gate failed — a test of the feature QA ran
+    against the app, a page the PRs added, or one of the feature's own
+    requests answering 5xx. `verified` when at least one passed and none
+    failed (a POST-only feature has no page to walk; its own tests and its
+    played requests confirm it). Anything else — not run, or a
     record from before the fields — is `unverified`: nothing contradicts
     the build, nothing confirms it.
     """

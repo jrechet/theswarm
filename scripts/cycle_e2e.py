@@ -411,7 +411,7 @@ def behaviour_notes(demo_report: dict | None) -> list[str]:
         detail = gate.get("reason") or gate.get("failure_excerpt") or ""
         if name == "feature_e2e" and gate.get("reason"):
             detail = gate["reason"]
-        label = "feature E2E" if name == "feature_e2e" else "feature pages"
+        label = {"feature_e2e": "feature E2E", "feature_calls": "feature calls"}.get(name, "feature pages")
         notes.append(f"{label} {gate['status']}" + (f": {detail}" if detail else ""))
     return notes
 

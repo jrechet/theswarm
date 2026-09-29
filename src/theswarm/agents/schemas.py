@@ -97,6 +97,21 @@ class TestFault(BaseModel):
     why: str = Field(description="the exact reason, citing the line of the test or of the app")
 
 
+class DemoCall(BaseModel):
+    """One request of a feature's demo, played on QA's own demo server."""
+
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"]
+    path: str = Field(description='the URL path, starting with "/", ids filled in — no host')
+    json_body: dict | list | None = Field(default=None, description="the JSON body, or null")
+    caption: str = Field(description="one line a viewer reads: what this call shows")
+
+
+class DemoScript(BaseModel):
+    """The calls that show a feature working on the seeded demo data."""
+
+    calls: list[DemoCall]
+
+
 class TestTriage(BaseModel):
     """QA's triage of the failing feature tests (`qa._triage_feature_failures`)."""
 
