@@ -607,10 +607,53 @@ async def dev_loop_end(state: CycleState, runtime: Runtime[CycleRuntime]) -> dic
     return {"dev_claims_open": False, "requeued": requeued}
 
 
+async def _delivered_prs(rt: CycleRuntime, state: CycleState) -> list[dict]:
+    """The PRs the cycle opened, and those it merged that an earlier cycle
+    opened — read from GitHub, since the state keeps only their numbers.
+
+    Cycle 4eaa5b767051 merged PR #486 (opened the day before, its review
+    answered by the Dev): the demo walked nothing of the feature and the
+    report told one story, "#484 — already on main".
+    """
+    prs = [p for p in state.get("prs", []) if isinstance(p, dict)]
+    seen = {p.get("number") for p in prs}
+    github = rt.base_state.get("github")
+    for number in state.get("merged_prs", []):
+        if number in seen or github is None or not hasattr(github, "get_pr"):
+            continue
+        seen.add(number)
+        try:
+            pr = await github.get_pr(number)
+        except Exception as exc:  # noqa: BLE001 — a story less, never a lost QA
+            log.warning("Could not read merged PR #%s for the demo: %s", number, exc)
+            continue
+        if isinstance(pr, dict):
+            prs.append(pr)
+    return prs
+
+
+async def _satisfied_titles(rt: CycleRuntime, state: CycleState) -> dict[int, str]:
+    """Titles of the tasks the Dev found already on main — the state keeps
+    their numbers; the PO read "#484" and nothing else."""
+    github = rt.base_state.get("github")
+    titles: dict[int, str] = {}
+    for number in sorted(set(state.get("already_satisfied", []))):
+        if github is None or not hasattr(github, "get_issue"):
+            break
+        try:
+            issue = await github.get_issue(number)
+        except Exception:  # noqa: BLE001
+            continue
+        if isinstance(issue, dict) and issue.get("title"):
+            titles[number] = issue["title"]
+    return titles
+
+
 async def qa(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     rt = runtime.context
     await rt.enter("qa")
     await rt.progress("QA", "Running tests + security scan…")
+    delivered = await _delivered_prs(rt, state)
     try:
         qa_state = await _run_phase(
             rt, "qa", "QA",
@@ -618,7 +661,7 @@ async def qa(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
                 **rt.base_state, "phase": Phase.DEMO.value,
                 # What the cycle delivered: QA reads the feature's pages off
                 # its PRs and the demo walks them.
-                "prs": [p for p in state.get("prs", []) if isinstance(p, dict)],
+                "prs": delivered,
                 "merged_prs": list(state.get("merged_prs", [])),
             }),
         )
@@ -631,14 +674,15 @@ async def qa(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     if isinstance(report, dict):
         # The QA graph sees the base state only; the cycle knows what it
         # delivered. The PO's evening report reads this first.
-        report = {**report, "user_stories": _stories_of(state)}
+        report = {**report, "user_stories": _stories_of(
+            {**state, "prs": delivered}, titles=await _satisfied_titles(rt, state))}
     return {
         **_accounted(state, "qa", tokens, cost), **budget,
         "demo_report": report,
     }
 
 
-def _stories_of(state: CycleState) -> list[dict]:
+def _stories_of(state: CycleState, titles: dict[int, str] | None = None) -> list[dict]:
     """What the cycle delivered, one entry per task: its PR (merged or still
     open), then the tasks the Dev found already on main.
 
@@ -662,7 +706,8 @@ def _stories_of(state: CycleState) -> list[dict]:
             "status": "merged" if pr["number"] in merged else "open",
         })
     for task in sorted(set(state.get("already_satisfied", []))):
-        stories.append({"task": task, "title": "", "pr": None, "url": "", "status": "already on main"})
+        stories.append({"task": task, "title": (titles or {}).get(task, ""), "pr": None, "url": "",
+                        "status": "already on main"})
     return stories
 
 
