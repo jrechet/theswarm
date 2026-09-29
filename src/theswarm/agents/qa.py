@@ -942,9 +942,10 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
         }
 
     base_url = f"http://127.0.0.1:{port}"
-    # The demo's data, declared by the target, before anything is walked.
+    # The demo's data, declared by the target, before anything is walked —
+    # into the database this server reads (`_seed_env`).
     await run_seed(workspace, _demo_spec(workspace).get("seed"), python=python,
-                   url=base_url, env=_demo_scrubbed_env(workspace))
+                   url=base_url, env=_seed_env(workspace, env))
     recorder = PlaywrightRecorder()
     feature_paths = {path for path, _ in state.get("feature_pages") or []}
     # What each of the feature's own pages answered on the running target:
@@ -1115,7 +1116,7 @@ async def record_demo_video(state: AgentState) -> dict:
 
     base_url = f"http://127.0.0.1:{port}"
     await run_seed(workspace, _demo_spec(workspace).get("seed"), python=python,
-                   url=base_url, env=_demo_scrubbed_env(workspace))
+                   url=base_url, env=_seed_env(workspace, env))
     recorder = PlaywrightRecorder()
 
     try:
@@ -1769,10 +1770,25 @@ def _demo_launch(workspace: str, python: str, port: int) -> tuple[list[str], dic
         tmp = tempfile.mkdtemp(prefix="swarm-demo-")
         command = shlex.split(command_template.format(python=python, port=port, tmp=tmp))
         env = _demo_scrubbed_env(workspace)
+        # `{tmp}` in a declared value is this launch's own directory: a
+        # database of its own per demo server. The workspace's outlived
+        # cycles, and QA's E2E leftovers were what the demos showed.
+        for key, value in (spec.get("env") or {}).items():
+            env[str(key)] = (str(value).replace("{tmp}", tmp).replace("{port}", str(port))
+                             .replace("{python}", python))
         log.info("QA: starting the target as declared: %s", " ".join(command))
         return command, env
     command = [python, "-m", "uvicorn", _DEFAULT_DEMO_MODULE, "--host", "127.0.0.1", "--port", str(port)]
     return command, os.environ.copy()
+
+
+def _seed_env(workspace: str, launch_env: dict[str, str]) -> dict[str, str]:
+    """The environment a seed runs in: its server's when the target declared
+    its launch (the same `{tmp}` database), the scrubbed one otherwise — an
+    undeclared launch inherits this process's environment, tokens included."""
+    if str(_demo_spec(workspace).get("command") or "").strip():
+        return dict(launch_env)
+    return _demo_scrubbed_env(workspace)
 
 
 async def _run_demo_setup(workspace: str) -> None:

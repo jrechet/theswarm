@@ -386,6 +386,14 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   database was empty — the dashboard said "Loading…" and the page cycle
   28371c2016da built (`/api/v1/concerts/1/occupancy`) answered 404 and was
   skipped; its `scripts/seed_demo.py` (concert-tour-app#396) fixes that.
+  **`{tmp}` in a declared `demo.env` value is the launch's own
+  directory**, and a declared target's seed runs in its server's
+  environment (`_seed_env`; an undeclared launch inherits this process's
+  tokens, so its seed keeps the scrubbed one): a database of its own per
+  demo server, E2E run included. The workspace's database outlives
+  cycles — the tour-revenue demo showed an E2E leftover at "revenue 0.00,
+  0 concerts" until concert-tour-app declared `DATABASE_URL:
+  sqlite:///{tmp}/demo.db` (concert-tour-app#425).
   Without a declaration: `uvicorn src.main:app`, the guessed page walk, no
   setup, no seed. TheSwarm declares `python -m theswarm serve --port {port} --db
   {tmp}/demo.db` with `SWARM_AUTH_DISABLED=1`, `ready_seconds: 90`,
