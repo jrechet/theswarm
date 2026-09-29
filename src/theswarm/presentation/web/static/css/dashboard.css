@@ -3660,6 +3660,8 @@ body.has-todays-demo-expanded { overflow: hidden; }
 .chip-ready { background: var(--success-subtle); color: var(--success); }
 .chip-in-progress { background: var(--warning-subtle); color: var(--warning); }
 .chip-review { background: var(--accent-subtle); color: var(--accent); }
+.chip-done { background: var(--accent-subtle); color: var(--accent); }
+.chip-dropped { background: transparent; color: var(--text-muted); text-decoration: line-through; }
 .chip-backlog { background: var(--bg-tertiary); color: var(--text-secondary); }
 
 /* ── Focus mode: primary nav vs collapsed Advanced ───────────────────── */

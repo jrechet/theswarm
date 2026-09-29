@@ -118,10 +118,13 @@
     {% if pinned.children %}
     <ul class="mt-3 flex flex-col gap-1.5">
       {% for child in pinned.children %}
-      <li class="flex items-center gap-2.5 text-[13.5px]">
-        {% if child.status == 'review' %}
+      <li class="flex items-center gap-2.5 text-[13.5px]" data-child="{{ child.number }}" data-status="{{ child.status }}">
+        {% if child.status in ('review', 'done') %}
         <span class="w-1.5 h-1.5 rounded-full bg-moss shrink-0" aria-hidden="true"></span>
         <span class="text-soft line-through decoration-rule">{{ child.title }}</span>
+        {% elif child.status == 'dropped' %}
+        <span class="w-1.5 h-1.5 rounded-full border border-rule shrink-0" aria-hidden="true"></span>
+        <span class="text-faint line-through decoration-rule">{{ child.title }} <span class="no-underline font-mono text-[11px]">dropped</span></span>
         {% elif child.status == 'in-progress' %}
         <span class="w-1.5 h-1.5 rounded-full bg-honey swarm-working shrink-0" aria-hidden="true"></span>
         <span>{{ child.title }}</span>

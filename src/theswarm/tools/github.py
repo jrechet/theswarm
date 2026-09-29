@@ -485,6 +485,8 @@ def _issue_to_dict(issue: Issue) -> dict:
         "body": issue.body or "",
         "labels": [l.name for l in issue.labels],
         "state": issue.state,
+        # completed / not_planned once closed: a dropped sub-task is not a built one
+        "state_reason": getattr(issue, "state_reason", None),
         "assignees": [a.login for a in issue.assignees],
         "url": issue.html_url,
     }

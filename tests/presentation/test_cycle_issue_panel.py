@@ -109,7 +109,8 @@ async def test_panel_renders_a_status_chip_per_child(monkeypatch):
     async with _client(_app()) as client:
         body = (await client.get(f"/fragments/cycle/{record.id}/issue")).text
 
-    for chip in ("chip-review", "chip-in-progress", "chip-ready"):
+    # #201 is closed: done, whatever label it kept (lineup-add's #454)
+    for chip in ("chip-done", "chip-in-progress", "chip-ready"):
         assert chip in body
 
 

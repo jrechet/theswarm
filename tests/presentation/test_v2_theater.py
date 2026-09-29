@@ -206,3 +206,48 @@ async def test_the_theater_of_a_continuation_links_its_earlier_phases(web):
 
     assert 'data-testid="resumed-from"' in html
     assert "/swarm/cycles/747bb89eced2" in html
+
+
+# ── The breakdown: a closed sub-task is done ───────────────────────────
+# lineup-add (383c7f77d983, 2026-09-29): #454 was closed "already
+# satisfied" and carried no status label; the story was closed, and the
+# theater still read "2/3 done" with #454 grey, as if nobody had built it.
+
+_LINEUP_CHILDREN = [
+    {"number": 452, "title": "LineupEntry model", "labels": ["status:review"], "state": "closed",
+     "state_reason": "completed", "body": "Parent: #451"},
+    {"number": 453, "title": "POST lineup endpoint", "labels": ["status:review"], "state": "open",
+     "body": "Parent: #451"},
+    {"number": 454, "title": "Tests for the lineup endpoint", "labels": ["role:dev"], "state": "closed",
+     "state_reason": "completed", "body": "Parent: #451"},
+    {"number": 457, "title": "Lineup page", "labels": ["status:ready"], "state": "open",
+     "body": "Parent: #451"},
+    {"number": 458, "title": "Old idea", "labels": ["status:ready"], "state": "closed",
+     "state_reason": "not_planned", "body": "Parent: #451"},
+]
+
+
+async def test_a_closed_sub_task_is_done_and_a_dropped_one_is_not():
+    from theswarm.application.services.pinned_issue import load_pinned_issue
+
+    with patch("theswarm.tools.github.GitHubClient") as klass:
+        klass.return_value.get_issue = AsyncMock(return_value={"number": 451, "title": "Lineup"})
+        klass.return_value.get_issues = AsyncMock(return_value=_LINEUP_CHILDREN)
+        pinned = await load_pinned_issue("o/r", 451)
+
+    assert {c["number"]: c["status"] for c in pinned.children} == {
+        452: "done", 453: "review", 454: "done", 457: "ready", 458: "dropped"}
+    assert pinned.done == 3
+
+
+async def test_the_theater_draws_it_done(web):
+    client, _ = web
+    record = _record(issue=451)
+    with patch("theswarm.tools.github.GitHubClient") as klass:
+        klass.return_value.get_issue = AsyncMock(return_value={"number": 451, "title": "Lineup"})
+        klass.return_value.get_issues = AsyncMock(return_value=_LINEUP_CHILDREN)
+        r = await client.get(f"/c/{record.id}")
+
+    assert "3/5 done" in r.text
+    assert 'data-child="454" data-status="done"' in r.text
+    assert 'data-child="458" data-status="dropped"' in r.text
