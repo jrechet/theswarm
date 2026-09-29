@@ -299,6 +299,19 @@ class GitHubClient:
             kwargs["target_url"] = target_url
         await self._run(commit.create_status, **kwargs)
 
+    async def get_review_status(
+        self, sha: str, *, context: str = "theswarm/review",
+    ) -> dict | None:
+        """The latest `context` status on `sha` as ``{"state", "description"}``,
+        None when the head carries none — the swarm's verdict on that head."""
+        await self._fresh()
+        commit = await self._run(self._repo.get_commit, sha)
+        combined = await self._run(commit.get_combined_status)
+        for s in combined.statuses:
+            if s.context == context:
+                return {"state": s.state, "description": s.description or ""}
+        return None
+
     async def get_ci_checks(self, ref: str) -> list[dict]:
         """Every CI signal on `ref`, flattened: commit statuses, then check runs.
 
