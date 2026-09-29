@@ -77,7 +77,25 @@ def test_a_repaired_e2e_file_is_said():
                       "failure_excerpt": "", "repaired_from": "E   fixture 'api_client' not found"},
     }))
 
-    assert gates["e2e_tests"].detail == "24 passed, 0 failed (file repaired once: E   fixture 'api_client' not found)"
+    assert gates["e2e_tests"].detail == "24 passed, 0 failed (file repaired once: fixture 'api_client' not found)"
+
+
+def test_the_repair_is_said_in_one_line():
+    """cancel-tour (d119d706fbae): the gates slide carried pytest's whole
+    excerpt — a dozen "ERROR at setup of …" blocks — under a passing gate."""
+    excerpt = "\n".join([
+        "___ ERROR at setup of test_feature_cancel_tour_cancels_all_upcoming_concerts ___",
+        "E   TypeError: 'module' object is not callable",
+        "___ ERROR at setup of test_feature_cancel_tour_requires_a_reason ___",
+        "E   TypeError: 'module' object is not callable",
+    ])
+    gates = _gates(ReportGenerator().generate(_cycle(), qa_gates={
+        "e2e_tests": {"total": 15, "passed": 15, "failed": 0, "status": "pass",
+                      "failure_excerpt": "", "repaired_from": excerpt},
+    }))
+
+    assert gates["e2e_tests"].detail == (
+        "15 passed, 0 failed (file repaired once: TypeError: 'module' object is not callable)")
 
 
 def test_no_qa_gates_is_the_old_report():
