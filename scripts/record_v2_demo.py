@@ -196,15 +196,24 @@ def wait_for_cycle(cycle_id: str, budget_s: int) -> dict:
 
 def film_demo(p, repo: str, cycle_id: str,
               opening: str = "The cycle is over: the theater ends on the demo",
-              feed_role: str = "") -> tuple[Path, str]:
+              feed_role: str = "", breakdown: bool = False) -> tuple[Path, str]:
     """Theater once done → its demo card → the player, slide by slide → the
     repo page's reliability panel (what the harness judged). With
     `feed_role`, the theater's feed is first filtered to that agent and
-    shown (a station click filters it)."""
+    shown (a station click filters it); with `breakdown`, the pinned
+    issue's sub-tasks are shown first."""
     browser, context, video_dir = _film(p, "demo")
     page = context.new_page()
     page.goto(f"{BASE}/c/{cycle_id}", wait_until="domcontentloaded")
     _caption(page, opening)
+    pinned = page.locator('[data-testid="pinned-issue"]')
+    if breakdown and pinned.count():
+        time.sleep(3)
+        pinned.evaluate("e => e.scrollIntoView({block: 'start'})")  # the whole list, above the caption
+        counted = pinned.locator("span.font-mono").filter(has_text="done").first
+        _caption(page, "The breakdown: " + (counted.inner_text() if counted.count() else "its sub-tasks"))
+        time.sleep(8)
+        page.evaluate("window.scrollTo(0, 0)")
     if feed_role:
         time.sleep(3)
         page.locator(f'button.station[data-role="{feed_role}"]').first.click()
@@ -323,6 +332,8 @@ def main() -> int:
                     help="an eval feature id: the harness runs it instead of a filmed Play")
     ap.add_argument("--feed-role", default="",
                     help="with --cycle: filter the theater's feed to this agent first (techlead, dev, …)")
+    ap.add_argument("--breakdown", action="store_true",
+                    help="with --cycle: show the pinned issue's sub-tasks first")
     ap.add_argument("--board", action="store_true",
                     help="film the repo page's board only — no cycle")
     ap.add_argument("--cycle", default="",
@@ -367,7 +378,7 @@ def main() -> int:
                 p, args.repo, cycle_id,
                 **({"opening": "After a restart: the finished cycle's theater, drawn from the database"}
                    if args.cycle else {}),
-                feed_role=args.feed_role,
+                feed_role=args.feed_role, breakdown=args.breakdown,
             )
             films.append(demo_film)
         out = DEMOS_DIR / f"{args.name}.webm"
