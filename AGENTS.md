@@ -804,7 +804,12 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   price-range build on 2026-09-28; **a failing feature test is triaged**
   first — one call, `qa._triage_feature_failures`, `TestTriage`: every
   failure the test's own mistake makes the gate `inconclusive` and the
-  verdict `unverified`, never `verified`; nothing is rewritten to pass —
+  verdict `unverified`, never `verified`; nothing is rewritten to pass;
+  every *other* failing test of the file gets the same triage
+  (`qa._triage_other_failures`, assertions only): all of them the tests'
+  own mistake makes the whole-file `e2e_tests` gate `inconclusive` — a
+  warning with why, not red (a lower-cased header, a nested `venue` the
+  schema never had reddened it for days and the PO reported regressions) —
   past-concerts-toggle's tests counted `class="concert-card` as a
   substring and found 24 cards for 6; the E2E prompt now asks for data
   through the JSON API and whole-element HTML parsing, never a substring
