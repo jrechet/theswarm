@@ -325,6 +325,7 @@ async def poll_and_review_prs(state: AgentState) -> dict:
     # so it is picked up again; only an exhausted subscription window
     # (ClaudeFatalError) still aborts — nothing after it could succeed.
     skipped: list[int] = []
+    workspace = state.get("workspace")
     for pr in todo:
         earlier = await _earlier_verdict(github, pr)
         if earlier is not None:
@@ -332,7 +333,7 @@ async def poll_and_review_prs(state: AgentState) -> dict:
             reviews.append(earlier)
             continue
         try:
-            review = await _review_single_pr(github, claude, pr, context)
+            review = await _review_single_pr(github, claude, pr, context, workdir=workspace)
         except ClaudeFatalError:
             raise
         except Exception as exc:
@@ -519,6 +520,15 @@ async def _send_back_to_dev(
             f"(PR #{pr['number']}). Leaving it in review for a person to look at "
             "rather than sending it round again.",
         )
+        # In review, not where the last attempt left it: a failed attempt
+        # requeues to status:ready, and concert-tour-app#306 sat there — any
+        # untargeted Dev would take it again — under six "left in review".
+        await github.add_labels(number, ["status:review"])
+        for stale in ("status:ready", "status:in-progress"):
+            try:
+                await github.remove_label(number, stale)
+            except Exception:  # noqa: BLE001 — a label it did not carry
+                pass
         log.info("Task #%d: %d rounds of changes — left for a person", number, rounds + 1)
         return False
     note = _changes_comment(pr, summary, issues)
@@ -532,7 +542,35 @@ async def _send_back_to_dev(
     return True
 
 
-async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
+# The reviewer sees the diff; what the diff uses without showing may be on
+# main already. PR #486 imported two symbols its sibling #485 had merged an
+# iteration earlier, and was sent back as CRITICAL for it (79f45fdaadb9).
+REPOSITORY_SECTION = """
+
+## The repository
+It is checked out on the base branch in your working directory.
+Symbols, modules and fixtures the diff uses but does not show
+may already exist on the base branch — merged earlier, often by a sibling
+pull request. Read the repository to check before calling anything
+missing: a missing definition is a finding only once you verified it is
+absent. Read only what a doubt needs.
+"""
+
+
+async def _dev_reply(github, pr_number: int) -> str:
+    """The Dev's latest answer to a review on this PR (`dev.DEV_REPLY_MARKER`)."""
+    from theswarm.agents.dev import DEV_REPLY_MARKER
+
+    try:
+        comments = await github.get_issue_comments(pr_number)
+    except Exception:  # noqa: BLE001 — no answer read is no answer
+        return ""
+    replies = [c.get("body") or "" for c in comments or []
+               if isinstance(c, dict) and DEV_REPLY_MARKER in (c.get("body") or "")]
+    return replies[-1].replace(DEV_REPLY_MARKER, "").strip() if replies else ""
+
+
+async def _review_single_pr(github, claude, pr: dict, context: str, *, workdir: str | None = None) -> dict:
     """Review a single PR: get diff, call Claude, submit review."""
     pr_number = pr["number"]
     log.info("Reviewing PR #%d: %s", pr_number, pr["title"])
@@ -557,10 +595,17 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
         files_diff=files_diff,
         context=context,
     )
+    if workdir:
+        prompt += REPOSITORY_SECTION
+    reply = await _dev_reply(github, pr_number)
+    if reply:
+        prompt += ("\n## The developer answered your last review\n"
+                   f"{reply}\n\nWeigh it: if it shows a concern was unfounded, do not repeat it.\n")
 
     result = await claude.run(
         prompt, timeout=_review_timeout(len(prompt)),
         output_schema=ReviewVerdict.model_json_schema(),
+        **({"workdir": workdir} if workdir else {}),
     )
     log.info("Claude review done for PR #%d: %d tokens, $%.4f",
              pr_number, result.total_tokens, result.cost_usd)

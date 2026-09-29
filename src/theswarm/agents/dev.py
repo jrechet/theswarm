@@ -189,6 +189,46 @@ async def _prior_failures(github, issue_number: int) -> int:
 _CHANGES_PR_RE = re.compile(r"PR #(\d+) \(branch `([^`]+)`\)")
 
 
+# The Dev's answer to a review it made no change for, on the PR. The review
+# and the answer are a conversation (CHANGES_REQUESTED_CAP bounds it): the
+# price-stats Dev answered "already in place" three iterations running and
+# nobody read it (cycle 79f45fdaadb9).
+DEV_REPLY_MARKER = "<!-- swarm:dev-reply -->"
+_ANSWER_LIMIT = 2000
+
+
+def _answer_of(outcome, result) -> str:
+    """What the Dev said, in a few lines."""
+    said = ""
+    if outcome is not None:
+        said = outcome.summary or outcome.reason or ""
+    said = (said or getattr(result, "text", "") or "").strip()
+    return said[:_ANSWER_LIMIT] or "The Dev made no change on this branch."
+
+
+async def _answer_the_review(github, task: dict, pr_number: int, sha: str, answer: str) -> None:
+    """The answer on the PR, the head back to "to review", the task in review."""
+    await github.add_comment(
+        pr_number,
+        f"{DEV_REPLY_MARKER}\n**The Dev's answer to the review** — no change on this branch:\n\n{answer}",
+    )
+    if hasattr(github, "create_commit_status"):
+        try:
+            await github.create_commit_status(
+                sha, "pending", f"Dev answered the review — to review again: {answer[:80]}",
+                context="theswarm/review",
+            )
+        except Exception as exc:  # noqa: BLE001 — the comment is the answer; the status a hint
+            log.warning("Could not reset the review status of PR #%d: %s", pr_number, exc)
+    await github.add_labels(task["number"], ["status:review"])
+    for stale in ("status:in-progress", "status:ready"):
+        try:
+            await github.remove_label(task["number"], stale)
+        except Exception:  # noqa: BLE001 — a label it did not carry
+            pass
+    log.info("Task #%d: answered the review on PR #%d without a change", task["number"], pr_number)
+
+
 async def _changes_requested(github, issue_number: int) -> dict | None:
     """The TechLead's last "changes requested" note on this issue, or None.
 
@@ -543,6 +583,9 @@ async def implement_task(state: AgentState) -> dict:
         # TheSwarm's own (cycle 83b584194589).
         await ensure_target_venv(workspace)
 
+        # Where the branch stood, so an answer without a commit is told apart.
+        head_before = await git_ops.head_sha(workspace) if resuming else ""
+
         # Run Claude in the workspace
         result = await claude.run(
             prompt, workdir=workspace, timeout=IMPLEMENT_TIMEOUT_SECONDS,
@@ -587,6 +630,22 @@ async def implement_task(state: AgentState) -> dict:
         # sees the work whoever committed it.
         diff_stat = await git_ops.get_diff_stat(workspace)
         has_work = committed or bool(diff_stat.strip())
+
+        # Sent back, and nothing changed: the Dev disagrees with the review
+        # or cannot act on it. That is an answer — to the TechLead, on the PR.
+        pr_number = (note or {}).get("pr_number") or 0
+        if (resuming and pr_number and not committed and head_before
+                and await git_ops.head_sha(workspace) == head_before and github is not None):
+            answer = _answer_of(outcome, result)
+            await _answer_the_review(github, task, pr_number, head_before, answer)
+            await git_ops.remove_worktree(workspace)
+            return {
+                "result": f"answered the review on PR #{pr_number}: {answer[:200]}",
+                "answered_review": pr_number,
+                "tokens_used": result.total_tokens,
+                "cost_usd": result.cost_usd,
+                "branch": branch_name,
+            }
 
         if not has_work:
             if outcome is not None:
@@ -852,7 +911,7 @@ def _should_run_gates(state: AgentState) -> str:
     against unchanged code and then routing check_pr straight to end is
     wasted phase budget, not a safety net.
     """
-    if state.get("already_satisfied"):
+    if state.get("already_satisfied") or state.get("answered_review"):
         return "end"
     return "quality_gates"
 

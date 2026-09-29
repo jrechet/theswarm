@@ -291,6 +291,7 @@ async def _dev_iter_parallel(
     satisfied = list(state.get("already_satisfied", []))
     without = list(state.get("attempted_without_pr", []))
     worked = failed = repeated = opened = 0
+    answered: list[int] = []
     for result in results:
         if isinstance(result, ClaudeFatalError):
             await rt.progress("Dev", f"Fatal Claude error — aborting cycle: {str(result)[:160]}")
@@ -310,6 +311,13 @@ async def _dev_iter_parallel(
             prs.append(pr)
             await rt.progress("Dev", f"PR #{pr['number']} opened: {pr['url']}")
             continue
+        if result.get("answered_review"):
+            worked += 1
+            opened += 1  # the PR goes back to the TechLead: the loop moved
+            answered.append(result["answered_review"])
+            await rt.progress("Dev", f"Task #{(task or {}).get('number')}: answered the review on PR "
+                                     f"#{result['answered_review']} without a change — back to the TechLead")
+            continue
         if task is None:
             continue
         worked += 1
@@ -327,6 +335,11 @@ async def _dev_iter_parallel(
     updates.update(_accounted(state, f"dev_iter{iteration}", tokens, cost))
     updates.update(_within_budget(rt, state, Role.DEV, tokens))
     updates.update({"prs": prs, "already_satisfied": satisfied, "attempted_without_pr": without})
+    if answered:
+        reviewed = list(state.get("reviewed_prs", []))
+        for number in answered:
+            reviewed = _without_review_of(reviewed, number)
+        updates["reviewed_prs"] = reviewed
     if worked == 0 and failed == 0:
         await rt.progress("Dev", "No more ready tasks — ending dev loop")
         return {**updates, "dev_outcome": "end"}
@@ -336,6 +349,11 @@ async def _dev_iter_parallel(
         await rt.progress("Dev", "Every task produced no changes twice — ending dev loop")
         return {**updates, "dev_outcome": "end"}
     return {**updates, "dev_outcome": "review"}
+
+
+def _without_review_of(reviewed: list[str], pr_number: int) -> list[str]:
+    """`reviewed_prs` less the keys of one PR (`techlead._pr_key`)."""
+    return [key for key in reviewed if key != str(pr_number) and not key.startswith(f"{pr_number}@")]
 
 
 async def dev_iter(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
@@ -411,6 +429,15 @@ async def dev_iter(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     if pr:
         updates["prs"] = [*state.get("prs", []), pr]
         await rt.progress("Dev", f"PR #{pr['number']} opened: {pr['url']}")
+        return {**updates, "dev_outcome": "review"}
+
+    answered = dev_state.get("answered_review")
+    if answered:
+        # Reviewed at this head already — the answer earns it another look.
+        updates["reviewed_prs"] = _without_review_of(state.get("reviewed_prs", []), answered)
+        number = (dev_state.get("task") or {}).get("number")
+        await rt.progress("Dev", f"Task #{number}: answered the review on PR #{answered} "
+                                 "without a change — back to the TechLead")
         return {**updates, "dev_outcome": "review"}
 
     task = dev_state.get("task")
