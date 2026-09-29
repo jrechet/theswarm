@@ -551,7 +551,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   `p.request.new_context(base_url=BASE_URL)`): it only said "a fixture
   creates the API context", each run invented one, and three of four local
   cycles on 2026-09-29 needed the repair for "TypeError: 'module' object
-  is not callable" at setup. **A repair keeps what it changed**
+  is not callable" at setup. **A sign-off after the code is cut**
+  (`qa._without_trailing_prose`: only when the file does not parse, at an
+  unindented line, and a tail that defines nothing): price-stats' file
+  closed on "Dima here — that's the full E2E suite …" and did not collect —
+  the repair's diff showed that line was all it removed. **A repair keeps what it changed**
   (`e2e_repair_diff`, a unified diff cut at 4 000 characters, logged and on
   the E2E gate as `repair_diff`): sold-out-list's PO graded the day yellow
   and asked what the repair had changed, with nothing to read.
