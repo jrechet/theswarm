@@ -166,8 +166,11 @@ def test_behaviour_is_verified_by_both_the_e2e_run_and_the_pages():
 
 
 def test_behaviour_is_broken_when_either_says_the_app_misbehaves():
-    assert evals.behaviour_of({"e2e_tests": "fail", "feature_pages": "pass"}) == "broken"
+    """The feature's own E2E tests, or its pages — not the whole-API file's
+    guesses about other endpoints (test_feature_e2e_gate.py)."""
+    assert evals.behaviour_of({"feature_e2e": "fail", "feature_pages": "pass"}) == "broken"
     assert evals.behaviour_of({"e2e_tests": "pass", "feature_pages": "fail"}) == "broken"
+    assert evals.behaviour_of({"e2e_tests": "fail", "feature_pages": "pass"}) == "verified"
 
 
 def test_behaviour_nobody_checked_is_unverified():

@@ -29,6 +29,7 @@ from theswarm.agents.base import (
     stub_result,
 )
 from theswarm.agents.qa_demo_seed import run_seed
+from theswarm.agents.qa_feature_pages import feature_e2e_gate
 from theswarm.config import AgentState, Role
 from theswarm.tools.claude import ClaudeFatalError
 
@@ -226,10 +227,15 @@ async def write_e2e_tests(state: AgentState) -> dict:
     e2e_dir = os.path.join(workspace, "tests", "e2e")
     test_path = os.path.join(e2e_dir, "test_api_e2e.py")
 
-    # Skip generation if E2E tests already exist
-    if os.path.exists(test_path) and os.path.getsize(test_path) > 100:
+    # The file lives in the workspace and outlived every cycle: written once,
+    # it tested the API of that day and never the feature a later cycle
+    # built. A cycle that delivered PRs gets a file written for them; one
+    # that built nothing reuses what is there.
+    built = [p for p in (state.get("prs") or []) if isinstance(p, dict)]
+    if not built and os.path.exists(test_path) and os.path.getsize(test_path) > 100:
         log.info("QA: E2E test file already exists at %s — reusing", test_path)
         return {"tokens_used": 0}
+    feature_pages = await _feature_pages_of(state) if built else []
 
     # Gather endpoint info from closed issues / PRs
     endpoints_text = "Unknown — inspect source files in src/routers/"
@@ -281,6 +287,8 @@ async def write_e2e_tests(state: AgentState) -> dict:
         port=e2e_port(),
     )
 
+    if built:
+        prompt += _feature_section(built, feature_pages)
     if source_snippets:
         prompt += "\n\n## Source code\n" + "\n\n".join(source_snippets)
 
@@ -316,7 +324,27 @@ async def write_e2e_tests(state: AgentState) -> dict:
     return {
         "tokens_used": result.total_tokens,
         "cost_usd": result.cost_usd,
+        "feature_pages": feature_pages,
     }
+
+
+def _feature_section(prs: list[dict], pages: list[tuple[str, str]]) -> str:
+    """What this cycle built, for the E2E file: its tests of it are the ones
+    the behaviour verdict reads (`feature_e2e_gate`)."""
+    lines = ["", "", "## The feature this cycle delivered"]
+    lines += [f"- PR #{pr.get('number')}: {pr.get('title', '')}" for pr in prs]
+    if pages:
+        lines.append("Its pages (GET, path parameters filled with 1):")
+        lines += [f"- `{path}`" for path, _ in pages]
+    lines += [
+        "",
+        "Test this feature FIRST and thoroughly, against the running app: name "
+        "every test that exercises it `test_feature_<what>` (only those — the "
+        "verdict on the cycle reads them). Read its routes, schemas and the "
+        "data the app starts with from the source; do not guess enum values "
+        "or ids. Keep the rest of the file to what the source defines.",
+    ]
+    return "\n".join(lines)
 
 
 async def _ensure_pytest_cov(claude, workspace: str, python: str) -> bool:
@@ -722,6 +750,8 @@ async def run_e2e_tests(state: AgentState) -> dict:
         "e2e_passed": e2e_passed,
         "e2e_output": e2e_output[-3000:],
         "e2e_counts": e2e_counts,
+        # The tests of the feature delivered, read off the whole output.
+        "e2e_feature": feature_e2e_gate(e2e_output),
         "tokens_used": run.tokens_used,
     }
     if run.repaired_from:
@@ -1321,6 +1351,11 @@ async def generate_demo_report(state: AgentState) -> dict:
                 "reason": coverage_reason,
             },
             "feature_pages": pages_gate,
+            # The E2E tests of the feature delivered (`test_feature_*`): the
+            # rest of the file probes the whole API and judges nothing here.
+            "feature_e2e": state.get("e2e_feature") or {
+                "status": "not_run", "passed": 0, "failed": 0, "reason": "no E2E run",
+            },
         },
         "overall_status": "green" if all_gates_pass else
                           "yellow" if (unit_status == "pass" and tests_passed) else "red",
@@ -1529,7 +1564,9 @@ async def run_captures(state: AgentState) -> dict:
     """
     # The feature's own pages, read off the cycle's PRs, join both walks:
     # the demo used to show the declared pages whatever was built.
-    feature_pages = await _feature_pages_of(state)
+    feature_pages = state.get("feature_pages")
+    if feature_pages is None:  # QA's E2E step read them when the cycle built something
+        feature_pages = await _feature_pages_of(state)
     state = {**state, "feature_pages": feature_pages}
 
     # The video lane launches its server once the screenshot lane's has
