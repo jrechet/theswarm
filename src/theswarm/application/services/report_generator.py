@@ -272,7 +272,9 @@ def _qa_gate_detail(name: str, gate: dict, status: QualityStatus) -> str:
     if "passed" not in gate:
         return str(gate.get("reason") or "")
     detail = f"{gate.get('passed', 0)} passed, {gate.get('failed', 0)} failed"
-    if gate.get("failure_excerpt"):
+    if gate.get("status") == "inconclusive" and gate.get("reason"):
+        detail += " — " + str(gate["reason"])  # who was wrong, before what pytest said
+    elif gate.get("failure_excerpt"):
         detail += " — " + str(gate["failure_excerpt"])
     elif gate.get("reason"):  # the feature's tests: which failed, and who is wrong
         detail += " — " + str(gate["reason"])

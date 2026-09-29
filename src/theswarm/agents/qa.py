@@ -407,6 +407,22 @@ async def _triage_feature_failures(claude, workspace: str, test_file: str, gate:
     names = [n.strip() for n in str(gate.get("reason", "")).removeprefix("failed:").split(",") if n.strip()]
     if not names:
         return gate
+    judged = await _ask_triage(claude, workspace, test_file, names, output)
+    if judged is None:
+        return gate
+    by_test, by_app = judged
+    if by_app:
+        return {**gate, "reason": gate["reason"] + " — the app: " + "; ".join(by_app)}
+    log.info("QA: the failing feature tests are the tests' own mistake: %s", "; ".join(by_test))
+    return {**gate, "status": "inconclusive",
+            "reason": "the tests are wrong, not the app: " + "; ".join(by_test)}
+
+
+async def _ask_triage(claude, workspace: str, test_file: str, names: list[str],
+                      output: str) -> tuple[list[str], list[str]] | None:
+    """One call: who is wrong about each named failing test. (the tests'
+    own mistakes, the app's), each "name: why"; None when the call failed
+    or left a test unjudged — then the failures stand."""
     from theswarm.agents.schemas import TestTriage
 
     prompt = TRIAGE_PROMPT.format(
@@ -420,18 +436,45 @@ async def _triage_feature_failures(claude, workspace: str, test_file: str, gate:
     except ClaudeFatalError:
         raise
     except Exception as exc:  # noqa: BLE001 — no triage, the failure stands
-        log.warning("QA: triage of the failing feature tests unavailable (%s)", exc)
-        return gate
+        log.warning("QA: triage of the failing tests unavailable (%s)", exc)
+        return None
     judged = {str(v.get("test", "")): v for v in verdicts if isinstance(v, dict)}
     if not all(name in judged for name in names):
-        return gate
+        return None
     by_test = [f"{n}: {judged[n].get('why', '')}" for n in names if judged[n].get("fault") == "test"]
     by_app = [f"{n}: {judged[n].get('why', '')}" for n in names if judged[n].get("fault") != "test"]
+    return by_test, by_app
+
+
+# Assertions only: a test that could not set up is the file's, and the
+# repair round is its answer (`_run_e2e_with_repair`).
+_FAILED_TEST_RE = re.compile(r"^FAILED \S+::(test_\w+)", re.MULTILINE)
+_MAX_TRIAGED = 8
+
+
+async def _triage_other_failures(claude, workspace: str, test_file: str, output: str) -> dict | None:
+    """The failing tests that are not the feature's, triaged the same way:
+    every one the tests' own mistake → `inconclusive`, with why; any the
+    app's → `fail`. None when nothing else failed or no answer came.
+
+    `'X-Total-Count' in headers` (Playwright lower-cases names) and a nested
+    `venue` the schema never had made the whole-file gate red for days, and
+    the PO reported a pagination regression that did not exist.
+    """
+    names: list[str] = []
+    for name in _FAILED_TEST_RE.findall(output or ""):
+        if not name.startswith("test_feature") and name not in names:
+            names.append(name)
+    if not names:
+        return None
+    judged = await _ask_triage(claude, workspace, test_file, names[:_MAX_TRIAGED], output)
+    if judged is None:
+        return None
+    by_test, by_app = judged
     if by_app:
-        return {**gate, "reason": gate["reason"] + " — the app: " + "; ".join(by_app)}
-    log.info("QA: the failing feature tests are the tests' own mistake: %s", "; ".join(by_test))
-    return {**gate, "status": "inconclusive",
-            "reason": "the tests are wrong, not the app: " + "; ".join(by_test)}
+        return {"status": "fail", "reason": "the app: " + "; ".join(by_app)}
+    log.info("QA: the other failing E2E tests are the tests' own mistake: %s", "; ".join(by_test))
+    return {"status": "inconclusive", "reason": "the tests are wrong, not the app: " + "; ".join(by_test)}
 
 
 def _seed_section(workspace: str) -> str:
@@ -915,6 +958,10 @@ async def run_e2e_tests(state: AgentState) -> dict:
             claude, workspace, e2e_test_file, feature_e2e_gate(e2e_output), e2e_output),
         "tokens_used": run.tokens_used,
     }
+    if not e2e_passed and not demo_launch_error:
+        triage = await _triage_other_failures(claude, workspace, e2e_test_file, e2e_output)
+        if triage is not None:
+            result["e2e_triage"] = triage
     if run.repaired_from:
         result["e2e_repaired_from"] = run.repaired_from
         result["e2e_repair_diff"] = run.repair_diff
@@ -1505,10 +1552,17 @@ async def generate_demo_report(state: AgentState) -> dict:
         launch_error=demo_launch_error,
     )
 
+    # The whole file's failures triaged: all of them the tests' own mistake
+    # is a warning, not a red gate (`_triage_other_failures`).
+    e2e_triage = state.get("e2e_triage") or {}
+    e2e_status = "pass" if (e2e_all_pass and e2e_total > 0) else ("fail" if e2e_total > 0 else "not_run")
+    if e2e_status == "fail" and e2e_triage.get("status") == "inconclusive":
+        e2e_status = "inconclusive"
+
     # All quality gates must pass for green
     all_gates_pass = (
         unit_status == "pass" and tests_passed
-        and e2e_all_pass and e2e_total > 0
+        and e2e_status in ("pass", "inconclusive")
         and semgrep_high == 0 and semgrep_status != "not_run"
         and pages_gate["status"] != "fail"
         and calls_gate["status"] != "fail"
@@ -1541,14 +1595,14 @@ async def generate_demo_report(state: AgentState) -> dict:
                 "total": e2e_total,
                 "passed": e2e_counts.get("passed", 0),
                 "failed": e2e_counts.get("failed", 0),
-                "status": "pass" if (e2e_all_pass and e2e_total > 0) else ("fail" if e2e_total > 0 else "not_run"),
+                "status": e2e_status,
                 # Why it failed, kept past the cycle: the workspace is not.
                 "failure_excerpt": state.get("e2e_failure_excerpt", ""),
                 # Why QA rewrote its own file once before this verdict.
                 "repaired_from": state.get("e2e_repaired_from", ""),
                 # What the repair changed, so the PO can read it was no weakening.
                 "repair_diff": state.get("e2e_repair_diff", ""),
-                "reason": demo_launch_error,
+                "reason": demo_launch_error or e2e_triage.get("reason", ""),
             },
             "security": {
                 "semgrep_high": semgrep_high,
