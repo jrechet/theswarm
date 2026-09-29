@@ -635,8 +635,31 @@ async def _review_single_pr(github, claude, pr: dict, context: str) -> dict:
     }
 
 
+# The branches the Dev makes (`dev._make_branch_name`): the swarm's own PRs.
+_SWARM_BRANCH_RE = re.compile(r"^feat/(issue-\d+|us-?\d+)(-|$)", re.IGNORECASE)
+
+
+def is_swarm_branch(branch: str | None) -> bool:
+    """True for a branch the Dev made — the swarm's own PR."""
+    return bool(branch) and bool(_SWARM_BRANCH_RE.match(branch))
+
+
+async def _foreign_approved(github, approved: list[int]) -> tuple[list[int], list[int]]:
+    """(the swarm's own, the others) among approved PRs, by their head
+    branch. The TechLead reviews every open PR and merges only its own
+    (owner, 2026-09-29): concert-tour-app#396, opened by hand on a
+    `chore/` branch, was reviewed and merged by a demo cycle's TechLead
+    where a person's review was the rule."""
+    if not approved:
+        return [], []
+    heads = {p["number"]: p.get("head") for p in await github.get_open_prs()}
+    own = [n for n in approved if is_swarm_branch(heads.get(n))]
+    return own, [n for n in approved if n not in own]
+
+
 async def merge_approved_prs(state: AgentState) -> dict:
-    """Merge PRs that were approved in the review step."""
+    """Merge the swarm's own PRs that were approved in the review step; an
+    approved PR it did not open keeps its review and is left for its author."""
     github = state.get("github")
     reviews = state.get("reviews", [])
 
@@ -644,19 +667,31 @@ async def merge_approved_prs(state: AgentState) -> dict:
         return stub_result(Role.TECHLEAD, "merge_approved_prs",
                            "merge all approved PRs into main")
 
+    approved = [r["pr_number"] for r in reviews if r.get("decision") == "APPROVE"]
+    try:
+        own, foreign = await _foreign_approved(github, approved)
+    except Exception:  # noqa: BLE001 — unreadable heads: merge nothing unknown
+        log.exception("Could not read the approved PRs' branches — merging none")
+        own, foreign = [], approved
+    for number in foreign:
+        log.info("PR #%d: approved, not the swarm's — left for its author", number)
+
     # On its own repository the swarm reviews but does not merge: a merge to
     # main redeploys this service, and the redeploy ends the cycle that just
     # merged — halfway through its own review phase, before QA ever runs.
     if state.get("github_repo") == SELF_REPO:
-        held = [r["pr_number"] for r in reviews if r.get("decision") == "APPROVE"]
+        held = own
         if held:
             log.info("Holding approved PRs %s on %s: merging would redeploy "
                      "this service mid-cycle", held, SELF_REPO)
+        summary = [f"Approved, held for a human to merge: {held}"] if held else []
+        if foreign:
+            summary.append(f"Approved, left for its author: {foreign}")
         return {
-            "result": (f"Approved, held for a human to merge: {held}"
-                       if held else "No PRs to process"),
+            "result": " | ".join(summary) if summary else "No PRs to process",
             "merged_prs": [],
             "held_prs": held,
+            "foreign_prs": foreign,
             "tokens_used": 0,
         }
 
@@ -676,6 +711,8 @@ async def merge_approved_prs(state: AgentState) -> dict:
         if decision != "APPROVE":
             log.info("PR #%d: skipping merge (decision: %s)", pr_number, decision)
             rejected.append(pr_number)
+            continue
+        if pr_number in foreign:
             continue
 
         open_pr: dict = {}
@@ -740,11 +777,14 @@ async def merge_approved_prs(state: AgentState) -> dict:
         summary.append(f"CI red, sent back: {ci_red}")
     if ci_pending:
         summary.append(f"CI still running, left open: {ci_pending}")
+    if foreign:
+        summary.append(f"Approved, left for its author: {foreign}")
 
     return {
         "result": " | ".join(summary) if summary else "No PRs to process",
         "merged_prs": merged,
         "held_prs": [],
+        "foreign_prs": foreign,
         "conflicted_prs": conflicted,
         "ci_red_prs": ci_red,
         "ci_pending_prs": ci_pending,

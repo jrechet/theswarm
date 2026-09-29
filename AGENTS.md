@@ -42,7 +42,10 @@ Two UI generations coexist in `presentation/web/`:
   sub-tasks, In review an issue an open PR names (`[#N]`/`Closes #N`, one
   `get_open_pr_briefs` listing), and the rest of those labels is Stalled —
   concert-tour-app read "Building 17" with nothing running; a failed PR read
-  keeps the labels' word), `/c/{cycle_id}` (the theater: agent rail from
+  keeps the labels' word; `scripts/clean_stale_labels.py` puts such labels
+  back in line — closed when merged, review when a PR is open, not planned
+  before `--close-before`, else ready, each with a comment; dry run by
+  default, never while a cycle runs on the repo), `/c/{cycle_id}` (the theater: agent rail from
   `ProgressBridge` live messages, pinned issue breakdown via
   `application/services/pinned_issue.py`, feed from the cycle event store — the
   agents' `AgentActivity`, fragments of streamed code left out
@@ -325,6 +328,12 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   waited for, one `CI_WAIT_SECONDS` (300s) per merge pass, then left open;
   unreadable CI merges as before. The swarm's own `theswarm/review` status
   is not CI. The end-of-cycle merge on SELF_REPO reads the same gate.
+  **And only the swarm's own** (owner, 2026-09-29): the TechLead reviews
+  every open PR but merges — or holds, on SELF_REPO — only branches the
+  Dev made (`techlead.is_swarm_branch`: `feat/issue-<n>…`, `feat/us-<n>…`);
+  any other approved PR is `foreign_prs`, "left for its author".
+  concert-tour-app#396, opened by hand on a `chore/` branch, was merged by
+  a demo cycle's TechLead where a person's review was the rule.
 - **A REQUEST_CHANGES review closes the loop**: the review is copied onto
   the *issue* behind `CHANGES_MARKER`, the label flips back to
   `status:ready`, and the next attempt resumes the branch the review is
