@@ -92,3 +92,14 @@ def test_the_state_declares_it():
     from theswarm.config import AgentState
 
     assert "e2e_repair_diff" in AgentState.__annotations__
+
+
+def test_the_prompt_says_playwright_lower_cases_header_names():
+    """tour-cities (2dd724ff92cf) and tour-revenue before it: the E2E test
+    `'X-Total-Count' in response.headers` failed against an app that sets the
+    header — Playwright lower-cases every name — and the PO reported a
+    "pagination-metadata regression" that never existed, two days running."""
+    prompt = qa.E2E_PROMPT
+
+    assert 'response.headers["x-total-count"]' in prompt
+    assert "lower-cases" in prompt

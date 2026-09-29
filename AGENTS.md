@@ -808,7 +808,9 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   past-concerts-toggle's tests counted `class="concert-card` as a
   substring and found 24 cards for 6; the E2E prompt now asks for data
   through the JSON API and whole-element HTML parsing, never a substring
-  count), and the new
+  count, and says Playwright lower-cases header names — `'X-Total-Count' in
+  response.headers` failed for days against an app that sets it, and the
+  PO reported a pagination regression that never existed), and the new
   `feature_pages` gate (`qa_feature_pages.feature_pages_gate`: the GET
   routes the PRs added, walked by the screenshot pass, their answers in
   `feature_page_statuses`). A 5xx is `fail`; a 4xx proves nothing (path
