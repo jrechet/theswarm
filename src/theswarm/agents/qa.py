@@ -1065,6 +1065,7 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
     # What each of the feature's own pages answered on the running target:
     # the report's `feature_pages` gate, a verdict on the behaviour built.
     feature_statuses: dict[str, int | None] = {}
+    call_results: list[dict] = []
 
     try:
         pages_to_capture = _pages_to_capture(workspace, state.get("feature_pages") or [])
@@ -1090,6 +1091,16 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
             except Exception as e:
                 log.warning("QA: failed to screenshot %s: %s", url, e)
 
+        # The feature's own requests (`qa_feature_calls`): a POST has no page
+        # to walk, so its demo is the call and what it answered.
+        call_results = await _play_feature_calls(state, base_url)
+        for exchange in call_results:
+            try:
+                artifacts.append(await recorder.screenshot_exchange(exchange))
+            except Exception as e:
+                log.warning("QA: failed to draw the call %s %s: %s",
+                            exchange.get("method"), exchange.get("path"), e)
+
     finally:
         await recorder.close()
         try:
@@ -1105,6 +1116,7 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
     return {
         "demo_artifacts": artifacts,
         "feature_page_statuses": feature_statuses,
+        "feature_call_results": call_results,
         "tokens_used": 0,
     }
 
@@ -1185,6 +1197,7 @@ async def record_demo_video(state: AgentState) -> dict:
     import os
     import signal
 
+    from theswarm.infrastructure.recording import playwright_recorder as rec
     from theswarm.infrastructure.recording.playwright_recorder import (
         PlaywrightRecorder,
         present_json,
@@ -1267,6 +1280,13 @@ async def record_demo_video(state: AgentState) -> dict:
                 await page.wait_for_timeout(1500)  # pause on each page for the video
             except Exception as e:
                 log.warning("QA video: failed to navigate to %s: %s", path, e)
+
+        for exchange in await _play_feature_calls(state, base_url):
+            try:
+                await rec.present_exchange(page, exchange)
+                await page.wait_for_timeout(2500)  # long enough to read the answer
+            except Exception as e:
+                log.warning("QA video: failed to show the call %s: %s", exchange.get("path"), e)
 
         artifact, data = await recorder.stop_recording()
         video_artifacts.append((artifact, data))
@@ -1427,12 +1447,23 @@ async def generate_demo_report(state: AgentState) -> dict:
         launch_error=demo_launch_error,
     )
 
+    from theswarm.agents.qa_feature_calls import feature_calls_gate
+
+    # The feature's own requests, played on the running target: a POST
+    # route has no page to walk, and its demo showed the API root.
+    calls_gate = feature_calls_gate(
+        state.get("feature_calls"),
+        state.get("feature_call_results") or [],
+        launch_error=demo_launch_error,
+    )
+
     # All quality gates must pass for green
     all_gates_pass = (
         unit_status == "pass" and tests_passed
         and e2e_all_pass and e2e_total > 0
         and semgrep_high == 0 and semgrep_status != "not_run"
         and pages_gate["status"] != "fail"
+        and calls_gate["status"] != "fail"
     )
 
     demo_report = {
@@ -1480,6 +1511,7 @@ async def generate_demo_report(state: AgentState) -> dict:
                 "reason": coverage_reason,
             },
             "feature_pages": pages_gate,
+            "feature_calls": calls_gate,
             # The E2E tests of the feature delivered (`test_feature_*`): the
             # rest of the file probes the whole API and judges nothing here.
             "feature_e2e": state.get("e2e_feature") or {
@@ -1696,7 +1728,12 @@ async def run_captures(state: AgentState) -> dict:
     feature_pages = state.get("feature_pages")
     if feature_pages is None:  # QA's E2E step read them when the cycle built something
         feature_pages = await _feature_pages_of(state)
-    state = {**state, "feature_pages": feature_pages}
+    # A route that is not GET is shown by its own requests, written once
+    # and played by both lanes, each on its own server and database.
+    feature_calls = state.get("feature_calls")
+    if feature_calls is None:
+        feature_calls = await _feature_calls_of(state)
+    state = {**state, "feature_pages": feature_pages, "feature_calls": feature_calls}
 
     # The video lane launches its server once the screenshot lane's has
     # answered, or that lane ended: two servers booting side by side on a
@@ -1725,7 +1762,40 @@ async def run_captures(state: AgentState) -> dict:
             if isinstance(lane, BaseException):
                 raise lane
         merged = _merge_captures(*lanes)
-    return {**merged, "feature_pages": feature_pages}
+    return {**merged, "feature_pages": feature_pages, "feature_calls": feature_calls}
+
+
+async def _feature_calls_of(state: AgentState) -> dict:
+    """The demo script of the feature's non-GET routes (`qa_feature_calls`),
+    or an empty one when there are no PRs to read or no such route."""
+    prs = [p for p in (state.get("prs") or []) if isinstance(p, dict)]
+    github, claude, workspace = state.get("github"), state.get("claude"), state.get("workspace")
+    if not prs or github is None or claude is None or not workspace:
+        return {"routes": [], "calls": [], "reason": ""}
+    from theswarm.agents import qa_feature_calls
+
+    try:
+        routes = await qa_feature_calls.feature_routes(github, prs)
+    except Exception as exc:  # noqa: BLE001 — a demo call is a courtesy, never a failed demo
+        log.warning("QA: could not read the feature's routes off its PRs: %s", exc)
+        return {"routes": [], "calls": [], "reason": ""}
+    commands = _demo_spec(workspace).get("seed")
+    seed = "\n".join(f"- `{c}`" for c in commands) if isinstance(commands, list) else ""
+    return await qa_feature_calls.write_demo_calls(claude, workspace, routes, seed=seed)
+
+
+async def _play_feature_calls(state: AgentState, base_url: str) -> list[dict]:
+    """The feature's demo calls, played on this lane's demo server."""
+    calls = (state.get("feature_calls") or {}).get("calls") or []
+    if not calls:
+        return []
+    from theswarm.agents import qa_feature_calls
+
+    try:
+        return await qa_feature_calls.play_calls(base_url, calls)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("QA: the feature's demo calls could not be played: %s", exc)
+        return []
 
 
 async def _feature_pages_of(state: AgentState) -> list[tuple[str, str]]:

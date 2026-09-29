@@ -6,7 +6,8 @@ was: every demo looked the same. A feature is where its pull requests
 touched the API: the GET routes a diff adds, or whose body a hunk lands
 in, with the router's prefix and its path parameters filled in. Those
 pages join the walk, and each PR's first page is its story's "after"
-capture. Only GET: a POST needs a body nobody can invent.
+capture. Only GET here: a POST needs a body, and `qa_feature_calls`
+has one written from the code and played.
 """
 
 from __future__ import annotations
@@ -85,17 +86,15 @@ def _touched_lines(patch: str) -> set[int]:
     return lines
 
 
-def touched_get_paths(patch: str, source: str, *, module: str = "", main_source: str = "") -> list[str]:
-    """The GET routes the patch adds or whose body it touches, as URL paths.
-
-    A hunk belongs to the last route declared before it; the route's path
-    parameters are filled with "1".
-    """
+def touched_routes(patch: str, source: str, *, module: str = "", main_source: str = "") -> list[tuple[str, str]]:
+    """(method, path template) of every route the patch adds or whose body
+    it touches, the router's prefix included. A hunk belongs to the last
+    route declared before it."""
     routes = routes_in(source)
     if not routes:
         return []
     prefixes = _prefixes(source, module, main_source)
-    touched: list[str] = []
+    touched: list[tuple[str, str]] = []
     for line in sorted(_touched_lines(patch)):
         owner = None
         for route in routes:
@@ -103,11 +102,21 @@ def touched_get_paths(patch: str, source: str, *, module: str = "", main_source:
                 owner = route
             else:
                 break
-        if owner is None or owner.method != "get":
+        if owner is None:
             continue
-        path = prefixes.get(owner.router, "") + owner.path
-        path = _PARAM_RE.sub(_PARAM_VALUE, path) or "/"
-        if path not in touched:
+        found = (owner.method, prefixes.get(owner.router, "") + owner.path or "/")
+        if found not in touched:
+            touched.append(found)
+    return touched
+
+
+def touched_get_paths(patch: str, source: str, *, module: str = "", main_source: str = "") -> list[str]:
+    """The GET routes the patch adds or whose body it touches, as URL paths,
+    their path parameters filled with "1"."""
+    touched: list[str] = []
+    for method, template in touched_routes(patch, source, module=module, main_source=main_source):
+        path = _PARAM_RE.sub(_PARAM_VALUE, template) or "/"
+        if method == "get" and path not in touched:
             touched.append(path)
     return touched
 
@@ -121,6 +130,19 @@ def _is_router_file(entry: dict) -> bool:
 async def pages_per_pr(github, prs: list[dict]) -> dict[int, list[str]]:
     """PR number → the feature pages its diff touched, in order, each once."""
     pages: dict[int, list[str]] = {}
+    for number, routes in (await routes_per_pr(github, prs)).items():
+        found: list[str] = []
+        for method, template in routes:
+            path = _PARAM_RE.sub(_PARAM_VALUE, template) or "/"
+            if method == "get" and path not in found:
+                found.append(path)
+        pages[number] = found
+    return pages
+
+
+async def routes_per_pr(github, prs: list[dict]) -> dict[int, list[tuple[str, str]]]:
+    """PR number → (method, path template) of the routes its diff touched."""
+    touched: dict[int, list[tuple[str, str]]] = {}
     for pr in prs:
         number, ref = pr.get("number"), pr.get("head_sha") or ""
         if not isinstance(number, int):
@@ -131,7 +153,7 @@ async def pages_per_pr(github, prs: list[dict]) -> dict[int, list[str]]:
             log.warning("QA: could not read PR #%s for its feature pages: %s", number, exc)
             continue
         main_source: str | None = None
-        found: list[str] = []
+        found: list[tuple[str, str]] = []
         for entry in files:
             if not _is_router_file(entry):
                 continue
@@ -144,12 +166,12 @@ async def pages_per_pr(github, prs: list[dict]) -> dict[int, list[str]]:
             except Exception as exc:  # noqa: BLE001
                 log.warning("QA: could not read %s at %s: %s", entry.get("filename"), ref[:7], exc)
                 continue
-            for path in touched_get_paths(entry.get("patch") or "", source, module=module,
-                                          main_source=main_source or ""):
-                if path not in found:
-                    found.append(path)
-        pages[number] = found
-    return pages
+            for route in touched_routes(entry.get("patch") or "", source, module=module,
+                                        main_source=main_source or ""):
+                if route not in found:
+                    found.append(route)
+        touched[number] = found
+    return touched
 
 
 async def _main_source(github, ref: str) -> str:

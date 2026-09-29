@@ -111,6 +111,8 @@ class AgentState(TypedDict, total=False):
     foreign_prs: list[int]  # approved PRs the swarm did not open: reviewed, left for their author
     e2e_feature: dict  # the E2E tests of the feature delivered (`test_feature_*`): status, counts, reason
     feature_page_statuses: dict  # feature page path → what it answered on the running target (None: unreachable)
+    feature_calls: dict  # routes / calls / reason: the demo script of a feature's non-GET routes (`qa_feature_calls`)
+    feature_call_results: list  # each demo call as played on the screenshot lane's server: status, body
     story_preview_urls: dict  # F2 — {pr_number: {"before": url_or_none, "after": url}}
     story_artifacts: dict  # F2 — {pr_number: {"before": [...], "after": [...]}}
     story_videos: dict  # F3 — {pr_number: (Artifact, bytes)}

@@ -50,10 +50,12 @@ def _head_sha(repo: str, pr: int) -> str:
 
 
 async def capture(repo: str, workspace: str, prs: list[int], with_e2e: bool = False,
-                  keep_e2e_file: bool = False) -> dict:
+                  keep_e2e_file: bool = False, with_calls: bool = False) -> dict:
     """QA's captures and report on the checkout — the real functions. With
     `with_e2e`, QA's E2E step first: the file written for the PRs (a real
-    Claude call), run on a seeded server, its failing feature tests triaged."""
+    Claude call), run on a seeded server, its failing feature tests triaged.
+    With `with_calls`, the demo script of the PRs' non-GET routes is written
+    by a real Claude call and played in both lanes (`qa_feature_calls`)."""
     from theswarm.agents import qa
     from theswarm.tools.github import GitHubClient
 
@@ -65,10 +67,13 @@ async def capture(repo: str, workspace: str, prs: list[int], with_e2e: bool = Fa
         "github_repo": repo,
     }
     e2e: dict = {}
-    if with_e2e:
+    if with_e2e or with_calls:
         from theswarm.tools.claude import ClaudeCLI
 
         state["claude"] = ClaudeCLI(model="sonnet")
+    if not with_calls:
+        state["feature_calls"] = {"routes": [], "calls": [], "reason": ""}
+    if with_e2e:
         if not keep_e2e_file:  # else: run the file as it is (a planted test)
             written = await qa.write_e2e_tests(state)
             state = {**state, **{k: v for k, v in written.items() if k == "feature_pages"}}
@@ -116,7 +121,7 @@ def film_report(p, repo: str, report_id: str, gate: dict, feature_shots: list[di
     film._caption(page, "QA ran on the target: its demo.seed filled the database, then the walk")
     time.sleep(5)
     page.goto(f"{film.BASE}/demos/{report_id}/play", wait_until="domcontentloaded")
-    film._caption(page, f"feature pages: {gate.get('status')} — {gate.get('reason', '')}")
+    film._caption(page, f"{gate.get('name', 'feature pages')}: {gate.get('status')} — {gate.get('reason', '')}")
     time.sleep(4)
     for _ in range(12):
         if page.locator("video:visible").count():
@@ -145,6 +150,8 @@ def main() -> int:
                     help="run QA's E2E step first (writes the file with Claude, runs it, triages)")
     ap.add_argument("--keep-e2e-file", action="store_true",
                     help="with --with-e2e: run the workspace's E2E file as it is instead of writing one")
+    ap.add_argument("--with-calls", action="store_true",
+                    help="write the demo calls of the PRs' non-GET routes (a Claude call) and play them")
     args = ap.parse_args()
 
     workspace = str(Path(args.workspace).resolve())
@@ -152,15 +159,20 @@ def main() -> int:
 
     env = film._env()
     os.environ.setdefault("GITHUB_TOKEN", env["GITHUB_TOKEN"])  # QA reads the PRs' diffs
-    if args.with_e2e:  # the subscription only (V2 invariant I1)
+    if args.with_e2e or args.with_calls:  # the subscription only (V2 invariant I1)
         os.environ["SWARM_CLAUDE_BACKEND"] = "sdk"
         os.environ.pop("ANTHROPIC_API_KEY", None)
         if env.get("CLAUDE_CODE_OAUTH_TOKEN"):
             os.environ.setdefault("CLAUDE_CODE_OAUTH_TOKEN", env["CLAUDE_CODE_OAUTH_TOKEN"])
     qa_out = asyncio.run(capture(args.repo, workspace, args.prs, with_e2e=args.with_e2e,
-                                 keep_e2e_file=args.keep_e2e_file))
-    gate = qa_out["demo_report"]["quality_gates"].get("feature_pages", {})
+                                 keep_e2e_file=args.keep_e2e_file, with_calls=args.with_calls))
+    gates = qa_out["demo_report"]["quality_gates"]
+    gate = gates.get("feature_pages", {})
     print("feature pages gate:", json.dumps(gate), flush=True)
+    if args.with_calls:
+        print("feature calls gate:", json.dumps(gates.get("feature_calls")), flush=True)
+        if gates.get("feature_calls", {}).get("status") != "not_run":
+            gate = {**gates["feature_calls"], "name": "feature calls"}
     if args.with_e2e:
         print("feature E2E gate:", json.dumps(qa_out["demo_report"]["quality_gates"].get("feature_e2e")),
               flush=True)
@@ -170,19 +182,21 @@ def main() -> int:
     try:
         with sync_playwright() as p:
             shots = [s for s in qa_out["demo_report"].get("screenshots", [])
-                     if str(s.get("label", "")).startswith("feature_pr_")]
+                     if str(s.get("label", "")).startswith(("feature_pr_", "feature_call_"))]
             video = film_report(p, args.repo, report_id, gate, shots)
         out = film.DEMOS_DIR / f"{args.name}.webm"
         film.join([video], out)
     finally:
         server.terminate()
         server.wait(timeout=20)
-    summary = {"report": report_id, "feature_pages": gate,
+    summary = {"report": report_id, "feature_pages": gates.get("feature_pages"),
+               "feature_calls": gates.get("feature_calls"),
                "screenshots": [s.get("label") for s in qa_out["demo_report"].get("screenshots", [])],
                "video": str(out.relative_to(ROOT)), "bytes": out.stat().st_size}
     (film.WORK / f"{args.name}.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))
-    return 0 if gate.get("status") == "pass" else 1
+    return 0 if "pass" in (gates.get("feature_pages", {}).get("status"),
+                           gates.get("feature_calls", {}).get("status")) else 1
 
 
 if __name__ == "__main__":

@@ -25,9 +25,11 @@ AGENTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "src" / "theswarm" / 
 # (#121; `conflict` since approved PRs that main moved past go back too).
 # `status`/`pages`/`reason` are the feature-pages gate and `passed`/`failed`
 # the feature-E2E gate (`qa_feature_pages`), both inside `demo_report`.
+# `routes`/`calls` are the demo script (`qa_feature_calls`), carried whole
+# in the declared `feature_calls`, and the `feature_calls` gate's list.
 HELPER_ONLY_KEYS = {
     "decision", "summary", "issues", "pr_number", "sent_back", "earlier", "text", "conflict",
-    "status", "pages", "reason", "passed", "failed",
+    "status", "pages", "reason", "passed", "failed", "routes", "calls",
 }
 
 
