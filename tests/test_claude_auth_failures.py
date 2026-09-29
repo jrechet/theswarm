@@ -35,9 +35,15 @@ def test_transient_failures_are_not_auth_failures(message):
     assert _is_auth_failure(_CLIUnavailable(message)) is False
 
 
-def test_the_deploy_no_longer_ships_the_override():
-    """Prod runs on the mounted, self-refreshing ~/.claude session (I1);
-    shipping the token as well means the broken one wins."""
-    for f in (".github/actions/write-env/action.yml", ".github/workflows/cd.yml"):
-        assert "CLAUDE_CODE_OAUTH_TOKEN" not in Path(f).read_text()
-        assert "claude_code_oauth_token" not in Path(f).read_text()
+def test_the_deploy_ships_the_token_only_when_it_is_set():
+    """#76 (2026-09-13) stopped shipping a token that had gone stale; the
+    mounted session then died on its own during the 2026-09-28 outage. A
+    `claude setup-token` token (a year, no refresh chain) is the primary
+    credential again, the mounted session the fallback (the SDK retries
+    without the token on an auth failure). Optional: no secret, no line."""
+    write_env = Path(".github/actions/write-env/action.yml").read_text()
+    assert "claude_code_oauth_token:" in write_env
+    assert 'if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then' in write_env
+    assert 'echo "CLAUDE_CODE_OAUTH_TOKEN=$CLAUDE_CODE_OAUTH_TOKEN"' in write_env
+    cd = Path(".github/workflows/cd.yml").read_text()
+    assert cd.count("claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}") == 2  # deploy, redeploy
