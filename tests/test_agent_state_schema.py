@@ -27,9 +27,10 @@ AGENTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "src" / "theswarm" / 
 # the feature-E2E gate (`qa_feature_pages`), both inside `demo_report`.
 # `routes`/`calls` are the demo script (`qa_feature_calls`), carried whole
 # in the declared `feature_calls`, and the `feature_calls` gate's list.
+# `error` marks a demo script the writer could not produce (vs. none needed).
 HELPER_ONLY_KEYS = {
     "decision", "summary", "issues", "pr_number", "sent_back", "earlier", "text", "conflict",
-    "status", "pages", "reason", "passed", "failed", "routes", "calls",
+    "status", "pages", "reason", "passed", "failed", "routes", "calls", "error",
 }
 
 

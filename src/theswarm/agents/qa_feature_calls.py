@@ -36,13 +36,20 @@ DEMO_CALLS_PROMPT = """\
 You are QA, preparing the demo of a feature this cycle just built. The demo
 runs this repository's app on a fresh database{seed}
 
-The feature added these routes (method, path template, pull request):
+The feature added or changed these routes (method, path template, pull request):
 {routes}
+
+The demo already walks every GET route as is: its path with ids filled with
+1, no query string. Write calls only where that walk cannot show the
+feature: a route that changes data, and a GET route that needs query
+parameters (or ids the walk would not guess). A GET route that answers as
+is needs no call — answer an empty list when no route needs one.
 
 Read the code — the routers, the request schemas, the seed — and write at
 most {limit} HTTP calls that SHOW the feature working on that data, in order:
 1. what the data looks like before (a GET), when the feature changes something;
-2. the feature's own request(s), with a valid JSON body built from the schema;
+2. the feature's own request(s): a JSON body built from the schema, or the
+   query parameters a GET needs;
 3. what changed after (the same GET).
 
 Rules:
@@ -55,14 +62,17 @@ Rules:
 
 
 async def feature_routes(github, prs: list[dict]) -> list[dict]:
-    """The routes the cycle's PRs touched that are not GET, each once, with
-    the PR that touched it first: ``{"pr", "method", "path"}``."""
+    """The routes the cycle's PRs touched, each once, with the PR that
+    touched it first: ``{"pr", "method", "path"}``. GET ones too: a GET that
+    needs a query parameter shows nothing to the page walk — artist-search's
+    `/tours/search` answered it 422 and its demo showed the dashboard
+    (da79522769b3); the writer decides which need a call."""
     routes: list[dict] = []
     seen: set[tuple[str, str]] = set()
     for number, touched in (await routes_per_pr(github, prs)).items():
         for method, template in touched:
             key = (method.upper(), template)
-            if method.lower() != "get" and key not in seen:
+            if key not in seen:
                 seen.add(key)
                 routes.append({"pr": number, "method": key[0], "path": template})
     return routes
@@ -125,7 +135,8 @@ async def write_demo_calls(claude, workspace: str, routes: list[dict], *, seed: 
         raise
     except Exception as exc:  # noqa: BLE001 — no script, the demo shows the pages
         log.warning("QA: the feature's demo calls could not be written (%s)", exc)
-        return {"routes": routes, "calls": [], "reason": f"the demo calls could not be written: {exc}"}
+        return {"routes": routes, "calls": [], "error": True,
+                "reason": f"the demo calls could not be written: {exc}"}
     calls = [
         {"method": str(c.get("method", "")).upper(), "path": c.get("path"),
          "json_body": c.get("json_body"), "caption": str(c.get("caption") or "")[:200]}
@@ -174,10 +185,13 @@ def feature_calls_gate(script: dict | None, results: list[dict], *, launch_error
     script = script or {}
     played = [{"method": r.get("method"), "path": r.get("path"), "status": r.get("status")}
               for r in results]
-    if not script.get("routes"):
-        return {"status": "not_run", "calls": [],
-                "reason": "the PRs add no route but GET — the pages are the demo"}
+    routes = script.get("routes") or []
+    if not routes:
+        return {"status": "not_run", "calls": [], "reason": "the PRs touch no route"}
     if not script.get("calls"):
+        if all(str(r.get("method", "")).upper() == "GET" for r in routes) and not script.get("error"):
+            return {"status": "not_run", "calls": [],
+                    "reason": "the pages are the demo — every route walks as is"}
         return {"status": "not_run", "calls": [], "reason": script.get("reason") or "no demo call"}
     if launch_error and not any(r.get("status") for r in results):
         return {"status": "not_run", "calls": played,

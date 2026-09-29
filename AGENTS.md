@@ -823,8 +823,10 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   all is `not_run`. **A feature that is not GET is shown by its own
   requests** (`feature_calls`, `agents/qa_feature_calls.py`): sell-tickets
   (68fd55bf81e5) added one POST route, and its demo was four seconds of
-  the API root. When a PR touches a POST/PUT/PATCH/DELETE route, one Claude
-  call (read profile, the workspace, the seed named) writes at most six
+  the API root. When a PR touches a route, one Claude
+  call (GET ones included since artist-search: `/tours/search` needs
+  `?artist=`, the walk got a 422 and the demo showed the dashboard — the
+  writer adds calls only where the walk cannot show the feature) (read profile, the workspace, the seed named) writes at most six
   calls against the seeded data — before, the feature's request with a
   body built from the schema, after — `run_captures` writes them once,
   and each lane plays them on its own demo server and database: each
