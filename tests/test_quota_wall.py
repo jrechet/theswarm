@@ -27,6 +27,19 @@ from theswarm.tools.claude import ClaudeCLI, ClaudeFatalError, _CLIUnavailable
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 NOW = datetime(2026, 9, 27, 7, 15, tzinfo=timezone.utc)
 WEEKLY = "SDK result success: You've hit your weekly limit · resets Sep 29, 4am (UTC)"
+
+
+def _weekly_ahead() -> tuple[str, datetime]:
+    """The weekly-limit message, two days after the real clock's today.
+
+    The tests that run the wall against the real clock used WEEKLY itself,
+    and failed from its reset on (2026-09-29 04:00 UTC) — a date in a
+    fixture is a time bomb wherever the code reads `now`.
+    """
+    reset = (datetime.now(timezone.utc) + timedelta(days=2)).replace(
+        hour=4, minute=0, second=0, microsecond=0)
+    return (f"SDK result success: You've hit your weekly limit · "
+            f"resets {reset:%b} {reset.day}, 4am (UTC)", reset)
 SESSION = "exit 1: You've hit your session limit · resets 1:20pm (UTC)"
 
 
@@ -109,7 +122,8 @@ async def test_a_quota_failure_raises_the_wall():
 
 
 async def test_no_call_is_spent_while_the_wall_stands():
-    quota_wall.raise_wall(WEEKLY, now=datetime.now(timezone.utc))
+    message, reset = _weekly_ahead()
+    quota_wall.raise_wall(message, now=datetime.now(timezone.utc))
     cli = ClaudeCLI(model="haiku")
     attempts = 0
 
@@ -118,7 +132,7 @@ async def test_no_call_is_spent_while_the_wall_stands():
         attempts += 1
 
     with patch.object(cli, "_run_sdk", side_effect=counting):
-        with pytest.raises(ClaudeFatalError, match="Sep 29"):
+        with pytest.raises(ClaudeFatalError, match=f"{reset:%b} {reset.day}"):
             await cli.run("hi")
 
     assert attempts == 0
@@ -170,13 +184,14 @@ async def test_health_says_the_window_is_open():
 
 
 async def test_health_says_when_the_window_reopens_and_stays_alive():
-    quota_wall.raise_wall(WEEKLY, now=datetime.now(timezone.utc))
+    message, reset = _weekly_ahead()
+    quota_wall.raise_wall(message, now=datetime.now(timezone.utc))
 
     status, body = await _health()
 
     assert status == 200  # a closed window is not a dead container
     assert body["checks"]["claude"] == "quota_wall"
-    assert body["claude_quota_resets_at"] == "2026-09-29T04:00:00+00:00"
+    assert body["claude_quota_resets_at"] == reset.isoformat()
 
 
 # ── The harness ────────────────────────────────────────────────────────
