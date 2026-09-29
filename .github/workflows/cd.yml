@@ -93,6 +93,7 @@ jobs:
           swarm_access_key: ${{ secrets.SWARM_ACCESS_KEY }}
           swarm_session_secret: ${{ secrets.SWARM_SESSION_SECRET }}
           swarm_webhook_secret: ${{ secrets.SWARM_WEBHOOK_SECRET }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       - name: Wait for running cycles
         # A deploy restarts the service and interrupts a running cycle. The
         # boot resumer brings it back once (V2 M4), but the node in flight
@@ -201,6 +202,7 @@ jobs:
           swarm_access_key: ${{ secrets.SWARM_ACCESS_KEY }}
           swarm_session_secret: ${{ secrets.SWARM_SESSION_SECRET }}
           swarm_webhook_secret: ${{ secrets.SWARM_WEBHOOK_SECRET }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       - name: Redeploy (latest)
         run: |
           export TS_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}

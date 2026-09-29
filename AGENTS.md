@@ -100,9 +100,13 @@ Full details: `docs/ARCHITECTURE-V2.md`, `docs/ROLES-OVERVIEW.md`.
 ## Environment
 
 Secrets in `.env` (never committed). Key vars: `CLAUDE_CODE_OAUTH_TOKEN`
-(headless auth for the Claude CLI, minted with `claude setup-token`; the
-browser-session credentials mounted from the host expire when their refresh
-token dies), `ANTHROPIC_API_KEY` (only a real `sk-ant-api` key enables the API
+(headless auth for Claude, minted with `claude setup-token`, a year of
+validity; the browser-session credentials mounted from the host expire when
+their refresh token dies — prod's did during the 2026-09-28 outage. In prod
+it is the optional repo secret of the same name, written to `.env` only when
+set: the token first, the mounted session as the fallback — an auth failure
+retries without the token, and so does a call that hangs before its session
+starts, the way a stale token hung the old CLI in #76), `ANTHROPIC_API_KEY` (only a real `sk-ant-api` key enables the API
 fallback; an `sk-ant-oat` OAuth token is CLI-only and is deliberately ignored
 by the fallback), `GITHUB_TOKEN` (push auth,
 injected per git command — never written to `.git/config`), `SWARM_GITHUB_REPO`,
@@ -571,7 +575,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   SDK, omitting is not stripping**: `ClaudeAgentOptions.env` is merged *over*
   the parent's `os.environ`, so the key must be overridden to `""`
   (`_sdk_child_env`) — measured 2026-09-23, omission answered
-  `apiKeySource: ANTHROPIC_API_KEY`, the empty override `none`.
+  `apiKeySource: ANTHROPIC_API_KEY`, the empty override `none`. The same
+  holds for the OAuth token the auth retry drops: omitted, it came back
+  through the merge, and the retry "without the token" answered the same
+  401 as the call it retried (measured 2026-09-29) — it is overridden to
+  `""` too, which sends the binary to the session on disk.
   `python -m theswarm validate` runs a one-turn probe and prints who answered
   (`identity=subscription` is the only acceptable value); it is skipped when
   `SWARM_CLAUDE_BACKEND=api`, the test suite's default.

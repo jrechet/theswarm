@@ -356,12 +356,15 @@ def _sdk_child_env(*, drop_oauth_env: bool = False, workdir: str | None = None) 
     remove it there: measured on 2026-09-23, an omitted ANTHROPIC_API_KEY
     came back as ``apiKeySource: ANTHROPIC_API_KEY``, an empty override as
     ``none`` (the subscription). So the keys I1 forbids are overridden to
-    empty, explicitly. The OAuth override is still *dropped* (its absence
-    is what lets the session on disk win); an empty override there would
-    shadow that session.
+    empty, explicitly. So is the OAuth override when it is dropped: omitted,
+    it came back through the merge — measured 2026-09-29, the retry "without
+    the token" answered the same 401 as the call it retried — while an empty
+    one sends the binary to the session on disk (it answered from there).
     """
     env = _child_env(drop_oauth_env=drop_oauth_env, workdir=workdir)
     env["ANTHROPIC_API_KEY"] = ""
+    if drop_oauth_env:
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = ""
     return env
 
 
@@ -1119,15 +1122,21 @@ class ClaudeCLI:
         if isinstance(first, _SDKTimeout):
             grown = self._retry_timeout(timeout, first, workdir=workdir)
             resume = first.session_id or None
+            # No session at all, with the env token set: the hang #76 saw a
+            # stale token cause (the CLI then, 2026-09-13). The mounted
+            # session answers the retry.
+            drop_token = resume is None and bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
             log.warning(
-                "Claude SDK timed out — %s with %ds",
+                "Claude SDK timed out — %s with %ds%s",
                 f"resuming session {resume}" if resume else "re-prompting", grown,
+                " and without the CLAUDE_CODE_OAUTH_TOKEN override" if drop_token else "",
             )
             try:
                 return await self._run_sdk(
                     SDK_CONTINUE_PROMPT if resume else prompt,
                     workdir=workdir, timeout=grown, permission_mode=permission_mode,
                     resume=resume, output_schema=output_schema,
+                    **({"drop_oauth_env": True} if drop_token else {}),
                 )
             except _CLIUnavailable as again:
                 quota = _quota_exhausted(again)
