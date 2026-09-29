@@ -480,7 +480,10 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   pretty-printed, 20px) — the pages a cycle adds are often API routes,
   and Chromium drew them as one 13px line on a white page. **The demo shows the feature**
   (`agents/qa_feature_pages.py`, 2026-09-27): the GET routes the cycle's
-  PRs add, or whose body a diff touches, with the router's prefix and
+  PRs — **those it opened and those it merged** (`cycle_graph._delivered_prs`,
+  read from GitHub: cycle 4eaa5b767051 merged a PR the day before had
+  opened, and its demo showed the dashboard with every behaviour gate "not
+  run"; an already-on-main task's story says its issue title too) — add, or whose body a diff touches, with the router's prefix and
   `{params}` filled with 1, join both walks after the declared pages; the
   walk's screenshot of such a page (label `feature_pr_<n>_…`) is that
   PR's story capture, and the stored report lists a story per delivered
