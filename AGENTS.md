@@ -748,7 +748,7 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   that do not depend on each other; a chained breakdown runs in order.
   `SWARM_DEV_PARALLELISM=1` in the compose file is the way back.
 - **V2 runtime M6 — the harness is an eval suite.** `evals/<target>.yaml`
-  lists the canonical features (twenty-four on concert-tour-app since 2026-09-29: the first seventeen had all been run by then; `evals.exhausted` makes the harness warn when all are built — top the manifest up before that); `theswarm.evals`
+  lists the canonical features (thirty-one on concert-tour-app since 2026-09-29 evening: the first seventeen had all been run by that morning, the next seven by the evening; `evals.exhausted` makes the harness warn when all are built — top the manifest up before that); `theswarm.evals`
   picks the feature of the day (rotation by day of year), scores a run
   (`passed` keeps its pre-M6 meaning — completed, a PR, nothing unbuilt —
   and the PR's CI, the review decisions, cost, duration, `within_cost`,

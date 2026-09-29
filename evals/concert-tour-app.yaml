@@ -179,3 +179,55 @@ features:
     expected_paths: ["**/*.py"]
     max_cost_usd: 8
     max_duration_s: 3600
+  # Topped up again the same evening: all twenty-four were built by then
+  # (the last seven in one day, locally). None of these routes existed;
+  # artist-search puts /tours/search beside /tours/{tour_id} on purpose.
+  - id: refund-tickets
+    text: |-
+      Refund tickets for a concert
+      POST /api/v1/concerts/{id}/refunds with a quantity gives back that many tickets and returns the concert with its updated counts; 422 for a quantity of zero or less, 409 when refunding more tickets than were sold, 404 for an unknown concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: lineup-remove
+    text: |-
+      Take an act off a concert's lineup
+      DELETE /api/v1/concerts/{id}/lineup/{entry_id} removes that lineup entry and answers 204; 404 when the concert or the entry does not exist, or the entry belongs to another concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: reschedule-concert
+    text: |-
+      Reschedule a concert
+      PATCH /api/v1/concerts/{id} with a new date_time moves the concert and returns it; 422 for a date in the past, 409 for a cancelled concert, 404 for an unknown concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: tour-span
+    text: |-
+      Show when a tour starts and ends
+      GET /api/v1/tours/{id}/span returns the first and last concert dates of the tour and the number of days between them, cancelled concerts left out; all null when it has none; 404 for an unknown tour.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: tour-occupancy
+    text: |-
+      Show how full a whole tour is
+      GET /api/v1/tours/{id}/occupancy returns the tickets sold, the total capacity and the percentage sold over the tour's concerts that are not cancelled; 404 for an unknown tour.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: weekday-stats
+    text: |-
+      Count the concerts per weekday
+      GET /api/v1/stats/weekdays returns, for each day of the week from Monday to Sunday, how many concerts that are not cancelled fall on it — every day present, zero included.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: artist-search
+    text: |-
+      Search the tours by artist
+      GET /api/v1/tours/search?artist=<text> returns the tours whose artist contains the text, case-insensitive; 422 without the parameter; the existing GET /api/v1/tours/{id} keeps working.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
