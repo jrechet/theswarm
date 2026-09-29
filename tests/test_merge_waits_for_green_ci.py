@@ -146,7 +146,7 @@ class _Repo:
         self.labels: list[tuple[int, list[str]]] = []
 
     async def get_open_prs(self):
-        return [{"number": 41, "head": "feat/x", "head_sha": "abc123",
+        return [{"number": 41, "head": "feat/issue-11-stats", "head_sha": "abc123",
                  "title": "[#11] Stats", "body": "Closes #11"}]
 
     async def get_ci_checks(self, ref):

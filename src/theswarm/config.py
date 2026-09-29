@@ -108,6 +108,7 @@ class AgentState(TypedDict, total=False):
     demo_launch_error: str
     prs: list[dict]  # the cycle's PRs (number, head_sha, title, url): QA reads the feature's pages off them
     feature_pages: list  # (path, label) the feature lives on, from its PRs — they join the demo walks
+    foreign_prs: list[int]  # approved PRs the swarm did not open: reviewed, left for their author
     e2e_feature: dict  # the E2E tests of the feature delivered (`test_feature_*`): status, counts, reason
     feature_page_statuses: dict  # feature page path → what it answered on the running target (None: unreachable)
     story_preview_urls: dict  # F2 — {pr_number: {"before": url_or_none, "after": url}}

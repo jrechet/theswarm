@@ -489,6 +489,8 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
         await rt.progress("TechLead", f"PR #{number}: approved, CI red — back to the Dev")
     for number in tl_state.get("ci_pending_prs", []):
         await rt.progress("TechLead", f"PR #{number}: approved, CI still running — left open")
+    for number in tl_state.get("foreign_prs", []):
+        await rt.progress("TechLead", f"PR #{number}: approved, not the swarm's — left for its author")
     skipped = list(tl_state.get("skipped_prs", []))
     for number in skipped:
         await rt.progress(
