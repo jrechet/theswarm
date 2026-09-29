@@ -128,3 +128,54 @@ features:
     expected_paths: ["**/*.py"]
     max_cost_usd: 8
     max_duration_s: 3600
+  # Topped up on 2026-09-29: every feature above had been run (the harness
+  # warns when the manifest is exhausted). None of these routes existed.
+  - id: sell-tickets
+    text: |-
+      Sell tickets for a concert
+      POST /api/v1/concerts/{id}/tickets with a positive quantity adds it to the tickets sold and returns the concert with its remaining tickets; 409 when it would exceed the venue's capacity or the concert is cancelled, 422 for a quantity under 1, 404 for an unknown concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: lineup-add
+    text: |-
+      Add a support act to a concert's lineup
+      POST /api/v1/concerts/{id}/lineup with an artist name and a set order adds the act and returns 201 with it; 409 when that set order is already taken for the concert, 404 for an unknown concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: cancel-tour
+    text: |-
+      Cancel a whole tour
+      POST /api/v1/tours/{id}/cancel with a reason cancels every upcoming concert of the tour not already cancelled, with that reason, and returns how many it cancelled; 404 for an unknown tour, 422 without a reason.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: sold-out-list
+    text: |-
+      List the sold-out concerts
+      GET /api/v1/concerts/sold-out returns the upcoming concerts with no ticket left, soonest first; cancelled concerts are not listed.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: month-stats
+    text: |-
+      Count the concerts per month
+      GET /api/v1/stats/months returns, for each month that has concerts (YYYY-MM), the number of concerts that are not cancelled, in chronological order.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: price-stats
+    text: |-
+      Summarise ticket prices
+      GET /api/v1/stats/prices returns the lowest, the average and the highest ticket price over the upcoming concerts that are not cancelled and have a price; all three null when there is none.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: tour-cities
+    text: |-
+      Show the cities a tour goes through
+      GET /api/v1/tours/{id}/cities returns the distinct cities of the tour's concerts in date order, cancelled concerts left out; 404 for an unknown tour.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600

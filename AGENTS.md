@@ -687,7 +687,7 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   that do not depend on each other; a chained breakdown runs in order.
   `SWARM_DEV_PARALLELISM=1` in the compose file is the way back.
 - **V2 runtime M6 — the harness is an eval suite.** `evals/<target>.yaml`
-  lists the canonical features (seventeen on concert-tour-app since 2026-09-27: the first five were all built by 2026-09-25, eight of eleven by the 27th; `evals.exhausted` makes the harness warn when all are built — top the manifest up before that); `theswarm.evals`
+  lists the canonical features (twenty-four on concert-tour-app since 2026-09-29: the first seventeen had all been run by then; `evals.exhausted` makes the harness warn when all are built — top the manifest up before that); `theswarm.evals`
   picks the feature of the day (rotation by day of year), scores a run
   (`passed` keeps its pre-M6 meaning — completed, a PR, nothing unbuilt —
   and the PR's CI, the review decisions, cost, duration, `within_cost`,
@@ -745,7 +745,9 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   failure the test's own mistake makes the gate `inconclusive` and the
   verdict `unverified`, never `verified`; nothing is rewritten to pass —
   past-concerts-toggle's tests counted `class="concert-card` as a
-  substring and found 24 cards for 6), and the new
+  substring and found 24 cards for 6; the E2E prompt now asks for data
+  through the JSON API and whole-element HTML parsing, never a substring
+  count), and the new
   `feature_pages` gate (`qa_feature_pages.feature_pages_gate`: the GET
   routes the PRs added, walked by the screenshot pass, their answers in
   `feature_page_statuses`). A 5xx is `fail`; a 4xx proves nothing (path
