@@ -312,11 +312,21 @@ def run_harness(repo: str, feature_id: str, budget: int) -> tuple[str, int]:
 
 
 def join(parts: list[Path], out: Path) -> None:
-    """One webm from the films, re-encoded small (VP9, 1280x720)."""
-    listing = WORK / "videos" / "parts.txt"
-    listing.write_text("".join(f"file '{p}'\n" for p in parts))
+    """One webm from the films, re-encoded small (VP9, 1280x720).
+
+    The concat *filter*, not the demuxer: the demuxer needs one codec for
+    every input, and given a joined film (VP9) and a raw Playwright clip
+    (VP8) it wrote the first and dropped the rest without an error — the
+    review-conversation demo lost its second half (2026-09-29).
+    """
+    inputs = [arg for part in parts for arg in ("-i", str(part))]
+    scaled = "".join(
+        f"[{i}:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,"
+        f"setsar=1,fps=25[v{i}];" for i in range(len(parts)))
+    chain = "".join(f"[v{i}]" for i in range(len(parts)))
     subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
+        ["ffmpeg", "-y", "-loglevel", "error", *inputs,
+         "-filter_complex", f"{scaled}{chain}concat=n={len(parts)}:v=1:a=0[out]", "-map", "[out]",
          "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "42", "-row-mt", "1", "-deadline", "good",
          "-cpu-used", "4", "-an", str(out)],
         check=True,
