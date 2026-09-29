@@ -34,7 +34,7 @@ _CLAUDE_READINESS_TTL_SECONDS = 60
 _OK_VALUES = frozenset({"ok", "connected", "not_configured"})
 # quota_wall: the Claude subscription window is closed — the process is
 # alive and serving, nothing to restart, so it is a warning, never an error.
-_WARN_VALUES = frozenset({"missing", "busy", "quota_wall"})
+_WARN_VALUES = frozenset({"missing", "busy", "quota_wall", "auth_expired"})
 _ERROR_VALUES = frozenset({"error"})
 
 # Upper bound on the liveness probe's DB query. Every repo shares one
@@ -103,10 +103,13 @@ async def health(request: Request) -> JSONResponse:
 
     # The Claude subscription window: closed since a call ran into it, and
     # when it reopens (the harness starts nothing before then).
-    from theswarm.tools import quota_wall
+    # ...or its credentials rejected (`auth_wall`): a person must renew them.
+    from theswarm.tools import auth_wall, quota_wall
 
     wall = quota_wall.wall_until()
-    checks["claude"] = "quota_wall" if wall is not None else "ok"
+    rejected = auth_wall.wall_until()
+    checks["claude"] = ("quota_wall" if wall is not None
+                        else "auth_expired" if rejected is not None else "ok")
 
     status = _derive_status(checks)
 
@@ -118,6 +121,8 @@ async def health(request: Request) -> JSONResponse:
     }
     if wall is not None:
         result["claude_quota_resets_at"] = wall.isoformat()
+    if rejected is not None:
+        result["claude_auth"] = auth_wall.reason()
 
     if bridge is not None:
         vcs_map = getattr(bridge, "_swarm_po_vcs_map", {})

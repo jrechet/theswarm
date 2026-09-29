@@ -256,7 +256,19 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   51 s (62f353165e62). **The wall outlives a deploy** (table
   `quota_wall`, v031, primed at boot by `quota_wall.prime`): four
   deploys followed that wall the same morning, and each new container
-  read `claude: ok` until a call ran into it again.
+  read `claude: ok` until a call ran into it again. **Expired credentials are a
+  wall too** (`tools/auth_wall`, in-process, held 10 min, never
+  persisted — a redeploy is how new credentials arrive): prod came back
+  from its 2026-09-28 outage with the mounted `~/.claude` session dead
+  ("OAuth session expired and could not be refreshed"), and the harness's
+  cycle died in 26 s, scored a failed run and a regression, and tried to
+  alert. Claude Code's own words for dead credentials
+  (`_EXPIRED_CREDENTIAL_MARKERS`, narrower than the retry's
+  `_AUTH_FAILURE_MARKERS` — a "401" in a tool's output must not end a
+  cycle) raise `ClaudeFatalError` with the way to renew them, after the
+  one retry without `CLAUDE_CODE_OAUTH_TOKEN`; the eval scores it
+  `interrupted`, `/health` says `claude: auth_expired` with `claude_auth`,
+  and the harness starts nothing while it stands.
 - **A deploy waits for the running cycle** (`cd.yml`, "Wait for running
   cycles", up to 30 min, then deploys anyway). A merge made while prod was
   idle used to land four to ten minutes later in the middle of the next

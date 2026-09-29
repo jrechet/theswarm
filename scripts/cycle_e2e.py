@@ -169,6 +169,19 @@ def quota_wall_until(*, api=None) -> str:
     return str(body.get("claude_quota_resets_at") or "") if status == 200 else ""
 
 
+def credentials_expired(*, api=None) -> str:
+    """Why the swarm's Claude credentials were rejected, "" while they work.
+
+    `/health` says so once a call has run into them (`auth_wall`); the run
+    of 2026-09-29 13:46 created its issue, died in 26 s on an expired
+    session and scored a regression.
+    """
+    status, body = (api or _api)("/health")
+    if status != 200 or (body.get("checks") or {}).get("claude") != "auth_expired":
+        return ""
+    return str(body.get("claude_auth") or "expired")
+
+
 def start_cycle(repo: str, issue: int) -> str:
     if not wait_for_health():
         sys.exit(f"FAIL start: {BASE}/health never answered 200 in {HEALTH_WAIT_SECONDS}s")
@@ -435,6 +448,13 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
     if wall:
         message = (f"the Claude subscription window is closed until {wall}; "
                    "no issue created, no cycle started, nothing measured")
+        print(f"\nNOT MEASURED — {message}")
+        annotate("warning", f"{repo}" + (f" [{feature.id}]" if feature else "") + f": {message}")
+        return True, {}
+    rejected = credentials_expired()
+    if rejected:
+        message = (f"the swarm's Claude credentials are expired ({rejected}) — a person must "
+                   "renew them; no issue created, no cycle started, nothing measured")
         print(f"\nNOT MEASURED — {message}")
         annotate("warning", f"{repo}" + (f" [{feature.id}]" if feature else "") + f": {message}")
         return True, {}

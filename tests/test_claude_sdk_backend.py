@@ -372,12 +372,14 @@ async def test_an_auth_failure_retries_once_without_the_oauth_override(sdk, monk
     assert attempts == [False, True]
 
 
-async def test_an_auth_failure_without_an_override_is_just_a_failure(sdk):
+async def test_an_expired_session_without_an_override_is_tried_once_and_fatal(sdk):
+    """Nothing to retry without an override; and the session itself being
+    dead is fatal (`auth_wall`, prod 2026-09-29), not a skipped step."""
     async def run_sdk(prompt, *, workdir, timeout, permission_mode, drop_oauth_env=False, resume=None, output_schema=None):
         raise _CLIUnavailable("Failed to authenticate: OAuth session expired")
 
     with patch.object(sdk, "_run_sdk", side_effect=run_sdk) as spy:
-        with pytest.raises(RuntimeError, match="Claude SDK"):
+        with pytest.raises(ClaudeFatalError, match="credentials expired"):
             await sdk.run("hi")
     assert spy.await_count == 1
 
