@@ -314,7 +314,14 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   commented PR is still open next time and nothing about it changed —
   cycle 5f8f0f63f58c read #124 three times and the 300s phase timed out
   on the pass that mattered. A new push changes the key and earns a new
-  review.
+  review. **And once per head across cycles**: the `theswarm/review`
+  status the verdict leaves on the head (M8) is read first
+  (`techlead._earlier_verdict`, `GitHubClient.get_review_status`); a head
+  that carries one is not reviewed, commented on or sent back again, and
+  its decision still reaches the merge pass. concert-tour-app#307 sat at
+  one head from 2026-09-24 and drew twelve identical REQUEST_CHANGES,
+  each with a "left for a person" comment on its task; the hand-opened
+  #433 was re-approved on every cycle.
 - **The verdict is read wherever the reviewer put it.** Prose, then a
   fenced ```json block, is a common shape; the parser takes the first
   object that carries a `decision`, fenced or bare, and steps over braces

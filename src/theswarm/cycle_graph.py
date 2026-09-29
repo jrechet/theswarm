@@ -473,7 +473,8 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
     merged = list(tl_state.get("merged_prs", []))
     updates["merged_prs"] = [*state.get("merged_prs", []), *merged]
     for r in reviews:
-        await rt.progress("TechLead", f"PR #{r['pr_number']}: {r['decision']}")
+        since = " — unchanged since it was reviewed" if r.get("earlier") else ""
+        await rt.progress("TechLead", f"PR #{r['pr_number']}: {r['decision']}{since}")
     for r in reviews:
         if r.get("sent_back"):
             await rt.progress(

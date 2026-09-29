@@ -326,6 +326,11 @@ async def poll_and_review_prs(state: AgentState) -> dict:
     # (ClaudeFatalError) still aborts — nothing after it could succeed.
     skipped: list[int] = []
     for pr in todo:
+        earlier = await _earlier_verdict(github, pr)
+        if earlier is not None:
+            reviewed.append(_pr_key(pr))
+            reviews.append(earlier)
+            continue
         try:
             review = await _review_single_pr(github, claude, pr, context)
         except ClaudeFatalError:
@@ -358,6 +363,47 @@ def _pr_key(pr: dict) -> str:
     changes the key and earns a new review; a held or commented PR does not."""
     sha = pr.get("head_sha")
     return f"{pr['number']}@{sha}" if sha else str(pr["number"])
+
+
+# Once per head across cycles, too. `reviewed_prs` lives one cycle; the
+# `theswarm/review` status the verdict leaves on the head (M8) outlives it.
+# concert-tour-app#307 sat at one head from 2026-09-24 and every cycle
+# reviewed it again: twelve identical REQUEST_CHANGES, twelve statuses and
+# a "left for a person" comment on its task each time.
+_STATUS_DECISIONS = {"Approved": "APPROVE", "Changes requested": "REQUEST_CHANGES",
+                     "Commented": "COMMENT"}
+
+
+def _verdict_of_status(status) -> tuple[str, str] | None:
+    """(decision, summary) from a `theswarm/review` status the swarm wrote
+    (`_publish_review_status`), None for anything else."""
+    if not isinstance(status, dict):
+        return None
+    label, _, summary = (status.get("description") or "").partition(":")
+    decision = _STATUS_DECISIONS.get(label)
+    return (decision, summary.strip()) if decision else None
+
+
+async def _earlier_verdict(github, pr: dict) -> dict | None:
+    """The swarm's verdict on this PR's head from an earlier cycle, as a
+    review entry that costs nothing and posts nothing — None when the head
+    has none, or it cannot be read (then the PR is reviewed)."""
+    sha = pr.get("head_sha")
+    if not sha:
+        return None
+    try:
+        verdict = _verdict_of_status(await github.get_review_status(sha))
+    except Exception as exc:  # noqa: BLE001 — a review is the safe answer
+        log.info("PR #%d: earlier verdict unreadable (%s) — reviewing it", pr["number"], exc)
+        return None
+    if verdict is None:
+        return None
+    decision, summary = verdict
+    log.info("PR #%d: %s at %s since an earlier cycle — not reviewed again until it changes",
+             pr["number"], decision, sha[:7])
+    return {"pr_number": pr["number"], "decision": decision, "summary": summary,
+            "issues": [], "sent_back": False, "tokens_used": 0, "cost_usd": 0.0,
+            "earlier": True}
 
 
 # A review's CLI budget follows its prompt. 180s is the CLI default,
