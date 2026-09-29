@@ -157,6 +157,32 @@ def _is_auth_failure(error: BaseException) -> bool:
     return any(marker in text for marker in _AUTH_FAILURE_MARKERS)
 
 
+# Claude Code's own words for credentials nothing will fix but a person:
+# narrower than `_AUTH_FAILURE_MARKERS`, which decides a retry — "401" in a
+# tool's output must not end a cycle.
+_EXPIRED_CREDENTIAL_MARKERS = (
+    "oauth session expired", "failed to authenticate", "not logged in",
+    "please run /login", "invalid api key", "oauth access token has expired",
+)
+RENEW_HINT = ("renew them: `claude setup-token` → CLAUDE_CODE_OAUTH_TOKEN, or log in "
+              "again where ~/.claude is mounted")
+
+
+def _credentials_expired(error: BaseException) -> bool:
+    """True when the failure is the credentials themselves (`auth_wall`)."""
+    text = str(error).lower()
+    return any(marker in text for marker in _EXPIRED_CREDENTIAL_MARKERS)
+
+
+def _credential_wall(error: BaseException) -> "ClaudeFatalError":
+    """Raise the auth wall and the fatal error that ends the cycle."""
+    from theswarm.tools import auth_wall
+
+    detail = str(error).removeprefix("SDK result success: ").removeprefix("SDK result error: ")
+    auth_wall.raise_wall(detail)
+    return ClaudeFatalError(f"Claude credentials expired: {detail} — {RENEW_HINT}")
+
+
 class _CLIUnavailable(Exception):
     """Raised when the Claude Code CLI can't service a request.
 
@@ -1061,8 +1087,14 @@ class ClaudeCLI:
         call: the caller skips the step (invariant I6), never the CLI or
         the API — forced means forced.
         """
-        from theswarm.tools import quota_wall
+        from theswarm.tools import auth_wall, quota_wall
 
+        rejected_until = auth_wall.wall_until()
+        if rejected_until is not None:
+            raise ClaudeFatalError(
+                f"Claude credentials expired — no call made before "
+                f"{rejected_until.isoformat(timespec='minutes')}: {auth_wall.reason()} — {RENEW_HINT}"
+            )
         until = quota_wall.wall_until()
         if until is not None:
             # A wall with a clock on it, raised by an earlier call: nothing
@@ -1120,8 +1152,13 @@ class ClaudeCLI:
                     "Claude SDK also failed without the env token (%s) — keeping the "
                     "original failure", without_token,
                 )
+                if _credentials_expired(without_token):
+                    raise _credential_wall(without_token) from without_token
                 raise RuntimeError(f"Claude SDK failed: {first}") from without_token
 
+        if _credentials_expired(first):
+            # Nothing to fall back to: the session itself is dead.
+            raise _credential_wall(first) from first
         raise RuntimeError(f"Claude SDK failed: {first}") from first
 
     def _retry_timeout(

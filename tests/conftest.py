@@ -58,11 +58,13 @@ def _no_real_claude_binary(monkeypatch):
 def _no_quota_wall():
     """A closed subscription window is remembered per process; a test that
     closes it must not close it for the next."""
-    from theswarm.tools import quota_wall
+    from theswarm.tools import auth_wall, quota_wall
 
     quota_wall.clear()
+    auth_wall.clear()
     yield
     quota_wall.clear()
+    auth_wall.clear()
 
 
 @pytest.fixture(autouse=True)

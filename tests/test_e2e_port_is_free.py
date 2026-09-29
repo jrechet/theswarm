@@ -58,11 +58,17 @@ def test_the_preferred_base_is_used_when_it_is_free():
 
 
 def _free_triplet_base() -> int:
-    """A base whose three ports are all currently free."""
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        base = s.getsockname()[1]
-    return base + 1000
+    """A base whose three ports are all currently free.
+
+    Not the OS's next ephemeral port + 1000: macOS hands those out from a
+    counter that walks up to 65535, and after a day of demo servers it sat
+    near the top — `bind(): port must be 0-65535` on every run
+    (2026-09-29). A block well inside the range, found by binding.
+    """
+    for base in range(21000, 60000, 7):
+        if all(_is_free(base + offset) for offset in (0, 1, 2)):
+            return base
+    raise RuntimeError("no free port triplet between 21000 and 60000")
 
 
 def test_an_occupied_base_is_skipped(occupied):
