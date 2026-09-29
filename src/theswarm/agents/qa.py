@@ -164,6 +164,9 @@ real resources, list them, fetch one, update/delete where routes exist
 - Build request bodies from the actual schema fields; use \
 `uuid.uuid4().hex[:8]` to keep unique fields unique
 - Assert status codes AND response body content
+- Playwright's `APIResponse.headers` lower-cases every header name: read \
+`response.headers["x-total-count"]`, never `"X-Total-Count"` — the wrong case \
+fails against an app that sets the header
 - Assert on data through the JSON API wherever one exists. When a test must \
 read HTML, parse whole elements (count `<article class="…">` tags, match an \
 exact class token) — never count a class name as a substring: \
