@@ -491,6 +491,11 @@ async def push_branch(workdir: str, branch_name: str) -> None:
     log.info("Pushed branch %s", branch_name)
 
 
+async def head_sha(workdir: str) -> str:
+    """The commit the checkout is on, "" when git cannot say."""
+    return (await _run_git("rev-parse", "HEAD", cwd=workdir, check=False)).strip()
+
+
 async def get_diff_stat(workdir: str) -> str:
     """Get a compact diff stat of current changes vs main."""
     return await _run_git("diff", "--stat", "main", cwd=workdir, check=False)

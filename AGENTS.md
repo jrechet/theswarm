@@ -366,7 +366,23 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   about (`git.resume_branch`, not `create_branch`, which would reset from
   main and discard the commits) and pushes onto the PR that already
   exists. Two rounds on one task is a conversation; at
-  `CHANGES_REQUESTED_CAP` it stays in review with a comment for a person.
+  `CHANGES_REQUESTED_CAP` it is *put* in review (`status:review`, ready and
+  in-progress taken off) with a comment for a person — concert-tour-app#306
+  read "Leaving it in review" six times while a failed attempt had left it
+  `status:ready`, where any untargeted Dev would take it again. **A
+  conversation has two sides**: a sent-back task that ends with no new
+  commit is the Dev's *answer* (`dev._answer_the_review`) — posted on the
+  PR behind `DEV_REPLY_MARKER`, the head's `theswarm/review` status reset
+  to pending ("Dev answered"), the task in review, the PR's keys taken out
+  of `reviewed_prs` — and the TechLead reviews again with the answer in its
+  prompt. **The reviewer reads the repository** (the clone, on main: the
+  review runs with the read profile, `REPOSITORY_SECTION`): price-stats'
+  PR #486 imported two symbols its sibling #485 had merged, was sent back
+  as CRITICAL for "never defined", and the Dev answered "already in place"
+  three iterations running into a log nobody read — the feature scored a
+  failure and a regression (79f45fdaadb9). With both, the next cycle on the
+  story (4eaa5b767051) had the Dev answer, the TechLead check main ("my
+  earlier concern about missing symbols was unfounded") and merge it.
   Before #121 the review was written on the PR and forgotten, and
   `pick_task` skips `status:review` — so nothing ever came back.
 - **A Claude call that fails is a step skipped, not a cycle lost.** Two
