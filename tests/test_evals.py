@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -38,8 +38,9 @@ def test_the_shipped_manifest_loads_with_unique_features():
 
 def test_rotation_visits_every_feature_and_is_stable_per_day():
     manifest = evals.load_manifest(MANIFEST)
-    days = range(1, len(manifest.features) + 1)
-    seen = {feature_of_the_day(manifest, date(2026, 9, d)).id for d in days}
+    # Consecutive days, not days of one month: 31 features ask for Sept 31.
+    days = [date(2026, 9, 1) + timedelta(days=n) for n in range(len(manifest.features))]
+    seen = {feature_of_the_day(manifest, day).id for day in days}
     assert seen == {f.id for f in manifest.features}
     assert feature_of_the_day(manifest, date(2026, 9, 23)) == feature_of_the_day(manifest, date(2026, 9, 23))
 
