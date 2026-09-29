@@ -173,7 +173,20 @@ exact class token) — never count a class name as a substring: \
 defines auth
 - The app runs at `http://127.0.0.1:{port}`: use a module-level \
 `BASE_URL = "http://127.0.0.1:{port}"` and no other host or port
-- Fixture `api_context` creates the Playwright API context
+- Create the API context with exactly this fixture — no `playwright` \
+fixture, no browser, no other setup (the file runs under the repository's \
+own tests/conftest.py):
+
+from playwright.sync_api import sync_playwright
+
+@pytest.fixture(scope="session")
+def api_context():
+    with sync_playwright() as p:
+        context = p.request.new_context(base_url=BASE_URL)
+        yield context
+        context.dispose()
+
+  Every request goes through it with a path (`api_context.get("/api/v1/…")`)
 
 Start your output with `import` — no comments before it, no explanations after the code.
 """
@@ -718,6 +731,7 @@ class _E2ERun:
     output: str
     passed: bool
     repaired_from: str = ""  # the setup errors the file was rewritten for
+    repair_diff: str = ""  # what the repair changed, as a unified diff
     tokens_used: int = 0
     cost_usd: float = 0.0
 
@@ -730,15 +744,45 @@ async def _run_e2e_with_repair(claude, workspace: str, python: str, test_file: s
         return _E2ERun(output, passed)
     first_excerpt = _failure_excerpt(output) or f"{counts['errors']} setup error(s), no reason printed"
     log.warning("QA E2E: not one test set up — repairing the file once:\n%s", first_excerpt)
+    written = _read_text(test_file)
     repair = await _repair_e2e_file(claude, workspace, test_file, first_excerpt, counts["errors"])
     if repair is None:
         return _E2ERun(output, passed)
+    diff = _repair_diff(written, _read_text(test_file))
+    log.warning("QA E2E: the repair changed:\n%s", diff)
     output, passed = await _pytest_e2e(claude, workspace, python, test_file)
     return _E2ERun(
-        output, passed, repaired_from=first_excerpt,
+        output, passed, repaired_from=first_excerpt, repair_diff=diff,
         tokens_used=getattr(repair, "total_tokens", 0) or 0,
         cost_usd=getattr(repair, "cost_usd", 0.0) or 0.0,
     )
+
+
+# What a repair changed, for the report and the log: the PO of sold-out-list
+# asked engineering "to confirm what was actually changed to go from
+# TypeError … to passing" and graded the day yellow for not knowing.
+REPAIR_DIFF_LIMIT = 4000
+
+
+def _read_text(path: str) -> str:
+    try:
+        with open(path) as handle:
+            return handle.read()
+    except OSError:
+        return ""
+
+
+def _repair_diff(written: str, repaired: str) -> str:
+    """The repair as a unified diff, cut at REPAIR_DIFF_LIMIT characters."""
+    import difflib
+
+    diff = "".join(difflib.unified_diff(
+        written.splitlines(keepends=True), repaired.splitlines(keepends=True),
+        fromfile="test_api_e2e.py (written)", tofile="test_api_e2e.py (repaired)", n=1,
+    ))
+    if len(diff) > REPAIR_DIFF_LIMIT:
+        diff = diff[:REPAIR_DIFF_LIMIT].rsplit("\n", 1)[0] + "\n… (diff cut)"
+    return diff
 
 
 async def _ensure_pytest_playwright(python: str) -> None:
@@ -870,6 +914,7 @@ async def run_e2e_tests(state: AgentState) -> dict:
     }
     if run.repaired_from:
         result["e2e_repaired_from"] = run.repaired_from
+        result["e2e_repair_diff"] = run.repair_diff
         result["cost_usd"] = run.cost_usd
     if not e2e_passed and not demo_launch_error:
         excerpt = _failure_excerpt(e2e_output)
@@ -1498,6 +1543,8 @@ async def generate_demo_report(state: AgentState) -> dict:
                 "failure_excerpt": state.get("e2e_failure_excerpt", ""),
                 # Why QA rewrote its own file once before this verdict.
                 "repaired_from": state.get("e2e_repaired_from", ""),
+                # What the repair changed, so the PO can read it was no weakening.
+                "repair_diff": state.get("e2e_repair_diff", ""),
                 "reason": demo_launch_error,
             },
             "security": {
