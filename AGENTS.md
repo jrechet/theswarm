@@ -429,6 +429,14 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   each other's code (#322/#323 in 9d3174f41829; #325 never merged).
   Dependencies wait for a *merge*: on SELF_REPO, where approved PRs merge
   only at the end of the cycle, a dependent task waits for the next cycle.
+- **No tests-only sub-task** (`BREAKDOWN_PROMPT`): each task ships the
+  tests of its own code, written first, named in its acceptance criteria.
+  The prompt used to ask for "a test-writing task if the story requires
+  new tests" while the Dev "always writes tests for new code": every story
+  on concert-tour-app from 2026-09-26 ended its chain on one, after the
+  code it tests, and seven of eighteen found their tests already on main
+  (#383 … #512) — a Dev iteration, a closing comment and an "already on
+  main" story in the player, for nothing.
 - **The Dev is told about its siblings' open PRs** (`_sibling_prs`: title +
   files, in the prompt above the `ALREADY_SATISFIED` rule). Four sub-tasks
   of one story built in parallel each re-implemented the others' work
