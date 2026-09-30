@@ -511,8 +511,10 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
         await rt.progress(
             "TechLead", f"PR #{number} conflicts with main — back to the Dev to merge it",
         )
+    # What happened now, not the story's history: a sibling may have been
+    # found already on main (the theater's card is this line).
     for number in tl_state.get("closed_stories", []):
-        await rt.progress("TechLead", f"Story #{number} done — every sub-task merged")
+        await rt.progress("TechLead", f"Story #{number} done — its last sub-task merged")
     for number in tl_state.get("ci_red_prs", []):
         await rt.progress("TechLead", f"PR #{number}: approved, CI red — back to the Dev")
     for number in tl_state.get("ci_pending_prs", []):
@@ -572,7 +574,7 @@ async def _close_stories_already_built(rt: CycleRuntime, state: CycleState) -> N
     from theswarm.agents.techlead import close_finished_stories
 
     for number in await close_finished_stories(github, satisfied):
-        await rt.progress("TechLead", f"Story #{number} done — every sub-task already on main")
+        await rt.progress("TechLead", f"Story #{number} done — its last sub-task was already on main")
 
 
 async def dev_loop_end(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
