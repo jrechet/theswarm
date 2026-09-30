@@ -176,3 +176,100 @@ def test_story_preview_urls_point_every_pr_at_its_first_page():
     urls = fp.story_preview_urls(pages, port=8001)
 
     assert urls == {362: {"before": None, "after": "http://127.0.0.1:8001/api/v1/tours/1/summary"}}
+
+
+# ── A decorator over several lines (lineup-remove, 2026-09-30) ───────
+# concert-tour-app#514 added `@api_router.delete(` with its path on the next
+# line. The route was not a route to QA: its lines went to the GET lineup
+# route above, the demo walked the lineup untouched, no call removed an act
+# and the feature_calls gate said "the pages are the demo".
+
+LINEUP_AFTER = '''from fastapi import APIRouter, Response
+
+api_router = APIRouter(prefix="/api/v1/concerts", tags=["concerts"])
+
+
+@api_router.get(
+    "/{concert_id}/lineup",
+    response_model=list,
+)
+def list_concert_lineup(concert_id: int):
+    return lineup(concert_id)
+
+
+@api_router.post(
+    path="/{concert_id}/lineup",
+    status_code=201,
+)
+def create_concert_lineup_entry(concert_id: int, payload):
+    return entry
+
+
+@api_router.delete(
+    "/{concert_id}/lineup/{entry_id}",
+    status_code=204,
+)
+def delete_concert_lineup_entry(concert_id: int, entry_id: int):
+    delete_lineup_entry(concert_id, entry_id)
+    return Response(status_code=204)
+
+
+@api_router.get("/{concert_id}/occupancy")
+def occupancy(concert_id: int):
+    return occupancy_of(concert_id)
+'''
+
+# The shape git gave #514: the new function, then the two blank lines.
+ADDS_DELETE = '''@@ -18,5 +18,14 @@ def create_concert_lineup_entry(concert_id: int, payload):
+ def create_concert_lineup_entry(concert_id: int, payload):
+     return entry
+ 
+ 
++@api_router.delete(
++    "/{concert_id}/lineup/{entry_id}",
++    status_code=204,
++)
++def delete_concert_lineup_entry(concert_id: int, entry_id: int):
++    delete_lineup_entry(concert_id, entry_id)
++    return Response(status_code=204)
++
++
+ @api_router.get("/{concert_id}/occupancy")
+'''
+
+# The same addition with the blank lines first: they are nobody's code.
+ADDS_DELETE_BLANKS_FIRST = '''@@ -18,4 +18,13 @@ def create_concert_lineup_entry(concert_id: int, payload):
+ def create_concert_lineup_entry(concert_id: int, payload):
+     return entry
++
++
++@api_router.delete(
++    "/{concert_id}/lineup/{entry_id}",
++    status_code=204,
++)
++def delete_concert_lineup_entry(concert_id: int, entry_id: int):
++    delete_lineup_entry(concert_id, entry_id)
++    return Response(status_code=204)
+ 
+ 
+'''
+
+
+def test_a_path_on_the_line_after_the_decorator_is_a_route():
+    routes = fp.routes_in(LINEUP_AFTER)
+
+    assert [(r.method, r.path, r.line) for r in routes] == [
+        ("get", "/{concert_id}/lineup", 6), ("post", "/{concert_id}/lineup", 14),
+        ("delete", "/{concert_id}/lineup/{entry_id}", 22), ("get", "/{concert_id}/occupancy", 31),
+    ]
+
+
+def test_the_route_the_diff_adds_is_the_feature_not_its_neighbour():
+    assert fp.touched_routes(ADDS_DELETE, LINEUP_AFTER) == [
+        ("delete", "/api/v1/concerts/{concert_id}/lineup/{entry_id}")]
+    assert fp.touched_get_paths(ADDS_DELETE, LINEUP_AFTER) == []
+
+
+def test_blank_lines_the_diff_adds_touch_no_route():
+    assert fp.touched_routes(ADDS_DELETE_BLANKS_FIRST, LINEUP_AFTER) == [
+        ("delete", "/api/v1/concerts/{concert_id}/lineup/{entry_id}")]

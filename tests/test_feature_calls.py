@@ -438,6 +438,19 @@ async def test_an_exchange_is_drawn_as_request_and_answer(page):
     assert '"tickets_sold": 122' in answer  # pretty-printed
 
 
+async def test_an_answer_with_no_body_says_so(page):
+    """A DELETE answers 204 with nothing: the answer box read blank."""
+    from theswarm.infrastructure.recording.playwright_recorder import present_exchange
+
+    await present_exchange(page, {
+        "method": "DELETE", "path": "/api/v1/concerts/1/lineup/2", "caption": "Take the opening act off",
+        "request": None, "status": 204, "content_type": "", "body": "",
+    })
+
+    assert await page.locator("header").inner_text() == "DELETE /api/v1/concerts/1/lineup/2 → 204"
+    assert await page.locator("pre").all_inner_texts() == ["(empty)"]
+
+
 # ── GET routes that need input (artist-search, da79522769b3) ─────────
 # `/api/v1/tours/search` needs `?artist=`: the plain walk got a 422, the
 # feature_pages gate said "not run" and the demo showed the dashboard.

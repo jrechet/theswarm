@@ -18,8 +18,12 @@ from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
 
+# Read over the whole file, not a line: the path may sit on the line after
+# the decorator (`@api_router.delete(` then `"/{concert_id}/lineup/…",`).
 _ROUTE_RE = re.compile(
-    r'^\s*@(?P<router>\w+)\.(?P<method>get|post|put|patch|delete)\(\s*["\'](?P<path>[^"\']*)["\']',
+    r'^[ \t]*@(?P<router>\w+)\.(?P<method>get|post|put|patch|delete)\('
+    r'\s*(?:path\s*=\s*)?["\'](?P<path>[^"\']*)["\']',
+    re.MULTILINE,
 )
 _ROUTER_RE = re.compile(r'^(?P<name>\w+)\s*=\s*APIRouter\((?P<args>[^)]*)\)', re.MULTILINE)
 _PREFIX_RE = re.compile(r'prefix\s*=\s*["\'](?P<prefix>[^"\']*)["\']')
@@ -40,13 +44,13 @@ class Route:
 
 
 def routes_in(source: str) -> list[Route]:
-    """Every route decorator in a router file, in order."""
-    routes: list[Route] = []
-    for number, line in enumerate(source.splitlines(), start=1):
-        match = _ROUTE_RE.match(line)
-        if match:
-            routes.append(Route(match["router"], match["method"], match["path"], number))
-    return routes
+    """Every route decorator in a router file, in order — its path on the
+    decorator's line or further down. lineup-remove's DELETE
+    (concert-tour-app#514) put it on the next line and was no route at all:
+    its lines went to the GET route above, and the demo walked the lineup
+    with nothing taken off it."""
+    return [Route(m["router"], m["method"], m["path"], source.count("\n", 0, m.start()) + 1)
+            for m in _ROUTE_RE.finditer(source)]
 
 
 def _prefixes(source: str, module: str, main_source: str) -> dict[str, str]:
@@ -67,7 +71,8 @@ def _touched_lines(patch: str) -> set[int]:
 
     Not a hunk's context lines: the three above a new route belong to the
     route before it, and counting them made every addition drag its
-    neighbour into the demo.
+    neighbour into the demo. Nor a blank line it adds: git puts the two
+    between functions above a new route as often as below it.
     """
     lines: set[int] = set()
     number = 0
@@ -77,7 +82,8 @@ def _touched_lines(patch: str) -> set[int]:
             number = int(hunk["start"])
             continue
         if raw.startswith("+"):
-            lines.add(number)
+            if raw[1:].strip():
+                lines.add(number)
             number += 1
         elif raw.startswith("-"):
             continue
