@@ -36,6 +36,11 @@ class Feature:
     expected_paths: tuple[str, ...] = ()
     max_cost_usd: float = 0.0
     max_duration_s: int = 0
+    # Already on the target, built outside the scored series — a local
+    # harness run, a filmed Play: which cycle, when. The rotation skips it
+    # like a delivered one, whatever the history says; removing the line
+    # (a target reset) asks for it again.
+    built_by: str = ""
 
     @property
     def title(self) -> str:
@@ -60,6 +65,7 @@ def load_manifest(path: Path) -> Manifest:
             expected_paths=tuple(entry.get("expected_paths") or ()),
             max_cost_usd=float(entry.get("max_cost_usd") or 0.0),
             max_duration_s=int(entry.get("max_duration_s") or 0),
+            built_by=str(entry.get("built_by") or "").strip(),
         )
         for entry in raw.get("features") or []
     )
@@ -104,6 +110,17 @@ def delivered_features(runs: list[dict]) -> set[str]:
     return {fid for fid, outcome in latest.items() if outcome in DELIVERED}
 
 
+def built_elsewhere(manifest: Manifest) -> set[str]:
+    """Feature ids the manifest records as already on the target.
+
+    The history the harness reads is prod's (`/api/evals/runs`): the
+    twenty-two features built by local runs and filmed Plays while prod was
+    down or had no credentials (2026-09-28 → 30) are not in it, and prod's
+    rotation would have spent three weeks asking for them again.
+    """
+    return {f.id for f in manifest.features if f.built_by}
+
+
 def next_feature(manifest: Manifest, runs: list[dict], day: date | None = None) -> Feature:
     """The feature of the day, unless the target already has it — then the
     next one in rotation it does not have.
@@ -116,7 +133,7 @@ def next_feature(manifest: Manifest, runs: list[dict], day: date | None = None) 
     and its score says so.
     """
     start = _day_index(manifest, day)
-    delivered = delivered_features(runs)
+    delivered = delivered_features(runs) | built_elsewhere(manifest)
     count = len(manifest.features)
     for offset in range(count):
         feature = manifest.features[(start + offset) % count]
@@ -132,7 +149,7 @@ def exhausted(manifest: Manifest, runs: list[dict]) -> bool:
     already_delivered and measures nothing new: the manifest needs new
     features. The first five were all built by 2026-09-25.
     """
-    delivered = delivered_features(runs)
+    delivered = delivered_features(runs) | built_elsewhere(manifest)
     return all(feature.id in delivered for feature in manifest.features)
 
 

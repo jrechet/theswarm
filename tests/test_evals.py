@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -21,7 +22,10 @@ def _first_five() -> evals.Manifest:
     """The manifest as it shipped with M6: the date-pinned rotation tests
     below were written against five features, and the shipped file grows."""
     shipped = evals.load_manifest(MANIFEST)
-    return evals.Manifest(repo=shipped.repo, features=shipped.features[:5])
+    # Without what the shipped file records as built elsewhere: these
+    # tests are about the rotation, not about the target.
+    return evals.Manifest(repo=shipped.repo,
+                          features=tuple(replace(f, built_by="") for f in shipped.features[:5]))
 
 
 def test_the_shipped_manifest_loads_with_unique_features():
@@ -251,6 +255,59 @@ def test_a_manifest_is_exhausted_only_when_every_feature_is_delivered():
     assert evals.exhausted(manifest, built)
     assert not evals.exhausted(manifest, built[:-1])
     assert not evals.exhausted(manifest, [])
+
+
+# ── Built outside the scored series (2026-09-30) ─────────────────────
+# The harness reads prod's history. Twenty-two features were built by local
+# harness runs and filmed Plays while prod was down or had no credentials;
+# prod's rotation would have spent three weeks asking for them again.
+
+BUILT_ELSEWHERE_2026_09_30 = {
+    "remaining-tickets", "past-concerts-toggle", "ical-feed", "price-range", "occupancy",
+    "country-stats", "tour-revenue", "next-concert", "sell-tickets", "lineup-add",
+    "cancel-tour", "sold-out-list", "month-stats", "price-stats", "tour-cities",
+    "refund-tickets", "lineup-remove", "reschedule-concert", "tour-span",
+    "tour-occupancy", "weekday-stats", "artist-search",
+}
+
+
+def _built(manifest: evals.Manifest, *ids: str) -> evals.Manifest:
+    return evals.Manifest(repo=manifest.repo, features=tuple(
+        replace(f, built_by="local harness, cycle abc123") if f.id in ids else f
+        for f in manifest.features))
+
+
+def test_a_feature_built_elsewhere_is_not_asked_for_again():
+    manifest = _built(_first_five(), "city-search")
+
+    assert evals.next_feature(manifest, [], SEPT_23).id == "chronological-order"
+    # Whatever prod's history says of it: its runs there were interrupted.
+    interrupted = [{"feature": "city-search", "passed": False, "outcome": "interrupted"}]
+    assert evals.next_feature(manifest, interrupted, SEPT_23).id == "chronological-order"
+
+
+def test_features_built_elsewhere_count_toward_exhaustion():
+    five = _first_five()
+
+    assert evals.exhausted(_built(five, *(f.id for f in five.features)), [])
+    assert not evals.exhausted(_built(five, "city-search"), [])
+
+
+def test_the_manifest_reads_where_a_feature_was_built(tmp_path):
+    path = tmp_path / "m.yaml"
+    path.write_text('repo: a/b\nfeatures:\n  - id: f\n    built_by: "local harness, cycle 3e2c11a40ee6"\n'
+                    '    text: Do it\n    max_cost_usd: 5\n')
+
+    assert evals.load_manifest(path).features[0].built_by == "local harness, cycle 3e2c11a40ee6"
+
+
+def test_the_shipped_manifest_records_what_the_target_already_has():
+    manifest = evals.load_manifest(MANIFEST)
+    recorded = {f.id: f.built_by for f in manifest.features if f.built_by}
+
+    assert BUILT_ELSEWHERE_2026_09_30 <= set(recorded)
+    assert "3e2c11a40ee6" in recorded["tour-occupancy"]
+    assert not evals.exhausted(manifest, [])  # new features to measure
 
 
 def test_the_score_says_which_prs_merged():
