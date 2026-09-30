@@ -7,11 +7,15 @@
 # decisions, cost, duration, files touched — and posted to the swarm's
 # /api/evals/runs; the repo page shows the trend. When every feature here
 # is delivered the harness warns: add new ones below.
+# `built_by` records a feature the target already has that prod's history
+# does not know — a local harness run, a filmed Play (which cycle, when):
+# the rotation skips it. Remove the line after a target reset.
 # `expected_paths` are globs the PR's files must match (empty: not
 # judged); tighten them as the target's layout settles.
 repo: jrechet/concert-tour-app
 features:
   - id: remaining-tickets
+    built_by: "before the eval series, PRs #203–#204"
     text: Show the remaining ticket count on each concert card
     expected_paths: ["**/*.py", "**/*.html", "**/*.js", "**/*.css"]
     max_cost_usd: 8
@@ -73,6 +77,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: past-concerts-toggle
+    built_by: "local harness, cycle f211f5c2ccf1, 2026-09-29, PRs #439–#441"
     text: |-
       Hide past concerts by default
       The concert list shows only today's and future concerts; a "Show past concerts" toggle brings the past ones back.
@@ -80,6 +85,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: ical-feed
+    built_by: "local harness, cycle 79e1658b2462, 2026-09-29, PRs #430–#432"
     text: |-
       Subscribe to a tour in a calendar
       GET /api/v1/tours/{id}/calendar.ics returns the tour's dates as an iCalendar feed, one event per concert with its city and venue.
@@ -87,6 +93,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: price-range
+    built_by: "local harness, cycle 6186726707ca, 2026-09-28, PRs #415–#417"
     text: |-
       Filter the concerts by ticket price
       GET /api/v1/concerts accepts min_price and max_price (inclusive); a concert without a price is excluded when either is given, and min_price above max_price is a 422.
@@ -94,6 +101,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: occupancy
+    built_by: "a filmed Play, cycle 28371c2016da, 2026-09-28, PRs #392–#395"
     text: |-
       Show how full a concert is
       GET /api/v1/concerts/{id}/occupancy returns tickets sold, the venue's capacity and the percentage sold (null when the capacity is unknown); 404 for an unknown concert.
@@ -101,6 +109,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: country-stats
+    built_by: "local harness, cycle 7f4f2188cd90, 2026-09-28, PRs #408–#410"
     text: |-
       Count the concerts per country
       GET /api/v1/stats/countries returns each country with its number of concerts, most concerts first; cancelled concerts are not counted.
@@ -108,6 +117,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: tour-revenue
+    built_by: "local harness, cycle 03790f693195, 2026-09-28, PRs #422–#424"
     text: |-
       Report a tour's ticket revenue
       GET /api/v1/tours/{id}/revenue returns the sum of ticket price times tickets sold over the tour's concerts, cancelled ones excluded, and the number of concerts it counted; 404 for an unknown tour.
@@ -115,6 +125,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: next-concert
+    built_by: "a filmed Play, cycle 57adc6cdea13, 2026-09-28, PRs #401–#403"
     text: |-
       Tell a fan when the next concert is
       GET /api/v1/concerts/next returns the soonest concert from now on that is not cancelled, with its venue and city; 404 when there is none.
@@ -131,6 +142,7 @@ features:
   # Topped up on 2026-09-29: every feature above had been run (the harness
   # warns when the manifest is exhausted). None of these routes existed.
   - id: sell-tickets
+    built_by: "local harness, cycle 68fd55bf81e5, 2026-09-29, PRs #447–#450"
     text: |-
       Sell tickets for a concert
       POST /api/v1/concerts/{id}/tickets with a positive quantity adds it to the tickets sold and returns the concert with its remaining tickets; 409 when it would exceed the venue's capacity or the concert is cancelled, 422 for a quantity under 1, 404 for an unknown concert.
@@ -138,6 +150,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: lineup-add
+    built_by: "local harness, cycle 383c7f77d983, 2026-09-29, PRs #455–#456"
     text: |-
       Add a support act to a concert's lineup
       POST /api/v1/concerts/{id}/lineup with an artist name and a set order adds the act and returns 201 with it; 409 when that set order is already taken for the concert, 404 for an unknown concert.
@@ -145,6 +158,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: cancel-tour
+    built_by: "local harness, cycle d119d706fbae, 2026-09-29, PRs #462–#464"
     text: |-
       Cancel a whole tour
       POST /api/v1/tours/{id}/cancel with a reason cancels every upcoming concert of the tour not already cancelled, with that reason, and returns how many it cancelled; 404 for an unknown tour, 422 without a reason.
@@ -152,6 +166,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: sold-out-list
+    built_by: "local harness, cycle d80e66ee0e62, 2026-09-29, PRs #469–#470"
     text: |-
       List the sold-out concerts
       GET /api/v1/concerts/sold-out returns the upcoming concerts with no ticket left, soonest first; cancelled concerts are not listed.
@@ -159,6 +174,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: month-stats
+    built_by: "local harness, cycle ed1aa4d9a9fd, 2026-09-29, PRs #475–#477"
     text: |-
       Count the concerts per month
       GET /api/v1/stats/months returns, for each month that has concerts (YYYY-MM), the number of concerts that are not cancelled, in chronological order.
@@ -166,6 +182,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: price-stats
+    built_by: "local harness, cycle 79f45fdaadb9, then its resume 4eaa5b767051, 2026-09-29, PRs #485–#486"
     text: |-
       Summarise ticket prices
       GET /api/v1/stats/prices returns the lowest, the average and the highest ticket price over the upcoming concerts that are not cancelled and have a price; all three null when there is none.
@@ -173,6 +190,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: tour-cities
+    built_by: "local harness, cycle 2dd724ff92cf, 2026-09-29, PRs #491–#493"
     text: |-
       Show the cities a tour goes through
       GET /api/v1/tours/{id}/cities returns the distinct cities of the tour's concerts in date order, cancelled concerts left out; 404 for an unknown tour.
@@ -183,6 +201,7 @@ features:
   # (the last seven in one day, locally). None of these routes existed;
   # artist-search puts /tours/search beside /tours/{tour_id} on purpose.
   - id: refund-tickets
+    built_by: "local harness, cycle 8e614eabfb1e, 2026-09-29, PRs #498–#499"
     text: |-
       Refund tickets for a concert
       POST /api/v1/concerts/{id}/refunds with a quantity gives back that many tickets and returns the concert with its updated counts; 422 for a quantity of zero or less, 409 when refunding more tickets than were sold, 404 for an unknown concert.
@@ -190,6 +209,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: lineup-remove
+    built_by: "local harness, cycle de5e914a8d5c, 2026-09-30, PRs #513–#514"
     text: |-
       Take an act off a concert's lineup
       DELETE /api/v1/concerts/{id}/lineup/{entry_id} removes that lineup entry and answers 204; 404 when the concert or the entry does not exist, or the entry belongs to another concert.
@@ -197,6 +217,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: reschedule-concert
+    built_by: "local harness, cycle 7af87e116df7, 2026-09-30, PRs #519–#520"
     text: |-
       Reschedule a concert
       PATCH /api/v1/concerts/{id} with a new date_time moves the concert and returns it; 422 for a date in the past, 409 for a cancelled concert, 404 for an unknown concert.
@@ -204,6 +225,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: tour-span
+    built_by: "local harness, cycle 7b0bf367054b, 2026-09-30, PRs #525–#527"
     text: |-
       Show when a tour starts and ends
       GET /api/v1/tours/{id}/span returns the first and last concert dates of the tour and the number of days between them, cancelled concerts left out; all null when it has none; 404 for an unknown tour.
@@ -211,6 +233,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: tour-occupancy
+    built_by: "local harness, cycle 3e2c11a40ee6, 2026-09-30, PRs #531–#532"
     text: |-
       Show how full a whole tour is
       GET /api/v1/tours/{id}/occupancy returns the tickets sold, the total capacity and the percentage sold over the tour's concerts that are not cancelled; 404 for an unknown tour.
@@ -218,6 +241,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: weekday-stats
+    built_by: "local harness, cycle ac1fa9d785d6, 2026-09-30, PRs #537–#539"
     text: |-
       Count the concerts per weekday
       GET /api/v1/stats/weekdays returns, for each day of the week from Monday to Sunday, how many concerts that are not cancelled fall on it — every day present, zero included.
@@ -225,9 +249,59 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: artist-search
+    built_by: "local harness, cycle da79522769b3, 2026-09-29, PRs #504–#506"
     text: |-
       Search the tours by artist
       GET /api/v1/tours/search?artist=<text> returns the tours whose artist contains the text, case-insensitive; 422 without the parameter; the existing GET /api/v1/tours/{id} keeps working.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: venues-list
+    text: |-
+      List the venues
+      GET /api/v1/venues returns every venue with its name, city, country and capacity, sorted by name; ?min_capacity=N keeps the venues that hold at least N people; 422 for a negative min_capacity.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: concert-date-range
+    text: |-
+      Find the concerts between two dates
+      GET /api/v1/concerts/between?start=YYYY-MM-DD&end=YYYY-MM-DD returns the concerts whose date falls in that range, both days included, soonest first; 422 when start is after end, or a date is missing or malformed.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: lineup-reorder
+    text: |-
+      Move an act in a concert's lineup
+      PATCH /api/v1/concerts/{id}/lineup/{entry_id} with a new set_order moves that lineup entry and returns it; 422 for a set_order of zero or less; 404 when the concert or the entry does not exist, or the entry belongs to another concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: concert-notes
+    text: |-
+      Keep notes on a concert
+      PUT /api/v1/concerts/{id}/notes with {"notes": "..."} stores up to 500 characters of notes and returns the concert with them; GET /api/v1/concerts/{id} shows them too, null until set; 422 above 500 characters; 404 for an unknown concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: revenue-by-city
+    text: |-
+      Show the ticket revenue per city
+      GET /api/v1/stats/revenue/cities returns, for each city, the revenue of its concerts that are not cancelled (tickets sold times the ticket price), highest first; concerts without a price count for 0.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: tour-duplicate
+    text: |-
+      Duplicate a tour
+      POST /api/v1/tours/{id}/duplicate creates a new tour for the same artist, named "<name> (copy)", with the status planned and no concerts, and answers 201 with it; 404 for an unknown tour.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: artists-list
+    text: |-
+      List the artists on tour
+      GET /api/v1/artists returns each distinct artist across the tours, alphabetical, with the number of tours they have; an empty list when there is none.
     expected_paths: ["**/*.py"]
     max_cost_usd: 8
     max_duration_s: 3600
