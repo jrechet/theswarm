@@ -438,6 +438,25 @@ async def test_an_exchange_is_drawn_as_request_and_answer(page):
     assert '"tickets_sold": 122' in answer  # pretty-printed
 
 
+@pytest.mark.parametrize("status,colour", [
+    (201, "rgb(63, 122, 70)"), (422, "rgb(184, 114, 10)"), (500, "rgb(176, 64, 42)"),
+    (None, "rgb(94, 100, 108)"),
+])
+async def test_the_request_line_is_a_band_in_its_status_colour(page, status, colour):
+    """The demo card plays the video ~256 px wide: the call must read there."""
+    from theswarm.infrastructure.recording.playwright_recorder import present_exchange
+
+    await page.set_viewport_size({"width": 1280, "height": 720})
+    await present_exchange(page, {"method": "POST", "path": "/api/v1/concerts/1/tickets",
+                                  "caption": "Sell two tickets", "request": {"quantity": 2},
+                                  "status": status, "body": "{}"})
+
+    style = await page.locator("header").evaluate(
+        "h => { const s = getComputedStyle(h); return [s.backgroundColor, parseFloat(s.fontSize)]; }")
+    caption = await page.locator("p.caption").evaluate("p => parseFloat(getComputedStyle(p).fontSize)")
+    assert style[0] == colour and style[1] >= 28 and caption >= 32
+
+
 async def test_an_answer_with_no_body_says_so(page):
     """A DELETE answers 204 with nothing: the answer box read blank."""
     from theswarm.infrastructure.recording.playwright_recorder import present_exchange

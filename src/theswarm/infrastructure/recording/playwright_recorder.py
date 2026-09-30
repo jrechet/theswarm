@@ -13,24 +13,49 @@ from theswarm.domain.reporting.value_objects import Artifact, ArtifactType
 log = logging.getLogger(__name__)
 
 
+# The request line of every answer drawn for a demo — a JSON page, a
+# download, a demo call — is a band in its status's colour, large. The
+# theater's demo card plays the video about 256 px wide, and a cream page of
+# 20 px text read as a blank frame there (reschedule-concert and tour-span,
+# 2026-09-30). Atelier colours (static/v2/input.css): moss for an answer,
+# honey for a 4xx, rust for a 5xx, slate for none.
+_BAND_CSS = (
+    'header{font:600 30px/1.3 ui-monospace,"IBM Plex Mono",Menlo,monospace;color:#fff;'
+    "margin:0 0 30px;padding:26px 56px;background:#5E646C;word-break:break-all}"
+    "header.ok{background:#3F7A46}header.warn{background:#B8720A}header.bad{background:#B0402A}"
+)
+
+
+def _status_class(status: object) -> str:
+    if not isinstance(status, int):
+        return "none"
+    return "bad" if status >= 500 else "warn" if status >= 400 else "ok"
+
+
+_TEXT_STYLE = (
+    '<meta charset="utf-8"><style>'
+    "html,body{margin:0;background:#FAF8F3;color:#1F1C17}"
+    'body{padding:0 0 40px;font:18px/1.55 ui-monospace,"IBM Plex Mono",Menlo,monospace}'
+    + _BAND_CSS
+    + "pre{margin:0 56px;white-space:pre-wrap;word-break:break-word}</style>"
+)
+_JSON_STYLE = _TEXT_STYLE.replace("font:18px/1.55", "font:20px/1.55")
+
+
 # A JSON answer drawn so it can be read in a thumbnail or a video: the
 # request and its status on top, the body pretty-printed below, large. The
 # pages a cycle's PRs add are often API routes, and Chromium drew them as
 # one 13px line on a white page (docs/demos/qa-feature-pages.webm).
 _PRESENT_JSON = """
-([path, status]) => {
+([path, status, style, band]) => {
   if (!/json/i.test(document.contentType || "")) return false;
   const source = document.querySelector("pre") || document.body;
   let pretty;
   try { pretty = JSON.stringify(JSON.parse(source.textContent), null, 2); }
   catch (e) { return false; }
-  document.head.innerHTML = '<meta charset="utf-8"><style>'
-    + 'html,body{margin:0;background:#FAF8F3;color:#1F1C17}'
-    + 'body{padding:40px 56px;font:20px/1.55 ui-monospace,"IBM Plex Mono",Menlo,monospace}'
-    + 'header{font:600 16px/1.4 system-ui,sans-serif;color:#7A6F5E;letter-spacing:.02em;'
-    + 'margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid #E4DDCF}'
-    + 'pre{margin:0;white-space:pre-wrap;word-break:break-word}</style>';
+  document.head.innerHTML = style;
   const header = document.createElement("header");
+  header.className = band;
   header.textContent = "GET " + path + (status ? " \u2192 " + status : "");
   const pre = document.createElement("pre");
   pre.textContent = pretty;
@@ -38,16 +63,6 @@ _PRESENT_JSON = """
   return true;
 }
 """
-
-
-_TEXT_STYLE = (
-    '<meta charset="utf-8"><style>'
-    "html,body{margin:0;background:#FAF8F3;color:#1F1C17}"
-    'body{padding:40px 56px;font:18px/1.55 ui-monospace,"IBM Plex Mono",Menlo,monospace}'
-    "header{font:600 16px/1.4 system-ui,sans-serif;color:#7A6F5E;letter-spacing:.02em;"
-    "margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid #E4DDCF}"
-    "pre{margin:0;white-space:pre-wrap;word-break:break-word}</style>"
-)
 
 
 async def present_text(page, path: str, status: int | None, content_type: str, body: str) -> None:
@@ -59,16 +74,17 @@ async def present_text(page, path: str, status: int | None, content_type: str, b
     kind = (content_type or "").split(";")[0].strip()
     head = f"GET {path}" + (f" \u2192 {status}" if status else "") + (f" \u00b7 {kind}" if kind else "")
     await page.set_content(
-        f"<html><head>{_TEXT_STYLE}</head><body><header>{html.escape(head)}</header>"
+        f"<html><head>{_TEXT_STYLE}</head><body>"
+        f'<header class="{_status_class(status)}">{html.escape(head)}</header>'
         f"<pre>{html.escape(body[:20_000])}</pre></body></html>"
     )
 
 
 _EXCHANGE_STYLE = _TEXT_STYLE.replace(
     "</style>",
-    "p.caption{font:600 24px/1.35 system-ui,sans-serif;margin:0 0 20px;color:#1F1C17}"
-    "h2{font:600 12px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;"
-    "color:#7A6F5E;margin:26px 0 10px}"
+    "p.caption{font:600 34px/1.3 system-ui,sans-serif;margin:0 56px 22px;color:#1F1C17}"
+    "h2{font:600 13px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;"
+    "color:#7A6F5E;margin:26px 56px 10px}"
     "pre.request{color:#5B4A2E}</style>",
 )
 
@@ -94,7 +110,7 @@ async def present_exchange(page, exchange: dict) -> None:
     status = exchange.get("status")
     head = f"{exchange.get('method', 'GET')} {exchange.get('path', '/')}" + (
         f" → {status}" if status else " → no answer")
-    parts = [f"<header>{html.escape(head)}</header>"]
+    parts = [f'<header class="{_status_class(status)}">{html.escape(head)}</header>']
     if exchange.get("caption"):
         parts.append(f'<p class="caption">{html.escape(exchange["caption"])}</p>')
     sent = _pretty(exchange.get("request"))
@@ -109,7 +125,7 @@ async def present_exchange(page, exchange: dict) -> None:
 async def present_json(page, path: str, status: int | None) -> bool:
     """Redraw the page if it is a JSON answer; False when it is not."""
     try:
-        return bool(await page.evaluate(_PRESENT_JSON, [path, status]))
+        return bool(await page.evaluate(_PRESENT_JSON, [path, status, _JSON_STYLE, _status_class(status)]))
     except Exception:  # noqa: BLE001 — a demo page as it came is still a demo page
         log.debug("present_json: could not redraw %s", path, exc_info=True)
         return False

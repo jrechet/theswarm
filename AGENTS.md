@@ -495,7 +495,12 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   page is redrawn legible** before it is captured, in both walks
   (`playwright_recorder.present_json`: "GET /path → 200" over the body,
   pretty-printed, 20px) — the pages a cycle adds are often API routes,
-  and Chromium drew them as one 13px line on a white page. **The demo shows the feature**
+  and Chromium drew them as one 13px line on a white page. The request
+  line of every drawn answer (JSON page, download, demo call) is a band
+  in its status's atelier colour — moss, honey for a 4xx, rust for a 5xx
+  — in 30px, the call's caption in 34px: the theater's demo card plays
+  the video about 256 px wide, and a cream page of 20px text read there
+  as a blank frame (reschedule-concert, 2026-09-30). **The demo shows the feature**
   (`agents/qa_feature_pages.py`, 2026-09-27): the GET routes the cycle's
   PRs — **those it opened and those it merged** (`cycle_graph._delivered_prs`,
   read from GitHub: cycle 4eaa5b767051 merged a PR the day before had
