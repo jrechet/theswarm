@@ -362,7 +362,11 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   beside `CHANGES_MARKER`, the failing checks named); still running is
   waited for, one `CI_WAIT_SECONDS` (300s) per merge pass, then left open;
   unreadable CI merges as before. The swarm's own `theswarm/review` status
-  is not CI. The end-of-cycle merge on SELF_REPO reads the same gate.
+  is not CI. The end-of-cycle merge on SELF_REPO reads the same gate. An
+  approved PR main has moved past goes back with `CONFLICT_MARKER`,
+  headed "**Merge conflict** on PR #N" — concert-notes' #545 read
+  "Changes requested", which no review had asked for; the Dev reads the
+  markers and `PR #N (branch …)`, never the heading.
   **And only the swarm's own** (owner, 2026-09-29): the TechLead reviews
   every open PR but merges — or holds, on SELF_REPO — only branches the
   Dev made (`techlead.is_swarm_branch`: `feat/issue-<n>…`, `feat/us-<n>…`);
