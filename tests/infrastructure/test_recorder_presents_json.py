@@ -50,3 +50,29 @@ async def test_an_html_page_is_left_alone(page):
 
     assert await present_json(page, "/dashboard", 200) is False
     assert await page.locator("h1").inner_text() == "Dashboard"
+
+
+# ── Legible at the size of the demo card (2026-09-30) ────────────────
+# The theater's demo card plays the video about 256 px wide: a cream page of
+# 20 px text read as a blank frame there (reschedule-concert, tour-span).
+# The request line is a band in its status's atelier colour, large.
+
+MOSS = "rgb(63, 122, 70)"  # the atelier moss: an answer
+
+
+async def band_of(page) -> tuple[str, float, float]:
+    """(background colour, font size, width) of the drawn request line."""
+    return tuple(await page.locator("header").evaluate(
+        "h => { const s = getComputedStyle(h);"
+        " return [s.backgroundColor, parseFloat(s.fontSize), h.getBoundingClientRect().width]; }"))
+
+
+async def test_a_json_page_s_request_line_is_a_band_in_its_status_colour(page):
+    await page.set_viewport_size({"width": 1280, "height": 720})
+    await page.goto("http://demo.test/api/v1/concerts/1/occupancy")
+
+    await present_json(page, "/api/v1/concerts/1/occupancy", 200)
+
+    colour, size, width = await band_of(page)
+    assert colour == MOSS and size >= 28 and width == 1280
+    assert await page.locator("header").inner_text() == "GET /api/v1/concerts/1/occupancy → 200"
