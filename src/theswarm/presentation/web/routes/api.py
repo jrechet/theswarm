@@ -311,6 +311,16 @@ async def api_list_eval_runs(request: Request, repo: str = "", limit: int = 50) 
     return JSONResponse({"runs": await store.list_for_repo(repo, limit=max(1, min(limit, 500)))})
 
 
+@router.post("/claude/probe")
+async def api_claude_probe() -> JSONResponse:
+    """Can Claude answer right now? The harness asks before it opens an
+    issue (`tools/claude_probe`): a standing wall answers for free, else one
+    short call on the cycles' own path does; the answer is kept a minute."""
+    from theswarm.tools import claude_probe
+
+    return JSONResponse(await claude_probe.probe())
+
+
 @router.post("/cycle")
 async def start_cycle(request: Request) -> JSONResponse:
     """Start a new cycle via the headless API."""

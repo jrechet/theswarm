@@ -182,6 +182,19 @@ def credentials_expired(*, api=None) -> str:
     return str(body.get("claude_auth") or "expired")
 
 
+def claude_answer(*, api=None) -> dict:
+    """What the server's probe says of Claude right now (`POST
+    /api/claude/probe`: a standing wall, or one short call on the cycles'
+    own path) — {} from a server without the probe, /health reads then.
+
+    /health only knows a wall a call ran into in the last ten minutes: the
+    scheduled run of 2026-09-30 read `claude: ok`, opened #508 and started
+    a cycle that died in 28 s on credentials dead for two days.
+    """
+    status, body = (api or _api)("/api/claude/probe", {})
+    return body if status == 200 and isinstance(body, dict) and body.get("claude") else {}
+
+
 def start_cycle(repo: str, issue: int) -> str:
     if not wait_for_health():
         sys.exit(f"FAIL start: {BASE}/health never answered 200 in {HEALTH_WAIT_SECONDS}s")
@@ -444,14 +457,19 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
           + (f"  [{feature.id}]" if feature else ""))
     if not wait_for_health():
         sys.exit(f"FAIL start: {BASE}/health never answered 200 in {HEALTH_WAIT_SECONDS}s")
-    wall = quota_wall_until()
+    answer = claude_answer()
+    if answer:
+        spent = "one call" if answer.get("spent") else "no call made"
+        print(f"  claude     : {answer['claude']} ({spent})"
+              + (f" — {answer['detail']}" if answer.get("detail") else ""))
+    wall = str(answer.get("claude_quota_resets_at") or "") if answer else quota_wall_until()
     if wall:
         message = (f"the Claude subscription window is closed until {wall}; "
                    "no issue created, no cycle started, nothing measured")
         print(f"\nNOT MEASURED — {message}")
         annotate("warning", f"{repo}" + (f" [{feature.id}]" if feature else "") + f": {message}")
         return True, {}
-    rejected = credentials_expired()
+    rejected = str(answer.get("claude_auth") or "") if answer else credentials_expired()
     if rejected:
         message = (f"the swarm's Claude credentials are expired ({rejected}) — a person must "
                    "renew them; no issue created, no cycle started, nothing measured")

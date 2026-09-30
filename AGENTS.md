@@ -272,7 +272,16 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   cycle) raise `ClaudeFatalError` with the way to renew them, after the
   one retry without `CLAUDE_CODE_OAUTH_TOKEN`; the eval scores it
   `interrupted`, `/health` says `claude: auth_expired` with `claude_auth`,
-  and the harness starts nothing while it stands.
+  and the harness starts nothing while it stands. **The harness asks
+  before it opens an issue** (`POST /api/claude/probe`,
+  `tools/claude_probe`): /health only knows a wall a call ran into in the
+  last ten minutes — the scheduled run of 2026-09-30 read `claude: ok`,
+  opened concert-tour-app#508 and started a cycle (6e3d36ca7d1d) that
+  died in 28 s on credentials dead for two days. A standing wall answers
+  for free; otherwise one short haiku call on the cycles' own path (the
+  token, then the session on disk, the same markers raising the same
+  walls). The answer is kept a minute, one probe at a time; a server
+  without the probe is read off /health as before.
 - **A deploy waits for the running cycle** (`cd.yml`, "Wait for running
   cycles", up to 30 min, then deploys anyway). A merge made while prod was
   idle used to land four to ten minutes later in the middle of the next
