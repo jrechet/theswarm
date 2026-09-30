@@ -278,6 +278,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: concert-notes
+    built_by: "local harness, cycle ec299e36a508, 2026-09-30, PRs #544–#546"
     text: |-
       Keep notes on a concert
       PUT /api/v1/concerts/{id}/notes with {"notes": "..."} stores up to 500 characters of notes and returns the concert with them; GET /api/v1/concerts/{id} shows them too, null until set; 422 above 500 characters; 404 for an unknown concert.

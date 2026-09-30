@@ -165,6 +165,22 @@ async def test_the_note_says_it_is_a_conflict():
     assert techlead.CONFLICT_MARKER not in note["text"]
 
 
+async def test_a_conflict_is_not_headed_as_changes_requested():
+    """concert-notes (ec299e36a508): #545 was approved and conflicted with
+    #546 — its task read "**Changes requested** on PR #545", which no review
+    had asked for."""
+    github = _GitHub()
+    await techlead._send_back_to_dev(
+        github, {"number": 545, "head": "feat/issue-542-x", "title": "[#542] Notes"},
+        techlead.CONFLICT_SUMMARY, [], conflict=True,
+    )
+
+    (note,) = github.comments[542]
+    assert "**Merge conflict** on PR #545 (branch `feat/issue-542-x`)" in note
+    assert "Changes requested" not in note
+    assert (await dev._changes_requested(github, 542))["pr_number"] == 545
+
+
 def _dev_state(repos, branch, claude):
     github = _GitHub()
     github.comments[11] = [techlead.CONFLICT_MARKER + "\n" + techlead._changes_comment(

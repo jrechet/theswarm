@@ -457,11 +457,14 @@ def _task_of_pr(pr: dict) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _changes_comment(pr: dict, summary: str, issues: list[dict]) -> str:
-    """What the Dev will read on the issue before its next attempt."""
+def _changes_comment(pr: dict, summary: str, issues: list[dict], *, conflict: bool = False) -> str:
+    """What the Dev will read on the issue before its next attempt. A
+    conflict is named as one: nobody requested changes on an approved PR
+    that main moved past (concert-notes' #545, 2026-09-30)."""
+    heading = "Merge conflict" if conflict else "Changes requested"
     lines = [
         CHANGES_MARKER,
-        f"**Changes requested** on PR #{pr['number']} (branch `{pr.get('head', '')}`)",
+        f"**{heading}** on PR #{pr['number']} (branch `{pr.get('head', '')}`)",
         "",
         summary,
     ]
@@ -533,14 +536,14 @@ async def _send_back_to_dev(
                 pass
         log.info("Task #%d: %d rounds of changes — left for a person", number, rounds + 1)
         return False
-    note = _changes_comment(pr, summary, issues)
+    note = _changes_comment(pr, summary, issues, conflict=conflict)
     if conflict:
         note = CONFLICT_MARKER + "\n" + note
     await github.add_comment(number, note)
     await github.add_labels(number, ["status:ready"])
     await github.remove_label(number, "status:review")
-    log.info("Task #%d sent back to the Dev after REQUEST_CHANGES on PR #%d",
-             number, pr["number"])
+    log.info("Task #%d sent back to the Dev after %s on PR #%d",
+             number, "a merge conflict" if conflict else "REQUEST_CHANGES", pr["number"])
     return True
 
 
