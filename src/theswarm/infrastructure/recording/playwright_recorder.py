@@ -100,7 +100,9 @@ async def present_exchange(page, exchange: dict) -> None:
     sent = _pretty(exchange.get("request"))
     if sent:
         parts.append(f'<h2>Sent</h2><pre class="request">{html.escape(sent)}</pre>')
-    parts.append(f"<h2>Answer</h2><pre>{html.escape(_pretty(exchange.get('body', ''))[:20_000])}</pre>")
+    # A 204 answers nothing; a blank box read like a failed capture.
+    answer = _pretty(exchange.get("body", ""))[:20_000] or "(empty)"
+    parts.append(f"<h2>Answer</h2><pre>{html.escape(answer)}</pre>")
     await page.set_content(f"<html><head>{_EXCHANGE_STYLE}</head><body>{''.join(parts)}</body></html>")
 
 

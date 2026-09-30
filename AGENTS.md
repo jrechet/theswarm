@@ -841,8 +841,17 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   and each lane plays them on its own demo server and database: each
   exchange a screenshot (`screenshot_exchange`, the feature's own call
   labelled as its PR's story) and 2.5 s of the video (`present_exchange`:
-  "POST /path → 201", the caption, what was sent, the answer). A call's
-  path must be a path on that server ("/…", never a host). The gate reads
+  "POST /path → 201", the caption, what was sent, the answer — "(empty)"
+  for a 204). A call's
+  path must be a path on that server ("/…", never a host). **A route is
+  read over the whole router file** (`qa_feature_pages.routes_in`): its
+  path may sit on the line after `@api_router.delete(`, or be `path=`.
+  lineup-remove's DELETE (concert-tour-app#514, cycle de5e914a8d5c) was
+  no route at all: its lines went to the GET lineup route above it, the
+  demo walked the lineup untouched, `feature_pages` passed on a page the
+  feature never added and "behaviour verified" rested on it. Blank lines
+  a diff adds touch no route (git puts the two between functions above a
+  new route as often as below it). The gate reads
   only the calls of the feature's routes: 5xx `fail`, 2xx `pass`, a 4xx
   proves nothing (the body was written from the code), no script
   `not_run` with the reason. Any behaviour gate failing is `broken` — the
