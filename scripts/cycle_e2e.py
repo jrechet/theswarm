@@ -132,9 +132,15 @@ def close_dead_story(repo: str, issue: int, cycle_id: str, why: str) -> None:
 
 
 def prs_before(repo: str) -> set[int]:
+    """The swarm's pull requests on `repo` — a branch its Dev made
+    (`techlead.is_swarm_branch`). venues-list in prod (541a0a65e3ec)
+    counted the owner's #554, a CI change opened while the cycle ran, and
+    scored the files off-target."""
+    from theswarm.agents.techlead import is_swarm_branch
+
     raw = _gh("pr", "list", "--repo", repo, "--state", "all", "--limit", "60",
-              "--json", "number")
-    return {p["number"] for p in json.loads(raw or "[]")}
+              "--json", "number,headRefName")
+    return {p["number"] for p in json.loads(raw or "[]") if is_swarm_branch(p.get("headRefName"))}
 
 
 HEALTH_WAIT_SECONDS = 180

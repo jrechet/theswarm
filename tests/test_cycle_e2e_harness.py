@@ -411,3 +411,15 @@ def test_a_dispatch_by_id_runs_the_manifest_text(tmp_path, monkeypatch):
     (text, feature_id), = ran
     assert feature_id == "sold-out-badge"
     assert text.startswith('Show a "sold out" badge')
+
+
+def test_only_the_swarm_s_pull_requests_are_the_cycle_s(monkeypatch):
+    """venues-list in prod (541a0a65e3ec, 2026-10-01): the owner opened
+    concert-tour-app#554 (a CI change on `chore/…`) while the cycle ran; the
+    harness counted it as the cycle's and scored the files off-target."""
+    listed = [{"number": 551, "headRefName": "feat/issue-548-add-venue-schema"},
+              {"number": 554, "headRefName": "chore/forge-hybrid-ci"},
+              {"number": 433, "headRefName": "docs/readme-note"}]
+    monkeypatch.setattr(cycle_e2e, "_gh", lambda *args: json.dumps(listed))
+
+    assert cycle_e2e.prs_before("jrechet/concert-tour-app") == {551}
