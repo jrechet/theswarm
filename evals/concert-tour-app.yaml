@@ -306,3 +306,52 @@ features:
     expected_paths: ["**/*.py"]
     max_cost_usd: 8
     max_duration_s: 3600
+  - id: venue-detail
+    text: |-
+      Show a venue and what plays there
+      GET /api/v1/venues/{id} returns the venue with its name, city, country and capacity, and its upcoming concerts that are not cancelled, soonest first; 404 for an unknown venue.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: venue-create
+    text: |-
+      Add a venue
+      POST /api/v1/venues with a name, a city, a country and a capacity creates the venue and answers 201 with it; 422 for a capacity of zero or less or a missing name; 409 when that city already has a venue of that name.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: concert-price
+    text: |-
+      Change a concert's ticket price
+      PATCH /api/v1/concerts/{id}/price with {"ticket_price": "..."} sets the price and returns the concert; 422 for a negative price; 409 for a cancelled concert; 404 for an unknown concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: lineup-clear
+    text: |-
+      Clear a concert's lineup
+      DELETE /api/v1/concerts/{id}/lineup removes every act from the concert's lineup and answers 204, the concert itself kept; 404 for an unknown concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: sold-out-tours
+    text: |-
+      List the sold-out tours
+      GET /api/v1/tours/sold-out returns the tours whose every concert that is not cancelled is sold out, a tour without such concerts left out; an empty list when there is none; GET /api/v1/tours/{id} keeps working.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: tour-uncancel
+    text: |-
+      Bring a cancelled tour back
+      POST /api/v1/tours/{id}/uncancel restores a cancelled tour to planned, and its concerts that were cancelled with it, and returns the tour; 409 when the tour is not cancelled; 404 for an unknown tour.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: stats-capacity
+    text: |-
+      Count the seats left
+      GET /api/v1/stats/capacity returns the total capacity, the tickets sold and the seats left over the upcoming concerts that are not cancelled; zeros when there is none.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
