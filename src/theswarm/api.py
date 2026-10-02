@@ -181,6 +181,7 @@ async def _emit_demo_ready(
     cycle_id: str,
     repo: str,
     result: dict[str, Any],
+    issue_number: int | None = None,
 ) -> None:
     """Build a DemoReport from the cycle result and publish DemoReady.
 
@@ -206,13 +207,16 @@ async def _emit_demo_ready(
         thumb_rel_preview = ""
         demo_dict = result.get("demo_report") or {}
         screenshots: list[dict] = []
+        videos: list[dict] = []
         if isinstance(demo_dict, dict):
             thumb_rel_preview = demo_dict.get("thumbnail_path", "") or ""
             screenshots = demo_dict.get("screenshots") or []
+            videos = demo_dict.get("videos") or []
 
         report = ReportGenerator().generate(
             cycle, thumbnail_rel_path=thumb_rel_preview,
-            screenshots=screenshots, held_prs=held,
+            screenshots=screenshots, held_prs=held, videos=videos,
+            stories=ReportGenerator.stories_of(demo_dict) if isinstance(demo_dict, dict) else (),
             qa_gates=demo_dict.get("quality_gates") if isinstance(demo_dict, dict) else None,
         )
 
@@ -243,6 +247,7 @@ async def _emit_demo_ready(
             play_url=play_url,
             title=title,
             thumbnail_url=thumbnail_url,
+            issue_number=issue_number,
         ))
     except Exception:
         log.exception("Failed to emit DemoReady for cycle %s", cycle_id)
@@ -485,6 +490,7 @@ async def _run_api_cycle(
                     # made every resumed cycle look fresh.
                     triggered_by=triggered_by,
                     trace_id=trace_id,
+                    issue_number=issue_number,
                 ))
 
             on_checkpoint = None
@@ -567,6 +573,7 @@ async def _run_api_cycle(
                 cycle_id=cycle_id,
                 repo=repo,
                 result=result,
+                issue_number=issue_number,
             )
 
         if callback_url:

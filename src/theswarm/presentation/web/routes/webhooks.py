@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
+
 import logging
 import time
 
@@ -51,22 +54,33 @@ async def github_webhook(request: Request) -> Response:
     payload = await request.json()
     event = handler.parse_event(event_type, payload)
 
-    # V2 M8 — the GitHub-native doors, for the owner only
+    # V2 M8 — the GitHub-native doors, for the owner only. GitHub gives a
+    # webhook ten seconds; the work (a cycle to start, a label to take off
+    # with a fresh client, a note to write) took fifteen on 2026-09-27 and
+    # the delivery was recorded as failed although the cycle ran. Answer
+    # first, work after.
     if handler.is_go_label(event):
-        await _handle_go_label(request, event)
-        return Response(content="ok", status_code=200)
+        _after_answering(request, _handle_go_label(request, event),
+                         f"{event.label} on {event.repo_full_name}#{event.issue_number}")
+        return Response(content="accepted", status_code=202)
     instruction = handler.swarm_instruction(event)
     if instruction is not None:
-        await _handle_instruction(request, event, instruction)
-        return Response(content="ok", status_code=200)
+        _after_answering(request, _handle_instruction(request, event, instruction),
+                         f"instruction on {event.repo_full_name}#{event.issue_number}")
+        return Response(content="accepted", status_code=202)
 
     # Sprint F P1 — /swarm implement on an issue comment
     if handler.is_implement_command(event):
         await _handle_implement_command(request, event)
         return Response(content="ok", status_code=200)
 
+    # Sprint F's rule — a cycle on every push to main and every opened
+    # issue — predates the doors above, and the live webhook delivers
+    # every issue event: on 2026-09-28 the harness's story and the
+    # TechLead's three sub-issues each started an untargeted cycle. Off
+    # unless asked for; the doors are how a cycle starts from GitHub.
     allowed_repos = getattr(request.app.state, "allowed_repos", [])
-    if handler.should_trigger_cycle(event, allowed_repos):
+    if _auto_cycle_enabled() and handler.should_trigger_cycle(event, allowed_repos):
         log.info(
             "Webhook triggering cycle: repo=%s event=%s",
             event.repo_full_name,
@@ -93,6 +107,34 @@ async def github_webhook(request: Request) -> Response:
                     break
 
     return Response(content="ok", status_code=200)
+
+
+def _auto_cycle_enabled() -> bool:
+    """The pre-M8 auto-trigger (a cycle per push and per opened issue)."""
+    return os.environ.get("SWARM_WEBHOOK_AUTO_CYCLE", "").strip().lower() in ("1", "true", "yes")
+
+
+def _after_answering(request, work, what: str) -> None:
+    """Run a door's work once GitHub has its answer, and keep the task so a
+    test (or a shutdown) can wait for it."""
+    tasks: set[asyncio.Task] = request.app.state.__dict__.setdefault("webhook_tasks", set())
+    task = asyncio.create_task(_guarded(work, what))
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+
+
+async def _guarded(work, what: str) -> None:
+    try:
+        await work
+    except Exception:  # noqa: BLE001 — the delivery is answered; the failure is ours to read
+        log.exception("Webhook: %s failed after the answer", what)
+
+
+async def drain_background(app) -> None:
+    """Await the doors' pending work — for tests and a clean shutdown."""
+    tasks = getattr(app.state, "webhook_tasks", None) or set()
+    while tasks:
+        await asyncio.gather(*tuple(tasks), return_exceptions=True)
 
 
 def _owner_only(request, event) -> bool:

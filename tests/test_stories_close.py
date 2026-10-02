@@ -277,3 +277,31 @@ async def test_the_dev_loop_leaves_stories_alone_when_nothing_was_already_built(
     await cycle_graph.dev_loop_end({}, SimpleNamespace(context=rt))
 
     assert github.closed == []
+
+
+async def test_the_story_done_line_claims_only_what_happened(monkeypatch):
+    """reschedule-concert (7af87e116df7) merged #519 and #520, then found its
+    tests sub-task already on main — and the theater's Tech Lead card read
+    "Story #515 done — every sub-task already on main" right under "2 PRs
+    merged"."""
+    from types import SimpleNamespace
+
+    from theswarm import cycle, cycle_graph
+
+    github = _csv_export(s347="closed")  # #345 and #346 merged earlier in the cycle
+    progress: list[str] = []
+
+    async def say(role, message):
+        progress.append(message)
+
+    async def nothing(*_a, **_kw):
+        return []
+
+    monkeypatch.setattr(cycle, "_requeue_unfinished", nothing)
+    rt = SimpleNamespace(config=SimpleNamespace(workspace_dir=""), dev_claims_open=True,
+                         base_state={"github": github}, progress=say, phase_checkpoint=nothing)
+
+    await cycle_graph.dev_loop_end({"already_satisfied": [347]}, SimpleNamespace(context=rt))
+
+    assert "Story #344 done — its last sub-task was already on main" in progress
+    assert not any("every sub-task" in m for m in progress)

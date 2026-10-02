@@ -47,6 +47,20 @@ def test_an_exhausted_subscription_window_is_interrupted_too():
     assert record["outcome"] == evals.OUTCOME_INTERRUPTED
 
 
+def test_the_weekly_window_is_interrupted_once_the_wrapper_names_it():
+    """Harness cycle 62f353165e62 (2026-09-27) died on the 7-day window and
+    scored `failed`, regression, because the wrapper had not recognised the
+    wording and raised a plain RuntimeError. Recognised, it is the same
+    `ClaudeFatalError` and the run is not a measurement of the swarm."""
+    error = ("ClaudeFatalError: Claude subscription exhausted: SDK result success: "
+             "You've hit your weekly limit · resets Sep 29, 4am (UTC)")
+
+    record = evals.score(None, _observed(prs=(), merged=(), error=error))
+
+    assert record["outcome"] == evals.OUTCOME_INTERRUPTED
+    assert record["passed"] is False
+
+
 def test_any_other_failure_is_still_a_failure():
     record = evals.score(None, _observed(error="RuntimeError: phase qa timed out"))
 

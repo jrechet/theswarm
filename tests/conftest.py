@@ -7,6 +7,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+# The harness (scripts/cycle_e2e.py, loaded by path in a dozen tests) reads
+# SWARM_BASE when it is loaded and calls it for whatever a test forgot to
+# stub. A closed local port refuses at once; prod — unreachable on
+# 2026-09-28 — held each such call for its 60 s timeout, stretched the suite
+# from 3½ to 10½ minutes and failed a run. No test may reach prod.
+os.environ["SWARM_BASE"] = "http://127.0.0.1:9/swarm"
+
 
 @pytest.fixture(autouse=True)
 def _default_claude_backend_for_tests(monkeypatch):
@@ -50,12 +57,16 @@ def _no_real_claude_binary(monkeypatch):
 @pytest.fixture(autouse=True)
 def _no_quota_wall():
     """A closed subscription window is remembered per process; a test that
-    closes it must not close it for the next."""
-    from theswarm.tools import quota_wall
+    closes it must not close it for the next. Nor the probe's kept answer."""
+    from theswarm.tools import auth_wall, claude_probe, quota_wall
 
     quota_wall.clear()
+    auth_wall.clear()
+    claude_probe.forget()
     yield
     quota_wall.clear()
+    auth_wall.clear()
+    claude_probe.forget()
 
 
 @pytest.fixture(autouse=True)

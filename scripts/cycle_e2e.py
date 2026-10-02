@@ -15,10 +15,13 @@ target already has); --feature-id picks one; --all runs the series. Every
 run is scored — PR, its CI, the reviews, cost, duration, files touched —
 and appended to docs/harness-runs.jsonl.
 
-Exit code 0 when every cycle finished AND a pull request came out of it,
-or when the Dev found every sub-task already on main (`already_delivered`:
-nothing measured, a warning, never a regression). Anything else prints
-where it stopped and why.
+Exit code 0 when every cycle finished AND a pull request came out of it
+AND the running target did not contradict it, or when the Dev found every
+sub-task already on main (`already_delivered`: nothing measured, a
+warning, never a regression). A build QA's E2E run or the walk of the new
+pages found broken (`behaviour: broken`) is a failure: the tickets say
+done, the app says otherwise. Anything else prints where it stopped and
+why.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ import fnmatch
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import time
@@ -76,6 +80,15 @@ def create_issue(repo: str, feature: str) -> int:
     return number
 
 
+# "Parent: #N" as the TechLead writes it; the number ends where the digits
+# end, or "Parent: #37" is inside "Parent: #378" (the server's #229).
+_PARENT_RE = re.compile(r"Parent:\s*#(\d+)(?!\d)")
+
+
+def _child_of(body: str | None, parent: int) -> bool:
+    return any(int(n) == parent for n in _PARENT_RE.findall(body or ""))
+
+
 def unfinished_children(repo: str, parent: int) -> list[int]:
     """Sub-tasks of `parent` still open and not in review.
 
@@ -86,10 +99,9 @@ def unfinished_children(repo: str, parent: int) -> list[int]:
     raw = _gh("issue", "list", "--repo", repo, "--state", "open",
               "--limit", "60", "--json", "number,body,labels")
     open_issues = json.loads(raw or "[]")
-    marker = f"Parent: #{parent}"
     return sorted(
         i["number"] for i in open_issues
-        if marker in (i.get("body") or "")
+        if _child_of(i.get("body"), parent)
         and "status:review" not in {l["name"] for l in i.get("labels", [])}
     )
 
@@ -101,17 +113,34 @@ def closed_children(repo: str, parent: int) -> list[int]:
     feature already delivered."""
     raw = _gh("issue", "list", "--repo", repo, "--state", "closed",
               "--limit", "60", "--json", "number,body")
-    marker = f"Parent: #{parent}"
     return sorted(
         i["number"] for i in json.loads(raw or "[]")
-        if marker in (i.get("body") or "")
+        if _child_of(i.get("body"), parent)
     )
 
 
+def close_dead_story(repo: str, issue: int, cycle_id: str, why: str) -> None:
+    """Close the story a cycle never broke down: nothing was built, no
+    sub-task exists, and the feature is asked for again on a fresh issue.
+    Three such stories sat open on concert-tour-app after the subscription
+    window ran out (#351, #352, #378)."""
+    _gh("issue", "close", str(issue), "--repo", repo, "--reason", "not planned",
+        "--comment", (f"Closing: cycle {cycle_id} ended before the breakdown ({why[:200]}); "
+                      "nothing was built and no sub-task exists. The harness will ask for "
+                      "this feature again on a fresh issue."))
+    print(f"  issue #{issue} closed — the cycle ended before the breakdown")
+
+
 def prs_before(repo: str) -> set[int]:
+    """The swarm's pull requests on `repo` — a branch its Dev made
+    (`techlead.is_swarm_branch`). venues-list in prod (541a0a65e3ec)
+    counted the owner's #554, a CI change opened while the cycle ran, and
+    scored the files off-target."""
+    from theswarm.agents.techlead import is_swarm_branch
+
     raw = _gh("pr", "list", "--repo", repo, "--state", "all", "--limit", "60",
-              "--json", "number")
-    return {p["number"] for p in json.loads(raw or "[]")}
+              "--json", "number,headRefName")
+    return {p["number"] for p in json.loads(raw or "[]") if is_swarm_branch(p.get("headRefName"))}
 
 
 HEALTH_WAIT_SECONDS = 180
@@ -144,6 +173,32 @@ def quota_wall_until(*, api=None) -> str:
     """
     status, body = (api or _api)("/health")
     return str(body.get("claude_quota_resets_at") or "") if status == 200 else ""
+
+
+def credentials_expired(*, api=None) -> str:
+    """Why the swarm's Claude credentials were rejected, "" while they work.
+
+    `/health` says so once a call has run into them (`auth_wall`); the run
+    of 2026-09-29 13:46 created its issue, died in 26 s on an expired
+    session and scored a regression.
+    """
+    status, body = (api or _api)("/health")
+    if status != 200 or (body.get("checks") or {}).get("claude") != "auth_expired":
+        return ""
+    return str(body.get("claude_auth") or "expired")
+
+
+def claude_answer(*, api=None) -> dict:
+    """What the server's probe says of Claude right now (`POST
+    /api/claude/probe`: a standing wall, or one short call on the cycles'
+    own path) — {} from a server without the probe, /health reads then.
+
+    /health only knows a wall a call ran into in the last ten minutes: the
+    scheduled run of 2026-09-30 read `claude: ok`, opened #508 and started
+    a cycle that died in 28 s on credentials dead for two days.
+    """
+    status, body = (api or _api)("/api/claude/probe", {})
+    return body if status == 200 and isinstance(body, dict) and body.get("claude") else {}
 
 
 def start_cycle(repo: str, issue: int) -> str:
@@ -273,6 +328,11 @@ def review_decisions(result: dict) -> list[str]:
     return [str(r.get("decision", "")) for r in (result or {}).get("reviews", []) or []]
 
 
+def reviews_skipped(result: dict | None) -> int:
+    """Reviews the cycle went without: a failed call, a timed-out phase."""
+    return len((result or {}).get("review_skips") or [])
+
+
 def cycle_cost(record: dict) -> float:
     """What the cycle spent: its result's figure, else its row's (a failed
     cycle has no result, and its spend is on the row since v030)."""
@@ -352,7 +412,8 @@ def past_runs(repo: str, history: pathlib.Path, *, api=None) -> list[dict]:
 
 
 def is_regression(previous: dict | None, current: dict) -> bool:
-    """True only when a target flips from built to failed.
+    """True only when a target flips from built to failed, or from a build
+    the app did not contradict to one it did (`behaviour: broken`).
 
     A first-ever failure (no previous entry) and a repeat failure are both
     unsurprising — only a pass-then-fail transition is worth flagging. An
@@ -360,11 +421,31 @@ def is_regression(previous: dict | None, current: dict) -> bool:
     never a regression and never the run a new one is compared with
     (`evals.last_measured`).
     """
+    if previous is None or evals.outcome_of(previous) != evals.OUTCOME_BUILT:
+        return False
+    if evals.outcome_of(current) == evals.OUTCOME_FAILED:
+        return True
     return (
-        previous is not None
-        and evals.outcome_of(previous) == evals.OUTCOME_BUILT
-        and evals.outcome_of(current) == evals.OUTCOME_FAILED
+        evals.outcome_of(current) == evals.OUTCOME_BUILT
+        and current.get("behaviour") == evals.BEHAVIOUR_BROKEN
+        and previous.get("behaviour") != evals.BEHAVIOUR_BROKEN
     )
+
+
+def behaviour_notes(demo_report: dict | None) -> list[str]:
+    """What the behaviour gates said, one line each, from QA's report."""
+    gates = (demo_report or {}).get("quality_gates") or {}
+    notes: list[str] = []
+    for name in evals.BEHAVIOUR_GATES:
+        gate = gates.get(name)
+        if not isinstance(gate, dict) or not gate.get("status"):
+            continue
+        detail = gate.get("reason") or gate.get("failure_excerpt") or ""
+        if name == "feature_e2e" and gate.get("reason"):
+            detail = gate["reason"]
+        label = {"feature_e2e": "feature E2E", "feature_calls": "feature calls"}.get(name, "feature pages")
+        notes.append(f"{label} {gate['status']}" + (f": {detail}" if detail else ""))
+    return notes
 
 
 def annotate(level: str, message: str) -> None:
@@ -382,10 +463,22 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
           + (f"  [{feature.id}]" if feature else ""))
     if not wait_for_health():
         sys.exit(f"FAIL start: {BASE}/health never answered 200 in {HEALTH_WAIT_SECONDS}s")
-    wall = quota_wall_until()
+    answer = claude_answer()
+    if answer:
+        spent = "one call" if answer.get("spent") else "no call made"
+        print(f"  claude     : {answer['claude']} ({spent})"
+              + (f" — {answer['detail']}" if answer.get("detail") else ""))
+    wall = str(answer.get("claude_quota_resets_at") or "") if answer else quota_wall_until()
     if wall:
         message = (f"the Claude subscription window is closed until {wall}; "
                    "no issue created, no cycle started, nothing measured")
+        print(f"\nNOT MEASURED — {message}")
+        annotate("warning", f"{repo}" + (f" [{feature.id}]" if feature else "") + f": {message}")
+        return True, {}
+    rejected = str(answer.get("claude_auth") or "") if answer else credentials_expired()
+    if rejected:
+        message = (f"the swarm's Claude credentials are expired ({rejected}) — a person must "
+                   "renew them; no issue created, no cycle started, nothing measured")
         print(f"\nNOT MEASURED — {message}")
         annotate("warning", f"{repo}" + (f" [{feature.id}]" if feature else "") + f": {message}")
         return True, {}
@@ -418,13 +511,16 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
     record = cycle_record(cycle_id)
     cycle_result = record.get("result") or {}
     satisfied = tuple(int(n) for n in cycle_result.get("already_satisfied") or ())
+    closed = closed_children(repo, issue) if not new_prs else []
     if not new_prs:
-        unexplained = sorted(set(closed_children(repo, issue)) - set(satisfied))
+        unexplained = sorted(set(closed) - set(satisfied))
         if unexplained:
             print(f"  closed, not built: {', '.join(f'#{n}' for n in unexplained)}")
             left = sorted(set(left) | set(unexplained))
     if left:
         print(f"  unfinished : {', '.join(f'#{n}' for n in left)}")
+    if state != "completed" and not new_prs and not left and not closed:
+        close_dead_story(repo, issue, cycle_id, str(record.get("error") or f"cycle {state}"))
     observed = evals.Observed(
         state=state,
         prs=tuple(new_prs),
@@ -432,6 +528,7 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
         ci=ci,
         files=tuple(files),
         review_decisions=tuple(review_decisions(cycle_result)),
+        reviews_skipped=reviews_skipped(cycle_result),
         cost_usd=cycle_cost(record),
         duration_s=duration_seconds(str(record.get("started_at") or ""), str(record.get("completed_at") or "")),
         backend=str(cycle_result.get("backend") or ""),
@@ -454,8 +551,25 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
           + (f"  (over budget)" if result["within_cost"] is False or result["within_time"] is False else "")
           + (f"  files {'ok' if result['files_match'] else 'off-target'}" if result["files_match"] is not None else ""))
 
+    notes = behaviour_notes(cycle_result.get("demo_report"))
+    if result["passed"] and result["behaviour"] == evals.BEHAVIOUR_BROKEN:
+        broken = [n for n in notes if " fail" in n] or notes
+        print("\nFAIL — built, but the running app says otherwise: " + "; ".join(broken))
+        if result["regression"]:
+            print("\n⚠ REGRESSION — the last build here behaved; this one does not")
+        asyncio.run(alert_mattermost(
+            f":red_circle: Harness: built but broken on {repo}"
+            + (f" [{feature.id}]" if feature else "")
+            + f" — {'; '.join(broken)}"
+            + (" — REGRESSION" if result["regression"] else "")
+            + f" (cycle {cycle_id}, issue #{issue})"
+        ))
+        return False, result
+
     if result["passed"]:
-        print("\nPASS — a feature was asked for, and the whole of it was built.")
+        print("\nPASS — a feature was asked for, and the whole of it was built"
+              + (" — behaviour verified on the running app." if result["behaviour"] == evals.BEHAVIOUR_VERIFIED
+                 else " — behaviour unverified" + (f" ({'; '.join(notes)})" if notes else "") + "."))
         return True, result
 
     if result["outcome"] == evals.OUTCOME_ALREADY_DELIVERED:

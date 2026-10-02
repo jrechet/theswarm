@@ -23,8 +23,8 @@ REVIEWS = [
 def _github() -> AsyncMock:
     gh = AsyncMock()
     gh.get_open_prs = AsyncMock(return_value=[
-        {"number": 94, "head": "feat/close-issue"},
-        {"number": 96, "head": "feat/report-why"},
+        {"number": 94, "head": "feat/issue-93-close-issue"},
+        {"number": 96, "head": "feat/issue-95-report-why"},
     ])
     gh.merge_pr = AsyncMock()
     gh.delete_branch = AsyncMock()

@@ -21,8 +21,10 @@ IDENTITY = ["-c", "user.name=t", "-c", "user.email=t@t"]
 
 
 def _git(cwd, *args) -> str:
+    # The repository is `cwd`, whatever the shell that started the suite exported.
+    env = {k: v for k, v in os.environ.items() if k not in git_ops.REPO_LOCAL_GIT_ENV}
     return subprocess.run(
-        ["git", *IDENTITY, *args], cwd=cwd, check=True, capture_output=True, text=True,
+        ["git", *IDENTITY, *args], cwd=cwd, check=True, capture_output=True, text=True, env=env,
     ).stdout.strip()
 
 
@@ -112,6 +114,28 @@ async def test_two_tasks_two_branches_no_commit_lost(clone):
     assert "a.py" in _git(clone, "show", "--name-only", "--format=", "feat/issue-1-a")
     assert "b.py" in _git(clone, "show", "--name-only", "--format=", "feat/issue-2-b")
     # The clone's own checkout saw none of it, worktrees included.
+    assert _git(clone, "status", "--porcelain") == ""
+
+
+async def test_an_index_exported_by_the_callers_shell_is_not_shared(clone, tmp_path, monkeypatch):
+    """A shell that built a tree by hand exported GIT_INDEX_FILE, then ran the
+    suite (2026-09-28): the clone and both worktrees shared that one index,
+    and the test above failed on the clone's status, `AD b.py`."""
+    stray = tmp_path / "stray-index"
+    monkeypatch.setenv("GIT_INDEX_FILE", str(stray))
+
+    a, b = await asyncio.gather(
+        git_ops.add_worktree(str(clone), "feat/issue-1-a"),
+        git_ops.add_worktree(str(clone), "feat/issue-2-b"),
+    )
+    Path(a, "a.py").write_text("a = 1\n")
+    Path(b, "b.py").write_text("b = 1\n")
+    assert await git_ops.commit_all(a, "feat: a")
+    assert await git_ops.commit_all(b, "feat: b")
+
+    assert not stray.exists()
+    assert _git(clone, "show", "--name-only", "--format=", "feat/issue-1-a") == "a.py"
+    assert _git(clone, "show", "--name-only", "--format=", "feat/issue-2-b") == "b.py"
     assert _git(clone, "status", "--porcelain") == ""
 
 

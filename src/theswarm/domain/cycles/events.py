@@ -14,6 +14,7 @@ class CycleStarted(DomainEvent):
     project_id: str = ""
     triggered_by: str = ""
     trace_id: str = ""  # the cycle's root span, when a tracer is installed
+    issue_number: int | None = None  # the pinned issue (Play, the label door, the harness)
 
 
 @dataclass(frozen=True)

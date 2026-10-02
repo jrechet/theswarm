@@ -35,13 +35,38 @@ Two UI generations coexist in `presentation/web/`:
 - **V2** — `routes/v2.py` + `templates/v2/` on Tailwind tokens (`static/v2/input.css`,
   Plex fonts vendored, no CDN). Owns `/` (repo picker fed by the GitHub App
   installation plus legacy registered projects), `/r/{owner}/{name}` (composer →
-  GitHub issue, issue board, ▶ Play), `/c/{cycle_id}` (the theater: agent rail from
+  GitHub issue, issue board, ▶ Play — the composer lands on `?new=N` and the page
+  reads that issue by number, highlighted: GitHub's list trails a creation by
+  seconds and the feature just written was missing; the board groups by what is
+  happening, not by the labels: Building is the running cycle's issue and its
+  sub-tasks, In review an issue an open PR names (`[#N]`/`Closes #N`, one
+  `get_open_pr_briefs` listing), and the rest of those labels is Stalled —
+  concert-tour-app read "Building 17" with nothing running; a failed PR read
+  keeps the labels' word; `scripts/clean_stale_labels.py` puts such labels
+  back in line — closed when merged, review when a PR is open, not planned
+  before `--close-before`, else ready, each with a comment; dry run by
+  default, never while a cycle runs on the repo), `/c/{cycle_id}` (the theater: agent rail from
   `ProgressBridge` live messages, pinned issue breakdown via
-  `application/services/pinned_issue.py`, feed from the cycle event store; the
-  page polls `/c/{id}/stage` every 3 s and only swaps the DOM on change).
+  `application/services/pinned_issue.py` — a sub-task closed as completed
+  is done whatever label it kept, one closed as not planned is "dropped";
+  lineup-add's #454, closed "already satisfied" with no status label, read
+  as unbuilt and the finished story as "2/3 done" — feed from the cycle event store — the
+  agents' `AgentActivity`, fragments of streamed code left out
+  (`progress_bridge.is_telling`; it read Sprint D's AgentThought, which nothing
+  emits, and said "Nothing yet" on every cycle until 2026-09-28); the
+  page polls `/c/{id}/stage` every 3 s and only swaps the DOM on change; **it
+  ends on the demo**: once the cycle's report is stored, the stage shows it —
+  the video, the counts, "Watch the demo →" to the player — and a completed
+  cycle whose report has not landed yet (it is saved just after the status)
+  keeps the page polling, `data-demo-pending`, two minutes at most).
 - **V1** — everything else (`/dashboard`, `/projects/`, `/cycles/`, HTMX
-  fragments, the 14 role surfaces). Demoted, not deleted; the theater sends
-  cycles the in-memory tracker no longer knows to `/cycles/{id}` (archive view).
+  fragments, the 14 role surfaces). Demoted, not deleted. The theater draws a
+  *finished* cycle the in-memory tracker no longer knows from its row —
+  stations done, feed from the event store, demo card from the report store,
+  pinned issue from `cycles.issue_number` (v032, written by `CycleStarted`);
+  before, every deploy sent those links to the V1 archive and their demo was
+  gone. Only a row still `running` that nothing runs goes to `/cycles/{id}`
+  (archive view).
 
 `presentation/web/auth.py` is the wall (pure ASGI, fail-safe closed); doors are
 `routes/auth_routes.py` (access key + GitHub OAuth) and the GitHub App setup in
@@ -75,9 +100,13 @@ Full details: `docs/ARCHITECTURE-V2.md`, `docs/ROLES-OVERVIEW.md`.
 ## Environment
 
 Secrets in `.env` (never committed). Key vars: `CLAUDE_CODE_OAUTH_TOKEN`
-(headless auth for the Claude CLI, minted with `claude setup-token`; the
-browser-session credentials mounted from the host expire when their refresh
-token dies), `ANTHROPIC_API_KEY` (only a real `sk-ant-api` key enables the API
+(headless auth for Claude, minted with `claude setup-token`, a year of
+validity; the browser-session credentials mounted from the host expire when
+their refresh token dies — prod's did during the 2026-09-28 outage. In prod
+it is the optional repo secret of the same name, written to `.env` only when
+set: the token first, the mounted session as the fallback — an auth failure
+retries without the token, and so does a call that hangs before its session
+starts, the way a stale token hung the old CLI in #76), `ANTHROPIC_API_KEY` (only a real `sk-ant-api` key enables the API
 fallback; an `sk-ant-oat` OAuth token is CLI-only and is deliberately ignored
 by the fallback), `GITHUB_TOKEN` (push auth,
 injected per git command — never written to `.git/config`), `SWARM_GITHUB_REPO`,
@@ -155,7 +184,7 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
 - The cycle tracker is in-memory, but a restart no longer loses a running
   cycle (V2 runtime M4, closes the practical side of #5): the boot resumer
   continues it under a new tracker id, `/c/{old}` redirects to it while it
-  runs, and the archive view shows it afterwards.
+  runs, and the theater draws it from its row afterwards.
 - The GitHub App manifest flow is broken (GitHub returns a code it does not
   recognise, no app is created) and **is not needed**: repos come from
   `github_app.list_user_repositories()` with the owner's `GITHUB_TOKEN`, and
@@ -193,7 +222,12 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   `CLAUDE_CODE_OAUTH_TOKEN`, and an exhausted
   **subscription window** is fatal — retrying it burns the remaining
   iterations in seconds against a wall and reports a credential error that
-  sends the reader hunting for a bug that does not exist.
+  sends the reader hunting for a bug that does not exist. The wall has more
+  than one wording: "session limit" (5 h) and "weekly limit" (7 days) are
+  both `_QUOTA_MARKERS`, plus a "hit your … limit" pattern for the next
+  one — harness cycle 62f353165e62 (2026-09-27) died on the weekly window
+  unrecognised, as a plain `RuntimeError`, and the eval scored a failed
+  regression where `interrupted` was the truth.
 - `GitHubClient._fresh()` rebinds only when App credentials exist. A static
   `GITHUB_TOKEN` never rotates, and rebuilding on a mere difference replaces
   clients built deliberately with a mock — that is how a token in the
@@ -201,6 +235,12 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
 - Tests must not assert git argv **by position**: `_auth_args()` prepends
   credential flags whenever `GITHUB_TOKEN` is set, so index-based assertions
   silently depend on the suite's environment.
+- **Git runs on the repository its `cwd` names**: `_run_git` drops
+  `REPO_LOCAL_GIT_ENV` (`GIT_INDEX_FILE`, `GIT_DIR`, … — git's own
+  `--local-env-vars`). A shell that exported `GIT_INDEX_FILE` to build a
+  tree by hand then ran the suite (2026-09-28): the clone and every task
+  worktree shared that one index, and `test_two_tasks_two_branches_no_commit_lost`
+  failed twice "under load" while passing alone — it was the environment.
 - `static/v2/app.css` is generated: never commit it. It slipped in twice —
   the `.gitignore` pattern had no leading `**/`, so a mid-path `/` anchored it
   to the repo root and `git add -A` kept re-adding the file.
@@ -238,7 +278,31 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   `claude_quota_resets_at` (a warning, never a 503 — the process is
   fine), and the harness reads that first and starts nothing: on
   2026-09-27 it had created its story issue and a cycle that died in
-  51 s (62f353165e62).
+  51 s (62f353165e62). **The wall outlives a deploy** (table
+  `quota_wall`, v031, primed at boot by `quota_wall.prime`): four
+  deploys followed that wall the same morning, and each new container
+  read `claude: ok` until a call ran into it again. **Expired credentials are a
+  wall too** (`tools/auth_wall`, in-process, held 10 min, never
+  persisted — a redeploy is how new credentials arrive): prod came back
+  from its 2026-09-28 outage with the mounted `~/.claude` session dead
+  ("OAuth session expired and could not be refreshed"), and the harness's
+  cycle died in 26 s, scored a failed run and a regression, and tried to
+  alert. Claude Code's own words for dead credentials
+  (`_EXPIRED_CREDENTIAL_MARKERS`, narrower than the retry's
+  `_AUTH_FAILURE_MARKERS` — a "401" in a tool's output must not end a
+  cycle) raise `ClaudeFatalError` with the way to renew them, after the
+  one retry without `CLAUDE_CODE_OAUTH_TOKEN`; the eval scores it
+  `interrupted`, `/health` says `claude: auth_expired` with `claude_auth`,
+  and the harness starts nothing while it stands. **The harness asks
+  before it opens an issue** (`POST /api/claude/probe`,
+  `tools/claude_probe`): /health only knows a wall a call ran into in the
+  last ten minutes — the scheduled run of 2026-09-30 read `claude: ok`,
+  opened concert-tour-app#508 and started a cycle (6e3d36ca7d1d) that
+  died in 28 s on credentials dead for two days. A standing wall answers
+  for free; otherwise one short haiku call on the cycles' own path (the
+  token, then the session on disk, the same markers raising the same
+  walls). The answer is kept a minute, one probe at a time; a server
+  without the probe is read off /health as before.
 - **A deploy waits for the running cycle** (`cd.yml`, "Wait for running
   cycles", up to 30 min, then deploys anyway). A merge made while prod was
   idle used to land four to ten minutes later in the middle of the next
@@ -299,7 +363,14 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   commented PR is still open next time and nothing about it changed —
   cycle 5f8f0f63f58c read #124 three times and the 300s phase timed out
   on the pass that mattered. A new push changes the key and earns a new
-  review.
+  review. **And once per head across cycles**: the `theswarm/review`
+  status the verdict leaves on the head (M8) is read first
+  (`techlead._earlier_verdict`, `GitHubClient.get_review_status`); a head
+  that carries one is not reviewed, commented on or sent back again, and
+  its decision still reaches the merge pass. concert-tour-app#307 sat at
+  one head from 2026-09-24 and drew twelve identical REQUEST_CHANGES,
+  each with a "left for a person" comment on its task; the hand-opened
+  #433 was re-approved on every cycle.
 - **The verdict is read wherever the reviewer put it.** Prose, then a
   fenced ```json block, is a common shape; the parser takes the first
   object that carries a `decision`, fenced or bare, and steps over braces
@@ -312,14 +383,42 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   beside `CHANGES_MARKER`, the failing checks named); still running is
   waited for, one `CI_WAIT_SECONDS` (300s) per merge pass, then left open;
   unreadable CI merges as before. The swarm's own `theswarm/review` status
-  is not CI. The end-of-cycle merge on SELF_REPO reads the same gate.
+  is not CI. The end-of-cycle merge on SELF_REPO reads the same gate. An
+  approved PR main has moved past goes back with `CONFLICT_MARKER`,
+  headed "**Merge conflict** on PR #N" — concert-notes' #545 read
+  "Changes requested", which no review had asked for; the Dev reads the
+  markers and `PR #N (branch …)`, never the heading. A conflict is not a
+  review round: it does not count toward `CHANGES_REQUESTED_CAP`, and an
+  approved PR that conflicts goes back whatever the rounds before it.
+  **And only the swarm's own** (owner, 2026-09-29): the TechLead reviews
+  every open PR but merges — or holds, on SELF_REPO — only branches the
+  Dev made (`techlead.is_swarm_branch`: `feat/issue-<n>…`, `feat/us-<n>…`);
+  any other approved PR is `foreign_prs`, "left for its author".
+  concert-tour-app#396, opened by hand on a `chore/` branch, was merged by
+  a demo cycle's TechLead where a person's review was the rule.
 - **A REQUEST_CHANGES review closes the loop**: the review is copied onto
   the *issue* behind `CHANGES_MARKER`, the label flips back to
   `status:ready`, and the next attempt resumes the branch the review is
   about (`git.resume_branch`, not `create_branch`, which would reset from
   main and discard the commits) and pushes onto the PR that already
   exists. Two rounds on one task is a conversation; at
-  `CHANGES_REQUESTED_CAP` it stays in review with a comment for a person.
+  `CHANGES_REQUESTED_CAP` it is *put* in review (`status:review`, ready and
+  in-progress taken off) with a comment for a person — concert-tour-app#306
+  read "Leaving it in review" six times while a failed attempt had left it
+  `status:ready`, where any untargeted Dev would take it again. **A
+  conversation has two sides**: a sent-back task that ends with no new
+  commit is the Dev's *answer* (`dev._answer_the_review`) — posted on the
+  PR behind `DEV_REPLY_MARKER`, the head's `theswarm/review` status reset
+  to pending ("Dev answered"), the task in review, the PR's keys taken out
+  of `reviewed_prs` — and the TechLead reviews again with the answer in its
+  prompt. **The reviewer reads the repository** (the clone, on main: the
+  review runs with the read profile, `REPOSITORY_SECTION`): price-stats'
+  PR #486 imported two symbols its sibling #485 had merged, was sent back
+  as CRITICAL for "never defined", and the Dev answered "already in place"
+  three iterations running into a log nobody read — the feature scored a
+  failure and a regression (79f45fdaadb9). With both, the next cycle on the
+  story (4eaa5b767051) had the Dev answer, the TechLead check main ("my
+  earlier concern about missing symbols was unfounded") and merge it.
   Before #121 the review was written on the PR and forgotten, and
   `pick_task` skips `status:review` — so nothing ever came back.
 - **A Claude call that fails is a step skipped, not a cycle lost.** Two
@@ -331,7 +430,11 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   QA goes on without an E2E file; only `ClaudeFatalError` (subscription
   window) still aborts. Budgets follow the prompt: a review gets
   `_review_timeout(len(prompt))` (180s floor, +15s per 1k chars, 780s
-  ceiling), E2E generation 240s.
+  ceiling), E2E generation 240s. **A skipped review is counted**, not
+  only logged: `review_skips` in the cycle state and its result (a failed
+  call names its PR; a timed-out phase is `pr: None`), `reviews_skipped`
+  in the eval record, "N reviews skipped" on the repo page — "three
+  timeouts in seven cycles" had been read off logs by hand.
 - **A failed attempt leaves a trace on the issue** (`ATTEMPT_MARKER` comment,
   `agents/dev._note_failed_attempt`), and the picker reads those back: a
   sub-task that failed in an earlier cycle goes behind its untried siblings
@@ -353,6 +456,14 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   each other's code (#322/#323 in 9d3174f41829; #325 never merged).
   Dependencies wait for a *merge*: on SELF_REPO, where approved PRs merge
   only at the end of the cycle, a dependent task waits for the next cycle.
+- **No tests-only sub-task** (`BREAKDOWN_PROMPT`): each task ships the
+  tests of its own code, written first, named in its acceptance criteria.
+  The prompt used to ask for "a test-writing task if the story requires
+  new tests" while the Dev "always writes tests for new code": every story
+  on concert-tour-app from 2026-09-26 ended its chain on one, after the
+  code it tests, and seven of eighteen found their tests already on main
+  (#383 … #512) — a Dev iteration, a closing comment and an "already on
+  main" story in the player, for nothing.
 - **The Dev is told about its siblings' open PRs** (`_sibling_prs`: title +
   files, in the prompt above the `ALREADY_SATISFIED` rule). Four sub-tasks
   of one story built in parallel each re-implemented the others' work
@@ -367,9 +478,31 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   video, in place of the guessed `/`, `/docs`, `/health` (+ discovered
   routers) (`_pages_to_capture`); `setup` — shell commands run once per
   workspace before the first launch, each on its own 300s budget, same
-  scrubbed environment, a failing one logged and skipped (`_run_demo_setup`).
+  scrubbed environment, a failing one logged and skipped (`_run_demo_setup`);
+  `seed` — shell commands run once the demo server *answers*, in both
+  capture lanes (not before QA's E2E run), with `{python}`/`{url}`/`{port}`
+  and `DEMO_URL`, one at a time per workspace (`agents/qa_demo_seed.py`):
+  the target fills its own database, idempotently. concert-tour-app's demo
+  database was empty — the dashboard said "Loading…" and the page cycle
+  28371c2016da built (`/api/v1/concerts/1/occupancy`) answered 404 and was
+  skipped; its `scripts/seed_demo.py` (concert-tour-app#396) fixes that.
+  **`{tmp}` in a declared `demo.env` value is the launch's own
+  directory**, and a declared target's seed runs in its server's
+  environment (`_seed_env`; an undeclared launch inherits this process's
+  tokens, so its seed keeps the scrubbed one): a database of its own per
+  demo server, E2E run included. The workspace's database outlives
+  cycles — the tour-revenue demo showed an E2E leftover at "revenue 0.00,
+  0 concerts" until concert-tour-app declared `DATABASE_URL:
+  sqlite:///{tmp}/demo.db` (concert-tour-app#425). **The E2E server is
+  seeded too**, and the E2E prompt names the seed (`_seed_section`): once
+  each server had its own database, the unseeded E2E one was empty and ten
+  feature tests asked for tour 1 in vain — a false "broken" and regression
+  (ical-feed, 79e1658b2462; the swarm's PO diagnosed it itself). **A
+  download is drawn as text** (`_is_download`, `present_text`: "GET /path
+  → 200 · text/calendar" over the body) — `calendar.ics` made Chromium
+  start a download: no screenshot, no frame in the video.
   Without a declaration: `uvicorn src.main:app`, the guessed page walk, no
-  setup. TheSwarm declares `python -m theswarm serve --port {port} --db
+  setup, no seed. TheSwarm declares `python -m theswarm serve --port {port} --db
   {tmp}/demo.db` with `SWARM_AUTH_DISABLED=1`, `ready_seconds: 90`,
   `pages: ["/", "/r/jrechet/theswarm"]` (its own `/docs` 404s, #144), and
   `setup: ["bash scripts/build-css.sh"]` — the QA workspace is a plain clone
@@ -380,8 +513,33 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   demo server and read nothing of each other, so QA spends the longer of
   the two. `SWARM_QA_CAPTURE_CONCURRENCY` (default 2: two demo servers and
   two browsers in a 2 GB container) — set it to 1 on a heavy target, or
-  when a cycle's QA dies of memory. The per-story captures read
-  `story_preview_urls`, which nothing sets yet: they are no-ops.
+  when a cycle's QA dies of memory. **The video lane launches once the
+  screenshot lane's server has answered** (or that lane ended): two
+  servers booting side by side on a new database file race on the
+  target's first-boot DDL — concert-tour-app lost a lane to "table tours
+  already exists" when nothing had booted it before the captures, which
+  is the case whenever QA could not write its E2E file (#147). **A JSON
+  page is redrawn legible** before it is captured, in both walks
+  (`playwright_recorder.present_json`: "GET /path → 200" over the body,
+  pretty-printed, 20px) — the pages a cycle adds are often API routes,
+  and Chromium drew them as one 13px line on a white page. The request
+  line of every drawn answer (JSON page, download, demo call) is a band
+  in its status's atelier colour — moss, honey for a 4xx, rust for a 5xx
+  — in 30px, the call's caption in 34px: the theater's demo card plays
+  the video about 256 px wide, and a cream page of 20px text read there
+  as a blank frame (reschedule-concert, 2026-09-30). **The demo shows the feature**
+  (`agents/qa_feature_pages.py`, 2026-09-27): the GET routes the cycle's
+  PRs — **those it opened and those it merged** (`cycle_graph._delivered_prs`,
+  read from GitHub: cycle 4eaa5b767051 merged a PR the day before had
+  opened, and its demo showed the dashboard with every behaviour gate "not
+  run"; an already-on-main task's story says its issue title too) — add, or whose body a diff touches, with the router's prefix and
+  `{params}` filled with 1, join both walks after the declared pages; the
+  walk's screenshot of such a page (label `feature_pr_<n>_…`) is that
+  PR's story capture, and the stored report lists a story per delivered
+  task with it (`ReportGenerator.stories_of`) — before, every demo showed
+  the dashboard and the homepage whatever was built, and no report ever
+  carried a story or the video. The before/after machinery
+  (`story_preview_urls`) still waits for preview URLs nothing sets.
 - **The GitHub circuit breaker ignores 4xx** (`tools/github._is_client_error`):
   a 422 "cannot review your own pull request" is a fact about the request,
   not an outage. Four of them opened the breaker and blocked the memory save
@@ -446,13 +604,29 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   in a `.format` template is `{port}` afterwards, the `.replace` that
   followed matched nothing, and the model guessed 8000 — right on prod by
   luck, wrong anywhere the port moved.
-- **QA runs the E2E file it wrote, and repairs it once** when not one test
+- **QA rewrites its E2E file every cycle that built something** (it lived
+  in the workspace and was reused forever: written once, it tested the API
+  of that day and never a later feature), with the cycle's PRs and pages in
+  the prompt; a cycle with no PR reuses it. **QA runs the E2E file it
+  wrote, and repairs it once** when not one test
   sets up (every test an error, none passed or failed). The file is written
   blind; two cycles in five on 2026-09-25 reported `0 passed, 0 failed, 24
   errors` in under two seconds against a server answering 200. The repair
   call gets pytest's lines and the file, keeps every assertion, and the
   rerun is the verdict (`e2e_repaired_from` on the report card). A failed
-  *assertion* is a verdict on the target and is never repaired.
+  *assertion* is a verdict on the target and is never repaired. **The
+  prompt gives the `api_context` fixture verbatim** (`sync_playwright()`,
+  `p.request.new_context(base_url=BASE_URL)`): it only said "a fixture
+  creates the API context", each run invented one, and three of four local
+  cycles on 2026-09-29 needed the repair for "TypeError: 'module' object
+  is not callable" at setup. **A sign-off after the code is cut**
+  (`qa._without_trailing_prose`: only when the file does not parse, at an
+  unindented line, and a tail that defines nothing): price-stats' file
+  closed on "Dima here — that's the full E2E suite …" and did not collect —
+  the repair's diff showed that line was all it removed. **A repair keeps what it changed**
+  (`e2e_repair_diff`, a unified diff cut at 4 000 characters, logged and on
+  the E2E gate as `repair_diff`): sold-out-list's PO graded the day yellow
+  and asked what the repair had changed, with nothing to read.
 - **On SELF_REPO approved PRs merge at the end of the cycle** (#173), after
   QA and the report — never in the review phase, whose redeploy would end the
   cycle. A merge that fails stays open (#164 became unmergeable the moment its
@@ -473,7 +647,11 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   SDK, omitting is not stripping**: `ClaudeAgentOptions.env` is merged *over*
   the parent's `os.environ`, so the key must be overridden to `""`
   (`_sdk_child_env`) — measured 2026-09-23, omission answered
-  `apiKeySource: ANTHROPIC_API_KEY`, the empty override `none`.
+  `apiKeySource: ANTHROPIC_API_KEY`, the empty override `none`. The same
+  holds for the OAuth token the auth retry drops: omitted, it came back
+  through the merge, and the retry "without the token" answered the same
+  401 as the call it retried (measured 2026-09-29) — it is overridden to
+  `""` too, which sends the binary to the session on disk.
   `python -m theswarm validate` runs a one-turn probe and prints who answered
   (`identity=subscription` is the only acceptable value); it is skipped when
   `SWARM_CLAUDE_BACKEND=api`, the test suite's default.
@@ -619,7 +797,7 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   that do not depend on each other; a chained breakdown runs in order.
   `SWARM_DEV_PARALLELISM=1` in the compose file is the way back.
 - **V2 runtime M6 — the harness is an eval suite.** `evals/<target>.yaml`
-  lists the canonical features (seventeen on concert-tour-app since 2026-09-27: the first five were all built by 2026-09-25, eight of eleven by the 27th; `evals.exhausted` makes the harness warn when all are built — top the manifest up before that); `theswarm.evals`
+  lists the canonical features (forty-five on concert-tour-app since 2026-10-02: thirty-one built by 2026-09-30, the next seven measured one a day by prod from 2026-10-01; `evals.exhausted` makes the harness warn when all are built — top the manifest up before that). **A feature the target has that prod's history does not know carries `built_by`** (which cycle, when): the history the harness reads is prod's (`/api/evals/runs`), and the twenty-two features built by local harness runs and filmed Plays while prod was down or had no credentials (2026-09-28 → 30) would have been asked for again, one a day, for three weeks. `evals.built_elsewhere` counts them delivered in `next_feature` and `exhausted`; remove the line after a target reset. `theswarm.evals`
   picks the feature of the day (rotation by day of year), scores a run
   (`passed` keeps its pre-M6 meaning — completed, a PR, nothing unbuilt —
   and the PR's CI, the review decisions, cost, duration, `within_cost`,
@@ -659,6 +837,69 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   another lacks that run's line — which is also why two runs' appends
   conflicted in the publish step until `.gitattributes` gave the file
   `merge=union`.
+  **A story whose cycle never reached the breakdown is closed by the
+  harness** (`close_dead_story`, the cycle named in the comment): three
+  sat open on concert-tour-app after the subscription window ran out
+  (#351, #352, #378), with no sub-task and nothing built. The harness
+  matches `Parent: #N` exactly, like the server since #229.
+  **The harness judges the behaviour, not only the tickets** (#79 M5,
+  #85). `passed` keeps its meaning (a PR, nothing unbuilt) so the history
+  stays comparable; beside it, `behaviour` reads the two gates that ran
+  against the *running* target: QA's E2E tests *of the feature*
+  (`feature_e2e`: the `test_feature_*` tests of the file, whose prompt
+  names the cycle's PRs and pages — `qa_feature_pages.feature_e2e_gate`;
+  the rest of the file probes the whole API blind and is reported, not
+  judged: a stale `?status=planning` answered 422 failed a good
+  price-range build on 2026-09-28; **a failing feature test is triaged**
+  first — one call, `qa._triage_feature_failures`, `TestTriage`: every
+  failure the test's own mistake makes the gate `inconclusive` and the
+  verdict `unverified`, never `verified`; nothing is rewritten to pass;
+  every *other* failing test of the file gets the same triage
+  (`qa._triage_other_failures`, assertions only): all of them the tests'
+  own mistake makes the whole-file `e2e_tests` gate `inconclusive` — a
+  warning with why, not red (a lower-cased header, a nested `venue` the
+  schema never had reddened it for days and the PO reported regressions) —
+  past-concerts-toggle's tests counted `class="concert-card` as a
+  substring and found 24 cards for 6; the E2E prompt now asks for data
+  through the JSON API and whole-element HTML parsing, never a substring
+  count, and says Playwright lower-cases header names — `'X-Total-Count' in
+  response.headers` failed for days against an app that sets it, and the
+  PO reported a pagination regression that never existed), and the new
+  `feature_pages` gate (`qa_feature_pages.feature_pages_gate`: the GET
+  routes the PRs added, walked by the screenshot pass, their answers in
+  `feature_page_statuses`). A 5xx is `fail`; a 4xx proves nothing (path
+  parameters are filled with "1" and that row may not exist); no 2xx at
+  all is `not_run`. **A feature that is not GET is shown by its own
+  requests** (`feature_calls`, `agents/qa_feature_calls.py`): sell-tickets
+  (68fd55bf81e5) added one POST route, and its demo was four seconds of
+  the API root. When a PR touches a route, one Claude
+  call (GET ones included since artist-search: `/tours/search` needs
+  `?artist=`, the walk got a 422 and the demo showed the dashboard — the
+  writer adds calls only where the walk cannot show the feature) (read profile, the workspace, the seed named) writes at most six
+  calls against the seeded data — before, the feature's request with a
+  body built from the schema, after — `run_captures` writes them once,
+  and each lane plays them on its own demo server and database: each
+  exchange a screenshot (`screenshot_exchange`, the feature's own call
+  labelled as its PR's story) and 2.5 s of the video (`present_exchange`:
+  "POST /path → 201", the caption, what was sent, the answer — "(empty)"
+  for a 204). A call's
+  path must be a path on that server ("/…", never a host). **A route is
+  read over the whole router file** (`qa_feature_pages.routes_in`): its
+  path may sit on the line after `@api_router.delete(`, or be `path=`.
+  lineup-remove's DELETE (concert-tour-app#514, cycle de5e914a8d5c) was
+  no route at all: its lines went to the GET lineup route above it, the
+  demo walked the lineup untouched, `feature_pages` passed on a page the
+  feature never added and "behaviour verified" rested on it. Blank lines
+  a diff adds touch no route (git puts the two between functions above a
+  new route as often as below it). The gate reads
+  only the calls of the feature's routes: 5xx `fail`, 2xx `pass`, a 4xx
+  proves nothing (the body was written from the code), no script
+  `not_run` with the reason. Any behaviour gate failing is `broken` — the
+  harness prints "FAIL — built, but the running app says otherwise",
+  exits non-zero, and a broken build after one that was not is a
+  regression. One passing and none failing is `verified`; anything else
+  `unverified`, which does not fail a run. The repo page counts both and
+  draws a broken build rust-light.
 - **V2 runtime M8 — the GitHub-native doors.** The webhook route
   (`/webhooks/github`, outside the auth wall) is installed **only** when
   `SWARM_WEBHOOK_SECRET` is set (server.py; the repository webhook on
@@ -675,7 +916,26 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   TechLead's verdict is a commit status** `theswarm/review` on the PR's
   head (success / failure; a PAT can set statuses where a Check needs an
   App), best effort. `/r/{owner}/{name}/memory` renders
-  `AGENT_MEMORY.jsonl` by category, linked from the repo page.
+  `AGENT_MEMORY.jsonl` by category, linked from the repo page. **Both
+  doors answer 202 first and work after** (`webhooks._after_answering`,
+  a background task; `drain_background` for tests): GitHub gives a
+  delivery ten seconds, and the first live label (hook 686683585 on
+  concert-tour-app, 2026-09-27 19:50) started its cycle in a second and
+  then took fifteen taking the label off with a fresh client — GitHub
+  recorded the delivery as failed although the cycle ran. The door went
+  live that day: secret set, hook created, smoke test 200/401, label →
+  cycle 01475dd2c4d5 on #329. **The pre-M8 rule is off** (a cycle per
+  push to main and per opened issue, `SWARM_WEBHOOK_AUTO_CYCLE=1` to
+  want it): the first morning with the webhook live, the harness's story
+  and the TechLead's three sub-issues each started an untargeted cycle,
+  four queued behind the one that mattered (2026-09-28 07:31).
+  **The demo is announced on the issue that asked for it**
+  (`application/services/demo_announcer.py`, on `DemoReady`, which now
+  carries the cycle's issue): "🎬 The demo is ready — watch it" with the
+  player's public link (`EXTERNAL_URL`; without it nothing is posted — a
+  relative link is useless on GitHub), what was built and the two
+  behaviour gates. Once per cycle (`<!-- swarm:demo <cycle> -->`), only on
+  targeted cycles, a failure logged and nothing else lost.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

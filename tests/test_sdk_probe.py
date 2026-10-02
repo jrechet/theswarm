@@ -100,10 +100,21 @@ def test_omission_alone_would_leak_through_the_merge(monkeypatch):
     assert child["ANTHROPIC_API_KEY"] == "sk-ant-api03-should-not-leak"
 
 
-def test_sdk_child_env_drops_the_oauth_override_without_shadowing_it(monkeypatch):
+def test_sdk_child_env_really_drops_the_oauth_override(monkeypatch):
+    """Omitted, the token came back through the merge: measured 2026-09-29,
+    the retry "without the token" answered the same "401 OAuth access token
+    is invalid" as the call it retried. Overridden to empty, the binary goes
+    to the session on disk (it answered from there: "OAuth session expired"
+    — a different credential) — an empty override does not shadow it."""
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-stale")
-    env = _sdk_child_env(drop_oauth_env=True)
-    assert "CLAUDE_CODE_OAUTH_TOKEN" not in env
+    child = _as_the_sdk_transport_merges(_sdk_child_env(drop_oauth_env=True))
+    assert child["CLAUDE_CODE_OAUTH_TOKEN"] == ""
+
+
+def test_sdk_child_env_keeps_the_token_when_not_dropping(monkeypatch):
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-fine")
+    child = _as_the_sdk_transport_merges(_sdk_child_env())
+    assert child["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-ant-oat01-fine"
 
 
 # ── probe_sdk: one turn, and it says who answered ────────────────────

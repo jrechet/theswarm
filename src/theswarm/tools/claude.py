@@ -51,14 +51,20 @@ _FATAL_BAD_REQUEST_MARKERS = ("credit balance", "billing", "plans & billing")
 # the stated reset. Prod cycle 980dc1e098bc burned its last two Dev
 # iterations and the whole QA phase against it in 30 seconds, then reported
 # a generic "CLI failed twice" that said nothing about quota.
-_QUOTA_MARKERS = ("session limit", "usage limit", "quota exceeded")
+# The wording follows the window: "session limit" (5 h), "weekly limit"
+# (7 days: harness cycle 62f353165e62 on 2026-09-27 died on it in 51 s and,
+# unrecognised, was scored a failed regression of the swarm instead of
+# `interrupted`), and whatever the next plan calls its window — hence the
+# pattern beside the fixed markers.
+_QUOTA_MARKERS = ("session limit", "weekly limit", "usage limit", "quota exceeded")
+_QUOTA_PATTERN = re.compile(r"hit your [\w-]+ limit")
 
 
 def _quota_exhausted(error: Exception) -> str | None:
     """Return the CLI's own wording (which carries the reset time), else None."""
     message = str(error)
     lowered = message.lower()
-    if any(marker in lowered for marker in _QUOTA_MARKERS):
+    if any(marker in lowered for marker in _QUOTA_MARKERS) or _QUOTA_PATTERN.search(lowered):
         return message
     return None
 
@@ -149,6 +155,32 @@ def _is_auth_failure(error: BaseException) -> bool:
     """True when a CLI failure looks like bad credentials rather than a hiccup."""
     text = str(error).lower()
     return any(marker in text for marker in _AUTH_FAILURE_MARKERS)
+
+
+# Claude Code's own words for credentials nothing will fix but a person:
+# narrower than `_AUTH_FAILURE_MARKERS`, which decides a retry — "401" in a
+# tool's output must not end a cycle.
+_EXPIRED_CREDENTIAL_MARKERS = (
+    "oauth session expired", "failed to authenticate", "not logged in",
+    "please run /login", "invalid api key", "oauth access token has expired",
+)
+RENEW_HINT = ("renew them: `claude setup-token` → CLAUDE_CODE_OAUTH_TOKEN, or log in "
+              "again where ~/.claude is mounted")
+
+
+def _credentials_expired(error: BaseException) -> bool:
+    """True when the failure is the credentials themselves (`auth_wall`)."""
+    text = str(error).lower()
+    return any(marker in text for marker in _EXPIRED_CREDENTIAL_MARKERS)
+
+
+def _credential_wall(error: BaseException) -> "ClaudeFatalError":
+    """Raise the auth wall and the fatal error that ends the cycle."""
+    from theswarm.tools import auth_wall
+
+    detail = str(error).removeprefix("SDK result success: ").removeprefix("SDK result error: ")
+    auth_wall.raise_wall(detail)
+    return ClaudeFatalError(f"Claude credentials expired: {detail} — {RENEW_HINT}")
 
 
 class _CLIUnavailable(Exception):
@@ -324,12 +356,15 @@ def _sdk_child_env(*, drop_oauth_env: bool = False, workdir: str | None = None) 
     remove it there: measured on 2026-09-23, an omitted ANTHROPIC_API_KEY
     came back as ``apiKeySource: ANTHROPIC_API_KEY``, an empty override as
     ``none`` (the subscription). So the keys I1 forbids are overridden to
-    empty, explicitly. The OAuth override is still *dropped* (its absence
-    is what lets the session on disk win); an empty override there would
-    shadow that session.
+    empty, explicitly. So is the OAuth override when it is dropped: omitted,
+    it came back through the merge — measured 2026-09-29, the retry "without
+    the token" answered the same 401 as the call it retried — while an empty
+    one sends the binary to the session on disk (it answered from there).
     """
     env = _child_env(drop_oauth_env=drop_oauth_env, workdir=workdir)
     env["ANTHROPIC_API_KEY"] = ""
+    if drop_oauth_env:
+        env["CLAUDE_CODE_OAUTH_TOKEN"] = ""
     return env
 
 
@@ -1055,8 +1090,14 @@ class ClaudeCLI:
         call: the caller skips the step (invariant I6), never the CLI or
         the API — forced means forced.
         """
-        from theswarm.tools import quota_wall
+        from theswarm.tools import auth_wall, quota_wall
 
+        rejected_until = auth_wall.wall_until()
+        if rejected_until is not None:
+            raise ClaudeFatalError(
+                f"Claude credentials expired — no call made before "
+                f"{rejected_until.isoformat(timespec='minutes')}: {auth_wall.reason()} — {RENEW_HINT}"
+            )
         until = quota_wall.wall_until()
         if until is not None:
             # A wall with a clock on it, raised by an earlier call: nothing
@@ -1081,15 +1122,21 @@ class ClaudeCLI:
         if isinstance(first, _SDKTimeout):
             grown = self._retry_timeout(timeout, first, workdir=workdir)
             resume = first.session_id or None
+            # No session at all, with the env token set: the hang #76 saw a
+            # stale token cause (the CLI then, 2026-09-13). The mounted
+            # session answers the retry.
+            drop_token = resume is None and bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
             log.warning(
-                "Claude SDK timed out — %s with %ds",
+                "Claude SDK timed out — %s with %ds%s",
                 f"resuming session {resume}" if resume else "re-prompting", grown,
+                " and without the CLAUDE_CODE_OAUTH_TOKEN override" if drop_token else "",
             )
             try:
                 return await self._run_sdk(
                     SDK_CONTINUE_PROMPT if resume else prompt,
                     workdir=workdir, timeout=grown, permission_mode=permission_mode,
                     resume=resume, output_schema=output_schema,
+                    **({"drop_oauth_env": True} if drop_token else {}),
                 )
             except _CLIUnavailable as again:
                 quota = _quota_exhausted(again)
@@ -1114,8 +1161,13 @@ class ClaudeCLI:
                     "Claude SDK also failed without the env token (%s) — keeping the "
                     "original failure", without_token,
                 )
+                if _credentials_expired(without_token):
+                    raise _credential_wall(without_token) from without_token
                 raise RuntimeError(f"Claude SDK failed: {first}") from without_token
 
+        if _credentials_expired(first):
+            # Nothing to fall back to: the session itself is dead.
+            raise _credential_wall(first) from first
         raise RuntimeError(f"Claude SDK failed: {first}") from first
 
     def _retry_timeout(

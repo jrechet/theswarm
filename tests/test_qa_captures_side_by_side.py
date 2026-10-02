@@ -23,6 +23,10 @@ def _fakes(monkeypatch, log: list[str], *, meet: bool, fail: str = ""):
 
     async def screenshots(state):
         log.append("shots:start")
+        # Its server answered: the real walk signals it (the video lane
+        # launches after the first boot, test_capture_lanes_first_boot.py).
+        if state.get("demo_server_ready") is not None:
+            state["demo_server_ready"].set()
         if meet:
             await asyncio.wait_for(video_started.wait(), timeout=2)
         if fail == "shots":

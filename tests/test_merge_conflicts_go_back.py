@@ -165,6 +165,22 @@ async def test_the_note_says_it_is_a_conflict():
     assert techlead.CONFLICT_MARKER not in note["text"]
 
 
+async def test_a_conflict_is_not_headed_as_changes_requested():
+    """concert-notes (ec299e36a508): #545 was approved and conflicted with
+    #546 — its task read "**Changes requested** on PR #545", which no review
+    had asked for."""
+    github = _GitHub()
+    await techlead._send_back_to_dev(
+        github, {"number": 545, "head": "feat/issue-542-x", "title": "[#542] Notes"},
+        techlead.CONFLICT_SUMMARY, [], conflict=True,
+    )
+
+    (note,) = github.comments[542]
+    assert "**Merge conflict** on PR #545 (branch `feat/issue-542-x`)" in note
+    assert "Changes requested" not in note
+    assert (await dev._changes_requested(github, 542))["pr_number"] == 545
+
+
 def _dev_state(repos, branch, claude):
     github = _GitHub()
     github.comments[11] = [techlead.CONFLICT_MARKER + "\n" + techlead._changes_comment(
@@ -207,3 +223,39 @@ async def test_real_conflicts_go_to_claude_by_name(repos, monkeypatch):
     assert "<<<<<<<" not in Path(worktree, "app.py").read_text()
     # The resolution concluded the merge: main is an ancestor of the branch.
     subprocess.run(["git", "merge-base", "--is-ancestor", "origin/main", "HEAD"], cwd=worktree, check=True)
+
+
+# ── A conflict is not a review round ─────────────────────────────────
+# CHANGES_REQUESTED_CAP parks a task for a person after two rounds of
+# changes. A conflict note carried CHANGES_MARKER too, so two siblings
+# merging first (concert-notes built two tasks on one schema side by side)
+# would have parked an approved task nobody asked to change.
+
+
+def _note(pr: int, *, conflict: bool) -> str:
+    body = techlead._changes_comment({"number": pr, "head": "feat/issue-542-x"},
+                                     techlead.CONFLICT_SUMMARY if conflict else "Fix it", [],
+                                     conflict=conflict)
+    return (techlead.CONFLICT_MARKER + "\n" + body) if conflict else body
+
+
+async def test_earlier_conflicts_do_not_count_toward_the_cap():
+    github = _GitHub()
+    github.comments[542] = [_note(545, conflict=True), _note(545, conflict=True)]
+
+    sent = await techlead._send_back_to_dev(
+        github, {"number": 545, "head": "feat/issue-542-x", "title": "[#542] Notes"}, "Fix it", [])
+
+    assert sent is True and "status:ready" in github.labels[542]
+
+
+async def test_an_approved_pr_that_conflicts_goes_back_whatever_the_rounds_before():
+    github = _GitHub()
+    github.comments[542] = [_note(545, conflict=False), _note(545, conflict=False)]
+
+    sent = await techlead._send_back_to_dev(
+        github, {"number": 545, "head": "feat/issue-542-x", "title": "[#542] Notes"},
+        techlead.CONFLICT_SUMMARY, [], conflict=True)
+
+    assert sent is True and "status:ready" in github.labels[542]
+    assert "Merge conflict" in github.comments[542][-1]

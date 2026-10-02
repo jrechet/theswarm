@@ -19,11 +19,18 @@ AGENTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "src" / "theswarm" / 
 # Keys returned by plain helper functions rather than graph nodes. These are
 # collected into a declared key (e.g. reviews) instead of flowing through the
 # graph state, so the schema does not need them. `sent_back` rides inside a
-# review dict; `text`/`branch`/`conflict` are the pieces of the
+# review dict, and so does `earlier` (a verdict read off the head's
+# `theswarm/review` status, not a new review); `text`/`branch`/`conflict` are the pieces of the
 # changes-requested note `_changes_requested` hands to the prompt builder
 # (#121; `conflict` since approved PRs that main moved past go back too).
+# `status`/`pages`/`reason` are the feature-pages gate and `passed`/`failed`
+# the feature-E2E gate (`qa_feature_pages`), both inside `demo_report`.
+# `routes`/`calls` are the demo script (`qa_feature_calls`), carried whole
+# in the declared `feature_calls`, and the `feature_calls` gate's list.
+# `error` marks a demo script the writer could not produce (vs. none needed).
 HELPER_ONLY_KEYS = {
-    "decision", "summary", "issues", "pr_number", "sent_back", "text", "conflict",
+    "decision", "summary", "issues", "pr_number", "sent_back", "earlier", "text", "conflict",
+    "status", "pages", "reason", "passed", "failed", "routes", "calls", "error",
 }
 
 

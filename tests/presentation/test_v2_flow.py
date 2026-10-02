@@ -141,7 +141,9 @@ async def test_repo_page_groups_issues_by_status(web):
         r = await client.get("/r/jrechet/concert-tour-app")
 
     text = r.text
-    assert text.index("Building") < text.index("Payment flow")
+    # Labelled in progress, and no cycle is running: stalled, not building
+    # (test_v2_board_truth.py).
+    assert text.index("Stalled") < text.index("Payment flow")
     assert text.index("Ready") < text.index("Ship the seating map")
     assert text.index("Backlog") < text.index("Dark mode")
     assert text.count("▶") == 3  # every non-building issue gets Play
@@ -173,12 +175,60 @@ async def test_composer_creates_an_issue_from_free_text(web):
         )
 
     assert r.status_code == 303
-    assert r.headers["location"] == "/swarm/r/jrechet/concert-tour-app"
+    assert r.headers["location"] == "/swarm/r/jrechet/concert-tour-app?new=12"
     create.assert_awaited_once_with(
         title="Add a waiting list",
         body="Fans join when a show sells out.",
         labels=["status:backlog"],
     )
+
+
+async def test_the_feature_just_written_is_on_the_board_while_github_lags(web):
+    """GitHub's issue list trails a creation by seconds: the page reads the
+    new issue by number (consistent) and puts it on the board anyway."""
+    client, _ = web
+    fresh = {"number": 386, "title": "Show how full a concert is",
+             "labels": ["status:backlog"], "state": "open"}
+    with patch("theswarm.tools.github.GitHubClient") as klass:
+        klass.return_value.get_issues = AsyncMock(return_value=[
+            {"number": 385, "title": "Filter tours by status",
+             "labels": ["status:backlog"], "state": "open"},
+        ])
+        get_issue = AsyncMock(return_value=fresh)
+        klass.return_value.get_issue = get_issue
+        r = await client.get("/r/jrechet/concert-tour-app?new=386")
+
+    assert r.status_code == 200
+    get_issue.assert_awaited_once_with(386)
+    assert "Show how full a concert is" in r.text
+    assert 'data-testid="fresh-issue"' in r.text
+    assert "/issues/386/play" in r.text
+
+
+async def test_a_listed_new_issue_is_not_fetched_twice(web):
+    client, _ = web
+    listed = {"number": 386, "title": "Show how full a concert is",
+              "labels": ["status:backlog"], "state": "open"}
+    with patch("theswarm.tools.github.GitHubClient") as klass:
+        klass.return_value.get_issues = AsyncMock(return_value=[listed])
+        get_issue = AsyncMock()
+        klass.return_value.get_issue = get_issue
+        r = await client.get("/r/jrechet/concert-tour-app?new=386")
+
+    get_issue.assert_not_awaited()
+    assert r.text.count("/issues/386/play") == 1
+    assert 'data-testid="fresh-issue"' in r.text
+
+
+async def test_a_closed_or_missing_new_issue_is_left_off_the_board(web):
+    client, _ = web
+    with patch("theswarm.tools.github.GitHubClient") as klass:
+        klass.return_value.get_issues = AsyncMock(return_value=[])
+        klass.return_value.get_issue = AsyncMock(return_value=None)
+        r = await client.get("/r/jrechet/concert-tour-app?new=999")
+
+    assert r.status_code == 200
+    assert "/issues/999/play" not in r.text
 
 
 async def test_composer_truncates_a_runaway_title(web):

@@ -174,7 +174,9 @@ def test_run_one_scores_and_appends_a_full_record(tmp_path, monkeypatch):
 
     passed, record = cycle_e2e.run_one("o/r", "Do it", feature, 60, history)
 
-    assert passed is True
+    # QA's whole-API E2E run failed, but nothing about the feature was
+    # judged (no feature_e2e, no feature_pages): not a verdict on the build.
+    assert passed is True and record["behaviour"] == "unverified"
     assert record["prs"] == [77] and record["feature"] == "f1"
     # GitHub's own answer, not the cycle's report: #77 reads MERGED.
     assert record["merged"] == [77] and record["unmerged"] == []
@@ -409,3 +411,15 @@ def test_a_dispatch_by_id_runs_the_manifest_text(tmp_path, monkeypatch):
     (text, feature_id), = ran
     assert feature_id == "sold-out-badge"
     assert text.startswith('Show a "sold out" badge')
+
+
+def test_only_the_swarm_s_pull_requests_are_the_cycle_s(monkeypatch):
+    """venues-list in prod (541a0a65e3ec, 2026-10-01): the owner opened
+    concert-tour-app#554 (a CI change on `chore/…`) while the cycle ran; the
+    harness counted it as the cycle's and scored the files off-target."""
+    listed = [{"number": 551, "headRefName": "feat/issue-548-add-venue-schema"},
+              {"number": 554, "headRefName": "chore/forge-hybrid-ci"},
+              {"number": 433, "headRefName": "docs/readme-note"}]
+    monkeypatch.setattr(cycle_e2e, "_gh", lambda *args: json.dumps(listed))
+
+    assert cycle_e2e.prs_before("jrechet/concert-tour-app") == {551}

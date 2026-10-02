@@ -22,6 +22,7 @@ class DemoReady(DomainEvent):
     play_url: str = ""
     title: str = ""
     thumbnail_url: str = ""
+    issue_number: int | None = None  # the pinned issue: the demo is announced there
 
 
 @dataclass(frozen=True)

@@ -97,6 +97,9 @@ class AgentState(TypedDict, total=False):
     e2e_counts: dict
     e2e_failure_excerpt: str  # the lines of a failed E2E run that explain it
     e2e_repaired_from: str  # the setup errors QA rewrote its own E2E file for
+    e2e_repair_diff: str  # what that repair changed, a unified diff (cut)
+    e2e_triage: dict  # the whole file's other failing tests, triaged: status, reason
+    answered_review: int  # the PR whose review the Dev answered without a change (dev → TechLead again)
     security_scan: dict
     issue_stats: dict
     demo_report: dict | None
@@ -106,6 +109,13 @@ class AgentState(TypedDict, total=False):
     # server to talk to — "" when readiness succeeded. Set by whichever
     # launch node hit it first; later nodes that don't fail leave it as-is.
     demo_launch_error: str
+    prs: list[dict]  # the cycle's PRs (number, head_sha, title, url): QA reads the feature's pages off them
+    feature_pages: list  # (path, label) the feature lives on, from its PRs — they join the demo walks
+    foreign_prs: list[int]  # approved PRs the swarm did not open: reviewed, left for their author
+    e2e_feature: dict  # the E2E tests of the feature delivered (`test_feature_*`): status, counts, reason
+    feature_page_statuses: dict  # feature page path → what it answered on the running target (None: unreachable)
+    feature_calls: dict  # routes / calls / reason: the demo script of a feature's non-GET routes (`qa_feature_calls`)
+    feature_call_results: list  # each demo call as played on the screenshot lane's server: status, body
     story_preview_urls: dict  # F2 — {pr_number: {"before": url_or_none, "after": url}}
     story_artifacts: dict  # F2 — {pr_number: {"before": [...], "after": [...]}}
     story_videos: dict  # F3 — {pr_number: (Artifact, bytes)}

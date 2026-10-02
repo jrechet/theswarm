@@ -262,6 +262,16 @@ class GitHubClient:
         )
         return [_pr_to_dict(p) for p in prs]
 
+    async def get_open_pr_briefs(self) -> list[dict]:
+        """Open PRs as number/title/body only: one listing call. The board
+        reads which issues have one; `get_open_prs` reads `mergeable`, a
+        request per PR on a page render."""
+        await self._fresh()
+        prs: list[PullRequest] = await self._run(
+            lambda: list(self._repo.get_pulls(state="open"))
+        )
+        return [{"number": p.number, "title": p.title, "body": p.body or ""} for p in prs]
+
     async def get_pr(self, pr_number: int) -> dict | None:
         """One pull request as the dict `get_open_prs` returns, None if absent."""
         await self._fresh()
@@ -288,6 +298,19 @@ class GitHubClient:
         if target_url:
             kwargs["target_url"] = target_url
         await self._run(commit.create_status, **kwargs)
+
+    async def get_review_status(
+        self, sha: str, *, context: str = "theswarm/review",
+    ) -> dict | None:
+        """The latest `context` status on `sha` as ``{"state", "description"}``,
+        None when the head carries none — the swarm's verdict on that head."""
+        await self._fresh()
+        commit = await self._run(self._repo.get_commit, sha)
+        combined = await self._run(commit.get_combined_status)
+        for s in combined.statuses:
+            if s.context == context:
+                return {"state": s.state, "description": s.description or ""}
+        return None
 
     async def get_ci_checks(self, ref: str) -> list[dict]:
         """Every CI signal on `ref`, flattened: commit statuses, then check runs.
@@ -462,6 +485,8 @@ def _issue_to_dict(issue: Issue) -> dict:
         "body": issue.body or "",
         "labels": [l.name for l in issue.labels],
         "state": issue.state,
+        # completed / not_planned once closed: a dropped sub-task is not a built one
+        "state_reason": getattr(issue, "state_reason", None),
         "assignees": [a.login for a in issue.assignees],
         "url": issue.html_url,
     }

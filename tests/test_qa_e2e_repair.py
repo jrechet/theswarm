@@ -105,7 +105,8 @@ async def test_failed_assertions_are_the_target_s_verdict_and_are_not_repaired(t
     out = await _run(tmp_path, claude)
 
     assert out["e2e_passed"] is False and out["e2e_counts"]["failed"] == 2
-    assert claude.run.await_count == 0
+    # No repair (the triage of the failure may ask who is wrong; it rewrites nothing)
+    assert not any("not one test got past setup" in call.args[0] for call in claude.run.await_args_list)
     assert _file(tmp_path) == BLIND_FILE
     assert out.get("e2e_repaired_from", "") == ""
 

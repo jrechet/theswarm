@@ -136,3 +136,20 @@ async def test_a_run_with_a_red_qa_gate_says_so(web, tmp_path, monkeypatch):
 
     assert "QA red on 1" in html
     assert "QA e2e_tests fail" in html
+
+
+async def test_the_panel_says_which_builds_the_running_app_confirmed(web, tmp_path, monkeypatch):
+    """#85: a build is judged on the running target too — verified, or
+    built but broken, drawn apart from a clean build."""
+    _write(tmp_path, monkeypatch, [
+        {"repo": REPO, "passed": True, "outcome": "built", "feature": "a", "behaviour": "verified"},
+        {"repo": REPO, "passed": True, "outcome": "built", "feature": "b", "behaviour": "broken",
+         "qa": {"e2e_tests": "pass", "feature_pages": "fail"}},
+    ])
+
+    html = (await _page(web)).text
+
+    assert 'data-testid="evals-verified"' in html and "1 verified on the running app" in html
+    assert 'data-testid="evals-broken"' in html and "1 built but broken" in html
+    assert "b — built, but broken on the running app" in html
+    assert "feature_pages fail" in html

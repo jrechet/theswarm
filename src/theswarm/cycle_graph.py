@@ -69,6 +69,10 @@ class CycleState(TypedDict, total=False):
     reviewed_prs: list[str]
     prs: list[dict]
     reviews: list[dict]
+    # Reviews that did not happen: {"pr", "iteration", "why"} — a review
+    # call that failed (the PR is read next pass) or a review phase that
+    # timed out (pr None). Counted, not only logged (#147).
+    review_skips: list[dict]
     merged_prs: list[int]
     held_prs: list[int]
     records: list[dict]  # {"agent", "tokens", "cost"} per phase, in order
@@ -287,6 +291,7 @@ async def _dev_iter_parallel(
     satisfied = list(state.get("already_satisfied", []))
     without = list(state.get("attempted_without_pr", []))
     worked = failed = repeated = opened = 0
+    answered: list[int] = []
     for result in results:
         if isinstance(result, ClaudeFatalError):
             await rt.progress("Dev", f"Fatal Claude error — aborting cycle: {str(result)[:160]}")
@@ -306,6 +311,13 @@ async def _dev_iter_parallel(
             prs.append(pr)
             await rt.progress("Dev", f"PR #{pr['number']} opened: {pr['url']}")
             continue
+        if result.get("answered_review"):
+            worked += 1
+            opened += 1  # the PR goes back to the TechLead: the loop moved
+            answered.append(result["answered_review"])
+            await rt.progress("Dev", f"Task #{(task or {}).get('number')}: answered the review on PR "
+                                     f"#{result['answered_review']} without a change — back to the TechLead")
+            continue
         if task is None:
             continue
         worked += 1
@@ -323,6 +335,11 @@ async def _dev_iter_parallel(
     updates.update(_accounted(state, f"dev_iter{iteration}", tokens, cost))
     updates.update(_within_budget(rt, state, Role.DEV, tokens))
     updates.update({"prs": prs, "already_satisfied": satisfied, "attempted_without_pr": without})
+    if answered:
+        reviewed = list(state.get("reviewed_prs", []))
+        for number in answered:
+            reviewed = _without_review_of(reviewed, number)
+        updates["reviewed_prs"] = reviewed
     if worked == 0 and failed == 0:
         await rt.progress("Dev", "No more ready tasks — ending dev loop")
         return {**updates, "dev_outcome": "end"}
@@ -332,6 +349,11 @@ async def _dev_iter_parallel(
         await rt.progress("Dev", "Every task produced no changes twice — ending dev loop")
         return {**updates, "dev_outcome": "end"}
     return {**updates, "dev_outcome": "review"}
+
+
+def _without_review_of(reviewed: list[str], pr_number: int) -> list[str]:
+    """`reviewed_prs` less the keys of one PR (`techlead._pr_key`)."""
+    return [key for key in reviewed if key != str(pr_number) and not key.startswith(f"{pr_number}@")]
 
 
 async def dev_iter(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
@@ -409,6 +431,15 @@ async def dev_iter(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
         await rt.progress("Dev", f"PR #{pr['number']} opened: {pr['url']}")
         return {**updates, "dev_outcome": "review"}
 
+    answered = dev_state.get("answered_review")
+    if answered:
+        # Reviewed at this head already — the answer earns it another look.
+        updates["reviewed_prs"] = _without_review_of(state.get("reviewed_prs", []), answered)
+        number = (dev_state.get("task") or {}).get("number")
+        await rt.progress("Dev", f"Task #{number}: answered the review on PR #{answered} "
+                                 "without a change — back to the TechLead")
+        return {**updates, "dev_outcome": "review"}
+
     task = dev_state.get("task")
     if task is None:
         await rt.progress("Dev", "No more ready tasks — ending dev loop")
@@ -449,7 +480,13 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
         )
     except PhaseTimeout:
         await rt.progress("TechLead", "Review timed out — leaving PRs for next cycle")
-        return {"reviewed_prs": reviewed}
+        return {
+            "reviewed_prs": reviewed,
+            "review_skips": [
+                *state.get("review_skips", []),
+                {"pr": None, "iteration": iteration, "why": "review phase timed out"},
+            ],
+        }
 
     tokens, cost = tl_state.get("tokens_used", 0), tl_state.get("cost_usd", 0.0)
     updates = {
@@ -463,7 +500,8 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
     merged = list(tl_state.get("merged_prs", []))
     updates["merged_prs"] = [*state.get("merged_prs", []), *merged]
     for r in reviews:
-        await rt.progress("TechLead", f"PR #{r['pr_number']}: {r['decision']}")
+        since = " — unchanged since it was reviewed" if r.get("earlier") else ""
+        await rt.progress("TechLead", f"PR #{r['pr_number']}: {r['decision']}{since}")
     for r in reviews:
         if r.get("sent_back"):
             await rt.progress(
@@ -473,16 +511,26 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
         await rt.progress(
             "TechLead", f"PR #{number} conflicts with main — back to the Dev to merge it",
         )
+    # What happened now, not the story's history: a sibling may have been
+    # found already on main (the theater's card is this line).
     for number in tl_state.get("closed_stories", []):
-        await rt.progress("TechLead", f"Story #{number} done — every sub-task merged")
+        await rt.progress("TechLead", f"Story #{number} done — its last sub-task merged")
     for number in tl_state.get("ci_red_prs", []):
         await rt.progress("TechLead", f"PR #{number}: approved, CI red — back to the Dev")
     for number in tl_state.get("ci_pending_prs", []):
         await rt.progress("TechLead", f"PR #{number}: approved, CI still running — left open")
-    for number in tl_state.get("skipped_prs", []):
+    for number in tl_state.get("foreign_prs", []):
+        await rt.progress("TechLead", f"PR #{number}: approved, not the swarm's — left for its author")
+    skipped = list(tl_state.get("skipped_prs", []))
+    for number in skipped:
         await rt.progress(
             "TechLead", f"Review of PR #{number} unavailable — left for the next pass",
         )
+    if skipped:
+        updates["review_skips"] = [
+            *state.get("review_skips", []),
+            *({"pr": n, "iteration": iteration, "why": "review call failed"} for n in skipped),
+        ]
     if merged:
         await rt.progress("TechLead", f"Merged: {merged}")
     held = list(tl_state.get("held_prs", []))
@@ -526,7 +574,7 @@ async def _close_stories_already_built(rt: CycleRuntime, state: CycleState) -> N
     from theswarm.agents.techlead import close_finished_stories
 
     for number in await close_finished_stories(github, satisfied):
-        await rt.progress("TechLead", f"Story #{number} done — every sub-task already on main")
+        await rt.progress("TechLead", f"Story #{number} done — its last sub-task was already on main")
 
 
 async def dev_loop_end(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
@@ -561,14 +609,63 @@ async def dev_loop_end(state: CycleState, runtime: Runtime[CycleRuntime]) -> dic
     return {"dev_claims_open": False, "requeued": requeued}
 
 
+async def _delivered_prs(rt: CycleRuntime, state: CycleState) -> list[dict]:
+    """The PRs the cycle opened, and those it merged that an earlier cycle
+    opened — read from GitHub, since the state keeps only their numbers.
+
+    Cycle 4eaa5b767051 merged PR #486 (opened the day before, its review
+    answered by the Dev): the demo walked nothing of the feature and the
+    report told one story, "#484 — already on main".
+    """
+    prs = [p for p in state.get("prs", []) if isinstance(p, dict)]
+    seen = {p.get("number") for p in prs}
+    github = rt.base_state.get("github")
+    for number in state.get("merged_prs", []):
+        if number in seen or github is None or not hasattr(github, "get_pr"):
+            continue
+        seen.add(number)
+        try:
+            pr = await github.get_pr(number)
+        except Exception as exc:  # noqa: BLE001 — a story less, never a lost QA
+            log.warning("Could not read merged PR #%s for the demo: %s", number, exc)
+            continue
+        if isinstance(pr, dict):
+            prs.append(pr)
+    return prs
+
+
+async def _satisfied_titles(rt: CycleRuntime, state: CycleState) -> dict[int, str]:
+    """Titles of the tasks the Dev found already on main — the state keeps
+    their numbers; the PO read "#484" and nothing else."""
+    github = rt.base_state.get("github")
+    titles: dict[int, str] = {}
+    for number in sorted(set(state.get("already_satisfied", []))):
+        if github is None or not hasattr(github, "get_issue"):
+            break
+        try:
+            issue = await github.get_issue(number)
+        except Exception:  # noqa: BLE001
+            continue
+        if isinstance(issue, dict) and issue.get("title"):
+            titles[number] = issue["title"]
+    return titles
+
+
 async def qa(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     rt = runtime.context
     await rt.enter("qa")
     await rt.progress("QA", "Running tests + security scan…")
+    delivered = await _delivered_prs(rt, state)
     try:
         qa_state = await _run_phase(
             rt, "qa", "QA",
-            _invoke_agent(_cycle().build_qa_graph(), {**rt.base_state, "phase": Phase.DEMO.value}),
+            _invoke_agent(_cycle().build_qa_graph(), {
+                **rt.base_state, "phase": Phase.DEMO.value,
+                # What the cycle delivered: QA reads the feature's pages off
+                # its PRs and the demo walks them.
+                "prs": delivered,
+                "merged_prs": list(state.get("merged_prs", [])),
+            }),
         )
     except PhaseTimeout:
         qa_state = {}
@@ -579,14 +676,15 @@ async def qa(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     if isinstance(report, dict):
         # The QA graph sees the base state only; the cycle knows what it
         # delivered. The PO's evening report reads this first.
-        report = {**report, "user_stories": _stories_of(state)}
+        report = {**report, "user_stories": _stories_of(
+            {**state, "prs": delivered}, titles=await _satisfied_titles(rt, state))}
     return {
         **_accounted(state, "qa", tokens, cost), **budget,
         "demo_report": report,
     }
 
 
-def _stories_of(state: CycleState) -> list[dict]:
+def _stories_of(state: CycleState, titles: dict[int, str] | None = None) -> list[dict]:
     """What the cycle delivered, one entry per task: its PR (merged or still
     open), then the tasks the Dev found already on main.
 
@@ -610,7 +708,8 @@ def _stories_of(state: CycleState) -> list[dict]:
             "status": "merged" if pr["number"] in merged else "open",
         })
     for task in sorted(set(state.get("already_satisfied", []))):
-        stories.append({"task": task, "title": "", "pr": None, "url": "", "status": "already on main"})
+        stories.append({"task": task, "title": (titles or {}).get(task, ""), "pr": None, "url": "",
+                        "status": "already on main"})
     return stories
 
 
@@ -683,6 +782,7 @@ async def finish(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
         "prs": prs,
         "already_satisfied": sorted(set(state.get("already_satisfied", []))),
         "reviews": state.get("reviews", []),
+        "review_skips": state.get("review_skips", []),
         "merged_prs": merged,
         "held_prs": held,
         "demo_report": state.get("demo_report"),
