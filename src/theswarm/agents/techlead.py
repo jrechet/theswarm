@@ -513,12 +513,16 @@ async def _send_back_to_dev(
     number = _task_of_pr(pr)
     if number is None:
         return False  # a PR nobody's task owns: the review on it is the whole story
+    # Review rounds only: a conflict note carries CHANGES_MARKER too, and
+    # an approved PR that main moved past is not a change anyone asked for —
+    # two siblings merging first would have parked it for a person.
     try:
         comments = await github.get_issue_comments(number)
-        rounds = sum(1 for c in comments if CHANGES_MARKER in (c.get("body") or ""))
+        rounds = sum(1 for c in comments
+                     if CHANGES_MARKER in (body := c.get("body") or "") and CONFLICT_MARKER not in body)
     except Exception:
         rounds = 0
-    if rounds >= CHANGES_REQUESTED_CAP:
+    if rounds >= CHANGES_REQUESTED_CAP and not conflict:
         await github.add_comment(
             number,
             f"Changes were requested {rounds + 1} times on this task "

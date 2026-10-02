@@ -366,7 +366,9 @@ Done means: merged on `main`, deploy landed, behavior re-verified on prod
   approved PR main has moved past goes back with `CONFLICT_MARKER`,
   headed "**Merge conflict** on PR #N" — concert-notes' #545 read
   "Changes requested", which no review had asked for; the Dev reads the
-  markers and `PR #N (branch …)`, never the heading.
+  markers and `PR #N (branch …)`, never the heading. A conflict is not a
+  review round: it does not count toward `CHANGES_REQUESTED_CAP`, and an
+  approved PR that conflicts goes back whatever the rounds before it.
   **And only the swarm's own** (owner, 2026-09-29): the TechLead reviews
   every open PR but merges — or holds, on SELF_REPO — only branches the
   Dev made (`techlead.is_swarm_branch`: `feat/issue-<n>…`, `feat/us-<n>…`);
