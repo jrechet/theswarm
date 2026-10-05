@@ -82,7 +82,10 @@ Full details: `docs/ARCHITECTURE-V2.md`, `docs/ROLES-OVERVIEW.md`.
 - Issues flow `status:backlog → ready → in-progress → review → merged/closed`;
   the Dev agent picks `role:dev` + `status:ready`.
 - Stub mode: without `SWARM_GITHUB_REPO`/registered project, agents log intents and
-  make no API calls. Tests rely on it.
+  make no API calls. Tests rely on it. The CLI loads `.env` from the working
+  directory (`cli.main.load_env`, the README's Quickstart); the suite sets
+  `SWARM_SKIP_DOTENV=1` so a test that runs the CLI never loads the laptop's
+  real tokens into the process.
 - pytest `asyncio_mode = "auto"`; `respx` for HTTP mocking; tests organized by layer
   under `tests/{domain,application,infrastructure,presentation,integration,e2e}`.
 - 2300+ tests, all green. Any key an agent node returns MUST be declared in
@@ -660,7 +663,10 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   `""` too, which sends the binary to the session on disk.
   `python -m theswarm validate` runs a one-turn probe and prints who answered
   (`identity=subscription` is the only acceptable value); it is skipped when
-  `SWARM_CLAUDE_BACKEND=api`, the test suite's default.
+  `SWARM_CLAUDE_BACKEND=api`, the test suite's default. A missing
+  `ANTHROPIC_API_KEY` is an error only on that backend: `validate` and
+  `/health/ready` used to demand the key the subscription makes
+  pointless, and the Quickstart's first step exited 1 (2026-10-05).
 - **V2 runtime M1 — the SDK backend (`SWARM_CLAUDE_BACKEND=sdk`, set in
   `docker-compose.yml`).** Same `ClaudeCLI.run` contract, a message stream
   instead of one envelope. The call's *profile* is read off its two
