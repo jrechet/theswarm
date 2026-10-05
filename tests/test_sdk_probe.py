@@ -235,3 +235,44 @@ def test_binary_location_names_the_bundled_binary_or_the_path_one():
     location = claude_mod.sdk_binary_location()
     assert location.startswith(("bundled:", "path:"))
     assert location.endswith("claude")
+
+
+async def test_the_probe_closes_the_sdk_stream_before_it_returns(monkeypatch):
+    """`validate` printed "an error occurred during closing of asynchronous
+    generator … aclose(): asynchronous generator is already running" after
+    "Validation passed." (2026-10-05): the probe returned from inside the
+    stream and left it for the interpreter's finaliser."""
+    from types import SimpleNamespace
+
+    from theswarm.tools import claude as claude_mod
+
+    closed: list = []  # the task that closed the stream
+
+    class _Result:
+        subtype = "success"
+        is_error = False
+        result = "OK"
+        session_id = "s1"
+        total_cost_usd = 0.001
+
+    async def stream(prompt, options):
+        try:
+            yield SimpleNamespace(subtype="init", data={"apiKeySource": "none"})
+            yield _Result()
+            yield SimpleNamespace(subtype="late")
+        finally:
+            closed.append(asyncio.current_task())
+
+    monkeypatch.setattr(claude_mod, "_sdk_query", stream)
+    monkeypatch.setattr(claude_mod, "SystemMessage", type("SystemMessage", (), {}), raising=False)
+    import claude_agent_sdk
+
+    monkeypatch.setattr(claude_agent_sdk, "SystemMessage", SimpleNamespace, raising=False)
+    monkeypatch.setattr(claude_agent_sdk, "ResultMessage", _Result, raising=False)
+
+    report = await claude_mod.probe_sdk(timeout=5)
+
+    # Closed by the probe itself, in its own task — not by the event loop's
+    # finaliser in a task of its own, which runs late and complains.
+    assert closed == [asyncio.current_task()]
+    assert report["identity"] == "subscription"

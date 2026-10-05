@@ -15,7 +15,11 @@ def validator():
 
 
 class TestValidate:
-    def test_all_set(self, validator, monkeypatch):
+    def test_all_set(self, validator, monkeypatch, tmp_path):
+        from theswarm.application.services import startup_validator as sv
+
+        (tmp_path / "app.css").write_text("/* built */")  # the generated stylesheet, built
+        monkeypatch.setattr(sv, "V2_STYLESHEET", tmp_path / "app.css")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
         monkeypatch.setenv("GITHUB_TOKEN", "ghp-test")
         monkeypatch.setenv("SWARM_GITHUB_REPO", "owner/repo")
@@ -105,3 +109,47 @@ class TestValidateAndLog:
         with caplog.at_level(logging.ERROR):
             validator.validate_and_log()
         assert "ANTHROPIC_API_KEY" in caplog.text
+
+
+class TestSubscriptionNeedsNoApiKey:
+    """The Agent SDK runs on the subscription (V2 invariant I1): an API key is
+    the fallback, and its absence is the normal state. `python -m theswarm
+    validate` answered `identity=subscription` and then exited 1 on
+    "ANTHROPIC_API_KEY not set" (2026-10-05) — the Quickstart's first step."""
+
+    def test_no_api_key_is_fine_on_the_sdk(self, validator, monkeypatch):
+        monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "sdk")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        result = validator.validate()
+        assert result.ok and not any("ANTHROPIC_API_KEY" in e for e in result.errors)
+
+    def test_no_api_key_is_fine_in_auto_mode(self, validator, monkeypatch):
+        monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "auto")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        assert validator.validate().ok
+
+    def test_the_api_backend_still_needs_its_key(self, validator, monkeypatch):
+        monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "api")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        result = validator.validate()
+        assert not result.ok and any("SWARM_CLAUDE_BACKEND=api" in e for e in result.errors)
+
+
+class TestTheStylesheetIsBuilt:
+    """`static/v2/app.css` is generated (never committed): on a fresh clone the
+    Quickstart's first page rendered in Times with blue links (2026-10-05)."""
+
+    def test_a_missing_stylesheet_is_a_warning_naming_the_command(self, validator, monkeypatch, tmp_path):
+        from theswarm.application.services import startup_validator as sv
+
+        monkeypatch.setattr(sv, "V2_STYLESHEET", tmp_path / "app.css")
+        result = validator.validate(require_api_keys=False)
+        assert result.ok
+        assert any("app.css" in w and "scripts/build-css.sh" in w for w in result.warnings)
+
+    def test_a_built_stylesheet_warns_nothing(self, validator, monkeypatch, tmp_path):
+        from theswarm.application.services import startup_validator as sv
+
+        (tmp_path / "app.css").write_text("/* built */")
+        monkeypatch.setattr(sv, "V2_STYLESHEET", tmp_path / "app.css")
+        assert not any("app.css" in w for w in validator.validate(require_api_keys=False).warnings)

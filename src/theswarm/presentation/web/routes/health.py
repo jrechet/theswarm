@@ -279,7 +279,12 @@ async def readiness(request: Request) -> JSONResponse:
             ),
         }
 
-    # 9) Anthropic key reachable (env or vault) — required for any Claude call
+    # 9) Who answers Claude calls. The Agent SDK runs on the subscription
+    #    (V2 invariant I1); an API key is the fallback, and its absence is
+    #    the normal state — only a backend forced to the API needs one.
+    from theswarm.tools.claude import _resolve_backend_mode
+
+    backend = _resolve_backend_mode()
     has_anthropic_env = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
     has_anthropic_vault = False
     vault = getattr(request.app.state, "secret_vault", None)
@@ -290,7 +295,14 @@ async def readiness(request: Request) -> JSONResponse:
             has_anthropic_vault = bool(stored)
         except Exception:
             has_anthropic_vault = False
-    if has_anthropic_env or has_anthropic_vault:
+    has_key = has_anthropic_env or has_anthropic_vault
+    if backend != "api":
+        checks["anthropic_key"] = {
+            "status": "ok",
+            "detail": f"the Agent SDK answers on the subscription (backend {backend}); API fallback "
+                      + ("on (ANTHROPIC_API_KEY set)" if has_key else "off — no ANTHROPIC_API_KEY, the normal state"),
+        }
+    elif has_key:
         checks["anthropic_key"] = {
             "status": "ok",
             "detail": "ANTHROPIC_API_KEY available (" + ("env" if has_anthropic_env else "vault") + ")",
@@ -298,7 +310,7 @@ async def readiness(request: Request) -> JSONResponse:
     else:
         checks["anthropic_key"] = {
             "status": "error",
-            "detail": "ANTHROPIC_API_KEY not set in env and not in vault — Claude calls will fail",
+            "detail": "SWARM_CLAUDE_BACKEND=api and ANTHROPIC_API_KEY not set in env or vault — Claude calls will fail",
         }
 
     # Roll up

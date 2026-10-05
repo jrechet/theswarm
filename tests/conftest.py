@@ -40,6 +40,15 @@ def _no_target_venv_for_tests(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_dotenv_for_tests(monkeypatch):
+    """The CLI loads `.env` from the working directory (the README's
+    Quickstart). Not in the suite: the laptop's real tokens would reach
+    every later test. `tests/presentation/test_cli_loads_dotenv.py` lifts it."""
+    if "SWARM_SKIP_DOTENV" not in os.environ:
+        monkeypatch.setenv("SWARM_SKIP_DOTENV", "1")
+
+
+@pytest.fixture(autouse=True)
 def _no_real_claude_binary(monkeypatch):
     """No test launches the real bundled Claude binary — a real call on CI,
     a hang until the SDK timeout where the network is blocked (the local

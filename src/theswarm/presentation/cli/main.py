@@ -7,6 +7,7 @@ Default (no command) starts the full server with Mattermost, GitHub, and web das
 from __future__ import annotations
 
 import argparse
+import os
 import asyncio
 import logging
 import sys
@@ -597,7 +598,28 @@ async def cmd_status(args: argparse.Namespace) -> None:
     print(f"Cost today:    ${dashboard.total_cost_today:.2f}")
 
 
+def load_env() -> None:
+    """`.env` in the working directory, the real environment winning.
+
+    The server loads it through the config loader; the CLI did not, and the
+    README's first step — `validate` right after writing .env — warned
+    "GITHUB_TOKEN not set" with the token in the file (2026-10-05).
+    """
+    # The test suite sets SWARM_SKIP_DOTENV=1: a test that runs the CLI must
+    # not load the laptop's real .env (its tokens would reach every later
+    # test — that is how a token in the environment once made 13 tests call
+    # the live API).
+    if os.environ.get("SWARM_SKIP_DOTENV", "").strip() == "1":
+        return
+    from dotenv import find_dotenv, load_dotenv
+
+    # From the working directory upward: `load_dotenv()` alone searches from
+    # this module's directory, i.e. the checkout, not where the user runs.
+    load_dotenv(find_dotenv(usecwd=True) or None)
+
+
 def main(argv: list[str] | None = None) -> None:
+    load_env()
     parser = create_parser()
     args = parser.parse_args(argv)
 

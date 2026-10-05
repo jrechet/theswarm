@@ -17,6 +17,7 @@ Set ``SWARM_CLAUDE_BACKEND``:
 from __future__ import annotations
 
 import asyncio
+from contextlib import aclosing
 import json
 import logging
 import os
@@ -458,19 +459,23 @@ async def probe_sdk(
         return report
 
     async def _consume() -> None:
-        async for message in _sdk_query(_SDK_PROBE_PROMPT, options):
-            if isinstance(message, SystemMessage) and message.subtype == "init":
-                data = message.data or {}
-                report["identity"] = _identity_from_api_key_source(data.get("apiKeySource"))
-                report["claude_code_version"] = str(data.get("claude_code_version", ""))
-                report["session_id"] = str(data.get("session_id", ""))
-            elif isinstance(message, ResultMessage):
-                report["session_id"] = message.session_id or report["session_id"]
-                report["cost_usd"] = float(message.total_cost_usd or 0.0)
-                if message.is_error or message.subtype != "success":
-                    report["error"] = f"{message.subtype}: {message.result or 'no detail'}"
-                    return
-                report["ok"] = True
+        # Closed here, not by the loop's finaliser at exit: `validate` printed
+        # "aclose(): asynchronous generator is already running" after
+        # "Validation passed." (2026-10-05).
+        async with aclosing(_sdk_query(_SDK_PROBE_PROMPT, options)) as stream:
+            async for message in stream:
+                if isinstance(message, SystemMessage) and message.subtype == "init":
+                    data = message.data or {}
+                    report["identity"] = _identity_from_api_key_source(data.get("apiKeySource"))
+                    report["claude_code_version"] = str(data.get("claude_code_version", ""))
+                    report["session_id"] = str(data.get("session_id", ""))
+                elif isinstance(message, ResultMessage):
+                    report["session_id"] = message.session_id or report["session_id"]
+                    report["cost_usd"] = float(message.total_cost_usd or 0.0)
+                    if message.is_error or message.subtype != "success":
+                        report["error"] = f"{message.subtype}: {message.result or 'no detail'}"
+                        return
+                    report["ok"] = True
 
     try:
         await asyncio.wait_for(_consume(), timeout=timeout)
@@ -1000,27 +1005,28 @@ class ClaudeCLI:
         seen: dict = {"session_id": resume or "", "result": None}
 
         async def _consume() -> None:
-            async for message in _sdk_query(prompt, options):
-                if isinstance(message, SystemMessage):
-                    if message.subtype == "init":
-                        data = message.data or {}
-                        seen["session_id"] = str(data.get("session_id") or seen["session_id"])
-                        # I1, on every call, not only in the probe: the binary
-                        # says who it is before it works; a key is a stop.
-                        identity = _identity_from_api_key_source(data.get("apiKeySource"))
-                        if identity == "api-key":
-                            raise _CLIUnavailable(
-                                "the SDK answered with ANTHROPIC_API_KEY — refusing to "
-                                "run a cycle on per-token billing (V2 runtime invariant I1)"
-                            )
-                elif isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            await self._emit(_text_event(block.text))
-                        elif isinstance(block, ToolUseBlock):
-                            await self._emit(_tool_event(block.name, dict(block.input or {}), workdir))
-                elif isinstance(message, ResultMessage):
-                    seen["result"] = message
+            async with aclosing(_sdk_query(prompt, options)) as stream:
+                async for message in stream:
+                    if isinstance(message, SystemMessage):
+                        if message.subtype == "init":
+                            data = message.data or {}
+                            seen["session_id"] = str(data.get("session_id") or seen["session_id"])
+                            # I1, on every call, not only in the probe: the binary
+                            # says who it is before it works; a key is a stop.
+                            identity = _identity_from_api_key_source(data.get("apiKeySource"))
+                            if identity == "api-key":
+                                raise _CLIUnavailable(
+                                    "the SDK answered with ANTHROPIC_API_KEY — refusing to "
+                                    "run a cycle on per-token billing (V2 runtime invariant I1)"
+                                )
+                    elif isinstance(message, AssistantMessage):
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                await self._emit(_text_event(block.text))
+                            elif isinstance(block, ToolUseBlock):
+                                await self._emit(_tool_event(block.name, dict(block.input or {}), workdir))
+                    elif isinstance(message, ResultMessage):
+                        seen["result"] = message
 
         try:
             await asyncio.wait_for(_consume(), timeout=effective_timeout)
