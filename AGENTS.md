@@ -608,8 +608,14 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   in the workspace and was reused forever: written once, it tested the API
   of that day and never a later feature), with the cycle's PRs and pages in
   the prompt; a cycle with no PR reuses it. **QA runs the E2E file it
-  wrote, and repairs it once** when not one test
-  sets up (every test an error, none passed or failed). The file is written
+  wrote, and repairs it once** when the file itself is at fault
+  (`_e2e_file_at_fault`): not one test sets up (every test an error, none
+  passed or failed), or no test passed and every failure died on one and
+  the same exception that is not an assertion — prod's lineup-reorder run
+  (5a09ba15a9b2, 2026-10-03) lost all 29 tests to `response.status_code`
+  (Playwright's `APIResponse` has `.status`, which the prompt now says)
+  before any assertion ran, and the feature scored unverified with
+  nothing measured. The file is written
   blind; two cycles in five on 2026-09-25 reported `0 passed, 0 failed, 24
   errors` in under two seconds against a server answering 200. The repair
   call gets pytest's lines and the file, keeps every assertion, and the
