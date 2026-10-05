@@ -199,3 +199,70 @@ def test_the_state_declares_the_repair_key():
     from theswarm.config import AgentState
 
     assert "e2e_repaired_from" in AgentState.__annotations__
+
+
+# ── Every test died on the same exception (lineup-reorder, 2026-10-03) ──
+# Prod's cycle 5a09ba15a9b2: 0 passed, 29 failed, every one on
+# `response.status_code` — Playwright's APIResponse has `.status`. Not a
+# setup error, so no repair; not an assertion either, so no verdict on the
+# app: the run measured nothing and the feature scored "unverified".
+
+def _same_error(names: list[str]) -> str:
+    error = "AttributeError: 'APIResponse' object has no attribute 'status_code'. Did you mean: 'status_text'?"
+    blocks = "".join(
+        f"_____ {n} _____\ntests/e2e/test_api_e2e.py:78: in {n}\n    assert response.status_code == 200\nE   {error}\n"
+        for n in names)
+    summary = "".join(f"FAILED tests/e2e/test_api_e2e.py::{n} - {error}\n" for n in names)
+    return (blocks + "=========================== short test summary info ============================\n"
+            + summary + f"============================== {len(names)} failed in 2.10s ==============================\n")
+
+
+SAME_ERROR = _same_error(["test_feature_patch_lineup_entry_moves_forward", "test_create_lineup_entry_returns_201",
+                          "test_list_tours"])
+MIXED = SAME_ERROR.replace("E   AttributeError: 'APIResponse' object has no attribute 'status_code'. Did you mean: 'status_text'?\n",
+                           "E   AssertionError: assert 404 == 200\n", 1)
+SAME_ASSERTION = """\
+_____ test_a _____
+E   AssertionError: assert 404 == 200
+_____ test_b _____
+E   AssertionError: assert 404 == 200
+=========================== short test summary info ============================
+FAILED tests/e2e/test_api_e2e.py::test_a - AssertionError: assert 404 == 200
+FAILED tests/e2e/test_api_e2e.py::test_b - AssertionError: assert 404 == 200
+============================== 2 failed in 1.10s ==============================
+"""
+
+
+async def test_a_file_whose_every_test_died_on_the_same_exception_is_repaired_once(tmp_path):
+    claude = _claude([SAME_ERROR, ALL_PASS])
+
+    out = await _run(tmp_path, claude)
+
+    assert out["e2e_passed"] is True and claude.run.await_count == 1 and claude.run_tests.await_count == 2
+    assert "status_code" in out["e2e_repaired_from"]
+    prompt = claude.run.await_args.args[0]
+    assert "3 failing tests died on the same AttributeError" in prompt and "status_code" in prompt
+    assert _file(tmp_path) == FIXED_FILE
+
+
+async def test_an_assertion_among_the_failures_is_the_target_s_verdict(tmp_path):
+    claude = _claude([MIXED])
+
+    out = await _run(tmp_path, claude)
+
+    assert out["e2e_passed"] is False
+    assert not any("Read the application's routes" in c.args[0] for c in claude.run.await_args_list)
+    assert _file(tmp_path) == BLIND_FILE
+
+
+def test_the_same_exception_signature_leaves_assertions_alone():
+    counts = {"passed": 0, "failed": 2, "errors": 0, "total": 2}
+    assert qa._e2e_file_at_fault(counts, SAME_ASSERTION) == ""
+    assert "AttributeError" in qa._e2e_file_at_fault({**counts, "failed": 3}, SAME_ERROR)
+    assert qa._e2e_file_at_fault({"passed": 1, "failed": 2, "errors": 0, "total": 3}, SAME_ERROR) == ""
+    assert "not one test got past setup" in qa._e2e_file_at_fault(
+        {"passed": 0, "failed": 0, "errors": 24, "total": 24}, SETUP_ERRORS)
+
+
+def test_the_writer_is_told_the_response_api():
+    assert "`.status`" in qa.E2E_PROMPT and "status_code" in qa.E2E_PROMPT
