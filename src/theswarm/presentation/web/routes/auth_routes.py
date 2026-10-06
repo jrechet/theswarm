@@ -32,9 +32,17 @@ def owner_login() -> str:
 
 
 def _safe_next(raw: str, base: str) -> str:
-    """Only app-relative paths — never an absolute URL (open redirect)."""
+    """Where the browser goes after the key: an app path under the base path.
+
+    Only app-relative paths — never an absolute URL (open redirect). The
+    wall's `next` is the app's own path, without the reverse-proxy prefix;
+    returned as it was, it sent prod's owner to `bots.jrec.fr/r/…` and
+    Traefik's 404 (2026-10-06).
+    """
     if raw.startswith("/") and not raw.startswith("//"):
-        return raw
+        if base and (raw == base or raw.startswith(f"{base}/") or raw.startswith(f"{base}?")):
+            return raw
+        return f"{base}{raw}"
     return f"{base}/" if base else "/"
 
 
