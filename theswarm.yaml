@@ -28,7 +28,7 @@ agents:
 # pages replaces the guessed screenshot/video walk (/, /docs, /health) with
 # pages that actually exist on this app — /docs 404s here (#144).
 # setup runs once in the workspace before the first launch: the QA workspace
-# is a plain clone, and static/v2/app.css is generated, not checked in.
+# is a plain clone, and static/v3/app.css is generated, not checked in.
 demo:
   command: "{python} -m theswarm serve --host 127.0.0.1 --port {port} --db {tmp}/demo.db"
   ready_seconds: 90

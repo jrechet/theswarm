@@ -1,0 +1,121 @@
+{% extends "v3/base.html" %}
+{% import "v3/_ui.html" as ui %}
+{% block title %}TheSwarm — Home{% endblock %}
+{% block crumbs %}
+  <span class="text-ink font-medium">Home</span>
+  <span class="text-line-strong">/</span>
+  <span>{{ repos | length }} project{{ 's' if repos | length != 1 }}</span>
+{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-8">
+
+  {# ── Now: the cycles running at this moment ─────────────────────── #}
+  <section aria-labelledby="now" class="flex flex-col gap-3" data-testid="now">
+    {{ ui.section_label('Now', today, id='now') }}
+    {% if now %}
+      {% for c in now %}
+      <a href="{{ c.href }}" data-testid="now-cycle"
+         class="flex flex-wrap items-center gap-5 px-5 py-4 bg-surface border border-line rounded-[10px] hover:border-line-strong">
+        {{ ui.live_dot(10, pulse=(c.status == 'running')) }}
+        <span class="flex flex-col gap-1 min-w-[240px] flex-[1_1_260px]">
+          <span class="text-[16px] font-semibold tracking-tight">{% if c.issue_number %}<span class="font-mono text-faint font-medium">#{{ c.issue_number }}</span> {% endif %}{{ c.title }}</span>
+          <span class="text-[13px] text-muted">{{ c.repo }}{% if c.since %} · {{ c.status }} since {{ c.since }}{% else %} · {{ c.status }}{% endif %}</span>
+        </span>
+        <span class="text-[13px] font-medium text-live-deep whitespace-nowrap">Open the theater →</span>
+      </a>
+      {% endfor %}
+    {% else %}
+      <div class="px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px] text-[13px] text-muted" data-testid="now-empty">
+        Nothing is running. Open a project and press Play.
+      </div>
+    {% endif %}
+  </section>
+
+  {# ── To review: the latest demos ───────────────────────────────── #}
+  {% if to_review %}
+  <section aria-labelledby="review" class="flex flex-col gap-3" data-testid="to-review">
+    {{ ui.section_label('To review', to_review | length ~ ' recent demo' ~ ('s' if to_review | length != 1), id='review') }}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for d in to_review %}
+      <a href="{{ d.play_url }}" data-testid="review-demo"
+         class="flex flex-wrap items-center gap-4 px-4 py-3 border-t border-line first:border-t-0 hover:bg-raised">
+        <span class="w-16 h-10 rounded bg-[#14171C] inline-flex items-center justify-center shrink-0 overflow-hidden">
+          {% if d.thumbnail_url %}<img src="{{ d.thumbnail_url }}" alt="" width="64" height="40" class="block w-full h-full object-cover">
+          {% else %}<span class="text-white">{{ ui.ui_icon('play', 19) }}</span>{% endif %}
+        </span>
+        <span class="flex flex-col gap-0.5 flex-[1_1_220px] min-w-0">
+          <span class="font-medium truncate">{{ d.repo }}</span>
+          <span class="text-[12px] text-muted">{{ d.prs_merged }} PR{{ 's' if d.prs_merged != 1 }} merged{% if d.stories_total %} · {{ d.stories_completed }}/{{ d.stories_total }} stories{% endif %}{% if d.cost_usd %} · <span class="font-mono">${{ '%.2f' | format(d.cost_usd) }}</span>{% endif %}</span>
+        </span>
+        {% if d.gates_total %}
+          {{ ui.chip(d.gates_label, d.gates_kind) }}
+        {% endif %}
+        <span class="font-mono text-[12px] text-faint w-[120px] text-right">{{ d.when }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# ── Projects: the repositories the swarm may work on ──────────── #}
+  <section aria-labelledby="projects" class="flex flex-col gap-3">
+    {% call ui.section_label('Projects', '', id='projects') %}
+      {% if install_url %}<a href="{{ install_url }}" class="ml-auto text-[12px] text-muted hover:text-ink">Manage the app's repositories →</a>{% endif %}
+    {% endcall %}
+
+    {% if not repos and not app_configured %}
+    {% call ui.card('p-5 flex flex-col gap-3 max-w-xl') %}
+      <h3 class="font-semibold">Connect GitHub</h3>
+      <p class="text-[13px] text-muted leading-relaxed">One click creates your GitHub App; you then choose exactly which
+        repositories the swarm may touch. Credentials go straight from GitHub to this server, encrypted.</p>
+      {{ ui.btn('Connect GitHub', href=base ~ '/setup/github-app', kind='primary') }}
+    {% endcall %}
+    {% elif not repos %}
+    {% call ui.card('p-5 flex flex-col gap-3 max-w-xl') %}
+      <h3 class="font-semibold">No repositories yet</h3>
+      <p class="text-[13px] text-muted leading-relaxed">The app is connected but not installed anywhere. Choose the
+        repositories you trust the swarm with — you can change the list any time.</p>
+      {% if install_url %}{{ ui.btn('Choose repositories on GitHub', href=install_url, kind='primary') }}{% endif %}
+    {% endcall %}
+    {% endif %}
+
+    {% if repos %}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      <div class="flex items-center gap-2.5 px-4 h-10 border-b border-line text-[13px] font-medium">
+        {{ ui.customer_mark('I') }}Internal
+        <span class="ml-auto text-[12px] text-faint font-normal">{{ repos | length }} repositories, most recently pushed first</span>
+      </div>
+      <ul data-testid="repo-list" class="m-0 p-0 list-none">
+        {% for repo in repos %}
+        <li>
+          <a href="{{ base }}/r/{{ repo.full_name }}"
+             class="group flex items-center justify-between gap-6 px-4 py-3 border-t border-line first:border-t-0 hover:bg-raised">
+            <span class="min-w-0 flex items-center gap-2.5">
+              <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if repo.full_name in running_repos %}bg-live live-dot{% else %}bg-line-strong{% endif %}" aria-hidden="true"></span>
+              <span class="flex flex-col min-w-0">
+                <span class="text-[14px] leading-snug truncate"><span class="text-faint">{{ repo.owner }}/</span><span class="font-medium">{{ repo.name }}</span></span>
+                {% if repo.description %}<span class="text-[12px] text-muted truncate">{{ repo.description }}</span>{% endif %}
+              </span>
+            </span>
+            <span class="flex items-center gap-4 shrink-0 font-mono text-[11px] text-faint">
+              {% if repo.private %}<span class="border border-line rounded px-1.5 py-0.5">private</span>{% endif %}
+              {% if repo.language %}<span>{{ repo.language }}</span>{% endif %}
+              <span class="text-muted group-hover:text-live-deep group-hover:translate-x-0.5 transition-transform text-base" aria-hidden="true">→</span>
+            </span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if not oauth_ready %}
+    <p class="text-[13px] text-faint border-t border-line pt-4">
+      Sign-in with GitHub isn't set up yet —
+      <a href="{{ base }}/setup/github-oauth" class="text-live-deep hover:underline">one-time setup</a>.
+    </p>
+    {% endif %}
+  </section>
+
+</div>
+{% endblock %}

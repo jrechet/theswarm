@@ -1,0 +1,226 @@
+/* TheSwarm V3 — design tokens + Tailwind v4.
+ *
+ * Direction: "modern control room" (owner, 2026-10-06 — see
+ * docs/plans/2026-10-v3-one-product.md and docs/design/v3/System.dc.html):
+ * cool neutrals, light and dark, Geist / Geist Mono vendored (OFL, no CDN),
+ * amber is the brand mark and the live signal only, every other colour is
+ * a meaning (ok, bad, info, wait). 1 px lines, no shadows.
+ *
+ * The V2 names (paper/panel/wash/ink/soft/faint/rule, honey, moss, rust)
+ * are aliases onto these tokens: the V2 pages wear the V3 look inside the
+ * V3 shell until M3/M4 replace them and M6 deletes the aliases.
+ *
+ * Compiled by the standalone Tailwind binary: scripts/build-css.sh
+ * locally, the `css` Docker stage in prod. Output: static/v3/app.css
+ * (never committed).
+ */
+
+@import "tailwindcss";
+@source "../../templates/v3";
+@source "../../templates/v2";
+@source "../../templates/login.html";
+
+@font-face {
+  font-family: "Geist";
+  src: url("fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Tokens ──────────────────────────────────────────────────────────── */
+:root {
+  --canvas: #F6F7F9;
+  --surface: #FFFFFF;
+  --raised: #EEF0F3;
+  --line: #E1E4EA;
+  --line-strong: #C9CED6;
+  --ink: #0F1419;
+  --muted: #5B6471;
+  --faint: #8A93A0;
+  --live: #D97706;
+  --live-deep: #B45309;
+  --live-wash: #FDF1DC;
+  --ok: #15803D;
+  --ok-wash: #DCFCE7;
+  --bad: #B91C1C;
+  --bad-wash: #FEE2E2;
+  --info: #1D4ED8;
+  --info-wash: #DBEAFE;
+  --wait: #64748B;
+  --wait-wash: #E2E8F0;
+  --on-ink: #FFFFFF;
+
+  /* V2 aliases (deleted in M6) */
+  --paper: var(--canvas);
+  --panel: var(--surface);
+  --wash: var(--raised);
+  --soft: var(--muted);
+  --rule: var(--line);
+  --honey: var(--live);
+  --honey-deep: var(--live-deep);
+  --honey-wash: var(--live-wash);
+  --moss: var(--ok);
+  --moss-wash: var(--ok-wash);
+  --rust: var(--bad);
+  --rust-wash: var(--bad-wash);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #0C0E12;
+    --surface: #14171C;
+    --raised: #1C2027;
+    --line: #262B33;
+    --line-strong: #3A414B;
+    --ink: #E8EBEF;
+    --muted: #9AA3AF;
+    --faint: #6B7480;
+    --live: #F5A623;
+    --live-deep: #F5A623;
+    --live-wash: #2A2210;
+    --ok: #4ADE80;
+    --ok-wash: #0F2A1A;
+    --bad: #F87171;
+    --bad-wash: #2C1414;
+    --info: #60A5FA;
+    --info-wash: #10213A;
+    --wait: #94A3B8;
+    --wait-wash: #1E293B;
+    --on-ink: #0C0E12;
+  }
+}
+:root[data-theme="dark"] {
+  --canvas: #0C0E12;
+  --surface: #14171C;
+  --raised: #1C2027;
+  --line: #262B33;
+  --line-strong: #3A414B;
+  --ink: #E8EBEF;
+  --muted: #9AA3AF;
+  --faint: #6B7480;
+  --live: #F5A623;
+  --live-deep: #F5A623;
+  --live-wash: #2A2210;
+  --ok: #4ADE80;
+  --ok-wash: #0F2A1A;
+  --bad: #F87171;
+  --bad-wash: #2C1414;
+  --info: #60A5FA;
+  --info-wash: #10213A;
+  --wait: #94A3B8;
+  --wait-wash: #1E293B;
+  --on-ink: #0C0E12;
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-on-ink: var(--on-ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-live: var(--live);
+  --color-live-deep: var(--live-deep);
+  --color-live-wash: var(--live-wash);
+  --color-ok: var(--ok);
+  --color-ok-wash: var(--ok-wash);
+  --color-bad: var(--bad);
+  --color-bad-wash: var(--bad-wash);
+  --color-info: var(--info);
+  --color-info-wash: var(--info-wash);
+  --color-wait: var(--wait);
+  --color-wait-wash: var(--wait-wash);
+  --color-white: #fff;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  /* V2 aliases (deleted in M6) */
+  --color-paper: var(--canvas);
+  --color-panel: var(--surface);
+  --color-wash: var(--raised);
+  --color-soft: var(--muted);
+  --color-rule: var(--line);
+  --color-honey: var(--live);
+  --color-honey-deep: var(--live-deep);
+  --color-honey-wash: var(--live-wash);
+  --color-moss: var(--ok);
+  --color-moss-wash: var(--ok-wash);
+  --color-rust: var(--bad);
+  --color-rust-wash: var(--bad-wash);
+
+  --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ── The one animated signal: the swarm is working ──────────────────── */
+@keyframes live-ring {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 45%, transparent); }
+  70% { box-shadow: 0 0 0 7px transparent; }
+}
+.live-dot {
+  animation: live-ring 1.6s ease-out infinite;
+}
+@keyframes swarm-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.swarm-working {
+  animation: swarm-pulse 1.6s ease-in-out infinite;
+}
+/* The flow (V2 theater): hand-offs between agents. */
+@keyframes flow-dash {
+  to { background-position: 24px 0; }
+}
+@keyframes flow-stroke {
+  to { stroke-dashoffset: -24; }
+}
+.flow-line {
+  height: 2px;
+  background-image: linear-gradient(90deg, var(--line) 0 6px, transparent 6px 12px);
+  background-size: 12px 2px;
+  background-repeat: repeat-x;
+}
+.flow-line[data-flow="flowing"] {
+  background-image: linear-gradient(90deg, var(--live) 0 6px, transparent 6px 12px);
+  animation: flow-dash 0.9s linear infinite;
+}
+.flow-line[data-flow="done"] {
+  background-image: none;
+  background-color: var(--ok);
+}
+.flow-arc {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  vector-effect: non-scaling-stroke;
+}
+.flow-arc[data-flow="flowing"] {
+  stroke: var(--live);
+  animation: flow-stroke 0.9s linear infinite;
+}
+.flow-arc[data-flow="done"] {
+  stroke: var(--ok);
+  stroke-dasharray: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot, .swarm-working, .flow-line, .flow-arc { animation: none; }
+}
+
+/* Focus: one ring everywhere, ink on light, light on dark. */
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}

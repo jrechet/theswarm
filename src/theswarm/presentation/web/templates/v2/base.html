@@ -1,28 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}TheSwarm{% endblock %}</title>
-  <link rel="stylesheet" href="{{ base }}/static/v2/app.css?v={{ asset_v }}">
-</head>
-<body class="bg-paper text-ink font-sans antialiased min-h-screen flex flex-col">
-  <header class="border-b border-rule">
-    <div class="mx-auto w-full max-w-4xl px-5 h-14 flex items-center justify-between">
-      <a href="{{ base }}/" class="text-[17px] font-semibold tracking-tight focus-visible:outline-2 focus-visible:outline-honey focus-visible:outline-offset-4">
-        the<span class="text-honey">swarm</span>
-      </a>
-      <nav class="flex items-center gap-6 text-sm text-soft">
-        {% block nav_extra %}{% endblock %}
-        <a href="{{ base }}/dashboard" class="hover:text-ink focus-visible:outline-2 focus-visible:outline-honey">Legacy</a>
-        <form method="post" action="{{ base }}/logout">
-          <button type="submit" class="hover:text-ink cursor-pointer focus-visible:outline-2 focus-visible:outline-honey">Sign out</button>
-        </form>
-      </nav>
-    </div>
-  </header>
-  <main class="mx-auto w-full max-w-4xl px-5 py-10 flex-1">
-    {% block content %}{% endblock %}
-  </main>
-</body>
-</html>
+{#- V2 pages wear the V3 shell (docs/plans/2026-10-v3-one-product.md, M1):
+    their content renders unchanged in the V3 content area, with the V2
+    colour names aliased onto the V3 tokens in static/v3/input.css. M3 and
+    M4 replace these pages; M6 deletes this file. -#}
+{% extends "v3/base.html" %}
+{# The breadcrumb is the page's title without the product's name. #}
+{% block crumb %}{{ self.title() | replace(' — TheSwarm', '') | replace('TheSwarm — ', '') }}{% endblock %}

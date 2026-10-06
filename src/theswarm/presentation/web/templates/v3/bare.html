@@ -1,0 +1,24 @@
+{#- The V3 look without the shell: the doors (sign in, invitations). -#}
+{% import "v3/_ui.html" as ui %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}TheSwarm{% endblock %}</title>
+  <link rel="stylesheet" href="{{ base }}/static/v3/app.css?v={{ asset_v }}">
+  <script>
+    try { var t = localStorage.getItem("swarm-theme"); if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+  </script>
+</head>
+<body class="bg-canvas text-ink font-sans antialiased min-h-screen text-[14px] leading-[1.45]"
+      style="background-image: radial-gradient(var(--line-strong) 1px, transparent 1px); background-size: 22px 22px">
+  <div class="min-h-screen flex flex-col items-center justify-center gap-7 px-5 py-10">
+    <a href="{{ base }}/" class="flex items-center gap-2.5 text-[18px] font-semibold tracking-tight">
+      {{ ui.live_dot(14, pulse=False) }}theswarm
+    </a>
+    {% block body %}{% endblock %}
+    <span class="font-mono text-[11px] text-faint">{% block footer %}v3{% endblock %}</span>
+  </div>
+</body>
+</html>

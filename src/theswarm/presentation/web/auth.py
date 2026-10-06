@@ -158,6 +158,21 @@ def _cookie_value(headers: dict[str, str]) -> str:
     return ""
 
 
+def session_login(headers: dict[str, str]) -> str | None:
+    """The login of a valid session cookie among `headers`, else None."""
+    token = _cookie_value(headers)
+    return verify_session(token) if token else None
+
+
+def bearer_is_access_key(headers: dict[str, str]) -> bool:
+    """True when `Authorization: Bearer` carries the access key."""
+    bearer = headers.get("authorization", "")
+    key = access_key()
+    if not key or not bearer.startswith("Bearer "):
+        return False
+    return hmac.compare_digest(bearer.removeprefix("Bearer "), key)
+
+
 def _is_public(path: str) -> bool:
     return path in _PUBLIC_EXACT or path.startswith(_PUBLIC_PREFIXES)
 
@@ -223,11 +238,4 @@ class AuthWallMiddleware:
         await response(scope, receive, send)
 
     def _is_authenticated(self, headers: dict[str, str]) -> bool:
-        token = _cookie_value(headers)
-        if token and verify_session(token) is not None:
-            return True
-        bearer = headers.get("authorization", "")
-        key = access_key()
-        if key and bearer.startswith("Bearer "):
-            return hmac.compare_digest(bearer.removeprefix("Bearer "), key)
-        return False
+        return session_login(headers) is not None or bearer_is_access_key(headers)

@@ -68,7 +68,7 @@ async def test_root_serves_the_picker_not_a_redirect(web):
     client, _ = web
     r = await client.get("/")
     assert r.status_code == 200
-    assert "Pick a repository" in r.text
+    assert 'id="projects"' in r.text  # the V3 home's Projects section is the picker (M1)
 
 
 async def test_home_without_app_offers_to_connect(web):
