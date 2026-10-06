@@ -12,6 +12,7 @@ import logging
 import tempfile
 import shlex
 import os
+import shutil
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -1031,8 +1032,82 @@ def _semgrep_command(target: str = "src/") -> list[str] | None:
     return None
 
 
+# bandit beside semgrep (owner, 2026-10-06): the Python-specific checks —
+# shell=True, hard-coded passwords, pickle, yaml.load, weak hashes — that the
+# OWASP rules do not carry. Same arrangement: on PATH, else `uv tool run`,
+# pinned, cached on the data volume. SWARM_QA_BANDIT=0 turns it off.
+BANDIT_VERSION = "1.9.4"
+BANDIT_TIMEOUT_SECONDS = 180
+
+
+def _bandit_command(target: str = "src/") -> list[str] | None:
+    """How to run bandit here, None when it cannot or must not run."""
+    if os.environ.get("SWARM_QA_BANDIT", "1").strip().lower() in ("0", "false", "no"):
+        return None
+    args = ["-r", target, "-f", "json", "-q"]
+    if shutil.which("bandit"):
+        return ["bandit", *args]
+    uv = shutil.which("uv")
+    if uv:
+        return [uv, "tool", "run", "--from", f"bandit=={BANDIT_VERSION}", "bandit", *args]
+    return None
+
+
+# A scanner's first run through `uv tool run` prints uv's install lines
+# before the JSON, and `run_tests` merges stderr into stdout: cycle
+# 2e713964f7a3 read "bandit printed no JSON (exit 0)". The scans keep far
+# more than the usual tail, so a big report is not cut at its head either.
+SCAN_OUTPUT_CHARS = 400_000
+
+
+def _json_from(output: str) -> dict:
+    """The JSON object a scanner printed, whatever came before it on the
+    same stream; ValueError when there is none."""
+    try:
+        return json.loads(output)
+    except ValueError:
+        pass
+    for line_start in (m.start() for m in re.finditer(r"^\{", output, re.MULTILINE)):
+        try:
+            return json.loads(output[line_start:])
+        except ValueError:
+            continue
+    raise ValueError("no JSON object in the scanner's output")
+
+
+def _count_bandit(output: str) -> tuple[int, int]:
+    """(HIGH findings, all findings) in bandit's JSON; ValueError when it is not JSON."""
+    data = _json_from(output)
+    results = [r for r in data.get("results", []) if isinstance(r, dict)]
+    return sum(1 for r in results if str(r.get("issue_severity", "")).upper() == "HIGH"), len(results)
+
+
+async def _run_bandit(claude, workspace: str) -> dict:
+    """``bandit_status`` (pass / fail / error / not_run), ``bandit_high``, ``bandit_findings``."""
+    command = _bandit_command()
+    if command is None:
+        return {"bandit_status": "not_run", "bandit_high": 0, "bandit_findings": 0}
+    try:
+        result = await claude.run_tests(workspace, command, timeout=BANDIT_TIMEOUT_SECONDS,
+                                        tail_chars=SCAN_OUTPUT_CHARS)
+    except Exception as exc:  # noqa: BLE001 — a scan that cannot run is reported, never fatal
+        log.warning("QA: bandit failed to run: %s", exc)
+        return {"bandit_status": "not_run", "bandit_high": 0, "bandit_findings": 0}
+    try:
+        high, findings = _count_bandit(result["output"])
+    except (ValueError, KeyError, TypeError):
+        # bandit exits 1 on any finding, so the exit code says nothing on its own.
+        log.warning("QA: bandit printed no JSON (exit %s)", "0" if result.get("passed") else "non-zero")
+        return {"bandit_status": "error", "bandit_high": 0, "bandit_findings": 0}
+    if high:
+        log.warning("QA: bandit found %d HIGH severity finding(s) (%d in all)", high, findings)
+    else:
+        log.info("QA: bandit — 0 HIGH, %d finding(s) in all", findings)
+    return {"bandit_status": "fail" if high else "pass", "bandit_high": high, "bandit_findings": findings}
+
+
 async def run_security_scan(state: AgentState) -> dict:
-    """Run semgrep OWASP scan on the workspace.
+    """Run the security scans on the workspace: semgrep's OWASP rules, then bandit.
 
     Coverage no longer runs here — #135: it used to re-run the whole pytest
     suite with `--cov` just for the coverage figure, doubling the QA phase's
@@ -1055,11 +1130,12 @@ async def run_security_scan(state: AgentState) -> dict:
     try:
         if command is None:
             raise FileNotFoundError("semgrep: not on PATH, no uv to run it, or SWARM_QA_SEMGREP=0")
-        semgrep_result = await claude.run_tests(workspace, command, timeout=SEMGREP_TIMEOUT_SECONDS)
+        semgrep_result = await claude.run_tests(workspace, command, timeout=SEMGREP_TIMEOUT_SECONDS,
+                                                tail_chars=SCAN_OUTPUT_CHARS)
         semgrep_status = "pass"
         # Parse semgrep JSON output for HIGH severity findings
         try:
-            semgrep_data = json.loads(semgrep_result["output"])
+            semgrep_data = _json_from(semgrep_result["output"])
             findings = semgrep_data.get("results", [])
             semgrep_high = sum(
                 1 for f in findings
@@ -1070,7 +1146,7 @@ async def run_security_scan(state: AgentState) -> dict:
                 log.warning("QA: semgrep found %d HIGH severity findings", semgrep_high)
             else:
                 log.info("QA: semgrep clean — 0 HIGH findings")
-        except (json.JSONDecodeError, KeyError):
+        except (ValueError, KeyError):
             if not semgrep_result["passed"]:
                 semgrep_status = "error"
                 log.warning("QA: semgrep exited with error")
@@ -1084,6 +1160,7 @@ async def run_security_scan(state: AgentState) -> dict:
     security_scan = dict(state.get("security_scan", {}))
     security_scan["semgrep_high"] = semgrep_high
     security_scan["semgrep_status"] = semgrep_status
+    security_scan.update(await _run_bandit(claude, workspace))
     security_scan.setdefault("coverage_pct", 0.0)
     security_scan.setdefault("coverage_status", "not_run")
     security_scan.setdefault("coverage_reason", "")
@@ -1555,6 +1632,13 @@ async def generate_demo_report(state: AgentState) -> dict:
     security = state.get("security_scan", {})
     semgrep_high = security.get("semgrep_high", 0)
     semgrep_status = security.get("semgrep_status", "not_run")
+    bandit_high = security.get("bandit_high", 0)
+    bandit_status = security.get("bandit_status", "not_run")
+    # One HIGH from either scanner is red; one scanner that ran clean is
+    # green; neither having run is not run.
+    security_status = ("fail" if (semgrep_high or bandit_high)
+                       else "pass" if "pass" in (semgrep_status, bandit_status)
+                       else "error" if "error" in (semgrep_status, bandit_status) else "not_run")
     coverage_pct = security.get("coverage_pct", 0.0)
     coverage_status = security.get("coverage_status", "not_run")
     coverage_reason = security.get("coverage_reason", "")
@@ -1595,7 +1679,7 @@ async def generate_demo_report(state: AgentState) -> dict:
     all_gates_pass = (
         unit_status == "pass" and tests_passed
         and e2e_status in ("pass", "inconclusive")
-        and semgrep_high == 0 and semgrep_status != "not_run"
+        and security_status == "pass"
         and pages_gate["status"] != "fail"
         and calls_gate["status"] != "fail"
     )
@@ -1638,7 +1722,10 @@ async def generate_demo_report(state: AgentState) -> dict:
             },
             "security": {
                 "semgrep_high": semgrep_high,
-                "status": semgrep_status,
+                "semgrep_status": semgrep_status,
+                "bandit_high": bandit_high,
+                "bandit_status": bandit_status,
+                "status": security_status,
             },
             "coverage": {
                 "percent": coverage_pct,

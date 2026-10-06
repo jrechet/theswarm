@@ -31,6 +31,8 @@ AGENTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "src" / "theswarm" / 
 HELPER_ONLY_KEYS = {
     "decision", "summary", "issues", "pr_number", "sent_back", "earlier", "text", "conflict",
     "status", "pages", "reason", "passed", "failed", "routes", "calls", "error",
+    # `_run_bandit`'s answer, merged into `security_scan`
+    "bandit_status", "bandit_high", "bandit_findings",
 }
 
 

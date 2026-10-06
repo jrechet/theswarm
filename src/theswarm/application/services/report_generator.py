@@ -266,6 +266,8 @@ def _qa_gate_detail(name: str, gate: dict, status: QualityStatus) -> str:
         reason = gate.get("reason") or ""
         return f"not run: {reason}" if reason else "not run"
     if name == "security":
+        if "bandit_high" in gate:
+            return f"semgrep {gate.get('semgrep_high', 0)} HIGH · bandit {gate.get('bandit_high', 0)} HIGH"
         return f"{gate.get('semgrep_high', 0)} HIGH findings"
     if name == "coverage":
         return f"{gate.get('percent', 0)}% (threshold {gate.get('threshold', 70)}%)"

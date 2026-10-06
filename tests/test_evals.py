@@ -267,7 +267,7 @@ BUILT_ELSEWHERE_2026_09_30 = {
     "country-stats", "tour-revenue", "next-concert", "sell-tickets", "lineup-add",
     "cancel-tour", "sold-out-list", "month-stats", "price-stats", "tour-cities",
     "refund-tickets", "lineup-remove", "reschedule-concert", "tour-span",
-    "tour-occupancy", "weekday-stats", "artist-search", "concert-notes",
+    "tour-occupancy", "weekday-stats", "artist-search", "concert-notes", "artists-list",
 }
 
 
