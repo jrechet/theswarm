@@ -24,6 +24,12 @@ on:
       - 'docs/cycle-history.jsonl'
       - 'docs/harness-runs.jsonl'
       - 'AGENT_MEMORY.jsonl'
+      # A demo film or a page of docs changes no behaviour either: the
+      # docs-only merge of 2026-10-06 (#291) queued a deploy that would
+      # have waited on the owner's running yakoi cycle and then interrupted
+      # it a second time — which a cycle does not survive.
+      - 'docs/**'
+      - 'README.md'
   # Any base, not only main: the V2 runtime lands as stacked pull requests
   # (M0 ← M1 ← M2 …), each against the previous milestone's branch, and a
   # PR without CI is a PR nobody can merge. The deploy trigger above is

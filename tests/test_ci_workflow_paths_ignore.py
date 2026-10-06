@@ -55,3 +55,11 @@ def test_harness_workflow_dispatch_also_accepts_a_feature_input():
     assert inputs["feature"]["default"] == ""
     assert inputs["all"]["type"] == "boolean"
     assert inputs["all"]["default"] is False
+
+
+def test_a_docs_only_merge_does_not_deploy():
+    """The docs-only merge of 2026-10-06 (#291) queued a deploy that would
+    have waited on the owner's running yakoi cycle and interrupted it a
+    second time, which a cycle does not survive."""
+    ignored = CI_TRIGGERS["push"]["paths-ignore"]
+    assert "docs/**" in ignored and "README.md" in ignored
