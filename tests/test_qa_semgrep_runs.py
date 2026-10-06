@@ -56,7 +56,8 @@ async def test_the_scan_gets_room_for_its_first_download(monkeypatch, tmp_path):
 
     out = await qa.run_security_scan({"claude": claude, "workspace": str(tmp_path)})
 
-    assert claude.run_tests.await_args.kwargs["timeout"] == qa.SEMGREP_TIMEOUT_SECONDS
+    semgrep_call = claude.run_tests.await_args_list[0]  # bandit's call follows it
+    assert semgrep_call.kwargs["timeout"] == qa.SEMGREP_TIMEOUT_SECONDS
     assert out["security_scan"]["semgrep_status"] == "pass"
 
 

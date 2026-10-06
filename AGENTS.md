@@ -393,12 +393,16 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   markers and `PR #N (branch …)`, never the heading. A conflict is not a
   review round: it does not count toward `CHANGES_REQUESTED_CAP`, and an
   approved PR that conflicts goes back whatever the rounds before it.
-  **And only the swarm's own** (owner, 2026-09-29): the TechLead reviews
-  every open PR but merges — or holds, on SELF_REPO — only branches the
-  Dev made (`techlead.is_swarm_branch`: `feat/issue-<n>…`, `feat/us-<n>…`);
-  any other approved PR is `foreign_prs`, "left for its author".
-  concert-tour-app#396, opened by hand on a `chore/` branch, was merged by
-  a demo cycle's TechLead where a person's review was the rule.
+  **On a target the swarm's approval is final** (owner, 2026-10-06: "if
+  the swarm says it's good, then it's good — I only review the demo"):
+  every PR the TechLead approves merges, whoever opened it — Renovate's
+  concert-tour-app#507 and the owner's own #433 had sat approved for a
+  week under the earlier rule (2026-09-29: merge only branches the Dev
+  made, `techlead.is_swarm_branch`), left for a person who never comes.
+  That rule survives on SELF_REPO only: the swarm's own are held for the
+  end of the cycle, any other approved PR is `foreign_prs`, "left for its
+  author". Never park a target PR for the owner; what they judge is the
+  demo.
 - **A REQUEST_CHANGES review closes the loop**: the review is copied onto
   the *issue* behind `CHANGES_MARKER`, the label flips back to
   `status:ready`, and the next attempt resumes the branch the review is
@@ -543,6 +547,14 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   the dashboard and the homepage whatever was built, and no report ever
   carried a story or the video. The before/after machinery
   (`story_preview_urls`) still waits for preview URLs nothing sets.
+- **QA's security gate is two scanners** (owner, 2026-10-06 — "1: bandit"): semgrep's
+  OWASP rules (through `uv tool run`, pinned, since 2026-09-25 — the gate was
+  never "not run" in prod after that, whatever #79 said for a while) and
+  bandit (`_bandit_command`, pinned, `SWARM_QA_BANDIT=0` to skip), the
+  Python-specific checks. One HIGH from either is a red gate; one scanner
+  that ran clean is green; the detail names both ("semgrep 0 HIGH · bandit
+  1 HIGH"). bandit exits 1 on any finding: its JSON is the verdict, never
+  its exit code.
 - **The GitHub circuit breaker ignores 4xx** (`tools/github._is_client_error`):
   a 422 "cannot review your own pull request" is a fact about the request,
   not an outage. Four of them opened the breaker and blocked the memory save

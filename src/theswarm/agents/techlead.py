@@ -746,10 +746,8 @@ def is_swarm_branch(branch: str | None) -> bool:
 
 async def _foreign_approved(github, approved: list[int]) -> tuple[list[int], list[int]]:
     """(the swarm's own, the others) among approved PRs, by their head
-    branch. The TechLead reviews every open PR and merges only its own
-    (owner, 2026-09-29): concert-tour-app#396, opened by hand on a
-    `chore/` branch, was reviewed and merged by a demo cycle's TechLead
-    where a person's review was the rule."""
+    branch — SELF_REPO only since 2026-10-06; on a target the swarm's
+    approval is final and every approved PR merges."""
     if not approved:
         return [], []
     heads = {p["number"]: p.get("head") for p in await github.get_open_prs()}
@@ -758,8 +756,15 @@ async def _foreign_approved(github, approved: list[int]) -> tuple[list[int], lis
 
 
 async def merge_approved_prs(state: AgentState) -> dict:
-    """Merge the swarm's own PRs that were approved in the review step; an
-    approved PR it did not open keeps its review and is left for its author."""
+    """Merge the PRs approved in the review step.
+
+    On a target the swarm's approval is final (owner, 2026-10-06: "if the
+    swarm says it's good, then it's good — I only review the demo"):
+    Renovate's concert-tour-app#507 and the owner's own #433 had sat
+    approved for a week, left for a person who never comes. On SELF_REPO an
+    approved PR the swarm did not open keeps its review and is left for its
+    author (2026-09-29), and its own are held for the end of the cycle.
+    """
     github = state.get("github")
     reviews = state.get("reviews", [])
 
@@ -768,13 +773,16 @@ async def merge_approved_prs(state: AgentState) -> dict:
                            "merge all approved PRs into main")
 
     approved = [r["pr_number"] for r in reviews if r.get("decision") == "APPROVE"]
-    try:
-        own, foreign = await _foreign_approved(github, approved)
-    except Exception:  # noqa: BLE001 — unreadable heads: merge nothing unknown
-        log.exception("Could not read the approved PRs' branches — merging none")
-        own, foreign = [], approved
-    for number in foreign:
-        log.info("PR #%d: approved, not the swarm's — left for its author", number)
+    if state.get("github_repo") == SELF_REPO:
+        try:
+            own, foreign = await _foreign_approved(github, approved)
+        except Exception:  # noqa: BLE001 — unreadable heads: merge nothing unknown
+            log.exception("Could not read the approved PRs' branches — merging none")
+            own, foreign = [], approved
+        for number in foreign:
+            log.info("PR #%d: approved, not the swarm's — left for its author", number)
+    else:
+        own, foreign = approved, []
 
     # On its own repository the swarm reviews but does not merge: a merge to
     # main redeploys this service, and the redeploy ends the cycle that just

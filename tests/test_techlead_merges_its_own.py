@@ -1,12 +1,13 @@
-"""The TechLead reviews every open PR and merges only the swarm's own.
+"""On a target the swarm's approval is final; on its own repo it merges only its own.
 
-It merged whatever it approved: concert-tour-app#396, a PR the owner's
-session opened by hand on a `chore/` branch, was reviewed and merged by
-the TechLead of a demo cycle (2026-09-28) — where the owner's rule says a
-person reviews. Owner's decision (2026-09-29): review all, merge only its
-own. A PR the swarm did not open keeps its review and is left for its
-author; one of its own is a branch the Dev made (`feat/issue-<n>-…`,
-`feat/us-<n>-…`).
+2026-09-29: review all, merge only the swarm's own branches (`feat/issue-<n>-…`,
+`feat/us-<n>-…`) — concert-tour-app#396, opened by hand, had been merged by a
+demo cycle's TechLead where a person's review was the rule. 2026-10-06, the
+owner: "I will never review concert-tour-app PRs; if the swarm says it's
+good, then it's good. I only review DEMO." — Renovate's #507 and the owner's
+own #433 had sat approved for a week, left for a person who never comes. On
+a target every approved PR merges (green CI still required); "left for its
+author" survives on SELF_REPO only.
 """
 
 from __future__ import annotations
@@ -53,16 +54,17 @@ PRS = [
 REVIEWS = [{"pr_number": 425, "decision": "APPROVE"}, {"pr_number": 430, "decision": "APPROVE"}]
 
 
-async def test_an_approved_pr_the_swarm_did_not_open_is_left_for_its_author():
+async def test_on_a_target_an_approved_pr_the_swarm_did_not_open_merges_too():
+    """The owner's rule of 2026-10-06: the swarm's approval is final."""
     github = _github(PRS)
 
     out = await merge_approved_prs({"github": github, "github_repo": "jrechet/concert-tour-app",
                                     "reviews": REVIEWS})
 
     merged = [call.args[0] for call in github.merge_pr.await_args_list]
-    assert merged == [430]
-    assert out["merged_prs"] == [430] and out["foreign_prs"] == [425]
-    assert "left for its author" in out["result"]
+    assert merged == [425, 430]
+    assert out["merged_prs"] == [425, 430] and out["foreign_prs"] == []
+    assert "left for its author" not in out["result"]
 
 
 async def test_on_its_own_repo_only_its_own_are_held_for_the_end():

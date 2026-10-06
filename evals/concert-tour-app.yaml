@@ -300,6 +300,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: artists-list
+    built_by: "local harness, cycle 2e713964f7a3, 2026-10-06, PRs #579–#581"
     text: |-
       List the artists on tour
       GET /api/v1/artists returns each distinct artist across the tours, alphabetical, with the number of tours they have; an empty list when there is none.

@@ -255,7 +255,7 @@ async def test_run_security_scan_clean(tmp_path):
     # Coverage carried forward from run_unit_tests untouched.
     assert scan["coverage_pct"] == 82.5
     assert scan["coverage_status"] == "pass"
-    claude.run_tests.assert_called_once()
+    assert claude.run_tests.await_count == 2  # semgrep, then bandit — no pytest
     assert "pytest" not in " ".join(claude.run_tests.call_args[0][1])
 
 
