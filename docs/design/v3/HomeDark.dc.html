@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home — dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0C0E12}
+a{color:#E8EBEF;text-decoration:none}a:hover{color:#F5A623}
+@media (max-width:720px){.rail-list{flex-direction:row !important;flex-wrap:wrap}.rail-bottom{display:none !important}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(217,119,6,.45)}70%{box-shadow:0 0 0 7px rgba(217,119,6,0)}}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; align-items: stretch; background: #0C0E12; color: #E8EBEF; font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased">
+
+  <nav aria-label="Main" style="flex: 1 1 232px; background: #14171C; border-right: 1px solid #262B33; display: flex; flex-direction: column; gap: 16px; padding: 14px 12px; box-sizing: border-box">
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 8px; height: 32px">
+      <a href="Main.dc.html" style="font-weight: 600; font-size: 15px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px">
+        <span style="width: 10px; height: 10px; border-radius: 999px; background: {{live}}; display: inline-block"></span>
+        theswarm
+      </a>
+      <span style="font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 11px; color: #6B7480">v3</span>
+    </div>
+
+    <div class="rail-list" style="display: flex; flex-direction: column; gap: 2px">
+      <a href="Main.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 6px; background: #1C2027; font-weight: 500; font-size: 13px">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 7.5 8 2.5l6 5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5Z"/></svg>
+        Home
+      </a>
+      <a href="Settings.dc.html" style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 6px; color: #9AA3AF; font-size: 13px">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h6"/></svg>
+        Requests
+        <span style="margin-left: auto; font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 11px; color: #F5A623; background: #2A2210; border-radius: 999px; padding: 1px 7px">2</span>
+      </a>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #6B7480; padding: 0 8px">Customers</div>
+      <sc-for list="{{customers}}" as="c" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <a href="Project.dc.html" style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 6px; font-size: 13px; font-weight: 500">
+            <span style="width: 18px; height: 18px; border-radius: 5px; background: #E8EBEF; color: #0C0E12; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">{{c.initial}}</span>
+            {{c.name}}
+          </a>
+          <sc-for list="{{c.projects}}" as="p" hint-placeholder-count="2">
+            <a href="Project.dc.html" style="display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 8px 0 36px; border-radius: 6px; color: #9AA3AF; font-size: 13px">
+              <span style="width: 6px; height: 6px; border-radius: 999px; background: {{p.dot}}; display: inline-block; flex: none"></span>
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{p.name}}</span>
+            </a>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+
+    <div class="rail-bottom" style="margin-top: auto; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #262B33; padding-top: 10px">
+      <a href="Settings.dc.html" style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 6px; color: #9AA3AF; font-size: 13px">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>
+        Settings
+      </a>
+      <div style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; color: #9AA3AF; font-size: 13px">
+        <span style="width: 6px; height: 6px; border-radius: 999px; background: #4ADE80; display: inline-block"></span>
+        Claude ok
+        <span style="margin-left: auto; font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 11px; color: #6B7480">token 11 mo</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px; font-size: 13px">
+        <span style="width: 22px; height: 22px; border-radius: 999px; background: #1C2027; border: 1px solid #3A414B; display: inline-block"></span>
+        <span style="display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 500">jrechet</span><span style="font-size: 11px; color: #6B7480">owner</span></span>
+        <a href="Signin.dc.html" style="margin-left: auto; font-size: 12px; color: #6B7480">Sign out</a>
+      </div>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <header style="height: 52px; display: flex; align-items: center; gap: 16px; padding: 0 28px; border-bottom: 1px solid #262B33; background: #0C0E12; flex-wrap: wrap">
+      <div style="font-size: 13px; color: #9AA3AF; display: flex; align-items: center; gap: 8px">
+        <span style="color: #E8EBEF; font-weight: 500">Home</span>
+        <span style="color: #3A414B">/</span>
+        <span>3 customers · 5 projects</span>
+      </div>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 8px">
+        <a href="CustomerHome.dc.html" style="height: 30px; display: inline-flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid #3A414B; border-radius: 6px; background: #14171C; font-size: 13px; color: #E8EBEF">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8s-2.5 4.5-6.5 4.5S1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></svg>
+          View as a customer
+        </a>
+        <button type="button" aria-label="Toggle dark mode" style="width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #3A414B; border-radius: 6px; background: #14171C; color: #9AA3AF; cursor: pointer">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5Z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div style="padding: 28px; display: flex; flex-direction: column; gap: 32px; max-width: 1160px; box-sizing: border-box; width: 100%">
+
+      <section aria-labelledby="now" style="display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <h2 id="now" style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #6B7480">Now</h2>
+          <span style="font-size: 12px; color: #6B7480">Tuesday 6 October, 12:31 UTC</span>
+        </div>
+        <a href="Cycle.dc.html" style="display: flex; flex-wrap: wrap; align-items: center; gap: 20px; padding: 18px 20px; background: #14171C; border: 1px solid #262B33; border-radius: 10px">
+          <span style="width: 10px; height: 10px; border-radius: 999px; background: {{live}}; display: inline-block; animation: pulse 1.6s ease-out infinite; flex: none"></span>
+          <span style="display: flex; flex-direction: column; gap: 4px; min-width: 240px; flex: 1 1 260px">
+            <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em">Harden input validation and sanitization</span>
+            <span style="font-size: 13px; color: #9AA3AF">Yakoi · yakoi · feature <span style="font-family: 'Geist Mono', ui-monospace, Menlo, monospace">#85</span> · running for 1 h 12 min</span>
+          </span>
+          <span style="display: flex; align-items: center; gap: 6px; flex: 2 1 360px; font-size: 12px; color: #6B7480">
+            <sc-for list="{{phases}}" as="ph" hint-placeholder-count="7">
+              <span style="display: flex; flex-direction: column; gap: 6px; flex: 1 1 0; min-width: 0">
+                <span style="height: 4px; border-radius: 2px; background: {{ph.bar}}"></span>
+                <span style="color: {{ph.color}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ph.label}}</span>
+              </span>
+            </sc-for>
+          </span>
+          <span style="font-size: 13px; font-weight: 500; color: #F5A623; white-space: nowrap">Open the theater →</span>
+        </a>
+      </section>
+
+      <section aria-labelledby="review" style="display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <h2 id="review" style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #6B7480">To review</h2>
+          <span style="font-size: 12px; color: #6B7480">3 demos since yesterday</span>
+        </div>
+        <div style="background: #14171C; border: 1px solid #262B33; border-radius: 10px; overflow: hidden">
+          <sc-for list="{{demos}}" as="d" hint-placeholder-count="3">
+            <a href="Demo.dc.html" style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 16px; border-top: 1px solid #262B33">
+              <span style="width: 64px; height: 40px; border-radius: 4px; background: #14171C; display: inline-flex; align-items: center; justify-content: center; flex: none">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="#E8EBEF" aria-hidden="true"><path d="M3 1.5v9l7-4.5-7-4.5Z"/></svg>
+              </span>
+              <span style="display: flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0">
+                <span style="font-weight: 500">{{d.title}}</span>
+                <span style="font-size: 12px; color: #9AA3AF">{{d.meta}}</span>
+              </span>
+              <span style="display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500; color: {{d.chipColor}}; background: {{d.chipBg}}">
+                <span style="width: 6px; height: 6px; border-radius: 999px; background: {{d.chipColor}}"></span>{{d.chip}}
+              </span>
+              <span style="font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 12px; color: #6B7480; width: 110px; text-align: right">{{d.when}}</span>
+            </a>
+          </sc-for>
+        </div>
+      </section>
+
+      <section aria-labelledby="requests" style="display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <h2 id="requests" style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #6B7480">Requests from customers</h2>
+          <span style="font-size: 12px; color: #6B7480">2 waiting for you</span>
+        </div>
+        <div style="background: #14171C; border: 1px solid #262B33; border-radius: 10px; overflow: hidden">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 14px 16px; border-top: 1px solid #262B33">
+            <span style="width: 18px; height: 18px; border-radius: 5px; background: #E8EBEF; color: #0C0E12; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex: none">Y</span>
+            <span style="display: flex; flex-direction: column; gap: 2px; flex: 1 1 320px; min-width: 0">
+              <span style="font-weight: 500">Pouvoir exporter les factures du mois en PDF</span>
+              <span style="font-size: 12px; color: #9AA3AF">Yakoi · Nadia · 2 h ago · yakoi</span>
+            </span>
+            <span style="display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500; color: #F5A623; background: #2A2210"><span style="width: 6px; height: 6px; border-radius: 999px; background: #D97706"></span>Received</span>
+            <a href="Project.dc.html" style="height: 30px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 6px; background: #E8EBEF; color: #0C0E12; font-size: 13px; font-weight: 500">Turn into a feature</a>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 14px 16px; border-top: 1px solid #262B33">
+            <span style="width: 18px; height: 18px; border-radius: 5px; background: #E8EBEF; color: #0C0E12; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex: none">M</span>
+            <span style="display: flex; flex-direction: column; gap: 2px; flex: 1 1 320px; min-width: 0">
+              <span style="font-weight: 500">Le back-office doit afficher le stock par entrepôt</span>
+              <span style="font-size: 12px; color: #9AA3AF">Maison Verne · Léa · yesterday · verne-back-office</span>
+            </span>
+            <span style="display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500; color: #60A5FA; background: #10213A"><span style="width: 6px; height: 6px; border-radius: 999px; background: #60A5FA"></span>Planned · #212</span>
+            <a href="Project.dc.html" style="height: 30px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 6px; border: 1px solid #3A414B; background: #14171C; color: #E8EBEF; font-size: 13px; font-weight: 500">Open the feature</a>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="customers" style="display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: baseline; gap: 10px">
+          <h2 id="customers" style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #6B7480">Customers</h2>
+          <a href="Settings.dc.html" style="font-size: 12px; color: #9AA3AF; margin-left: auto">Manage customers →</a>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px">
+          <sc-for list="{{customers}}" as="c" hint-placeholder-count="3">
+            <a href="Project.dc.html" style="display: flex; flex-direction: column; gap: 14px; padding: 16px; background: #14171C; border: 1px solid #262B33; border-radius: 10px">
+              <span style="display: flex; align-items: center; gap: 10px">
+                <span style="width: 24px; height: 24px; border-radius: 6px; background: #E8EBEF; color: #0C0E12; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">{{c.initial}}</span>
+                <span style="font-weight: 600; font-size: 15px; letter-spacing: -0.01em">{{c.name}}</span>
+                <span style="margin-left: auto; font-size: 12px; color: #6B7480">{{c.members}}</span>
+              </span>
+              <span style="font-size: 13px; color: #9AA3AF">{{c.summary}}</span>
+              <span style="display: flex; align-items: baseline; gap: 6px; border-top: 1px solid #262B33; padding-top: 10px; font-size: 12px; color: #6B7480">
+                This month
+                <span style="font-family: 'Geist Mono', ui-monospace, Menlo, monospace; color: #E8EBEF; font-size: 13px">{{c.spend}}</span>
+                <span style="margin-left: auto; font-family: 'Geist Mono', ui-monospace, Menlo, monospace">{{c.cycles}}</span>
+              </span>
+            </a>
+          </sc-for>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"live":{"editor":"color","default":"#D97706","options":["#D97706","#2563EB","#7C3AED","#2DD4BF"],"section":"Signal"},"$preview":{"width":1440,"height":1040}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const live = this.props.live ?? '#D97706';
+    const done = '#4ADE80', todo = '#262B33';
+    return {
+      live,
+      customers: [
+        { name: 'Yakoi', initial: 'Y', members: '2 members', summary: '1 project · 1 cycle running · 12 features delivered', spend: '$12.40', cycles: '5 cycles',
+          projects: [{ name: 'yakoi', dot: live }] },
+        { name: 'Maison Verne', initial: 'M', members: '4 members', summary: '2 projects · 3 features in review · 1 request planned', spend: '$38.90', cycles: '14 cycles',
+          projects: [{ name: 'verne-shop', dot: '#60A5FA' }, { name: 'verne-back-office', dot: '#3A414B' }] },
+        { name: 'Internal', initial: 'I', members: 'you', summary: '2 projects · the test bed and the swarm itself', spend: '$41.20', cycles: '19 cycles',
+          projects: [{ name: 'concert-tour-app', dot: '#4ADE80' }, { name: 'theswarm', dot: '#3A414B' }] },
+      ],
+      phases: [
+        { label: 'Prepare', bar: done, color: '#9AA3AF' },
+        { label: 'Plan', bar: done, color: '#9AA3AF' },
+        { label: 'Breakdown', bar: done, color: '#9AA3AF' },
+        { label: 'Dev · iter 2', bar: live, color: '#F5A623' },
+        { label: 'Review', bar: todo, color: '#6B7480' },
+        { label: 'QA', bar: todo, color: '#6B7480' },
+        { label: 'Demo', bar: todo, color: '#6B7480' },
+      ],
+      demos: [
+        { title: 'Venue detail page', meta: 'Internal · concert-tour-app · 3 PRs merged · 38 min · $2.14', chip: 'Verified', chipColor: '#4ADE80', chipBg: '#0F2A1A', when: '07:41 today' },
+        { title: 'Export orders as CSV', meta: 'Maison Verne · verne-shop · 2 PRs merged · 51 min · $3.02', chip: 'Unverified', chipColor: '#F5A623', chipBg: '#2A2210', when: 'yesterday' },
+        { title: 'Stock by warehouse', meta: 'Maison Verne · verne-back-office · 1 PR open · 44 min · $2.77', chip: 'Broken', chipColor: '#F87171', chipBg: '#2C1414', when: 'yesterday' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

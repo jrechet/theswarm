@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home — as a customer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F6F7F9}
+a{color:#0F1419;text-decoration:none}a:hover{color:#B45309}
+@media (max-width:720px){.rail-list{flex-direction:row !important;flex-wrap:wrap}.rail-bottom{display:none !important}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(217,119,6,.45)}70%{box-shadow:0 0 0 7px rgba(217,119,6,0)}}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column; background: #F6F7F9; color: #0F1419; font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased">
+
+  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 20px; background: #FDF1DC; color: #8F5606; font-size: 13px; border-bottom: 1px solid #F0D9A8">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8s-2.5 4.5-6.5 4.5S1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="2"/></svg>
+    <span>You are seeing TheSwarm as <strong style="font-weight: 600">Nadia, a member of Yakoi</strong>. She sees this and nothing else.</span>
+    <a href="Main.dc.html" style="margin-left: auto; color: #8F5606; font-weight: 500">Back to your view →</a>
+  </div>
+
+  <div style="flex: 1; display: flex; flex-wrap: wrap; align-items: stretch">
+    <nav aria-label="Main" style="flex: 1 1 232px; background: #FFFFFF; border-right: 1px solid #E1E4EA; display: flex; flex-direction: column; gap: 16px; padding: 14px 12px; box-sizing: border-box">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 8px; height: 32px">
+        <a href="CustomerHome.dc.html" style="font-weight: 600; font-size: 15px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px">
+          <span style="width: 10px; height: 10px; border-radius: 999px; background: {{live}}; display: inline-block"></span>
+          theswarm
+        </a>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid #E1E4EA; border-radius: 8px">
+        <span style="width: 24px; height: 24px; border-radius: 6px; background: #0F1419; color: #FFFFFF; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">Y</span>
+        <span style="display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 600; font-size: 13px">Yakoi</span><span style="font-size: 11px; color: #8A93A0">your workspace</span></span>
+      </div>
+      <div class="rail-list" style="display: flex; flex-direction: column; gap: 2px">
+        <a href="CustomerHome.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 6px; background: #EEF0F3; font-weight: 500; font-size: 13px">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 7.5 8 2.5l6 5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5Z"/></svg>
+          Overview
+        </a>
+        <a href="Demo.dc.html" style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 6px; color: #5B6471; font-size: 13px">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M7 6.5v3l2.5-1.5L7 6.5Z" fill="currentColor"/></svg>
+          Demos
+        </a>
+        <a href="Request.dc.html" style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 6px; color: #5B6471; font-size: 13px">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h6"/></svg>
+          Your requests
+          <span style="margin-left: auto; font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 11px; color: #5B6471; background: #EEF0F3; border-radius: 999px; padding: 1px 7px">3</span>
+        </a>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div style="font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #8A93A0; padding: 0 8px">Projects</div>
+        <a href="CustomerHome.dc.html" style="display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 8px; border-radius: 6px; color: #5B6471; font-size: 13px">
+          <span style="width: 6px; height: 6px; border-radius: 999px; background: {{live}}; display: inline-block; flex: none"></span>
+          yakoi
+        </a>
+      </div>
+      <div class="rail-bottom" style="margin-top: auto; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid #E1E4EA; padding-top: 10px">
+        <div style="display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px; font-size: 13px">
+          <span style="width: 22px; height: 22px; border-radius: 999px; background: #EEF0F3; border: 1px solid #C9CED6; display: inline-block"></span>
+          <span style="display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 500">Nadia</span><span style="font-size: 11px; color: #8A93A0">Yakoi</span></span>
+          <a href="Signin.dc.html" style="margin-left: auto; font-size: 12px; color: #8A93A0">Sign out</a>
+        </div>
+      </div>
+    </nav>
+
+    <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+      <header style="height: 52px; display: flex; align-items: center; gap: 16px; padding: 0 28px; border-bottom: 1px solid #E1E4EA; background: #F6F7F9; flex-wrap: wrap">
+        <div style="font-size: 13px; color: #5B6471; display: flex; align-items: center; gap: 8px">
+          <span style="color: #0F1419; font-weight: 500">Overview</span>
+        </div>
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 8px">
+          <a href="Request.dc.html" style="height: 30px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 6px; background: #0F1419; color: #FFFFFF; font-size: 13px; font-weight: 500">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>
+            Send a request
+          </a>
+        </div>
+      </header>
+
+      <div style="padding: 24px 28px 28px; display: flex; flex-direction: column; gap: 28px; max-width: 1100px; box-sizing: border-box; width: 100%">
+
+        <div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px">
+          <div style="display: flex; flex-direction: column; gap: 4px; flex: 1 1 300px">
+            <h1 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.015em">Good afternoon, Nadia</h1>
+            <span style="font-size: 13px; color: #5B6471">yakoi · one feature being built right now, one demo ready since yesterday</span>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap">
+            <sc-for list="{{stats}}" as="s" hint-placeholder-count="4">
+              <span style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; background: #FFFFFF; border: 1px solid #E1E4EA; border-radius: 10px; min-width: 96px">
+                <span style="font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 20px; font-weight: 500; color: {{s.color}}; line-height: 1.1">{{s.n}}</span>
+                <span style="font-size: 12px; color: #5B6471">{{s.label}}</span>
+              </span>
+            </sc-for>
+          </div>
+        </div>
+
+        <section aria-labelledby="progress" style="display: flex; flex-direction: column; gap: 12px">
+          <h2 id="progress" style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #8A93A0">Being built right now</h2>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 20px; padding: 18px 20px; background: #FFFFFF; border: 1px solid #E1E4EA; border-radius: 10px">
+            <span style="width: 10px; height: 10px; border-radius: 999px; background: {{live}}; display: inline-block; animation: pulse 1.6s ease-out infinite; flex: none"></span>
+            <span style="display: flex; flex-direction: column; gap: 4px; flex: 1 1 260px; min-width: 0">
+              <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em">Harden input validation and sanitization</span>
+              <span style="font-size: 13px; color: #5B6471">Started at 11:19 · usually done within the hour · you will get the demo here</span>
+            </span>
+            <span style="display: flex; align-items: center; gap: 6px; flex: 2 1 320px">
+              <sc-for list="{{steps}}" as="st" hint-placeholder-count="4">
+                <span style="display: flex; flex-direction: column; gap: 6px; flex: 1 1 0; min-width: 0">
+                  <span style="height: 4px; border-radius: 2px; background: {{st.bar}}"></span>
+                  <span style="font-size: 12px; color: {{st.color}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{st.label}}</span>
+                </span>
+              </sc-for>
+            </span>
+          </div>
+        </section>
+
+        <section aria-labelledby="demos" style="display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; align-items: baseline; gap: 10px">
+            <h2 id="demos" style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #8A93A0">Latest demos</h2>
+            <a href="Demo.dc.html" style="margin-left: auto; font-size: 12px; color: #5B6471">All 12 demos →</a>
+          </div>
+          <div style="background: #FFFFFF; border: 1px solid #E1E4EA; border-radius: 10px; overflow: hidden">
+            <sc-for list="{{demos}}" as="d" hint-placeholder-count="3">
+              <a href="Demo.dc.html" style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 16px; border-top: 1px solid #E1E4EA">
+                <span style="width: 64px; height: 40px; border-radius: 4px; background: #14171C; display: inline-flex; align-items: center; justify-content: center; flex: none">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="#FFFFFF" aria-hidden="true"><path d="M3 1.5v9l7-4.5-7-4.5Z"/></svg>
+                </span>
+                <span style="display: flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0">
+                  <span style="font-weight: 500">{{d.title}}</span>
+                  <span style="font-size: 12px; color: #5B6471">{{d.meta}}</span>
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500; color: {{d.chipColor}}; background: {{d.chipBg}}">
+                  <span style="width: 6px; height: 6px; border-radius: 999px; background: {{d.chipColor}}"></span>{{d.chip}}
+                </span>
+                <span style="font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 12px; color: #8A93A0; width: 90px; text-align: right">{{d.when}}</span>
+              </a>
+            </sc-for>
+          </div>
+        </section>
+
+        <section aria-labelledby="requests" style="display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; align-items: baseline; gap: 10px">
+            <h2 id="requests" style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #8A93A0">Your requests</h2>
+            <span style="font-size: 12px; color: #8A93A0">what you asked for, and where it stands</span>
+          </div>
+          <div style="background: #FFFFFF; border: 1px solid #E1E4EA; border-radius: 10px; overflow: hidden">
+            <sc-for list="{{requests}}" as="r" hint-placeholder-count="3">
+              <a href="{{r.href}}" style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 16px; border-top: 1px solid #E1E4EA">
+                <span style="display: flex; flex-direction: column; gap: 2px; flex: 1 1 260px; min-width: 0">
+                  <span style="font-weight: 500">{{r.title}}</span>
+                  <span style="font-size: 12px; color: #5B6471">{{r.meta}}</span>
+                </span>
+                <span style="display: flex; align-items: center; gap: 4px">
+                  <sc-for list="{{r.steps}}" as="s" hint-placeholder-count="4">
+                    <span style="display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 500; color: {{s.color}}; background: {{s.bg}}">{{s.label}}</span>
+                  </sc-for>
+                </span>
+              </a>
+            </sc-for>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"live":{"editor":"color","default":"#D97706","options":["#D97706","#2563EB","#7C3AED","#0F766E"],"section":"Signal"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const live = this.props.live ?? '#D97706';
+    const done = { color: '#15803D', bg: '#DCFCE7' }, now = { color: '#B45309', bg: '#FDF1DC' }, next = { color: '#8A93A0', bg: '#EEF0F3' };
+    const chain = (at) => ['Received', 'Planned', 'Building', 'Delivered'].map((label, i) => ({ label, ...(i < at ? done : i === at ? now : next) }));
+    return {
+      live,
+      stats: [
+        { n: '12', label: 'delivered', color: '#15803D' },
+        { n: '1', label: 'being built', color: '#B45309' },
+        { n: '2', label: 'in review', color: '#1D4ED8' },
+        { n: '3', label: 'planned', color: '#5B6471' },
+      ],
+      steps: [
+        { label: 'Planned', bar: '#15803D', color: '#5B6471' },
+        { label: 'Building', bar: live, color: '#B45309' },
+        { label: 'Checking', bar: '#E1E4EA', color: '#8A93A0' },
+        { label: 'Demo ready', bar: '#E1E4EA', color: '#8A93A0' },
+      ],
+      demos: [
+        { title: 'Invoice PDF layout v2', meta: '1:12 · the new layout, the monthly export, the legal mentions', chip: 'Verified', chipColor: '#15803D', chipBg: '#DCFCE7', when: 'yesterday' },
+        { title: 'Multi-currency totals', meta: '0:58 · totals in EUR, CHF and GBP on every invoice', chip: 'Verified', chipColor: '#15803D', chipBg: '#DCFCE7', when: '2 Oct' },
+        { title: 'Customer search', meta: '1:04 · search by name, SIRET or email', chip: 'Unverified', chipColor: '#B45309', chipBg: '#FDF1DC', when: '30 Sep' },
+      ],
+      requests: [
+        { title: 'Pouvoir exporter les factures du mois en PDF', meta: 'sent 2 h ago · waiting for the team', steps: chain(0), href: 'Request.dc.html' },
+        { title: 'Numérotation des factures par exercice', meta: 'planned as feature #80 · in review', steps: chain(2), href: 'CustomerHome.dc.html' },
+        { title: 'Nouvelle mise en page des factures PDF', meta: 'delivered yesterday · demo 1:12', steps: chain(4), href: 'Demo.dc.html' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

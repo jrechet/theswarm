@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sign in</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F6F7F9}
+a{color:#0F1419;text-decoration:none}a:hover{color:#B45309}
+input:focus{outline:2px solid #0F1419;outline-offset:1px}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 40px 20px; box-sizing: border-box; background-color: #F6F7F9; background-image: radial-gradient(#D5D9E0 1px, transparent 1px); background-size: 22px 22px; color: #0F1419; font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased">
+
+  <a href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 18px; letter-spacing: -0.01em">
+    <span style="width: 14px; height: 14px; border-radius: 999px; background: {{live}}; display: inline-block"></span>
+    theswarm
+  </a>
+
+  <form style="width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 18px; padding: 28px; background: #FFFFFF; border: 1px solid #E1E4EA; border-radius: 12px; box-shadow: 0 8px 30px rgba(15,20,25,.06); margin: 0; box-sizing: border-box">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <h1 style="margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.015em">Sign in</h1>
+      <span style="font-size: 13px; color: #5B6471">Your projects, their progress, and every demo.</span>
+    </div>
+
+    <a href="Main.dc.html" style="height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border-radius: 6px; background: #0F1419; color: #FFFFFF; font-size: 14px; font-weight: 500">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="4" cy="3.5" r="1.5"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="6" r="1.5"/><path d="M4 5v6M12 7.5c0 2-2 2.5-4 3s-4 1-4 1"/></svg>
+      Continue with GitHub
+    </a>
+
+    <div style="display: flex; align-items: center; gap: 12px; color: #8A93A0; font-size: 12px">
+      <span style="flex: 1; height: 1px; background: #E1E4EA"></span>or<span style="flex: 1; height: 1px; background: #E1E4EA"></span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label for="email" style="font-size: 13px; font-weight: 500">Work email</label>
+      <input id="email" type="email" placeholder="nadia@yakoi.fr" style="height: 40px; padding: 0 12px; border: 1px solid #C9CED6; border-radius: 6px; background: #FFFFFF; font: inherit; font-size: 14px; color: #0F1419">
+    </div>
+    <a href="CustomerHome.dc.html" style="height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #C9CED6; border-radius: 6px; background: #FFFFFF; color: #0F1419; font-size: 14px; font-weight: 500">Email me a sign-in link</a>
+
+    <span style="font-size: 12px; color: #8A93A0; text-align: center; line-height: 1.5">Members are invited by the owner of their customer account. No invitation, no account.</span>
+  </form>
+
+  <span style="font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 11px; color: #8A93A0">bots.jrec.fr/swarm · v3</span>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"live":{"editor":"color","default":"#D97706","options":["#D97706","#2563EB","#7C3AED","#0F766E"],"section":"Signal"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { live: this.props.live ?? '#D97706' };
+  }
+}
+</script>
+</body>
+</html>

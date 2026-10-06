@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Design system</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F6F7F9}
+a{color:#0F1419;text-decoration:none}a:hover{color:#B45309}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(217,119,6,.45)}70%{box-shadow:0 0 0 7px rgba(217,119,6,0)}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1400px; box-sizing: border-box; padding: 48px; display: flex; flex-direction: column; gap: 32px; background: #F6F7F9; color: #0F1419; font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased">
+
+  <div style="display: flex; align-items: flex-end; gap: 24px">
+    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1">
+      <h1 style="margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.02em">One system, every screen</h1>
+      <span style="font-size: 15px; color: #5B6471">Modern control room. Cool neutrals, one type pairing, colour by meaning. The only colour that moves is the swarm at work.</span>
+    </div>
+    <div style="display: flex; gap: 8px; font-size: 12px; color: #5B6471">
+      <span style="padding: 4px 10px; border: 1px solid #C9CED6; border-radius: 999px; background: #FFFFFF">Geist · Geist Mono</span>
+      <span style="padding: 4px 10px; border: 1px solid #C9CED6; border-radius: 999px; background: #FFFFFF">1 px borders, no shadows</span>
+      <span style="padding: 4px 10px; border: 1px solid #C9CED6; border-radius: 999px; background: #FFFFFF">radius 6 · 10</span>
+      <span style="padding: 4px 10px; border: 1px solid #C9CED6; border-radius: 999px; background: #FFFFFF">light and dark</span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; flex: 1; min-height: 0">
+
+    <section style="display: flex; flex-direction: column; gap: 14px; padding: 20px; background: #FFFFFF; border: 1px solid #E1E4EA; border-radius: 10px">
+      <h2 style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #8A93A0">Colour, by meaning</h2>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; font-size: 12px">
+        <span style="color: #8A93A0">Light</span><span style="color: #8A93A0">Dark</span>
+        <sc-for list="{{tokens}}" as="t" hint-placeholder-count="13">
+          <span style="display: flex; align-items: center; gap: 8px"><span style="width: 22px; height: 22px; border-radius: 5px; background: {{t.light}}; border: 1px solid #E1E4EA; flex: none"></span><span style="display: flex; flex-direction: column; line-height: 1.2"><span style="font-weight: 500">{{t.name}}</span><span style="font-family: 'Geist Mono', ui-monospace, Menlo, monospace; color: #8A93A0; font-size: 11px">{{t.light}}</span></span></span>
+          <span style="display: flex; align-items: center; gap: 8px"><span style="width: 22px; height: 22px; border-radius: 5px; background: {{t.dark}}; border: 1px solid #262B33; flex: none"></span><span style="font-family: 'Geist Mono', ui-monospace, Menlo, monospace; color: #8A93A0; font-size: 11px">{{t.dark}}</span></span>
+        </sc-for>
+      </div>
+      <span style="font-size: 12px; color: #5B6471; line-height: 1.5; border-top: 1px solid #E1E4EA; padding-top: 10px">Amber is the brand and the live signal, nothing else. Green, red, blue and slate are verdicts and states, never decoration. Primary actions are ink on light, light on dark.</span>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 14px; padding: 20px; background: #FFFFFF; border: 1px solid #E1E4EA; border-radius: 10px">
+      <h2 style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #8A93A0">Type</h2>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <span style="font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1">Headline 28 / 600</span>
+        <span style="font-size: 22px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.2">Page title 22 / 600</span>
+        <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em">Section 16 / 600</span>
+        <span style="font-size: 14px">Body 14 / 400 — a sentence the owner reads, with a <a href="Main.dc.html" style="color: #B45309">link</a>.</span>
+        <span style="font-size: 13px; color: #5B6471">Table and rail 13 / 400, muted</span>
+        <span style="font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #8A93A0">Label 12 / 500 / tracked</span>
+        <span style="font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 12px; color: #5B6471">mono 12 — ids 9f1ef7c9 · $2.77 · 44 min · src/main/java</span>
+      </div>
+      <span style="font-size: 12px; color: #5B6471; line-height: 1.5; border-top: 1px solid #E1E4EA; padding-top: 10px">Two faces: Geist for everything a person reads, Geist Mono for everything a machine produced — ids, costs, durations, paths, request lines. Numbers never sit in prose.</span>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 14px; padding: 20px; background: #FFFFFF; border: 1px solid #E1E4EA; border-radius: 10px">
+      <h2 style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #8A93A0">Vocabulary</h2>
+      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px">
+        <sc-for list="{{words}}" as="w" hint-placeholder-count="7">
+          <span style="display: flex; gap: 10px; line-height: 1.4"><span style="font-weight: 600; width: 86px; flex: none">{{w.word}}</span><span style="color: #5B6471">{{w.def}}</span></span>
+        </sc-for>
+      </div>
+      <span style="font-size: 12px; color: #5B6471; line-height: 1.5; border-top: 1px solid #E1E4EA; padding-top: 10px">The URL says the level: /c/yakoi · /c/yakoi/p/yakoi · /c/yakoi/p/yakoi/f/85 · /cycles/9f1ef7c9 · /demos/57f424a8. No "repo", no "play", no "legacy".</span>
+    </section>
+
+    <section style="grid-column: span 2; display: flex; flex-direction: column; gap: 16px; padding: 20px; background: #FFFFFF; border: 1px solid #E1E4EA; border-radius: 10px">
+      <h2 style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #8A93A0">Components</h2>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px">
+
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="font-size: 12px; color: #8A93A0">Buttons</span>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+            <button type="button" style="height: 32px; padding: 0 12px; border: 0; border-radius: 6px; background: #0F1419; color: #FFFFFF; font: inherit; font-size: 13px; font-weight: 500">Primary</button>
+            <button type="button" style="height: 32px; padding: 0 12px; border: 1px solid #C9CED6; border-radius: 6px; background: #FFFFFF; color: #0F1419; font: inherit; font-size: 13px; font-weight: 500">Secondary</button>
+            <button type="button" style="height: 32px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: #5B6471; font: inherit; font-size: 13px">Ghost</button>
+            <button type="button" style="height: 32px; padding: 0 12px; border: 1px solid #C9CED6; border-radius: 6px; background: #FFFFFF; color: #B91C1C; font: inherit; font-size: 13px; font-weight: 500">Cancel the cycle</button>
+            <button type="button" style="height: 32px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border: 0; border-radius: 6px; background: #0F1419; color: #FFFFFF; font: inherit; font-size: 13px; font-weight: 500"><svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M3 1.5v9l7-4.5-7-4.5Z"/></svg>Play</button>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="font-size: 12px; color: #8A93A0">Status chips — the same six words on every screen</span>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+            <sc-for list="{{chips}}" as="c" hint-placeholder-count="6">
+              <span style="display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500; color: {{c.color}}; background: {{c.bg}}"><span style="width: 6px; height: 6px; border-radius: 999px; background: {{c.color}}; animation: {{c.anim}}"></span>{{c.label}}</span>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="font-size: 12px; color: #8A93A0">Rail items</span>
+          <div style="display: flex; flex-direction: column; gap: 2px; width: 208px">
+            <span style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 6px; background: #EEF0F3; font-weight: 500; font-size: 13px">Active item</span>
+            <span style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; border-radius: 6px; color: #5B6471; font-size: 13px">Item<span style="margin-left: auto; font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 11px; color: #B45309; background: #FDF1DC; border-radius: 999px; padding: 1px 7px">2</span></span>
+            <span style="display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 8px 0 36px; border-radius: 6px; color: #5B6471; font-size: 13px"><span style="width: 6px; height: 6px; border-radius: 999px; background: #D97706"></span>project, running</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="font-size: 12px; color: #8A93A0">Phase stepper — done, live, next</span>
+          <div style="display: flex; gap: 8px">
+            <sc-for list="{{steps}}" as="s" hint-placeholder-count="4">
+              <span style="display: flex; flex-direction: column; gap: 6px; flex: 1 1 0"><span style="height: 5px; border-radius: 3px; background: {{s.bar}}"></span><span style="font-size: 12px; font-weight: 500; color: {{s.color}}">{{s.label}}</span><span style="font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 11px; color: #8A93A0">{{s.time}}</span></span>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="font-size: 12px; color: #8A93A0">Gate row</span>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid #E1E4EA; border-radius: 10px; font-size: 13px">
+            <span style="width: 16px; height: 16px; border-radius: 999px; background: #DCFCE7; color: #15803D; display: inline-flex; align-items: center; justify-content: center"><svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m3 8.5 3 3 7-7"/></svg></span>
+            <span style="font-weight: 500; width: 110px">Security</span>
+            <span style="color: #5B6471; flex: 1">semgrep OWASP · bandit</span>
+            <span style="font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 12px; color: #15803D; font-weight: 500">0 HIGH · 0 HIGH</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="font-size: 12px; color: #8A93A0">Live dot, avatar, customer mark</span>
+          <div style="display: flex; align-items: center; gap: 16px">
+            <span style="width: 10px; height: 10px; border-radius: 999px; background: #D97706; animation: pulse 1.6s ease-out infinite"></span>
+            <span style="width: 22px; height: 22px; border-radius: 999px; background: #EEF0F3; border: 1px solid #C9CED6"></span>
+            <span style="width: 20px; height: 20px; border-radius: 5px; background: #0F1419; color: #FFFFFF; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center">Y</span>
+            <span style="display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px"><span style="width: 10px; height: 10px; border-radius: 999px; background: #D97706"></span>theswarm</span>
+            <span style="font-size: 12px; color: #5B6471">no logo, no mascot: a dot that moves when the swarm does</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 14px; padding: 20px; background: #FFFFFF; border: 1px solid #E1E4EA; border-radius: 10px">
+      <h2 style="margin: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: #8A93A0">Layout, one shell</h2>
+      <div style="display: flex; gap: 6px; height: 120px">
+        <span style="width: 44px; border: 1px solid #C9CED6; border-radius: 6px; background: #FFFFFF; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 10px; color: #8A93A0">232</span>
+        <span style="flex: 1; display: flex; flex-direction: column; gap: 6px">
+          <span style="height: 14px; border: 1px solid #C9CED6; border-radius: 4px; background: #FFFFFF; display: flex; align-items: center; padding: 0 6px; font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 10px; color: #8A93A0">52</span>
+          <span style="flex: 1; border: 1px dashed #C9CED6; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-family: 'Geist Mono', ui-monospace, Menlo, monospace; font-size: 10px; color: #8A93A0">content · padding 28 · gaps 12 / 24 / 32</span>
+        </span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #5B6471; line-height: 1.5">
+        <span><strong style="font-weight: 600; color: #0F1419">Rail</strong> — home, requests, the customers and their projects, settings, Claude's health, you.</span>
+        <span><strong style="font-weight: 600; color: #0F1419">Top bar</strong> — the breadcrumb says where you are; the actions of that level sit on the right.</span>
+        <span><strong style="font-weight: 600; color: #0F1419">Phone</strong> — the rail becomes a strip on top, columns stack, tables scroll sideways.</span>
+        <span><strong style="font-weight: 600; color: #0F1419">A customer</strong> sees the same shell with one customer in it, no settings, no Play.</span>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      tokens: [
+        { name: 'Canvas', light: '#F6F7F9', dark: '#0C0E12' },
+        { name: 'Surface', light: '#FFFFFF', dark: '#14171C' },
+        { name: 'Raised', light: '#EEF0F3', dark: '#1C2027' },
+        { name: 'Border', light: '#E1E4EA', dark: '#262B33' },
+        { name: 'Border strong', light: '#C9CED6', dark: '#3A414B' },
+        { name: 'Ink', light: '#0F1419', dark: '#E8EBEF' },
+        { name: 'Ink muted', light: '#5B6471', dark: '#9AA3AF' },
+        { name: 'Ink faint', light: '#8A93A0', dark: '#6B7480' },
+        { name: 'Live — the swarm at work', light: '#D97706', dark: '#F5A623' },
+        { name: 'Verified', light: '#15803D', dark: '#4ADE80' },
+        { name: 'Broken', light: '#B91C1C', dark: '#F87171' },
+        { name: 'In review', light: '#1D4ED8', dark: '#60A5FA' },
+        { name: 'Waiting', light: '#64748B', dark: '#94A3B8' },
+      ],
+      words: [
+        { word: 'Customer', def: 'a company you work for; its members sign in and see only it' },
+        { word: 'Project', def: 'a GitHub repository the swarm may work on, inside a customer' },
+        { word: 'Request', def: 'a need a customer wrote in their own words; yours to turn into a feature' },
+        { word: 'Feature', def: 'a GitHub issue you wrote; the swarm breaks it into sub-tasks' },
+        { word: 'Cycle', def: 'one run of the four agents on a feature: plan, build, review, check' },
+        { word: 'Demo', def: 'what a cycle delivered: the video, the gates, the verdict, the PRs' },
+        { word: 'Verdict', def: 'verified, unverified or broken — what the running app said' },
+      ],
+      chips: [
+        { label: 'Running', color: '#B45309', bg: '#FDF1DC', anim: 'pulse 1.6s ease-out infinite' },
+        { label: 'Verified', color: '#15803D', bg: '#DCFCE7', anim: 'none' },
+        { label: 'Unverified', color: '#B45309', bg: '#FDF1DC', anim: 'none' },
+        { label: 'Broken', color: '#B91C1C', bg: '#FEE2E2', anim: 'none' },
+        { label: 'In review', color: '#1D4ED8', bg: '#DBEAFE', anim: 'none' },
+        { label: 'Waiting', color: '#64748B', bg: '#E2E8F0', anim: 'none' },
+      ],
+      steps: [
+        { label: 'Plan', time: '3:10', bar: '#15803D', color: '#5B6471' },
+        { label: 'Build', time: '26:04 …', bar: '#D97706', color: '#B45309' },
+        { label: 'Check', time: '', bar: '#E1E4EA', color: '#8A93A0' },
+        { label: 'Demo', time: '', bar: '#E1E4EA', color: '#8A93A0' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

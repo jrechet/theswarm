@@ -1,0 +1,34 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-06T12:30:00Z"},
+  "title": "TheSwarm V3 redesign",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Signin.dc.html": {"x": 0, "y": 0, "w": 1440, "h": 900, "title": "Sign in", "expand": "fill", "is_interactive": true},
+    "Main.dc.html": {"x": 1520, "y": 0, "w": 1440, "h": 1040, "title": "Home — owner", "expand": "fill", "is_interactive": true},
+    "Project.dc.html": {"x": 3040, "y": 0, "w": 1440, "h": 1100, "title": "Project — board", "expand": "fill", "is_interactive": true},
+    "Cycle.dc.html": {"x": 4560, "y": 0, "w": 1440, "h": 1000, "title": "Cycle — the theater", "expand": "fill", "is_interactive": true},
+    "Demo.dc.html": {"x": 0, "y": 1220, "w": 1440, "h": 1150, "title": "Demo — the player", "expand": "fill", "is_interactive": true},
+    "CustomerHome.dc.html": {"x": 1520, "y": 1220, "w": 1440, "h": 1000, "title": "Home — as a customer", "expand": "fill", "is_interactive": true},
+    "Request.dc.html": {"x": 3040, "y": 1220, "w": 1440, "h": 900, "title": "Request — a customer writes", "expand": "fill", "is_interactive": true},
+    "Settings.dc.html": {"x": 4560, "y": 1220, "w": 1440, "h": 1100, "title": "Settings — customers, members", "expand": "fill", "is_interactive": true},
+    "HomeDark.dc.html": {"x": 0, "y": 2490, "w": 1440, "h": 1040, "title": "Home — dark", "expand": "fill", "is_interactive": true},
+    "CycleDark.dc.html": {"x": 1520, "y": 2490, "w": 1440, "h": 1000, "title": "Cycle — dark", "expand": "fill", "is_interactive": true},
+    "System.dc.html": {"x": 3040, "y": 2490, "w": 1440, "h": 1400, "title": "Design system"}
+  },
+  "order": [
+    "Signin.dc.html", "Main.dc.html", "Project.dc.html", "Cycle.dc.html",
+    "Demo.dc.html", "CustomerHome.dc.html", "Request.dc.html", "Settings.dc.html",
+    "HomeDark.dc.html", "CycleDark.dc.html", "System.dc.html"
+  ],
+  "notes": {
+    "row-owner": {"x": 0, "y": -300, "text": "Owner — sign in, home across customers, a project, a running cycle", "kind": "title1", "maxW": 5960},
+    "row-customer": {"x": 0, "y": 920, "text": "The demo · what a customer sees · the one thing a customer writes · settings", "kind": "title1", "maxW": 5960},
+    "row-dark": {"x": 0, "y": 2190, "text": "Dark mode · the design system every screen is built from", "kind": "title1", "maxW": 4400},
+    "q-request": {"x": 4560, "y": 2490, "w": 380, "text": "Open question — the Request: a customer writes a need in their own words, it lands in your inbox, you turn it into a feature when you decide. Yes or no?", "fill": "orange"},
+    "q-cost": {"x": 4560, "y": 2900, "w": 380, "text": "Open question — spend: the owner sees cost per customer and per cycle (for invoicing). Customers never see cost. OK?", "fill": "blue"},
+    "q-cycle": {"x": 4560, "y": 3310, "w": 380, "text": "Open question — a customer's view of a running cycle: four plain steps (Planned, Building, Checking, Demo ready), never the theater. OK?", "fill": "green"}
+  },
+  "designSystems": []
+}
