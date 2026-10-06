@@ -31,7 +31,22 @@ Two packages in `src/`: `theswarm` (agents, cycle, web) and `theswarm_common`
 - `infrastructure/` — SQLite (aiosqlite) repos, Playwright recorder, scheduler, webhooks
 - `presentation/` — CLI (argparse), web (FastAPI + Jinja + SSE), TUI (Textual)
 
-Two UI generations coexist in `presentation/web/`:
+Three UI generations coexist in `presentation/web/`, and V3 is the one being
+built (`docs/plans/2026-10-v3-one-product.md`, the owner's decisions of
+2026-10-06: one product for several customers whose members sign in and
+watch; the older two are deleted at its M6):
+- **V3** — `templates/v3/` (`base.html` the shell: one rail, one top bar, the
+  content; `bare.html` the doors; `_ui.html` the components as macros;
+  `home.html`) on the tokens of `static/v3/input.css` (cool neutrals, light
+  and dark, Geist and Geist Mono vendored, amber is the brand and the live
+  signal only, the V2 colour names aliased onto the V3 tokens until M6).
+  The rail is built once per HTML request by `shell.py`
+  (`ShellMiddleware` → `current_shell()`, handed to every template as
+  `shell`): home, the customers and their projects (Internal until M2),
+  the project the page is about, Claude's health, who is signed in; a
+  failing query leaves an empty rail, never an error page. Since M1 every
+  V2 page renders inside this shell (`v2/base.html` extends it) and the
+  "Legacy" link is gone — V1 is reachable by URL only until M6.
 - **V2** — `routes/v2.py` + `templates/v2/` on Tailwind tokens (`static/v2/input.css`,
   Plex fonts vendored, no CDN). Owns `/` (repo picker fed by the GitHub App
   installation plus legacy registered projects), `/r/{owner}/{name}` (composer →

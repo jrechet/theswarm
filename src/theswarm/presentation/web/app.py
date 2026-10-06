@@ -58,6 +58,7 @@ from theswarm.domain.cycles.events import (
 )
 from theswarm.presentation.web.routes import analyst, api, architect, artifacts, autonomy_config, chat, chief_of_staff, cycles, dashboard, demos, designer, dev_rigour, features, fragments, health, hitl, metrics, product, projects, prompt_library, qa, refactor_programs, release, reports, scout, security, semantic_memory, settings as settings_route, sre, team, techlead, webhooks, writer
 from theswarm.presentation.web.auth import AuthWallMiddleware
+from theswarm.presentation.web.shell import ShellMiddleware, current_shell
 from theswarm.presentation.web.routes import auth_routes, github_setup, v2
 from theswarm.presentation.web.sse import SSEHub
 
@@ -85,6 +86,7 @@ class _TemplateEngine:
         from fastapi.responses import HTMLResponse
         context.setdefault("base", self._base_path)
         context.setdefault("asset_v", _ASSET_VERSION)
+        context.setdefault("shell", current_shell())  # the V3 rail, per request
         template = self._env.get_template(name)
         html = template.render(**context)
         return HTMLResponse(content=html, status_code=status_code)
@@ -1009,6 +1011,8 @@ def create_web_app(
     if _STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
+    # The V3 shell (rail, Claude's health, who is signed in) for every HTML page.
+    app.add_middleware(ShellMiddleware, base_path=base_path.rstrip("/"))
     # Issue #38 — the wall goes up last so it fronts every route above.
     app.add_middleware(AuthWallMiddleware, base_path=base_path.rstrip("/"))
 

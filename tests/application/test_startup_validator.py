@@ -19,7 +19,7 @@ class TestValidate:
         from theswarm.application.services import startup_validator as sv
 
         (tmp_path / "app.css").write_text("/* built */")  # the generated stylesheet, built
-        monkeypatch.setattr(sv, "V2_STYLESHEET", tmp_path / "app.css")
+        monkeypatch.setattr(sv, "STYLESHEET", tmp_path / "app.css")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
         monkeypatch.setenv("GITHUB_TOKEN", "ghp-test")
         monkeypatch.setenv("SWARM_GITHUB_REPO", "owner/repo")
@@ -136,13 +136,13 @@ class TestSubscriptionNeedsNoApiKey:
 
 
 class TestTheStylesheetIsBuilt:
-    """`static/v2/app.css` is generated (never committed): on a fresh clone the
+    """`static/v3/app.css` is generated (never committed): on a fresh clone the
     Quickstart's first page rendered in Times with blue links (2026-10-05)."""
 
     def test_a_missing_stylesheet_is_a_warning_naming_the_command(self, validator, monkeypatch, tmp_path):
         from theswarm.application.services import startup_validator as sv
 
-        monkeypatch.setattr(sv, "V2_STYLESHEET", tmp_path / "app.css")
+        monkeypatch.setattr(sv, "STYLESHEET", tmp_path / "app.css")
         result = validator.validate(require_api_keys=False)
         assert result.ok
         assert any("app.css" in w and "scripts/build-css.sh" in w for w in result.warnings)
@@ -151,5 +151,5 @@ class TestTheStylesheetIsBuilt:
         from theswarm.application.services import startup_validator as sv
 
         (tmp_path / "app.css").write_text("/* built */")
-        monkeypatch.setattr(sv, "V2_STYLESHEET", tmp_path / "app.css")
+        monkeypatch.setattr(sv, "STYLESHEET", tmp_path / "app.css")
         assert not any("app.css" in w for w in validator.validate(require_api_keys=False).warnings)

@@ -30,6 +30,7 @@ flowchart LR
         TW[Tailwind binary - pinned v4.3.3]
         PYPI[PyPI packages via uv.lock]
         PLEX[IBM Plex fonts - vendored in repo]
+        GEIST[Geist fonts - vendored in repo, OFL]
     end
 
     USER((Owner)) -->|OAuth sign-in| GHAPP
@@ -63,7 +64,8 @@ flowchart LR
 | Mattermost `chat.jrec.fr` | Owner | self-hosted | bot token | low — optional surface | disconnect | ⚠ 404 on boot, fix-or-drop pending — the host is right (Traefik router `Host(chat.jrec.fr)`), but service `mattermost_mattermost` has run no task since ~2026-05 (last task shut down, earlier ones failed unhealthy), so Traefik answers its own 404; the harness alert fails the same way (read 2026-09-24) |
 | Seq `logs.jrec.fr` | Owner | self-hosted | API key | low | stdout logs | ✔ settled |
 | Tailwind standalone binary | Tailwind Labs | free, MIT | — | build-time fetch from GitHub releases (pinned + no runtime presence) | hand-rolled CSS | ✔ owner, 2026-09-01 (V2 UI) |
-| IBM Plex fonts | IBM (OFL) | free | — | none — woff2 vendored in repo, no CDN | system fonts | ✔ owner, 2026-09-01 (V2 UI) |
+| IBM Plex fonts | IBM (OFL) | free | — | none — woff2 vendored in repo, no CDN | system fonts | ✔ owner, 2026-09-01 (V2 UI) — leaves with V2 at V3 M6 |
+| Geist + Geist Mono fonts | Vercel (OFL 1.1, `static/v3/fonts/LICENSE.txt`) | free | — | none — the two variable woff2 vendored from the `geist` npm package 1.3.1, no CDN | system fonts (the tokens are the look, not the face) | ✔ owner, 2026-10-06 (V3, "modern control room") |
 | PyJWT + cryptography | OSS | free | — | supply chain (pinned in uv.lock) | — | ✔ owner, 2026-09-01 (App auth) |
 
 **Not dependencies (by design):** no runtime CDN (fonts and CSS ship in the

@@ -14,6 +14,7 @@ import os
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -102,12 +103,97 @@ async def home(request: Request) -> HTMLResponse:
     if creds is not None and creds.html_url:
         install_url = f"{creds.html_url}/installations/new"
 
-    return state.templates.TemplateResponse("v2/home.html", {
+    running = _running_repos_safe()
+    return state.templates.TemplateResponse("v3/home.html", {
         "repos": repos,
         "app_configured": creds is not None,
         "install_url": install_url,
         "oauth_ready": (await github_app.oauth_client()) is not None,
+        "now": _now_cards(state, running),
+        "running_repos": set(running),
+        "to_review": await _recent_demos(state),
+        "today": datetime.now(timezone.utc).strftime("%A %d %B, %H:%M UTC").replace(" 0", " "),
     })
+
+
+def _running_repos_safe() -> dict[str, object]:
+    from theswarm.presentation.web.shell import running_repos
+
+    try:
+        return running_repos()
+    except Exception:  # noqa: BLE001 — the home page stays
+        log.exception("V2: reading the cycle tracker failed")
+        return {}
+
+
+def _clock(iso: str) -> str:
+    try:
+        return datetime.fromisoformat(iso).astimezone(timezone.utc).strftime("%H:%M UTC")
+    except (TypeError, ValueError):
+        return ""
+
+
+def _when(moment: datetime) -> str:
+    """A demo's moment, the way a person says it: today 07:41, yesterday, 2 Oct."""
+    try:
+        moment = moment.astimezone(timezone.utc)
+    except (TypeError, ValueError, AttributeError):
+        return ""
+    today = datetime.now(timezone.utc).date()
+    days = (today - moment.date()).days
+    if days <= 0:
+        return moment.strftime("today %H:%M")
+    if days == 1:
+        return "yesterday"
+    return moment.strftime("%d %b").lstrip("0")
+
+
+def _now_cards(state, running: dict[str, object]) -> list[dict]:
+    """The queued and running cycles for the home's Now section."""
+    base = state.base_path
+    cards = []
+    for repo, record in running.items():
+        title = (record.description or "").strip()
+        if not title:
+            title = f"issue #{record.issue_number}" if record.issue_number else "the daily cycle"
+        if len(title) > 90:
+            title = title[:89].rstrip() + "…"
+        cards.append({
+            "id": record.id, "repo": repo, "issue_number": record.issue_number,
+            "title": title, "status": record.status.value,
+            "since": _clock(record.started_at or record.created_at),
+            "sort": record.created_at,
+            "href": f"{base}/c/{record.id}",
+        })
+    cards.sort(key=lambda c: c["sort"], reverse=True)
+    return cards
+
+
+async def _recent_demos(state, limit: int = 5) -> list[dict]:
+    """The latest demos across every project, for the home's To review."""
+    report_repo = getattr(state, "report_repo", None)
+    if report_repo is None:
+        return []
+    try:
+        reports = await report_repo.list_recent(limit=limit)
+    except Exception:  # noqa: BLE001 — the page stays, the section is empty
+        log.exception("V2: reading recent demo reports failed")
+        return []
+    rows = []
+    for report in reports:
+        card = _demo_card(state, report)
+        gates = list(report.quality_gates)
+        failed = [g for g in gates if str(getattr(g.status, "value", g.status)) == "fail"]
+        card.update({
+            "repo": report.project_id,
+            "when": _when(report.created_at),
+            "gates_total": len(gates),
+            "gates_label": ("Gates pass" if not failed
+                            else f"{len(failed)} gate{'s' if len(failed) != 1 else ''} failed"),
+            "gates_kind": "ok" if not failed else "bad",
+        })
+        rows.append(card)
+    return rows
 
 
 async def _ensure_project(state, owner: str, name: str) -> str:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the V2 stylesheet with the standalone Tailwind binary (no node).
+# Build the stylesheet (static/v3/app.css) with the standalone Tailwind binary (no node).
 # Usage: scripts/build-css.sh [--watch]
 set -euo pipefail
 
@@ -25,5 +25,5 @@ if [ ! -x "$BIN" ]; then
   chmod +x "$BIN"
 fi
 
-exec "$BIN" -i "$WEB/static/v2/input.css" -o "$WEB/static/v2/app.css" \
+exec "$BIN" -i "$WEB/static/v3/input.css" -o "$WEB/static/v3/app.css" \
   --minify "${1:-}"
