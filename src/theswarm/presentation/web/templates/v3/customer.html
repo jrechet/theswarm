@@ -1,0 +1,67 @@
+{% extends "v3/base.html" %}
+{% import "v3/_ui.html" as ui %}
+{% block title %}{{ customer.name }} — TheSwarm{% endblock %}
+{% block crumbs %}
+  <span class="text-ink font-medium">{{ customer.name }}</span>
+  <span class="text-line-strong">/</span>
+  <span>{{ projects | length }} project{{ 's' if projects | length != 1 }}</span>
+{% endblock %}
+{% block actions %}
+  {% if is_owner %}{{ ui.btn('Settings', href=base ~ '/settings/customers/' ~ customer.slug, kind='secondary', icon='settings') }}{% endif %}
+{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-7" data-testid="customer-page" data-slug="{{ customer.slug }}">
+
+  <div class="flex items-center gap-3">
+    {{ ui.customer_mark(customer.initial, 28) }}
+    <div class="flex flex-col gap-0.5">
+      <h1 class="m-0 text-[20px] font-semibold tracking-tight">{{ customer.name }}</h1>
+      <span class="text-[13px] text-muted">{% if is_owner %}What this customer's members see.{% else %}Your projects with the team.{% endif %}</span>
+    </div>
+  </div>
+
+  <section class="flex flex-col gap-3" aria-labelledby="projects">
+    {{ ui.section_label('Projects', '', id='projects') }}
+    {% if projects %}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for p in projects %}
+      {% if is_owner %}<a href="{{ p.href }}"{% else %}<div{% endif %} class="flex flex-wrap items-center gap-3.5 px-4 py-3 border-t border-line first:border-t-0 {% if is_owner %}hover:bg-raised{% endif %}" data-testid="customer-project">
+        <span class="w-1.5 h-1.5 rounded-full bg-line-strong shrink-0" aria-hidden="true"></span>
+        <span class="flex flex-col min-w-0 flex-[1_1_200px]">
+          <span class="text-[14px] leading-snug"><span class="text-faint">{{ p.owner }}/</span><span class="font-medium">{{ p.name }}</span></span>
+          {% if not is_owner %}<span class="text-[12px] text-muted">Progress and demos land here as the swarm builds.</span>{% endif %}
+        </span>
+        {% if is_owner %}<span class="text-[12px] text-muted">Open →</span>{% endif %}
+      {% if is_owner %}</a>{% else %}</div>{% endif %}
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px] text-[13px] text-muted">
+      {% if is_owner %}No project yet — add a repository from this customer's settings.{% else %}No project yet.{% endif %}
+    </div>
+    {% endif %}
+  </section>
+
+  {% if is_owner and customer.slug != 'internal' %}
+  <section class="flex flex-col gap-3" aria-labelledby="members">
+    {{ ui.section_label('Members', members | length ~ ' who can sign in', id='members') }}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for m in members %}
+      <div class="flex flex-wrap items-center gap-3.5 px-4 py-2.5 border-t border-line first:border-t-0 text-[13px]">
+        <span class="w-6 h-6 rounded-full bg-raised border border-line-strong shrink-0" aria-hidden="true"></span>
+        <span class="font-medium flex-[1_1_160px] min-w-0 truncate">{{ m.name }}</span>
+        <span class="text-[12px] text-faint font-mono">{{ m.email }}</span>
+        {% if m.state == 'active' %}{{ ui.chip('Active', 'verified') }}{% elif m.state == 'invited' %}{{ ui.chip('Invited', 'review') }}{% else %}{{ ui.chip('Link expired', 'waiting') }}{% endif %}
+      </div>
+      {% else %}
+      <div class="px-4 py-3 text-[13px] text-faint">Nobody yet — invite someone from this customer's settings.</div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if not is_owner %}
+  <p class="m-0 text-[12px] text-faint">Signed in as {{ actor.login }}. You see {{ customer.name }} and nothing else.</p>
+  {% endif %}
+</div>
+{% endblock %}

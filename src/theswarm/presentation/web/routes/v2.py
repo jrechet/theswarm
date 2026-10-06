@@ -47,6 +47,11 @@ _COMPOSER_TITLE_MAX = 80
 async def home(request: Request) -> HTMLResponse:
     """The picker: repositories the owner confided to the GitHub App."""
     state = request.app.state
+    from theswarm.presentation.web.routes.customers import member_home
+
+    sent_home = await member_home(request)  # a member's home is their customer (V3 M2)
+    if sent_home is not None:
+        return sent_home
     creds = await github_app.load_credentials()
 
     repos: list[dict] = []
