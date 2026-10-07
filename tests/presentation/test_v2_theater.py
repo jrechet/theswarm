@@ -181,8 +181,7 @@ async def test_play_now_lands_on_the_theater(web):
         r = await client.post("/c/internal/p/concert-tour-app/features/7/play")
 
     assert r.status_code == 303
-    assert "/swarm/cycles/" in r.headers["location"]
-    assert "/cycles/" not in r.headers["location"]
+    assert "/swarm/cycles/" in r.headers["location"]  # the theater, never the V1 archive (gone in M4)
 
 
 def test_a_continuation_names_the_cycle_it_resumes():
