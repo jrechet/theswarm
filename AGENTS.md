@@ -91,6 +91,32 @@ watch; the older two are deleted at its M6):
   redirects there; `/d/{short}` is the public read-only page outside the
   wall (`v3/demo_public.html`, the bare layout). V1's player, its JS and
   its speed test are gone; V1's demos list and compare stay until M6.
+  **What a member sees (M5)**: a **request** is the one thing a customer
+  writes — migration v034 (`requests`), `domain/customers/requests.py`
+  (frozen, received → planned → building → delivered, or declined;
+  `steps()` draws the four chips), `application/services/requests.py`
+  (`RequestService.submit/plan/decline`; `plan` creates the GitHub issue
+  on one of the customer's projects, `status:backlog`, the member's
+  words and `<!-- swarm:request {id} -->` in its body; `RequestTracker`
+  on the bus: `CycleStarted` on the feature's issue makes it building,
+  `DemoReady` delivered — both name the pinned issue). `routes/requests_routes.py`:
+  `/requests` is the owner's inbox (Turn into a feature / Decline) and a
+  member's list, `/requests/new` the member's composer; the home and the
+  rail count what waits (`shell.requests_waiting`). A member's `/c/{slug}`
+  is their overview (`customers.member_overview`: what is being built as
+  **four plain steps** — `presentation/web/member_steps.stage_for` maps
+  the cycle's last announced phase onto Planning · Building · Checking ·
+  Delivered — the latest demos, their requests, three counts), their
+  `/c/{slug}/p/{name}/f/{n}` the same four steps and the demo
+  (`v3/feature_member.html`), their `/demos/{id}` the player without the
+  cost, the cycle or the public link (`player.member`); the owner sees
+  any of it as they do with `?as=member`. The wall (`MEMBER_ALLOWED`)
+  opens those addresses to a member and nothing more — a project page,
+  the theater, Settings and `/api/*` stay refused — and each route then
+  checks the customer. **A demo's files are outside the wall**
+  (`auth._PUBLIC_FILE`: `/artifacts/<cycle>/<file>`, never `/artifacts/list`):
+  the public player of M4 linked a video that answered 401 without a
+  session (prod, 2026-10-07).
   **The pinned issue is kept 20 s** (`pinned_issue.load_pinned_issue`,
   `SWARM_PINNED_CACHE_SECONDS`, 0 in the suite): the stage polls every
   3 s and every render listed every issue of the repository, all states,
