@@ -82,6 +82,7 @@ browser does what the owner does. Each one names the cycle it filmed.
 | [`v3-theater.webm`](v3-theater.webm) | V3 M4 — the cycle and the demo, on a local server against the real concert-tour-app: Play opens the live theater at `/cycles/{id}` (the stepper as the cycle announces its phases, the four agents, what happened, the feature piece by piece), Cancel ends it; then a finished cycle at its V2 address `/c/…` redirects to `/cycles/…`, drawn from its row, ending on its demo; the player at `/demos/{id}`: the verdict the running app gave, the video, what QA measured, what was built, who can see it; the public link `/d/…`, read-only. |
 | [`v3-members.webm`](v3-members.webm) | V3 M5 — what a member sees, on a local server against the real concert-tour-app (standing in for espace client): the owner makes TLphone, gives it the project and invites Nadia; Nadia opens the link — her overview (nothing being built, no demo yet) — and writes a **request** in her own words; the owner finds it on the home and in the rail's badge, opens the inbox and turns it into a feature (a real GitHub issue, linked to the request, now Planned), then presses Play; a few minutes in, Nadia's overview shows it **being built as four plain steps** — Planning, Building, Checking, Delivered — and her feature page says what is happening in one line, never the theater; the real cycle runs, and when its demo lands her request reads Delivered and she watches it in the player: the video, what was checked, what was built — no cost, no cycle, no public link. |
 | [`d1-ops.webm`](d1-ops.webm) | DevOps D1 — the stack and the daily report, on a local server against the owner's real stack: the Ops card on the home, read again — jrec.fr over ssh (the CI slot held by another repository's job, the disks), GitHub Actions (main's head against this build, the runner, the failed runs of the day), Claude's walls, this laptop's disk (96 % used: a real finding), the day's harness run — then `/api/devops`, the JSON the daily report on Mattermost is made of. Nothing here touches a machine. |
+| [`v3-one-product.webm`](v3-one-product.webm) | V3 M6 — one product: V1 and V2 are deleted. A walk of every URL in the plan's table on a local server (the M5 film's data): the door, the home, a customer and the same customer as a member, the project, a feature, the theater ending on its demo, the player, the requests, Settings › Customers and Settings › Instance (V1's vault-backed settings, now on V3), the readiness page (from V1's shell, now on V3 without HTMX), the memory page (from V2's template), the GitHub door on the bare layout — then `/dashboard`, `/projects/`, `/cycles/`, `/demos/` and `/team` answer 404. |
 
 ```bash
 # QA's captures on a local checkout of the target, then the player (no cycle)
@@ -95,22 +96,11 @@ uv run python scripts/record_v2_demo.py --repo jrechet/concert-tour-app \
     --name <name> --harness-feature <eval feature id>
 ```
 
-## Recording / re-recording a walkthrough
+## The sprint walkthroughs
 
-Every sprint demo is a real Playwright capture of the dashboard tour, with
-the per-sprint demo play page included in the stops. To re-record:
-
-```bash
-# one sprint
-uv run python scripts/record_sprint_walkthrough.py B
-
-# all of B-F in sequence
-uv run python scripts/record_sprint_walkthrough.py all
-```
-
-The script boots an isolated TheSwarm server in a temp dir, runs `seed_self`
-(so the full sprint history is populated), walks the key dashboard screens
-and writes `docs/demos/sprint-<L>.webm`.
+The `sprint-<L>.webm` films are V1's dashboard tours (Sprints B–G), kept as
+history; the scripts that recorded them walked V1 pages and went with V1
+(M6, 2026-10-07).
 
 On deploy, the unified server runs `seed_self` at startup and copies the
 committed webms into the artifact store, so every dashboard gets the
