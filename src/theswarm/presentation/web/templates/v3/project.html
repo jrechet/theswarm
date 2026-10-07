@@ -1,0 +1,231 @@
+{% extends "v3/base.html" %}
+{% import "v3/_ui.html" as ui %}
+{% block title %}{{ project.name }} — TheSwarm{% endblock %}
+{% block crumbs %}
+  <a href="{{ urls.customer }}" class="text-muted hover:text-ink">{{ customer.name }}</a>
+  <span class="text-line-strong">/</span>
+  <span class="text-ink font-medium">{{ project.name }}</span>
+{% endblock %}
+{% block actions %}
+  <a href="{{ project.memory_url }}" class="text-[12px] text-muted hover:text-ink">what the swarm learned →</a>
+  <a href="{{ project.github_url }}" class="text-[12px] text-muted hover:text-ink">GitHub ↗</a>
+{% endblock %}
+{% block content_class %}{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-6" data-testid="project-page" data-project="{{ project.full_name }}">
+
+  <div class="flex flex-wrap items-end gap-4">
+    <div class="flex flex-col gap-1.5 flex-[1_1_320px]">
+      <h1 class="m-0 text-[22px] font-semibold tracking-tight">{{ project.name }}</h1>
+      <div class="text-[13px] text-muted flex flex-wrap gap-x-3.5 gap-y-1.5">
+        <span class="font-mono">{{ project.full_name }}</span>
+        {% if latest_demo %}<span>Last demo {{ latest_demo.created_at.strftime("%d %b %H:%M") }}</span>{% endif %}
+        {% if evals and evals.count %}<span>{{ evals.count }} harness run{{ 's' if evals.count != 1 }}</span>{% endif %}
+      </div>
+    </div>
+    <div role="tablist" aria-label="Project sections" class="flex gap-0.5 bg-raised p-[3px] rounded-lg">
+      <a href="{{ urls.page }}" role="tab" aria-selected="true" class="h-7 inline-flex items-center px-3 rounded-md bg-surface text-[13px] font-medium shadow-[0_1px_2px_rgba(15,20,25,.08)]">Board</a>
+      <a href="#delivered" role="tab" aria-selected="false" class="h-7 inline-flex items-center px-3 rounded-md text-[13px] text-muted hover:text-ink">Demos</a>
+      <a href="#cycles" role="tab" aria-selected="false" class="h-7 inline-flex items-center px-3 rounded-md text-[13px] text-muted hover:text-ink">Cycles</a>
+      <a href="{{ urls.settings }}" role="tab" aria-selected="false" class="h-7 inline-flex items-center px-3 rounded-md text-[13px] text-muted hover:text-ink">Settings</a>
+    </div>
+  </div>
+
+  {% if running_cycle %}
+  <a href="{{ running_cycle.href }}" data-testid="running-banner"
+     class="flex flex-wrap items-center gap-4 px-5 py-3.5 bg-surface border border-live/40 rounded-[10px] hover:border-live">
+    {{ ui.live_dot(10) }}
+    <span class="text-[14px] font-medium">The swarm is building{% if running_cycle.issue_number %} <span class="font-mono">#{{ running_cycle.issue_number }}</span>{% endif %}{% if running_cycle.since %} <span class="text-muted font-normal">since {{ running_cycle.since }}</span>{% endif %}</span>
+    <span class="ml-auto text-[13px] font-medium text-live-deep">Open the theater →</span>
+  </a>
+  {% endif %}
+
+  {# ── The composer ───────────────────────────────────────────────── #}
+  <form method="post" action="{{ urls.features }}" data-testid="composer"
+        class="flex flex-wrap items-center gap-2.5 pl-4 pr-2.5 py-2.5 bg-surface border border-line rounded-[10px]">
+    <label for="composer-body" class="sr-only">Write a feature</label>
+    <textarea id="composer-body" name="body" rows="1" required
+      placeholder="Write a feature for {{ project.name }} — one line is enough, the first line is the title"
+      class="flex-[1_1_360px] min-w-0 resize-y bg-transparent text-[14px] leading-[36px] placeholder:text-faint focus:outline-none"></textarea>
+    <button type="submit" name="play" value="" data-testid="create-only"
+      class="h-8 px-3 border border-line-strong rounded-md bg-surface text-ink text-[13px] font-medium cursor-pointer hover:bg-raised">Create only</button>
+    <button type="submit" name="play" value="1" data-testid="create-and-play"
+      class="h-8 inline-flex items-center gap-2 px-3 rounded-md bg-ink text-on-ink text-[13px] font-medium cursor-pointer hover:opacity-90">{{ ui.ui_icon('play', 16) }}Create and play</button>
+  </form>
+
+  {% if issues_error %}
+  <p class="m-0 text-[13px] text-bad border border-bad/30 bg-bad-wash rounded-[10px] px-4 py-3" data-testid="{{ 'issues-credential-error' if credential_error else 'issues-error' }}">
+    GitHub didn't answer: {{ issues_error }}</p>
+  {% endif %}
+
+  {# ── The board ──────────────────────────────────────────────────── #}
+  <div class="grid gap-3 items-start" style="grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr))" data-testid="issue-board">
+    {% for col in columns %}
+    <section aria-labelledby="group-{{ col.key }}" class="flex flex-col gap-2 min-w-0" data-column="{{ col.key }}">
+      <div class="flex items-center gap-2 h-7 px-1">
+        <span class="w-1.5 h-1.5 rounded-full {{ col.dot }}" aria-hidden="true"></span>
+        <h2 id="group-{{ col.key }}" class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-muted">{{ col.label }}</h2>
+        <span class="font-mono text-[12px] text-faint">{{ col.issues | length + col.stalled | length }}</span>
+      </div>
+      {% for issue in col.issues %}
+      <a href="{{ issue.href }}" data-testid="issue-{{ issue.number }}"{% if issue.fresh %} data-fresh="true"{% endif %}
+         class="flex flex-col gap-2 p-3 bg-surface border rounded-[10px] min-w-0 hover:border-line-strong {% if issue.fresh %}border-live/50{% else %}border-line{% endif %}">
+        <span class="flex items-center gap-2 text-[12px] text-faint">
+          <span class="font-mono">#{{ issue.number }}</span>
+          {% if issue.fresh %}<span class="ml-auto" data-testid="fresh-issue">{{ ui.chip('New', 'running') }}</span>
+          {% elif issue.building %}<span class="ml-auto">{{ ui.chip('Running', 'running', pulse=True) }}</span>{% endif %}
+        </span>
+        <span class="text-[13px] font-medium leading-[1.35]">{{ issue.title }}</span>
+        {% if issue.building %}
+        <span class="text-[12px] text-live-deep font-medium">Follow →</span>
+        {% endif %}
+      </a>
+      {% if not issue.building %}
+      <form method="post" action="{{ issue.play_url }}" class="-mt-1 px-1">
+        <button type="submit" data-testid="play-{{ issue.number }}" title="Build #{{ issue.number }}"
+          class="inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-[12px] font-medium text-muted hover:text-ink hover:bg-raised cursor-pointer">{{ ui.ui_icon('play', 14) }}Play</button>
+      </form>
+      {% endif %}
+      {% endfor %}
+      {% if not col.issues and not col.stalled %}
+      <div class="px-3 py-3 border border-dashed border-line-strong rounded-[10px] text-[12px] text-faint">Nothing here.</div>
+      {% endif %}
+    </section>
+    {% if col.key == 'ready' and col.stalled %}
+    </div><div class="hidden"></div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  {% set stalled = (columns | selectattr('key', 'equalto', 'ready') | first).stalled %}
+  {% if stalled %}
+  <section aria-labelledby="group-stalled" class="flex flex-col gap-2">
+    <div class="flex items-baseline gap-2.5 px-1">
+      <h2 id="group-stalled" class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-muted">Stalled</h2>
+      <span class="font-mono text-[12px] text-faint">{{ stalled | length }}</span>
+      <span class="text-[12px] text-faint">labelled building or in review, nothing is working on them — Play picks one up again</span>
+    </div>
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for issue in stalled %}
+      <div class="flex flex-wrap items-center gap-3 px-4 py-2.5 border-t border-line first:border-t-0 text-[13px]" data-testid="issue-{{ issue.number }}">
+        <span class="font-mono text-[12px] text-faint w-12">#{{ issue.number }}</span>
+        <a href="{{ issue.href }}" class="flex-1 min-w-0 truncate font-medium">{{ issue.title }}</a>
+        {{ ui.chip('Stalled', 'waiting') }}
+        <form method="post" action="{{ issue.play_url }}">
+          <button type="submit" data-testid="play-{{ issue.number }}" class="inline-flex items-center gap-1.5 h-7 px-2.5 border border-line-strong rounded-md bg-surface text-[12px] font-medium cursor-pointer hover:bg-raised">{{ ui.ui_icon('play', 14) }}Play</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if not has_issues and not issues_error %}
+  <p class="m-0 text-[13px] text-faint py-4 text-center border border-dashed border-line-strong rounded-[10px]">
+    No open feature — write the first one above.</p>
+  {% endif %}
+
+  {# ── Delivered: the demos ───────────────────────────────────────── #}
+  <section aria-labelledby="delivered" id="delivered" class="flex flex-col gap-3">
+    {{ ui.section_label('Delivered', (delivered | length ~ ' demo' ~ ('s' if delivered | length != 1)) if delivered else 'no demo yet', id='delivered-title') }}
+    {% if latest_demo %}
+    <div data-testid="latest-demo" class="flex flex-wrap gap-5 p-4 bg-surface border border-line rounded-[10px]">
+      <a href="{{ latest_demo.play_url }}" class="block shrink-0 w-full sm:w-56 rounded-md overflow-hidden border border-line bg-[#14171C]" aria-label="Watch the latest demo">
+        {% if latest_demo.video_url %}
+        <video class="block w-full aspect-video object-cover" preload="none" muted playsinline{% if latest_demo.thumbnail_url %} poster="{{ latest_demo.thumbnail_url }}"{% endif %}>
+          <source src="{{ latest_demo.video_url }}" type="video/webm">
+        </video>
+        {% elif latest_demo.thumbnail_url %}
+        <img class="block w-full aspect-video object-cover" src="{{ latest_demo.thumbnail_url }}" alt="" loading="lazy" width="448" height="252">
+        {% else %}<span class="block w-full aspect-video"></span>{% endif %}
+      </a>
+      <div class="min-w-0 flex-1 flex flex-col gap-2">
+        <div class="flex items-baseline justify-between gap-3 flex-wrap">
+          <h3 class="m-0 text-[14px] font-semibold">Latest demo <span class="font-normal text-muted">· {{ latest_demo.created_at.strftime("%d %b %H:%M") }}</span></h3>
+          <a href="{{ latest_demo.play_url }}" class="text-[13px] font-medium text-live-deep">Watch →</a>
+        </div>
+        <p class="m-0 text-[13px] text-muted">
+          {{ latest_demo.prs_merged }} PR{{ 's' if latest_demo.prs_merged != 1 }} merged
+          {%- if latest_demo.prs_held %} · {{ latest_demo.prs_held }} held for review{% endif %}
+          {%- if latest_demo.stories_total %} · {{ latest_demo.stories_completed }}/{{ latest_demo.stories_total }} stories{% endif %}
+          {%- if latest_demo.screenshot_count %} · {{ latest_demo.screenshot_count }} screenshot{{ 's' if latest_demo.screenshot_count != 1 }}{% endif %}
+          {%- if latest_demo.video_count %} · {{ latest_demo.video_count }} video{{ 's' if latest_demo.video_count != 1 }}{% endif %}
+          {%- if latest_demo.cost_usd %} · <span class="font-mono">${{ "%.2f" | format(latest_demo.cost_usd) }}</span>{% endif %}
+        </p>
+        {% if latest_demo.screenshots %}
+        <ul class="flex gap-2 m-0 p-0 list-none" aria-label="Screenshots">
+          {% for shot in latest_demo.screenshots %}<li><img src="{{ shot }}" alt="" loading="lazy" class="h-12 w-auto rounded border border-line bg-raised" width="96" height="48"></li>{% endfor %}
+        </ul>
+        {% endif %}
+        <a href="{{ base }}/c/{{ latest_demo.cycle_id }}" class="font-mono text-[11px] text-faint hover:text-muted">cycle {{ latest_demo.cycle_id[:8] }} ↗</a>
+      </div>
+    </div>
+    {% endif %}
+    {% if delivered | length > 1 %}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for d in delivered[1:] %}
+      <a href="{{ d.play_url }}" data-testid="delivered-demo" class="flex flex-wrap items-center gap-4 px-4 py-2.5 border-t border-line first:border-t-0 hover:bg-raised text-[13px]">
+        <span class="font-mono text-[12px] text-faint w-12">{% if d.issue_number %}#{{ d.issue_number }}{% else %}—{% endif %}</span>
+        <span class="flex-1 min-w-0 truncate font-medium">{{ d.title }}</span>
+        <span class="text-[12px] text-muted">{{ d.prs_merged }} PR{{ 's' if d.prs_merged != 1 }}{% if d.cost_usd %} · <span class="font-mono">${{ '%.2f' | format(d.cost_usd) }}</span>{% endif %}</span>
+        {% if d.gates_total %}{{ ui.chip(d.gates_label, d.gates_kind) }}{% endif %}
+        <span class="font-mono text-[12px] text-faint w-[100px] text-right">{{ d.when }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
+
+  {# ── The trend and the recent cycles ────────────────────────────── #}
+  <div class="grid gap-3" style="grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr))" id="cycles">
+    {% if evals and evals.count %}
+    <section aria-labelledby="evals-title" data-testid="evals" class="flex flex-col gap-3 p-4 bg-surface border border-line rounded-[10px]">
+      <div class="flex items-baseline justify-between gap-3 flex-wrap">
+        <h2 id="evals-title" class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">Reliability <span class="normal-case tracking-normal text-muted">· last {{ evals.count }} harness run{{ 's' if evals.count != 1 }}</span></h2>
+        <span class="font-mono text-[11px] text-faint">{%- for name, b in evals.by_backend.items() %}{{ name }} {{ b.passed }}/{{ b.runs }}{{ ' · ' if not loop.last }}{% endfor -%}</span>
+      </div>
+      <p class="m-0 text-[13px] text-muted">
+        {%- if evals.pass_rate is not none %}<span class="font-semibold {% if evals.pass_rate >= 0.8 %}text-ok{% elif evals.pass_rate >= 0.5 %}text-live-deep{% else %}text-bad{% endif %}">{{ (evals.pass_rate * 100) | round | int }}% built</span>{% else %}<span class="font-semibold text-faint">nothing measured</span>{% endif %}
+        {%- if evals.already_delivered %} · <span class="text-faint">{{ evals.already_delivered }} already delivered</span>{% endif %}
+        {%- if evals.interrupted %} · <span class="text-faint" data-testid="evals-interrupted">{{ evals.interrupted }} interrupted by a restart</span>{% endif %}
+        {%- if evals.left_open %} · <span class="text-bad" data-testid="evals-left-open">{{ evals.left_open }} with PRs left open</span>{% endif %}
+        {%- if evals.verified %} · <span class="text-ok" data-testid="evals-verified">{{ evals.verified }} verified on the running app</span>{% endif %}
+        {%- if evals.broken %} · <span class="text-bad font-semibold" data-testid="evals-broken">{{ evals.broken }} built but broken</span>{% endif %}
+        {%- if evals.qa_red %} · <span class="text-bad" data-testid="evals-qa-red">QA red on {{ evals.qa_red }}</span>{% endif %}
+        {%- if evals.reviews_skipped %} · <span class="text-live-deep" data-testid="evals-reviews-skipped">{{ evals.reviews_skipped }} review{{ 's' if evals.reviews_skipped != 1 }} skipped</span>{% endif %}
+        {%- if evals.avg_cost_usd is not none %} · <span class="font-mono">${{ "%.2f" | format(evals.avg_cost_usd) }}</span> avg{% endif %}
+        {%- if evals.avg_duration_s %} · <span class="font-mono">{{ (evals.avg_duration_s / 60) | round | int }} min</span> avg{% endif %}
+        {%- if evals.last and evals.last.regression %} · <span class="text-bad font-semibold">regression on the last run</span>{% endif %}
+      </p>
+      <ol class="flex gap-1.5 flex-wrap m-0 p-0 list-none items-end" aria-label="Runs, oldest first">
+        {% for run in evals.runs %}
+        {%- set delivered_before = run.outcome == 'already_delivered' %}
+        {%- set interrupted = run.outcome == 'interrupted' %}
+        {%- set broken = run.passed and run.behaviour == 'broken' %}
+        <li class="w-3.5 h-3.5 rounded-sm {% if broken %}bg-bad/60{% elif run.passed %}bg-ok{% elif delivered_before %}bg-line-strong{% elif interrupted %}border border-dashed border-faint{% else %}bg-bad{% endif %}{% if run.within_cost is false or run.within_time is false %} ring-2 ring-live{% endif %}"
+            title="{{ run.feature or 'feature' }} — {{ 'built, but broken on the running app' if broken else 'built' if run.passed else ('already delivered' if delivered_before else ('interrupted by a restart' if interrupted else 'failed')) }}{% if run.cost_usd is defined %} · ${{ '%.2f' | format(run.cost_usd) }}{% endif %}{% if run.duration_s %} · {{ (run.duration_s / 60) | round | int }} min{% endif %}"></li>
+        {% endfor %}
+      </ol>
+    </section>
+    {% endif %}
+
+    <section aria-labelledby="recent-title" class="flex flex-col p-4 pb-1.5 bg-surface border border-line rounded-[10px]" data-testid="recent-cycles">
+      <div class="flex items-baseline gap-2.5 pb-2.5">
+        <h2 id="recent-title" class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">Recent cycles</h2>
+        <span class="text-[12px] text-faint">{{ recent | length }} of the last</span>
+      </div>
+      {% for c in recent %}
+      <a href="{{ c.href }}" class="flex flex-wrap items-center gap-3 py-2.5 border-t border-line text-[13px] hover:bg-raised -mx-1 px-1 rounded">
+        <span class="font-mono text-[12px] text-faint w-[72px]">{{ c.short }}</span>
+        <span class="flex-1 min-w-0 truncate">{% if c.issue_number %}<span class="font-mono text-faint">#{{ c.issue_number }}</span>{% else %}the daily cycle{% endif %}{% if c.when %} <span class="text-muted">· {{ c.when }}</span>{% endif %}</span>
+        {{ ui.chip(c.label, c.kind, pulse=(c.kind == 'running')) }}
+        <span class="font-mono text-[12px] text-muted w-[120px] text-right">{{ c.duration }}{% if c.cost %} · {{ c.cost }}{% endif %}</span>
+        {% if c.demo_url %}<a href="{{ c.demo_url }}" class="text-[12px] font-medium text-live-deep">Demo →</a>{% endif %}
+      </a>
+      {% else %}
+      <p class="m-0 py-3 text-[13px] text-faint border-t border-line">No cycle yet — Play starts the first one.</p>
+      {% endfor %}
+    </section>
+  </div>
+</div>
+{% endblock %}
