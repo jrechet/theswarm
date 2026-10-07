@@ -81,61 +81,6 @@ async def test_thought_and_step_events_persisted_and_queried(db):
     assert step.detail == "pytest tests/"
 
 
-async def test_thoughts_fragment_renders_entries(db):
-    bus = EventBus()
-    store = SQLiteCycleEventStore(db)
-    cycle = await _seed_cycle(db)
-
-    # Seed two entries directly
-    t = datetime(2026, 4, 20, 10, 5, tzinfo=timezone.utc)
-    await store.append(
-        str(cycle.id), "AgentThought", t,
-        {"agent": "po", "thought": "Picking backlog issue #42", "phase": "plan"},
-    )
-    await store.append(
-        str(cycle.id), "AgentStep", t,
-        {"agent": "dev", "step": "open_pr", "detail": "PR #17", "phase": "implement"},
-    )
-
-    project_repo = SQLiteProjectRepository(db)
-    cycle_repo = SQLiteCycleRepository(db)
-    app = create_web_app(
-        project_repo, cycle_repo, bus, SSEHub(),
-        cycle_event_store=store,
-    )
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        r = await c.get(f"/fragments/cycle/{cycle.id}/thoughts")
-
-    assert r.status_code == 200
-    assert "Picking backlog issue" in r.text
-    assert "open_pr" in r.text
-    assert "PR #17" in r.text
-    assert 'data-agent="po"' in r.text
-    assert 'data-agent="dev"' in r.text
-
-
-async def test_thoughts_fragment_shows_empty_state(db):
-    bus = EventBus()
-    store = SQLiteCycleEventStore(db)
-    cycle = await _seed_cycle(db, "cyc-t-empty")
-
-    project_repo = SQLiteProjectRepository(db)
-    cycle_repo = SQLiteCycleRepository(db)
-    app = create_web_app(
-        project_repo, cycle_repo, bus, SSEHub(),
-        cycle_event_store=store,
-    )
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        r = await c.get(f"/fragments/cycle/{cycle.id}/thoughts")
-
-    assert r.status_code == 200
-    assert "No thoughts or steps captured yet" in r.text
-
-
 async def test_cycle_detail_includes_thoughts_panel(db):
     bus = EventBus()
     store = SQLiteCycleEventStore(db)

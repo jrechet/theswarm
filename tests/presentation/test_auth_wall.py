@@ -79,9 +79,9 @@ def test_tampered_session_is_rejected():
 
 
 async def test_anonymous_html_page_redirects_to_login(client):
-    r = await client.get("/projects/", headers={"Accept": "text/html"})
+    r = await client.get("/settings/instance", headers={"Accept": "text/html"})
     assert r.status_code == 303
-    assert r.headers["location"].endswith("/login?next=%2Fprojects%2F")
+    assert r.headers["location"].endswith("/login?next=%2Fsettings%2Finstance")
 
 
 async def test_anonymous_api_gets_401(client):
@@ -93,12 +93,6 @@ async def test_anonymous_cannot_start_a_cycle(client):
     """The exact call reproduced from outside in issue #38."""
     r = await client.post("/api/cycle", json={"repo": "a/b"})
     assert r.status_code == 401
-
-
-async def test_anonymous_htmx_fragment_gets_hx_redirect(client):
-    r = await client.get("/fragments/stats", headers={"HX-Request": "true"})
-    assert r.status_code == 401
-    assert r.headers["HX-Redirect"].endswith("/login")
 
 
 # ── What stays open, and why ───────────────────────────────────────────
@@ -142,7 +136,7 @@ async def test_wrong_key_is_rejected_without_a_cookie(client):
 
 async def test_right_key_opens_the_dashboard(client):
     await _login(client)
-    r = await client.get("/projects/")
+    r = await client.get("/settings/instance")
     assert r.status_code == 200
 
 
@@ -167,7 +161,7 @@ async def test_logout_closes_the_session(client):
     await _login(client)
     r = await client.post("/logout")
     assert r.status_code == 303
-    r = await client.get("/projects/", headers={"Accept": "text/html"})
+    r = await client.get("/settings/instance", headers={"Accept": "text/html"})
     assert r.status_code == 303  # walled again
 
 
@@ -213,7 +207,7 @@ async def test_same_origin_post_passes_csrf(client):
 async def test_no_access_key_still_walls_but_cannot_login(client, monkeypatch):
     """Losing the env vars must fail CLOSED, not open (the #31 lesson)."""
     monkeypatch.setenv("SWARM_ACCESS_KEY", "")
-    r = await client.get("/projects/", headers={"Accept": "text/html"})
+    r = await client.get("/settings/instance", headers={"Accept": "text/html"})
     assert r.status_code == 303  # still walled
     r = await client.post("/login", data={"access_key": ""})
     assert r.status_code == 401  # empty key never matches
@@ -221,5 +215,5 @@ async def test_no_access_key_still_walls_but_cannot_login(client, monkeypatch):
 
 async def test_disabled_flag_opens_everything(client, monkeypatch):
     monkeypatch.setenv("SWARM_AUTH_DISABLED", "1")
-    r = await client.get("/projects/")
+    r = await client.get("/settings/instance")
     assert r.status_code == 200

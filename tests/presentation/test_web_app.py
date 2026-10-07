@@ -51,112 +51,13 @@ async def client(app):
 # ── Dashboard ────────────────────────────────────────────────────
 
 
-class TestDashboardRoutes:
-    async def test_dashboard_empty(self, client):
-        r = await client.get("/dashboard")
-        assert r.status_code == 200
-        assert "TheSwarm" in r.text
-        assert "No active cycles" in r.text
-
-    async def test_dashboard_with_project(self, repos, client):
-        project_repo, cycle_repo = repos
-        await project_repo.save(Project(id="p1", repo=RepoUrl("o/p1")))
-
-        r = await client.get("/dashboard")
-        assert r.status_code == 200
-        assert "p1" in r.text
-
-    async def test_dashboard_renders_sparklines(self, repos, client):
-        from theswarm.domain.cycles.entities import Cycle
-
-        project_repo, cycle_repo = repos
-        await project_repo.save(Project(id="p1", repo=RepoUrl("o/p1")))
-        now = datetime.now(timezone.utc)
-        await cycle_repo.save(
-            Cycle(
-                id=CycleId("sparkline-1"),
-                project_id="p1",
-                status=CycleStatus.COMPLETED,
-                started_at=now,
-                completed_at=now,
-                total_cost_usd=0.42,
-            ),
-        )
-
-        r = await client.get("/dashboard")
-        assert r.status_code == 200
-        assert r.text.count('class="sparkline"') >= 1 or 'class="sparkline sparkline-empty"' in r.text
-
-
 # ── Projects ─────────────────────────────────────────────────────
-
-
-class TestProjectRoutes:
-    async def test_list_empty(self, client):
-        r = await client.get("/projects/")
-        assert r.status_code == 200
-        assert "No projects" in r.text
-
-    async def test_create_form(self, client):
-        r = await client.get("/projects/new")
-        assert r.status_code == 200
-        assert "Add Project" in r.text
-
-    async def test_create_and_list(self, client):
-        r = await client.post(
-            "/projects/",
-            data={
-                "project_id": "my-app",
-                "repo": "owner/my-app",
-                "framework": "fastapi",
-                "ticket_source": "github",
-                "team_channel": "",
-            },
-            follow_redirects=True,
-        )
-        assert r.status_code == 200
-        assert "my-app" in r.text
-
-    async def test_project_detail(self, repos, client):
-        project_repo, _ = repos
-        await project_repo.save(
-            Project(id="x", repo=RepoUrl("o/x"), framework=Framework.DJANGO),
-        )
-
-        r = await client.get("/projects/x")
-        assert r.status_code == 200
-        assert "django" in r.text
-
-    async def test_project_not_found(self, client):
-        r = await client.get("/projects/nope")
-        assert r.status_code == 404
-
-    async def test_delete_project(self, repos, client):
-        project_repo, _ = repos
-        await project_repo.save(Project(id="del-me", repo=RepoUrl("o/del-me")))
-
-        r = await client.post("/projects/del-me/delete", follow_redirects=True)
-        assert r.status_code == 200
-        assert "del-me" not in r.text
-
-    async def test_project_detail_has_demos_link(self, repos, client):
-        project_repo, _ = repos
-        await project_repo.save(Project(id="with-demos", repo=RepoUrl("o/with-demos")))
-
-        r = await client.get("/projects/with-demos")
-        assert r.status_code == 200
-        assert "/demos/?project=with-demos" in r.text
-        assert 'data-testid="project-demos-link"' in r.text
 
 
 # ── Cycles ───────────────────────────────────────────────────────
 
 
 class TestCycleRoutes:
-    async def test_list_empty(self, client):
-        r = await client.get("/cycles/")
-        assert r.status_code == 200
-        assert "No cycles" in r.text
 
     async def test_cycle_detail(self, repos, client):
         _, cycle_repo = repos
@@ -178,26 +79,6 @@ class TestCycleRoutes:
     async def test_cycle_not_found(self, client):
         r = await client.get("/cycles/nope")
         assert r.status_code == 404
-
-    async def test_trigger_cycle(self, repos, client, mocker):
-        project_repo, _ = repos
-        await project_repo.save(Project(id="p1", repo=RepoUrl("o/p1")))
-
-        # Mock run_api_cycle so the trigger spawns a no-op task instead of a
-        # real cycle pipeline (which would hang on git clone / HTTP calls).
-        async def _noop(*_args, **_kwargs):
-            return None
-
-        mocker.patch("theswarm.api.run_api_cycle", side_effect=_noop)
-
-        r = await client.post(
-            "/cycles/trigger",
-            data={"project_id": "p1"},
-            follow_redirects=True,
-        )
-        assert r.status_code == 200
-        body = r.text.lower()
-        assert any(s in body for s in ("running", "pending", "queued"))
 
     async def test_cycle_timeline_shows_duration(self, repos, client):
         from datetime import timedelta

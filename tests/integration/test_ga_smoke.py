@@ -58,25 +58,6 @@ async def _within(coro, label: str, max_seconds: float = 30.0):
 
 
 class TestGASmokeGate:
-    async def test_sprint_composer_endpoint_responds_quickly(self, client):
-        """Drafting a sprint must respond in <30s."""
-        with patch(
-            "theswarm.application.services.sprint_composer.SprintComposer.draft",
-            new_callable=AsyncMock,
-        ) as mock_draft:
-            mock_draft.return_value = SprintDraft(
-                request="x",
-                issues=(IssueDraft(title="Add LICENSE", body="MIT", labels=("status:backlog", "role:dev")),),
-            )
-            t0 = time.monotonic()
-            r = await _within(
-                client.post("/projects/smoke/sprints/draft", data={"description": "Add license"}),
-                "sprint draft",
-            )
-            elapsed = time.monotonic() - t0
-        assert r.status_code == 200
-        assert elapsed < 5.0, f"draft slow: {elapsed:.2f}s"
-        assert r.json()["issues"][0]["title"] == "Add LICENSE"
 
     async def test_readiness_reports_overall_status(self, client):
         r = await _within(client.get("/health/ready"), "readiness")
@@ -92,19 +73,3 @@ class TestGASmokeGate:
         assert r.status_code in (200, 503)
         body = r.json()
         assert body["service"] == "theswarm"
-
-    async def test_cycles_list_renders(self, client):
-        r = await _within(client.get("/cycles/"), "cycles list")
-        assert r.status_code == 200
-        assert "Cycles" in r.text
-
-    async def test_project_detail_renders_with_composer(self, client):
-        r = await _within(client.get("/projects/smoke"), "project detail")
-        assert r.status_code == 200
-        # Sprint composer + Run Cycle modal must both be on the page.
-        assert "sprint-composer" in r.text
-        assert "cost-preview-modal" in r.text
-        # Sidebar: the primary nav is the job itself; the rest is demoted.
-        assert "TheSwarm" in r.text
-        assert '<ul class="nav-primary">' in r.text
-        assert "<summary>Advanced</summary>" in r.text

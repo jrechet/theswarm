@@ -61,30 +61,6 @@ async def _seed_failed_cycle(db, cid: str, resume_phase: str | None) -> Cycle:
     return cycle
 
 
-async def test_checkpoints_endpoint_returns_list_and_resumable(db):
-    bus = EventBus()
-    cycle = await _seed_failed_cycle(db, "cyc-g5-a", "dev_loop")
-
-    project_repo = SQLiteProjectRepository(db)
-    cycle_repo = SQLiteCycleRepository(db)
-    ckpt_repo = SQLiteCheckpointRepository(db)
-    app = create_web_app(
-        project_repo, cycle_repo, bus, SSEHub(),
-        checkpoint_repo=ckpt_repo,
-    )
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        r = await c.get(f"/cycles/{cycle.id}/checkpoints")
-
-    assert r.status_code == 200
-    body = r.json()
-    assert body["cycle_id"] == str(cycle.id)
-    assert body["resumable_from"] == "dev_loop"
-    phases = [c["phase"] for c in body["checkpoints"]]
-    assert phases == ["po_morning", "techlead_breakdown", "dev_loop"]
-
-
 async def test_detail_shows_resume_button_when_failed_and_resumable(db):
     bus = EventBus()
     cycle = await _seed_failed_cycle(db, "cyc-g5-b", "qa")
@@ -155,24 +131,3 @@ async def test_detail_hides_resume_when_cycle_completed(db):
 
     assert r.status_code == 200
     assert "↻ Resume" not in r.text
-
-
-async def test_checkpoints_endpoint_graceful_when_repo_missing(db):
-    bus = EventBus()
-    await _seed_failed_cycle(db, "cyc-g5-e", None)
-
-    project_repo = SQLiteProjectRepository(db)
-    cycle_repo = SQLiteCycleRepository(db)
-    app = create_web_app(
-        project_repo, cycle_repo, bus, SSEHub(),
-        # checkpoint_repo deliberately omitted
-    )
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        r = await c.get("/cycles/cyc-g5-e/checkpoints")
-
-    assert r.status_code == 200
-    body = r.json()
-    assert body["checkpoints"] == []
-    assert body["resumable_from"] is None

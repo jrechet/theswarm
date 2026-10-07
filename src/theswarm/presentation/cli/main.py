@@ -517,7 +517,7 @@ async def cmd_dev_seed(args: argparse.Namespace) -> None:
     if result.reports_deleted:
         print(f"Deleted {result.reports_deleted} existing seed rows")
     print(f"Inserted {result.reports_inserted} demo reports")
-    print("Open http://localhost:8091/demos/ after `theswarm serve`")
+    print("Open http://localhost:8091/ after `theswarm serve`")
 
 
 async def cmd_seed_self(args: argparse.Namespace) -> None:
