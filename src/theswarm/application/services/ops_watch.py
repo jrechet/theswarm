@@ -55,6 +55,9 @@ class OpsWatch:
         self._channel = channel
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._on_report = on_report  # D3: the proposals raised from a report's findings
+        self._improver: Callable[[OpsReport | None], Awaitable[dict]] | None = None  # D4: the improvement PR
+        self._improvement: dict | None = None
+        self._improve_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
         self._last: OpsReport | None = None
         self._error: str = ""
@@ -68,6 +71,45 @@ class OpsWatch:
         """The daily report goes to this chat and channel (the server's, once connected)."""
         self._chat = chat
         self._channel = channel
+
+    # ── D4: improvements as PRs ────────────────────────────────────────
+
+    def configure_improver(self, improver: Callable[[OpsReport | None], Awaitable[dict]] | None) -> None:
+        self._improver = improver
+
+    @property
+    def can_improve(self) -> bool:
+        return self._improver is not None
+
+    @property
+    def improvement(self) -> dict | None:
+        """The last improvement asked for: running, opened (the PR), nothing (why) or failed (why)."""
+        return self._improvement
+
+    @property
+    def pending_improvement(self) -> asyncio.Task | None:
+        return self._improve_task if self._improve_task and not self._improve_task.done() else None
+
+    async def improve(self) -> dict:
+        """Measure, ask, open the PR — once at a time; the state is `running` until the answer lands."""
+        if self._improver is None:
+            return {"status": "failed", "reason": "no improver configured: no repository declared or no Claude"}
+        if self._improvement and self._improvement.get("status") == "running":
+            return self._improvement
+        self._improvement = {"status": "running", "started_at": self._clock().isoformat()}
+        try:
+            answer = await self._improver(self._last)
+        except Exception as exc:  # noqa: BLE001 — the answer is the record
+            log.exception("DevOps: the improvement failed")
+            answer = {"status": "failed", "reason": str(exc)[:200] or exc.__class__.__name__}
+        self._improvement = {**answer, "at": self._clock().isoformat()}
+        return self._improvement
+
+    def start_improvement(self) -> asyncio.Task:
+        """The owner's click: the improvement runs in the background, the page answers now."""
+        if self._improve_task is None or self._improve_task.done():
+            self._improve_task = asyncio.create_task(self.improve())
+        return self._improve_task
 
     def last(self) -> OpsReport | None:
         return self._last

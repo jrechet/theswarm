@@ -151,3 +151,43 @@ class TestThePreflightRoute:
     async def test_without_a_stack_it_is_go(self, owner):
         r = await owner.post("/api/devops/preflight")
         assert r.status_code == 200 and r.json()["go"] is True and "no stack" in r.json()["word"]
+
+
+class TestTheImprovement:
+    async def test_the_button_the_click_and_the_card(self, app, owner):
+        watch = _watch(app, _report(FINE))
+        r = await _home(owner)
+        assert 'data-testid="ops-improve"' not in r.text  # no improver: no button
+        await watch.refresh()
+        watch._last = OpsReport(watch._last.findings, NOW, watch._last.stack, 0.0,
+                                {"devops_prs": [{"number": 300, "title": "ci: cache uv", "html_url": "https://x/300", "head": "devops/cache-uv"}]})
+        answers = [{"status": "opened", "pr": 310, "url": "https://x/310", "title": "Cache the image layers", "expected_gain": "build 2 → 1 min"}]
+
+        async def improver(report):
+            return answers.pop(0)
+
+        watch.configure_improver(improver)
+        r = await _home(owner)
+        assert 'data-testid="ops-improve"' in r.text and 'data-testid="ops-improvement-pr" data-pr="300"' in r.text and "ci: cache uv" in r.text
+        r = await owner.post("/ops/improve", headers=HTML)
+        assert r.status_code == 303 and r.headers["location"].endswith("/#ops")
+        await watch.pending_improvement
+        r = await _home(owner)
+        assert 'data-testid="ops-improvement" data-status="opened"' in r.text and 'href="https://x/310"' in r.text
+        assert "Cache the image layers" in r.text and "expected: build 2 → 1 min" in r.text
+        r = await owner.get("/api/devops/improvement")
+        assert r.status_code == 200 and r.json()["improvement"]["pr"] == 310 and r.json()["open_prs"][0]["number"] == 300
+
+    async def test_without_a_stack_or_as_a_member_nothing_runs(self, app, owner):
+        r = await owner.post("/ops/improve", headers=HTML)
+        assert r.status_code == 303
+        r = await owner.get("/api/devops/improvement")
+        assert r.status_code == 404
+        _watch(app, _report(FINE))
+        r = await owner.post("/settings/customers", data={"name": "TLphone"})
+        r = await owner.post("/settings/customers/tlphone/members", data={"email": "nadia@tlphone.fr", "display_name": "Nadia"})
+        link = re.search(r'value="(http://test/invite/[^"]+)"', r.text).group(1).replace("http://test", "")
+        async with _client(app) as nadia:
+            await nadia.get(link)
+            r = await nadia.post("/ops/improve", headers=HTML)
+            assert r.status_code == 403

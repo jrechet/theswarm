@@ -105,3 +105,136 @@ class TestOnTheReport:
         report = await devops.gather(STACK, github=github, host_reader=None, claude=lambda: {"ok": True}, harness=None,
                                      build=lambda: "a" * 40, here=lambda: [], now=T0)
         assert not [x for x in report.findings if x.key == "measures"] and "measures" not in report.facts
+
+
+# ── D4b: the improvement PR ──────────────────────────────────────────────
+
+from theswarm.agents import devops_improve as imp  # noqa: E402
+from theswarm.application.services.ops_watch import OpsWatch  # noqa: E402
+
+
+class _Git:
+    def __init__(self, clone):
+        self.clone, self.calls = clone, []
+
+    async def clone_repo(self, url, dest):
+        self.calls.append(("clone", url))
+        return self.clone
+
+    async def create_branch(self, workdir, branch, base="main"):
+        self.calls.append(("branch", branch))
+
+    async def commit_all(self, workdir, message):
+        self.calls.append(("commit", message.splitlines()[0]))
+        return self.committed
+
+    async def push_branch(self, workdir, branch):
+        self.calls.append(("push", branch))
+
+    committed = True
+
+
+class _Claude:
+    def __init__(self, structured):
+        self.structured, self.prompts = structured, []
+
+    async def run(self, prompt, **kw):
+        self.prompts.append((prompt, kw))
+        return SimpleNamespace(structured=self.structured, text="")
+
+
+class _GitHub:
+    def __init__(self):
+        self.prs = []
+
+    async def create_pr(self, branch, base, title, body=""):
+        self.prs.append({"branch": branch, "base": base, "title": title, "body": body})
+        return {"number": 310, "html_url": "https://github.com/jrechet/theswarm/pull/310"}
+
+
+REPORT = SimpleNamespace(facts={"measures": {"jobs": [{"name": "tests", "runs": 8, "median_min": 9.0, "p90_min": 12.0, "setup_min": 0.3, "failures": 1}],
+                                             "cycle": {"runs": 7, "cost_usd": 2.4, "duration_min": 41.0}}}, read_at=T0)
+PROPOSED = {"status": "proposed", "title": "Cache uv downloads between CI runs", "rationale": "tests spend 2 min installing",
+            "expected_gain": "tests median 9 → 7 min", "files": [{"path": ".github/workflows/ci.yml", "content": "name: CI\n# cached\n"}]}
+
+
+class TestTheImprovementPR:
+    def test_what_devops_may_write(self):
+        assert imp.allowed_path(".github/workflows/ci.yml") and imp.allowed_path("Dockerfile") and imp.allowed_path("./docker-compose.yml")
+        assert imp.allowed_path(".github/actions/write-env/action.yml") and imp.allowed_path("theswarm.yaml")
+        for bad in ("src/theswarm/api.py", "tests/test_x.py", "../etc/passwd", ".github/workflows/../../x", "/etc/hosts", "", "README.md"):
+            assert not imp.allowed_path(bad), bad
+        assert imp.branch_name("Cache uv downloads between CI runs!", T0) == "devops/cache-uv-downloads-between-ci-runs-20261007"
+        assert imp.branch_name("", T0) == "devops/improvement-20261007"
+
+    def test_the_measures_as_words(self):
+        words = imp.measures_words(REPORT.facts)
+        assert words == ("- tests: 9 min median over 8 runs, p90 12, 0.3 min of it setup wait, 1 failed\n"
+                         "- a cycle on the test bed: $2.40 and 41 min median over 7 runs")
+        assert imp.measures_words(None) == "- nothing measured yet"
+
+    async def test_measure_ask_branch_write_push_pr(self, tmp_path):
+        clone = tmp_path / "clone"
+        (clone / ".github" / "workflows").mkdir(parents=True)
+        (clone / ".github" / "workflows" / "ci.yml").write_text("name: CI\n")
+        (clone / "Dockerfile").write_text("FROM python\n")
+        git, claude, github = _Git(str(clone)), _Claude(PROPOSED), _GitHub()
+        out = await imp.propose_improvement(STACK, REPORT, claude, github, workspace_root=str(tmp_path / "ws"), git=git, now=T0)
+        assert out["status"] == "opened" and out["pr"] == 310 and out["branch"] == "devops/cache-uv-downloads-between-ci-runs-20261007"
+        assert (clone / ".github" / "workflows" / "ci.yml").read_text() == "name: CI\n# cached\n"
+        assert git.calls == [("clone", "https://github.com/jrechet/theswarm.git"), ("branch", out["branch"]),
+                             ("commit", "ci: Cache uv downloads between CI runs"), ("push", out["branch"])]
+        [pr] = github.prs
+        assert pr["title"] == "ci(devops): Cache uv downloads between CI runs" and pr["base"] == "main"
+        assert "**Measured before**" in pr["body"] and "- tests: 9 min median over 8 runs" in pr["body"] and "tests median 9 → 7 min" in pr["body"]
+        prompt, kw = claude.prompts[0]
+        assert "--- .github/workflows/ci.yml\nname: CI" in prompt and "--- Dockerfile" in prompt and "- tests: 9 min median" in prompt
+        assert kw["workdir"] == str(clone) and kw["output_schema"]["properties"]["files"] and kw["timeout"] == imp.IMPROVE_TIMEOUT_SECONDS
+
+    async def test_nothing_a_refused_path_a_blank_answer_and_a_failure_are_records(self, tmp_path):
+        clone = tmp_path / "clone"
+        clone.mkdir()
+        git, github = _Git(str(clone)), _GitHub()
+        out = await imp.propose_improvement(STACK, REPORT, _Claude({"status": "nothing", "rationale": "the pipeline is already cached"}), github, git=git, now=T0)
+        assert out == {"status": "nothing", "reason": "the pipeline is already cached"} and github.prs == []
+        out = await imp.propose_improvement(STACK, REPORT, _Claude({**PROPOSED, "files": [{"path": "src/theswarm/api.py", "content": "x"}]}), github, git=git, now=T0)
+        assert out["status"] == "failed" and "outside the pipeline: src/theswarm/api.py" in out["reason"] and github.prs == []
+        out = await imp.propose_improvement(STACK, REPORT, _Claude(None), github, git=git, now=T0)
+        assert out["status"] == "failed" and "no structured" in out["reason"]
+        git.committed = False
+        out = await imp.propose_improvement(STACK, REPORT, _Claude(PROPOSED), github, git=git, now=T0)
+        assert out["status"] == "nothing" and "already has" in out["reason"] and github.prs == []
+
+        class _Broken(_Claude):
+            async def run(self, prompt, **kw):
+                raise RuntimeError("quota")
+
+        out = await imp.propose_improvement(STACK, REPORT, _Broken(None), github, git=git, now=T0)
+        assert out["status"] == "failed" and out["reason"] == "RuntimeError: quota"
+        assert (await imp.propose_improvement({"ci": []}, REPORT, _Claude(PROPOSED), github, git=git))["status"] == "failed"
+
+
+class TestTheWatchImproves:
+    async def test_one_at_a_time_and_the_state_for_the_card(self):
+        async def gather():
+            return devops.OpsReport((), read_at=T0)
+
+        watch = OpsWatch(gather, clock=lambda: T0)
+        assert not watch.can_improve and (await watch.improve())["status"] == "failed"
+        answers = [{"status": "opened", "pr": 310, "url": "u", "title": "t"}]
+
+        async def improver(report):
+            return answers.pop(0)
+
+        watch.configure_improver(improver)
+        assert watch.can_improve and watch.improvement is None
+        task = watch.start_improvement()
+        assert watch.pending_improvement is task
+        assert await task == {"status": "opened", "pr": 310, "url": "u", "title": "t", "at": T0.isoformat()}
+        assert watch.improvement["pr"] == 310 and watch.pending_improvement is None
+
+        async def broken(report):
+            raise RuntimeError("no Claude")
+
+        watch.configure_improver(broken)
+        assert (await watch.improve())["status"] == "failed" and "no Claude" in watch.improvement["reason"]

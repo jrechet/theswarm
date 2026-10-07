@@ -994,6 +994,19 @@ def create_web_app(
             interval_s=int(_os.environ.get("SWARM_DEVOPS_INTERVAL_SECONDS", "600") or 600),
             on_report=_raise_proposals,
         )
+        # D4 — improvements as PRs: the owner's click measures, asks Claude, opens the PR.
+        from theswarm.agents.devops import self_repo
+        from theswarm.agents.devops_improve import propose_improvement
+
+        if self_repo(stack):
+            async def _improver(report):
+                from theswarm.tools.claude import ClaudeCLI
+                from theswarm.tools.github import GitHubClient
+
+                return await propose_improvement(stack, report, ClaudeCLI(model=_os.environ.get("SWARM_CLAUDE_MODEL", "sonnet")),
+                                                 GitHubClient(self_repo(stack)))
+
+            app.state.ops_watch.configure_improver(_improver)
     else:
         app.state.ops_watch = None
         app.state.proposal_service = None

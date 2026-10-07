@@ -69,6 +69,17 @@ class DevOutcome(BaseModel):
     files: list[FileBlock] = Field(default_factory=list)
 
 
+class Improvement(BaseModel):
+    """DevOps's answer to "what would shorten the pipeline" (D4): a pull
+    request on the pipeline's files, or `nothing` with why."""
+
+    status: Literal["proposed", "nothing"]
+    title: str = ""
+    rationale: str = ""
+    expected_gain: str = ""
+    files: list[FileBlock] = Field(default_factory=list)
+
+
 class PlannedStory(BaseModel):
     number: int
     title: str = ""
