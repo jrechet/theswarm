@@ -6,9 +6,8 @@
  * amber is the brand mark and the live signal only, every other colour is
  * a meaning (ok, bad, info, wait). 1 px lines, no shadows.
  *
- * The V2 names (paper/panel/wash/ink/soft/faint/rule, honey, moss, rust)
- * are aliases onto these tokens: the V2 pages wear the V3 look inside the
- * V3 shell until M3/M4 replace them and M6 deletes the aliases.
+ * One generation of templates since M6 (templates/, the V3 tree); the
+ * V2 colour names that were aliased onto these tokens went with V2.
  *
  * Compiled by the standalone Tailwind binary: scripts/build-css.sh
  * locally, the `css` Docker stage in prod. Output: static/v3/app.css
@@ -17,7 +16,6 @@
 
 @import "tailwindcss";
 @source "../../templates/v3";
-@source "../../templates/v2";
 @source "../../templates/login.html";
 
 @font-face {
@@ -57,20 +55,6 @@
   --wait: #64748B;
   --wait-wash: #E2E8F0;
   --on-ink: #FFFFFF;
-
-  /* V2 aliases (deleted in M6) */
-  --paper: var(--canvas);
-  --panel: var(--surface);
-  --wash: var(--raised);
-  --soft: var(--muted);
-  --rule: var(--line);
-  --honey: var(--live);
-  --honey-deep: var(--live-deep);
-  --honey-wash: var(--live-wash);
-  --moss: var(--ok);
-  --moss-wash: var(--ok-wash);
-  --rust: var(--bad);
-  --rust-wash: var(--bad-wash);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -146,20 +130,6 @@
   --color-transparent: transparent;
   --color-current: currentColor;
 
-  /* V2 aliases (deleted in M6) */
-  --color-paper: var(--canvas);
-  --color-panel: var(--surface);
-  --color-wash: var(--raised);
-  --color-soft: var(--muted);
-  --color-rule: var(--line);
-  --color-honey: var(--live);
-  --color-honey-deep: var(--live-deep);
-  --color-honey-wash: var(--live-wash);
-  --color-moss: var(--ok);
-  --color-moss-wash: var(--ok-wash);
-  --color-rust: var(--bad);
-  --color-rust-wash: var(--bad-wash);
-
   --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -181,51 +151,8 @@
   background-size: 28px 100%;
   animation: live-sweep 1.2s linear infinite;
 }
-@keyframes swarm-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-.swarm-working {
-  animation: swarm-pulse 1.6s ease-in-out infinite;
-}
-/* The flow (V2 theater): hand-offs between agents. */
-@keyframes flow-dash {
-  to { background-position: 24px 0; }
-}
-@keyframes flow-stroke {
-  to { stroke-dashoffset: -24; }
-}
-.flow-line {
-  height: 2px;
-  background-image: linear-gradient(90deg, var(--line) 0 6px, transparent 6px 12px);
-  background-size: 12px 2px;
-  background-repeat: repeat-x;
-}
-.flow-line[data-flow="flowing"] {
-  background-image: linear-gradient(90deg, var(--live) 0 6px, transparent 6px 12px);
-  animation: flow-dash 0.9s linear infinite;
-}
-.flow-line[data-flow="done"] {
-  background-image: none;
-  background-color: var(--ok);
-}
-.flow-arc {
-  fill: none;
-  stroke: var(--line);
-  stroke-width: 2;
-  stroke-dasharray: 6 6;
-  vector-effect: non-scaling-stroke;
-}
-.flow-arc[data-flow="flowing"] {
-  stroke: var(--live);
-  animation: flow-stroke 0.9s linear infinite;
-}
-.flow-arc[data-flow="done"] {
-  stroke: var(--ok);
-  stroke-dasharray: none;
-}
 @media (prefers-reduced-motion: reduce) {
-  .live-dot, .swarm-working, .flow-line, .flow-arc { animation: none; }
+  .live-dot, .live-step { animation: none; }
 }
 
 /* Focus: one ring everywhere, ink on light, light on dark. */

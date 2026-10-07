@@ -300,9 +300,9 @@ class TestThePieces:
         css = (WEB / "static" / "v3" / "input.css").read_text()
         assert 'url("fonts/Geist-Variable.woff2")' in css and "googleapis" not in css
 
-    def test_the_tokens_carry_both_themes_and_the_v2_aliases(self):
+    def test_the_tokens_carry_both_themes_and_no_v2_alias(self):
         css = (WEB / "static" / "v3" / "input.css").read_text()
         for token in ("--canvas", "--surface", "--line", "--ink", "--live", "--ok", "--bad", "--info", "--wait"):
             assert f"{token}:" in css
         assert '@media (prefers-color-scheme: dark)' in css and ':root[data-theme="dark"]' in css
-        assert "--color-honey: var(--live)" in css and "--color-rule: var(--line)" in css
+        assert "--color-honey" not in css and "--color-rule" not in css  # the V2 aliases went with V2 (M6)

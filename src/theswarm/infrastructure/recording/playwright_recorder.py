@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 # download, a demo call — is a band in its status's colour, large. The
 # theater's demo card plays the video about 256 px wide, and a cream page of
 # 20 px text read as a blank frame there (reschedule-concert and tour-span,
-# 2026-09-30). Atelier colours (static/v2/input.css): moss for an answer,
+# 2026-09-30). Atelier colours (the V3 tokens, static/v3/input.css): ok for an answer,
 # honey for a 4xx, rust for a 5xx, slate for none.
 _BAND_CSS = (
     'header{font:600 30px/1.3 ui-monospace,"IBM Plex Mono",Menlo,monospace;color:#fff;'

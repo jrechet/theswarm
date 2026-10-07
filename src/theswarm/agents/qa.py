@@ -2220,7 +2220,7 @@ async def _run_demo_setup(workspace: str) -> None:
     and the demo goes on without it — TheSwarm declares `bash
     scripts/build-css.sh` so V2 pages render styled instead of the browser's
     unstyled default (Times, blue links): the QA workspace is a plain clone,
-    and `static/v2/app.css` is generated, not checked in.
+    and `static/v3/app.css` is generated, not checked in.
     """
     import asyncio
 
