@@ -46,6 +46,7 @@ dev = [
     "pytest-mock>=3.14",
     "pytest-cov>=7.1.0",
     "pytest-playwright>=0.7.2",
+    "axe-playwright-python>=0.1.4",
 ]
 
 [build-system]

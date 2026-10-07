@@ -59,7 +59,7 @@
         {{ ui.customer_mark(row.customer_initial, 18) }}
         <span class="flex flex-col gap-0.5 flex-[1_1_260px] min-w-0">
           <span class="font-medium truncate">{{ row.request.title }}</span>
-          <span class="text-[12px] text-muted">{{ row.customer_name }} · {{ row.when }}{% if row.feature_label %} · <a href="{{ row.feature_href }}" class="font-mono text-ink hover:underline">{{ row.feature_label }}</a>{% endif %}</span>
+          <span class="text-[12px] text-muted">{{ row.customer_name }} · {{ row.when }}{% if row.feature_label %} · <a href="{{ row.feature_href }}" class="font-mono text-ink underline underline-offset-2">{{ row.feature_label }}</a>{% endif %}</span>
         </span>
         {{ steps(row.steps) }}
       </div>

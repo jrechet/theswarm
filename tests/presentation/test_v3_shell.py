@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import re
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -306,3 +307,29 @@ class TestThePieces:
             assert f"{token}:" in css
         assert '@media (prefers-color-scheme: dark)' in css and ':root[data-theme="dark"]' in css
         assert "--color-honey" not in css and "--color-rule" not in css  # the V2 aliases went with V2 (M6)
+
+
+class TestThePhonePass:
+    """M7: the shell on a phone — the rail's foot reaches a narrow screen,
+    and an address that does not exist is a page, not JSON, for a browser."""
+
+    async def test_the_rail_s_foot_is_not_hidden_on_a_phone(self, web):
+        client, _ = web
+        with patch("theswarm.presentation.web.routes.common.github_app") as gh:
+            gh.load_credentials = AsyncMock(return_value=None)
+            gh.list_user_repositories = AsyncMock(return_value=[])
+            gh.oauth_client = AsyncMock(return_value=object())
+            r = await client.get("/", headers=HTML)
+        assert r.status_code == 200
+        foot = re.search(r'<div class="([^"]*)" data-testid="rail-foot">', r.text)
+        assert foot and "hidden" not in foot.group(1).split() and "md:flex-col" in foot.group(1)
+
+    async def test_an_unknown_address_is_a_page_for_a_browser_and_json_for_a_client(self, web):
+        client, _ = web
+        r = await client.get("/dashboard", headers=HTML)
+        assert r.status_code == 404 and 'data-testid="not-found"' in r.text and 'data-testid="rail-home"' in r.text
+        assert "/dashboard" in r.text and 'data-testid="not-found-home"' in r.text
+        r = await client.get("/dashboard", headers={"accept": "application/json"})
+        assert r.status_code == 404 and r.json() == {"detail": "Not Found"}
+        r = await client.get("/c/nobody", headers=HTML)
+        assert r.status_code == 404 and 'data-testid="not-found"' in r.text

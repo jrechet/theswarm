@@ -58,7 +58,7 @@
 
 {# A section label: 12px, tracked, with an aside on the same line. #}
 {% macro section_label(text, aside='', id='') -%}
-<div class="flex items-baseline gap-2.5">
+<div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
   <h2{% if id %} id="{{ id }}"{% endif %} class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">{{ text }}</h2>
   {% if aside %}<span class="text-[12px] text-faint">{{ aside }}</span>{% endif %}
   {{ caller() if caller is defined else '' }}

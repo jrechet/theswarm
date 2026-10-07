@@ -16,7 +16,7 @@ import re
 import time
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from theswarm.presentation.web.routes import stage
@@ -338,14 +338,14 @@ async def theater(request: Request, cycle_id: str):
     state = request.app.state
     target = await theater_target(state, cycle_id)
     if target is None:
-        return HTMLResponse("Cycle not found", status_code=404)
+        raise HTTPException(status_code=404, detail="Cycle not found")
     if target != cycle_id:
         # A restart interrupted it and the resumer continued it: the theater
         # of the continuation is where this cycle now lives.
         return RedirectResponse(f"{state.base_path}/cycles/{target}", status_code=303)
     record, orphan = await _record_for(state, cycle_id)
     if record is None:
-        return HTMLResponse("Cycle not found", status_code=404)
+        raise HTTPException(status_code=404, detail="Cycle not found")
     return state.templates.TemplateResponse("theater.html", await theater_context(request, record, orphan))
 
 
@@ -353,7 +353,7 @@ async def theater(request: Request, cycle_id: str):
 async def theater_stage(request: Request, cycle_id: str):
     record, orphan = await _record_for(request.app.state, cycle_id)
     if record is None:
-        return HTMLResponse("", status_code=404)
+        raise HTTPException(status_code=404, detail="")
     return request.app.state.templates.TemplateResponse(
         "_stage.html", await theater_context(request, record, orphan),
     )

@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from theswarm.application.services.requests import RequestError
@@ -159,7 +159,7 @@ async def plan_request(request: Request, request_id: str, project: str = Form(de
         return _refused(request, actor)
     req = await service.get(request_id)
     if req is None:
-        return HTMLResponse("No such request", status_code=404)
+        raise HTTPException(status_code=404, detail="No such request")
     customer = await _customer_of(state, req.customer_id)
     chosen = next((p for p in await state.project_repo.list_for_customer(req.customer_id) if str(p.repo) == project), None)
     if customer is None or chosen is None:
@@ -183,6 +183,6 @@ async def decline_request(request: Request, request_id: str, reason: str = Form(
         return _refused(request, actor)
     req = await service.get(request_id)
     if req is None:
-        return HTMLResponse("No such request", status_code=404)
+        raise HTTPException(status_code=404, detail="No such request")
     await service.decline(req, reason)
     return RedirectResponse(f"{state.base_path}/requests", status_code=303)

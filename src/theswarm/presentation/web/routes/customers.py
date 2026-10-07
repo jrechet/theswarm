@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import os
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from theswarm.application.services.customers import Actor, CustomerError
@@ -138,7 +138,7 @@ async def settings_customer(request: Request, slug: str, error: str = "") -> HTM
     state = request.app.state
     customer = await state.customer_service.by_slug(slug)
     if customer is None:
-        return HTMLResponse("No such customer", status_code=404)
+        raise HTTPException(status_code=404, detail="No such customer")
     return state.templates.TemplateResponse(
         "settings_customer.html", await _customer_context(request, customer, error=error),
     )
@@ -150,7 +150,7 @@ async def assign_project(request: Request, slug: str, full_name: str = Form(defa
     base = state.base_path
     customer = await state.customer_service.by_slug(slug)
     if customer is None:
-        return HTMLResponse("No such customer", status_code=404)
+        raise HTTPException(status_code=404, detail="No such customer")
     try:
         await state.customer_service.assign_project(full_name, customer)
     except ValueError as exc:
@@ -170,7 +170,7 @@ async def invite_member(
     state = request.app.state
     customer = await state.customer_service.by_slug(slug)
     if customer is None:
-        return HTMLResponse("No such customer", status_code=404)
+        raise HTTPException(status_code=404, detail="No such customer")
     try:
         member, token = await state.customer_service.invite(customer, email, display_name)
     except CustomerError as exc:
@@ -233,7 +233,7 @@ async def customer_page(request: Request, slug: str):
 
         target = await theater_target(state, slug)
         if target is None:
-            return HTMLResponse("Cycle not found", status_code=404)
+            raise HTTPException(status_code=404, detail="Cycle not found")
         return RedirectResponse(f"{state.base_path}/cycles/{target}", status_code=303)
     if actor is None or (not actor.is_owner and actor.customer_id != customer.id):
         return _refused(request, actor)

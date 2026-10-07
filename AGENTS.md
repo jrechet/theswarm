@@ -1047,6 +1047,30 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   relative link is useless on GitHub), what was built and the two
   behaviour gates. Once per cycle (`<!-- swarm:demo <cycle> -->`), only on
   targeted cycles, a failure logged and nothing else lost.
+- **Phone, dark, measurement (V3 M7, 2026-10-07)**: every screen rendered
+  at 375 px and 1280 px, light and dark, with no horizontal overflow
+  (`tmp`-only survey, `document.documentElement.scrollWidth` against
+  `clientWidth`); the rail's foot (Settings, Claude, who is signed in,
+  Sign out) is a row in the phone's strip, never hidden (`rail-foot`);
+  `section_label` wraps its aside and its trailing link. An address that
+  does not exist is a page for a browser (`not_found.html` in the shell,
+  the `StarletteHTTPException` handler in `app.py` — the router's own 404
+  is Starlette's, FastAPI's subclasses it) and the usual JSON for a
+  client; the pages' own 404s raise `HTTPException` with their word.
+  **CI's required smoke walk is `tests/e2e/test_smoke_walk.py`** (both
+  `ci.yml`): the unified server on an isolated database with the wall
+  down, every page and endpoint of the plan's table without a 5xx, V1's
+  addresses 404, and **axe** (`axe-playwright-python`, dev only) with no
+  serious or critical violation on the pages a person reads. Axe's first
+  run found the `--faint` token at 3.1:1 in light and 3.7:1 in dark, the
+  slate chip at 3.9:1 and the deep amber at 4.5:1 on their washes, and
+  in-text links told apart by colour alone: the tokens are
+  `#667085`/`#8A93A0`, `#475569`, `#A54D08`, and in-text links are
+  underlined (`underline underline-offset-2`). Lighthouse on a local
+  server (2026-10-07): the home 97/91/96, the player 96/91/96
+  (performance, accessibility, best practices), CLS 0, TBT 0, the home
+  235 KiB, the player 312 KiB. The SMTP door stays out until the owner
+  wants it.
 - **DevOps, the fifth persona (D1, 2026-10-07)** reads the pipeline and
   touches nothing: `agents/devops.py` — the stack declared in
   `theswarm.yaml` (`stack:` hosts with ssh and the CI slot directory, the

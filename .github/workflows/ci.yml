@@ -93,9 +93,9 @@ jobs:
         run: uv sync --dev
       - name: Install Playwright browsers
         run: uv run playwright install --with-deps chromium
-      - name: Run dashboard route smoke walk
+      - name: Run the route smoke walk and the axe pass
         run: |
-          uv run pytest tests/e2e/test_dashboard_e2e.py::TestRouteSmokeWalk \
+          uv run pytest tests/e2e/test_smoke_walk.py \
             -v --tb=short --browser chromium
 
   deploy:

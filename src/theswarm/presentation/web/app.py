@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Callable
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
 
@@ -1027,6 +1029,16 @@ def create_web_app(
     app.include_router(api.router)
     app.include_router(auth_routes.router)
     app.include_router(github_setup.router)
+
+    # A 404 is a page for a browser (the shell when signed in), the usual JSON for a client (M7).
+    @app.exception_handler(StarletteHTTPException)  # the router's own 404 is Starlette's, FastAPI's subclasses it
+    async def _http_exception(request, exc: StarletteHTTPException):
+        if exc.status_code == 404 and "text/html" in request.headers.get("accept", ""):
+            message = exc.detail if isinstance(exc.detail, str) and exc.detail != "Not Found" else ""
+            return app.state.templates.TemplateResponse("not_found.html", {
+                "request": request, "message": message, "path": request.url.path,
+            }, status_code=404)
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=getattr(exc, "headers", None))
 
     # Static files
     if _STATIC_DIR.is_dir():
