@@ -32,6 +32,8 @@ SSH_TIMEOUT_SECONDS = 20
 GITHUB_TIMEOUT_SECONDS = 30
 DISK_WARN_PERCENT = 85
 DISK_BAD_PERCENT = 95
+LOAD_WARN_PER_CORE = 1.0  # the 1-minute average over the cores
+LOAD_BAD_PER_CORE = 2.0
 FAILED_RUNS_HOURS = 24
 RUN_LIMIT = 30
 
@@ -261,6 +263,21 @@ def disk_finding(name: str, usages: list[dict], key: str = "disk") -> Finding:
     return Finding(key, f"Disk ({name})", status, "; ".join(parts))
 
 
+def load_finding(name: str, load: dict | None, key: str = "load") -> Finding:
+    """The 1-minute load average against the cores: a box past 2× cannot even boot a container in time."""
+    if not load or load.get("cores") in (None, 0) or load.get("one") is None:
+        return Finding(key, f"Load ({name})", UNKNOWN, "not read")
+    one, cores = float(load["one"]), int(load["cores"])
+    per_core = one / cores
+    detail = f"{one:.1f} over {cores} cores ({per_core:.1f} per core)"
+    if load.get("five") is not None:
+        detail += f", {float(load['five']):.1f} over 5 min"
+    status = BAD if per_core >= LOAD_BAD_PER_CORE else WARN if per_core >= LOAD_WARN_PER_CORE else OK
+    if status != OK:
+        detail += " — a boot or a health probe may not make it in time"
+    return Finding(key, f"Load ({name})", status, detail)
+
+
 def claude_finding(status: dict | None) -> Finding:
     """Claude's walls, as /health and the rail read them."""
     if not status:
@@ -332,6 +349,15 @@ def local_disk(paths: list[str] | None = None) -> list[dict]:
         rows.append({"path": probe, "percent": int(round(100 * usage.used / usage.total)) if usage.total else 0,
                      "free": _human(usage.free)})
     return rows
+
+
+def local_load() -> dict | None:
+    """This box's load average and cores (None where the OS has no such thing)."""
+    try:
+        one, five, fifteen = os.getloadavg()
+    except (AttributeError, OSError):
+        return None
+    return {"one": one, "five": five, "fifteen": fifteen, "cores": os.cpu_count() or 1}
 
 
 def _human(n: float) -> str:
@@ -411,7 +437,8 @@ def ssh_command(host: dict) -> list[str]:
 
 HOST_SCRIPT = (
     'for f in {slot_dir}/slot*/owner; do [ -f "$f" ] && echo "SLOT $f" && cat "$f" && echo "ENDSLOT"; done; '
-    'echo "DISK"; df -P {disk_paths} 2>/dev/null'
+    'echo "DISK"; df -P {disk_paths} 2>/dev/null; '
+    'echo "LOAD $(cat /proc/loadavg 2>/dev/null | cut -d" " -f1-3) $(nproc 2>/dev/null)"'
 )
 
 
@@ -434,6 +461,7 @@ def parse_host_output(text: str) -> dict:
     """SLOT/ENDSLOT blocks and the df -P table out of the host script's output."""
     slots: list[tuple[str, str]] = []
     disks: list[dict] = []
+    load: dict | None = None
     current: str | None = None
     buffer: list[str] = []
     in_disk = False
@@ -445,6 +473,14 @@ def parse_host_output(text: str) -> dict:
             current = None
         elif current is not None:
             buffer.append(line)
+        elif line.startswith("LOAD "):
+            in_disk = False
+            parts = line.split()[1:]
+            if len(parts) >= 4:
+                try:
+                    load = {"one": float(parts[0]), "five": float(parts[1]), "fifteen": float(parts[2]), "cores": int(parts[3])}
+                except ValueError:
+                    load = None
         elif line == "DISK":
             in_disk = True
         elif in_disk:
@@ -454,7 +490,7 @@ def parse_host_output(text: str) -> dict:
                     disks.append({"path": parts[5], "percent": int(parts[4].rstrip("%")), "free": _human(int(parts[3]) * 1024)})
                 except ValueError:
                     continue
-    return {"slots": slots, "disks": disks}
+    return {"slots": slots, "disks": disks, "load": load}
 
 
 async def read_host(host: dict, run: Callable[[dict, str], Awaitable[str]] | None = None) -> dict:
@@ -514,8 +550,10 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
         if host.get("ci_slot_dir"):
             findings.append(slot_finding(read.get("slots", []), now, int(host.get("ci_slot_stale_minutes") or DEFAULT_STALE_MINUTES), name))
         findings.append(disk_finding(name, read.get("disks", []), key=f"disk_{name}"))
+        findings.append(load_finding(name, read.get("load"), key=f"load_{name}"))
 
-    # This process: its disk, Claude's walls.
+    # This process: its box's load, its disk, Claude's walls.
+    findings.append(load_finding("here", local_load(), key="load_here"))
     try:
         findings.append(disk_finding("here", (here or local_disk)(), key="disk_here"))
     except Exception as exc:  # noqa: BLE001

@@ -54,10 +54,12 @@ class TestTheCiSlot:
 
     def test_the_host_script_s_output_is_parsed(self):
         text = f"SLOT {SLOT}\n{OWNER}ENDSLOT\nDISK\nFilesystem 1024-blocks Used Available Capacity Mounted on\n/dev/md3 3800000000 380000000 3300000000 11% /\n/dev/md3 3800000000 380000000 3300000000 11% /\n"
+        text += "LOAD 18.42 16.10 12.03 8\n"
         read = d.parse_host_output(text)
         assert read["slots"] == [(SLOT, OWNER.rstrip("\n"))]
+        assert read["load"] == {"one": 18.42, "five": 16.10, "fifteen": 12.03, "cores": 8}
         assert read["disks"] == [{"path": "/", "percent": 11, "free": "3.1T"}]
-        assert d.parse_host_output("") == {"slots": [], "disks": []}
+        assert d.parse_host_output("") == {"slots": [], "disks": [], "load": None}
 
     def test_the_ssh_command_names_the_host_and_port(self):
         cmd = d.ssh_command({"ssh": "debian@jrec.fr", "port": 5422})
@@ -117,6 +119,15 @@ class TestTheRest:
         not_yet = str(Path.home() / "no-such-workspaces-dir" / "deeper")  # a workspace directory not made yet
         assert d.local_disk([not_yet])[0]["path"] == str(Path.home()) and d._existing("/") == "/"
 
+    def test_load(self):
+        assert d.load_finding("jrec.fr", {"one": 2.0, "five": 1.5, "cores": 8}).status == "ok"
+        warm = d.load_finding("jrec.fr", {"one": 9.0, "five": 8.0, "cores": 8})
+        assert warm.status == "warn" and "1.1 per core" in warm.detail and "may not make it in time" in warm.detail
+        assert d.load_finding("jrec.fr", {"one": 18.4, "cores": 8}).status == "bad"  # 2026-10-07: the box under another repo's CI
+        assert d.load_finding("jrec.fr", None).status == "unknown" and d.load_finding("x", {"one": 1, "cores": 0}).status == "unknown"
+        here = d.local_load()
+        assert here is None or here["cores"] >= 1
+
     def test_claude(self):
         assert d.claude_finding({"status": "ok"}).status == "ok"
         assert d.claude_finding({"status": "quota_wall", "detail": "until 16:00 UTC"}).status == "bad"
@@ -165,12 +176,12 @@ class TestGather:
         report = await d.gather(STACK, github=_github, host_reader=_host, claude=lambda: {"status": "ok"},
                                 harness=lambda repo: _harness(repo), build=lambda: "753dbf9000", here=HERE, now=NOW)
         keys = [f.key for f in report.findings]
-        assert keys == ["deploy", "runners", "failed_runs", "ci_slot", "disk_jrec.fr", "disk_here", "claude", "harness"]
+        assert keys == ["deploy", "runners", "failed_runs", "ci_slot", "disk_jrec.fr", "load_jrec.fr", "load_here", "disk_here", "claude", "harness"]
         by = {f.key: f for f in report.findings}
         assert by["deploy"].status == "ok" and by["ci_slot"].status == "bad" and by["harness"].status == "ok"
         assert report.status == "bad" and report.counts["bad"] == 1
         assert report.stack == "jrec.fr · github-actions · ghcr.io · docker-swarm"
-        assert report.as_dict()["findings"][3]["key"] == "ci_slot"
+        assert report.as_dict()["findings"][3]["key"] == "ci_slot" and by["load_jrec.fr"].status == "unknown"
 
     async def test_a_reader_that_fails_is_a_finding_not_an_exception(self):
         async def broken(_):
@@ -190,7 +201,7 @@ class TestGather:
             raise ValueError("no repository declared in stack.ci")
 
         report = await d.gather({}, github=no_github, claude=lambda: {"status": "ok"}, here=HERE, now=NOW)
-        assert [f.key for f in report.findings] == ["deploy", "runners", "failed_runs", "disk_here", "claude"]
+        assert [f.key for f in report.findings] == ["deploy", "runners", "failed_runs", "load_here", "disk_here", "claude"]
 
     def test_the_report_in_words(self):
         report = d.OpsReport((d.Finding("ci_slot", "CI slot", "bad", "stale: slot1 held for 150 min", "https://x"),
