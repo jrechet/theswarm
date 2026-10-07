@@ -126,11 +126,14 @@ async def build_shell(state, headers: dict[str, str], path: str, base: str) -> d
         log.exception("shell: Claude status failed")
 
     # The projects, grouped by customer (Internal alone when nothing is wired).
+    # The repository gives entities (a RepoUrl, a customer_id); the query's
+    # DTOs (a plain string, no customer) are the fallback.
     projects: list = []
-    query = getattr(state, "list_projects_query", None)
-    if query is not None:
+    source = getattr(state, "project_repo", None) or getattr(state, "list_projects_query", None)
+    if source is not None:
         try:
-            projects = [p for p in await query.execute() if "/" in str(p.repo)]
+            rows = await (source.list_all() if hasattr(source, "list_all") else source.execute())
+            projects = [p for p in rows if "/" in str(p.repo)]
         except Exception:  # noqa: BLE001
             log.exception("shell: listing projects failed")
     customers: list = []
@@ -148,7 +151,7 @@ async def build_shell(state, headers: dict[str, str], path: str, base: str) -> d
     def project_row(p) -> dict:
         full_name = str(p.repo)
         return {
-            "name": p.repo.name, "full_name": full_name,
+            "name": full_name.partition("/")[2] or full_name, "full_name": full_name,
             "href": f"{base}/r/{full_name}", "running": full_name in running,
         }
 
@@ -204,7 +207,9 @@ class ShellMiddleware:
         self.base = base_path.rstrip("/")
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope.get("method", "GET") not in ("GET", "HEAD"):
+        # Every request that wants HTML — a form's POST renders a page too
+        # (the invitation link is shown on the settings page it comes from).
+        if scope["type"] != "http":
             return await self.app(scope, receive, send)
         headers = auth._headers(scope)
         path = scope.get("path", "")
