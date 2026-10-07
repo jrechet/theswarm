@@ -175,7 +175,7 @@ class TestTheCard:
 
         r = await _page(client)
 
-        assert "/swarm/c/cafe1234cafe" in r.text  # the cycle's page is the theater
+        assert "/swarm/cycles/cafe1234cafe" in r.text  # the cycle's page is the theater (M4)
 
     async def test_the_newest_report_wins(self, web):
         client, app = web
