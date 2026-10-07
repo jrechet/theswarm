@@ -17,7 +17,7 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from theswarm.presentation.web.routes import common
@@ -245,7 +245,7 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
     base = state.base_path
     customer, project = await _resolve(state, slug, name)
     if project is None:
-        return HTMLResponse("No such project", status_code=404)
+        raise HTTPException(status_code=404, detail="No such project")
     full_name = str(project.repo)
     urls = urls_for(base, slug, name)
 
@@ -308,7 +308,7 @@ async def compose(request: Request, slug: str, name: str, body: str = Form(defau
     base = state.base_path
     customer, project = await _resolve(state, slug, name)
     if project is None:
-        return HTMLResponse("No such project", status_code=404)
+        raise HTTPException(status_code=404, detail="No such project")
     urls = urls_for(base, slug, name)
     text = body.strip()
     if not text:
@@ -338,7 +338,7 @@ async def play(request: Request, slug: str, name: str, number: int):
     state = request.app.state
     customer, project = await _resolve(state, slug, name)
     if project is None:
-        return HTMLResponse("No such project", status_code=404)
+        raise HTTPException(status_code=404, detail="No such project")
     record = await common.start_targeted_cycle(
         state, project.repo.owner, project.repo.name, number, f"Play on issue #{number}",
     )
@@ -381,7 +381,7 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
     base = state.base_path
     customer, project = await _resolve(state, slug, name)
     if project is None:
-        return HTMLResponse("No such project", status_code=404)
+        raise HTTPException(status_code=404, detail="No such project")
     full_name = str(project.repo)
     urls = urls_for(base, slug, name)
     from theswarm.presentation.web.routes.customers import _refused, current_actor
@@ -399,7 +399,7 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
 
     pinned = await load_pinned_issue(full_name, number)
     if pinned.issue is None:
-        return HTMLResponse(f"No such feature: #{number}", status_code=404)
+        raise HTTPException(status_code=404, detail=f"No such feature: #{number}")
     issue = pinned.issue
     running = common._running_for_repo(full_name)
     building = bool(running is not None and getattr(running, "issue_number", None) == number)

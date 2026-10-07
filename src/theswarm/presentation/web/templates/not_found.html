@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Not found — TheSwarm{% endblock %}
+{% block crumbs %}
+  <span class="text-ink font-medium">Not found</span>
+{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-4 max-w-[560px]" data-testid="not-found">
+  <h1 class="m-0 text-[20px] font-semibold tracking-tight">There is nothing at this address</h1>
+  <p class="m-0 text-[14px] text-muted leading-relaxed">{{ message or "The page may have moved: since the one product (M6), every page lives under its customer — the home lists them." }}</p>
+  <p class="m-0 font-mono text-[12px] text-faint break-all">{{ path }}</p>
+  <div>{{ ui.btn('Home', href=base ~ '/', kind='primary', testid='not-found-home') }}</div>
+</div>
+{% endblock %}

@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from theswarm.presentation.web.routes import common
@@ -240,7 +240,7 @@ async def player(request: Request, report_id: str):
 
     report = await _report(request, report_id)
     if report is None:
-        return HTMLResponse("No such demo", status_code=404)
+        raise HTTPException(status_code=404, detail="No such demo")
     actor = await current_actor(request)
     member = actor is not None and not actor.is_owner
     if member and not await _members_project(request.app.state, actor.customer_id, report.project_id):
@@ -262,7 +262,7 @@ async def public_player(request: Request, short: str):
                 match = r
                 break
     if match is None:
-        return HTMLResponse("No such demo", status_code=404)
+        raise HTTPException(status_code=404, detail="No such demo")
     return request.app.state.templates.TemplateResponse(
         "demo_public.html", await player_context(request, match, public=True),
     )
