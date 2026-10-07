@@ -29,6 +29,13 @@ from theswarm.presentation.web.sse import SSEHub
 REPO = "jrechet/concert-tour-app"
 
 
+
+async def _v3(client, path, **kw):
+    """A V2 address registers the project and redirects (303, under the base
+    path); the page itself is read at its V3 address inside Internal."""
+    await client.get(path.split("?")[0], **kw)
+    return await client.get(path.replace("/r/jrechet/", "/c/internal/p/"), **kw)
+
 @pytest.fixture(autouse=True)
 def _isolate_tracker():
     from theswarm.api import get_cycle_tracker
@@ -78,7 +85,7 @@ def _report(rid="rep-1", *, project=REPO, when=None, with_video=True) -> DemoRep
 async def _page(client):
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=[])
-        return await client.get(f"/r/{REPO}", follow_redirects=True)
+        return await _v3(client, f"/r/{REPO}")
 
 
 class TestTheCard:
@@ -168,7 +175,7 @@ class TestTheCard:
 
         r = await _page(client)
 
-        assert "/swarm/cycles/cafe1234cafe" in r.text
+        assert "/swarm/c/cafe1234cafe" in r.text  # the cycle's page is the theater
 
     async def test_the_newest_report_wins(self, web):
         client, app = web
@@ -180,7 +187,8 @@ class TestTheCard:
         r = await _page(client)
 
         assert "/swarm/demos/rep-new/play" in r.text
-        assert "/swarm/demos/rep-old/play" not in r.text
+        card = r.text.split('data-testid="latest-demo"')[1].split('data-testid="delivered-demo"')[0]
+        assert "/swarm/demos/rep-old/play" not in card  # the older one is in the Delivered list, not the card
 
 
 class TestWhenThereIsNothingToShow:

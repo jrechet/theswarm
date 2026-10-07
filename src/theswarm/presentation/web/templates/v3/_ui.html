@@ -15,8 +15,7 @@
 {# A status chip: one of the six words, the same colours everywhere. #}
 {% macro chip(label, kind='waiting', pulse=False, testid='') -%}
 <span class="inline-flex items-center gap-1.5 h-[22px] px-[9px] rounded-full text-[12px] font-medium {{ CHIP_KINDS.get(kind, CHIP_KINDS['waiting']) }}"{% if testid %} data-testid="{{ testid }}"{% endif %} data-kind="{{ kind }}">
-  <span class="w-1.5 h-1.5 rounded-full bg-current{% if pulse %} live-dot{% endif %}" aria-hidden="true"></span>{{ label }}
-</span>
+  <span class="w-1.5 h-1.5 rounded-full bg-current{% if pulse %} live-dot{% endif %}" aria-hidden="true"></span>{{ label }}</span>
 {%- endmacro %}
 
 {# Buttons: primary (ink), secondary (lined), ghost, danger. An href makes a link. #}

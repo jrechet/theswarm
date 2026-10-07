@@ -114,7 +114,7 @@ def _report(rid: str, cycle_id: str, title: str = "Invoice numbering per year") 
     return DemoReport(
         id=rid, cycle_id=CycleId(cycle_id), project_id=REPO, created_at=NOW,
         summary=ReportSummary(stories_completed=1, stories_total=1, prs_merged=1, cost_usd=2.14),
-        stories=(StoryReport(ticket_id="14", title=title),),
+        stories=(StoryReport(ticket_id="14", title=title, status="completed"),),
     )
 
 
@@ -137,7 +137,8 @@ class TestThePage:
             assert f'aria-labelledby="group-{key}"' in r.text
         building = r.text.split('data-column="in-progress"')[1].split("</section>")[0]
         assert "Harden input validation" in building and "Old building label" not in building
-        assert 'aria-labelledby="group-stalled"' in r.text and "Old building label" in r.text.split('group-stalled')[1]
+        assert 'aria-labelledby="group-stalled"' in r.text
+        assert "Old building label" in r.text.split('aria-labelledby="group-stalled"')[1]
         review = r.text.split('data-column="review"')[1].split("</section>")[0]
         assert "Invoice numbering per year" in review
         assert 'data-testid="play-10"' in r.text and 'data-testid="play-13"' in r.text

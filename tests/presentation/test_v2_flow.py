@@ -19,6 +19,13 @@ from theswarm.presentation.web.sse import SSEHub
 from theswarm.tools import github_app
 
 
+
+async def _v3(client, path, **kw):
+    """A V2 address registers the project and redirects (303, under the base
+    path); the page itself is read at its V3 address inside Internal."""
+    await client.get(path.split("?")[0], **kw)
+    return await client.get(path.replace("/r/jrechet/", "/c/internal/p/"), **kw)
+
 @pytest.fixture(autouse=True)
 def _clean_github_app():
     github_app.reset_state()
@@ -120,7 +127,7 @@ async def test_repo_page_registers_the_project_on_first_visit(web):
     client, app = web
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=[])
-        r = await client.get("/r/jrechet/concert-tour-app", follow_redirects=True)
+        r = await _v3(client, "/r/jrechet/concert-tour-app")
 
     assert r.status_code == 200
     projects = await app.state.list_projects_query.execute()
@@ -138,7 +145,7 @@ async def test_repo_page_groups_issues_by_status(web):
     ]
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=issues)
-        r = await client.get("/r/jrechet/concert-tour-app", follow_redirects=True)
+        r = await _v3(client, "/r/jrechet/concert-tour-app")
 
     text = r.text
     # Labelled in progress, and no cycle is running: stalled, not building
@@ -146,7 +153,7 @@ async def test_repo_page_groups_issues_by_status(web):
     assert text.index("Stalled") < text.index("Payment flow")
     assert text.index("Ready") < text.index("Ship the seating map")
     assert text.index("Backlog") < text.index("Dark mode")
-    assert text.count("▶") == 3  # every non-building issue gets Play
+    assert text.count('data-testid="play-') == 3  # every non-building issue gets Play
 
 
 async def test_repo_page_survives_github_being_down(web):
@@ -155,7 +162,7 @@ async def test_repo_page_survives_github_being_down(web):
         klass.return_value.get_issues = AsyncMock(
             side_effect=RuntimeError("api.github.com unreachable"),
         )
-        r = await client.get("/r/jrechet/concert-tour-app", follow_redirects=True)
+        r = await _v3(client, "/r/jrechet/concert-tour-app")
 
     assert r.status_code == 200
     assert "GitHub didn&#39;t answer" in r.text or "GitHub didn't answer" in r.text
@@ -169,13 +176,14 @@ async def test_composer_creates_an_issue_from_free_text(web):
     with patch("theswarm.tools.github.GitHubClient") as klass:
         create = AsyncMock(return_value={"number": 12})
         klass.return_value.create_issue = create
+        await client.get("/r/jrechet/concert-tour-app")  # registers it under Internal
         r = await client.post(
             "/c/internal/p/concert-tour-app/features",
             data={"body": "Add a waiting list\nFans join when a show sells out."},
         )
 
     assert r.status_code == 303
-    assert r.headers["location"] == "/swarm/r/jrechet/concert-tour-app?new=12"
+    assert r.headers["location"] == "/swarm/c/internal/p/concert-tour-app?new=12"
     create.assert_awaited_once_with(
         title="Add a waiting list",
         body="Fans join when a show sells out.",
@@ -196,7 +204,7 @@ async def test_the_feature_just_written_is_on_the_board_while_github_lags(web):
         ])
         get_issue = AsyncMock(return_value=fresh)
         klass.return_value.get_issue = get_issue
-        r = await client.get("/r/jrechet/concert-tour-app?new=386", follow_redirects=True)
+        r = await _v3(client, "/r/jrechet/concert-tour-app?new=386")
 
     assert r.status_code == 200
     get_issue.assert_awaited_once_with(386)
@@ -213,7 +221,7 @@ async def test_a_listed_new_issue_is_not_fetched_twice(web):
         klass.return_value.get_issues = AsyncMock(return_value=[listed])
         get_issue = AsyncMock()
         klass.return_value.get_issue = get_issue
-        r = await client.get("/r/jrechet/concert-tour-app?new=386", follow_redirects=True)
+        r = await _v3(client, "/r/jrechet/concert-tour-app?new=386")
 
     get_issue.assert_not_awaited()
     assert r.text.count("/features/386/play") == 1
@@ -225,7 +233,7 @@ async def test_a_closed_or_missing_new_issue_is_left_off_the_board(web):
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=[])
         klass.return_value.get_issue = AsyncMock(return_value=None)
-        r = await client.get("/r/jrechet/concert-tour-app?new=999", follow_redirects=True)
+        r = await _v3(client, "/r/jrechet/concert-tour-app?new=999")
 
     assert r.status_code == 200
     assert "/features/999/play" not in r.text
@@ -236,6 +244,7 @@ async def test_composer_truncates_a_runaway_title(web):
     with patch("theswarm.tools.github.GitHubClient") as klass:
         create = AsyncMock(return_value={"number": 13})
         klass.return_value.create_issue = create
+        await client.get("/r/jrechet/concert-tour-app")  # registers it under Internal
         await client.post(
             "/c/internal/p/concert-tour-app/features",
             data={"body": "x" * 300},
@@ -249,6 +258,7 @@ async def test_composer_ignores_empty_submissions(web):
     with patch("theswarm.tools.github.GitHubClient") as klass:
         create = AsyncMock()
         klass.return_value.create_issue = create
+        await client.get("/r/jrechet/concert-tour-app")  # registers it under Internal
         r = await client.post(
             "/c/internal/p/concert-tour-app/features", data={"body": "   "},
         )
@@ -289,7 +299,7 @@ async def test_running_cycle_shows_the_follow_banner(web, _isolate_cycle_tracker
                "labels": ["status:in-progress"]}]
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=issues)
-        r = await client.get("/r/jrechet/concert-tour-app", follow_redirects=True)
+        r = await _v3(client, "/r/jrechet/concert-tour-app")
 
     assert 'data-testid="running-banner"' in r.text
     assert f"/swarm/c/{record.id}" in r.text

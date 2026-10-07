@@ -265,6 +265,7 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
         "project": _project_dict(customer, project, base),
         "urls": urls,
         "columns": columns,
+        "stalled": stalled,
         "has_issues": bool(issues),
         "issues_error": issues_error,
         "running_cycle": running_cycle,
