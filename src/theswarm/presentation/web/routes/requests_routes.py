@@ -98,14 +98,14 @@ async def requests_page(request: Request, error: str = ""):
     if actor.is_owner:
         inbox = await inbox_rows(state)
         open_ = [await request_row(state, r) for r in await service.open_requests() if r.status != "received"]
-        return state.templates.TemplateResponse("v3/requests.html", {
+        return state.templates.TemplateResponse("requests.html", {
             "role": "owner", "inbox": inbox, "open": open_, "error": error,
         })
     customer = await _customer_of(state, actor.customer_id)
     if customer is None:
         return _refused(request, actor)
     mine = [await request_row(state, r, customer) for r in await service.for_customer(customer)]
-    return state.templates.TemplateResponse("v3/requests.html", {
+    return state.templates.TemplateResponse("requests.html", {
         "role": "member", "mine": mine, "customer": customer, "actor": actor, "error": error,
     })
 
@@ -118,7 +118,7 @@ async def new_request(request: Request, error: str = ""):
         return _refused(request, actor)
     customer = await _customer_of(state, actor.customer_id)
     projects = await state.project_repo.list_for_customer(actor.customer_id) if customer is not None else []
-    return state.templates.TemplateResponse("v3/request_new.html", {
+    return state.templates.TemplateResponse("request_new.html", {
         "customer": customer, "actor": actor, "error": error,
         "projects": [{"full_name": str(p.repo), "name": p.repo.name} for p in projects],
     })

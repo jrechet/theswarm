@@ -294,7 +294,7 @@ class AuthWallMiddleware:
         if "text/html" in headers.get("accept", ""):
             templates = getattr(scope["app"].state, "templates", None)
             if templates is not None:
-                return templates.TemplateResponse("v3/refused.html", {
+                return templates.TemplateResponse("refused.html", {
                     "home": f"{self.base}/", "name": actor.login,
                 }, status_code=403)
         return JSONResponse({"detail": "This page belongs to someone else"}, status_code=403)

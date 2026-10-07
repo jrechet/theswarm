@@ -1,4 +1,4 @@
-{% import "v3/_ui.html" as ui %}
+{% import "_ui.html" as ui %}
 {# The stage: everything that moves while a cycle runs. Re-rendered whole by
    the page's poll loop; data-status lets the client stop polling. #}
 <div id="stage-inner" data-status="{{ record.status.value }}"{% if demo_pending %} data-demo-pending{% endif %} class="flex flex-col gap-5">

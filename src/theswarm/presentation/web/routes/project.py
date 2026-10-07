@@ -281,7 +281,7 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
         running_cycle = {"id": running.id, "issue_number": running.issue_number,
                          "href": f"{base}/cycles/{running.id}", "since": _clock(running.started_at or running.created_at)}
 
-    return state.templates.TemplateResponse("v3/project.html", {
+    return state.templates.TemplateResponse("project.html", {
         "customer": customer,
         "project": _project_dict(customer, project, base),
         "urls": urls,
@@ -404,7 +404,7 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
     running = common._running_for_repo(full_name)
     building = bool(running is not None and getattr(running, "issue_number", None) == number)
     if member_view:
-        return state.templates.TemplateResponse("v3/feature_member.html", await _member_feature(
+        return state.templates.TemplateResponse("feature_member.html", await _member_feature(
             state, customer, project, urls, number, issue, pinned, running if building else None, actor, as_member,
         ))
     status = "in-progress" if building else ("done" if issue.get("state") == "closed" else issue_status(issue))
@@ -414,7 +414,7 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
         c_label, c_kind = STATUS_CHIPS.get(child.get("status", ""), (child.get("status", "open"), "waiting"))
         children.append({**child, "label": c_label, "kind": c_kind, "href": f"{urls['feature']}{child['number']}"})
 
-    return state.templates.TemplateResponse("v3/feature.html", {
+    return state.templates.TemplateResponse("feature.html", {
         "customer": customer,
         "project": _project_dict(customer, project, base),
         "urls": urls,
@@ -463,7 +463,7 @@ async def memory_page(request: Request, owner: str, name: str) -> HTMLResponse:
         }
         for category in memory_store.CATEGORIES
     ]
-    return state.templates.TemplateResponse("v3/memory.html", {
+    return state.templates.TemplateResponse("memory.html", {
         "owner": owner, "repo_name": name,
         "groups": [g for g in groups if g["entries"]],
         "total": len(entries),

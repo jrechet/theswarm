@@ -15,8 +15,7 @@
  */
 
 @import "tailwindcss";
-@source "../../templates/v3";
-@source "../../templates/login.html";
+@source "../../templates";
 
 @font-face {
   font-family: "Geist";

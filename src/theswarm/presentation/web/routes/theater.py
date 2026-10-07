@@ -346,7 +346,7 @@ async def theater(request: Request, cycle_id: str):
     record, orphan = await _record_for(state, cycle_id)
     if record is None:
         return HTMLResponse("Cycle not found", status_code=404)
-    return state.templates.TemplateResponse("v3/theater.html", await theater_context(request, record, orphan))
+    return state.templates.TemplateResponse("theater.html", await theater_context(request, record, orphan))
 
 
 @router.get("/cycles/{cycle_id}/stage", response_class=HTMLResponse)
@@ -355,5 +355,5 @@ async def theater_stage(request: Request, cycle_id: str):
     if record is None:
         return HTMLResponse("", status_code=404)
     return request.app.state.templates.TemplateResponse(
-        "v3/_stage.html", await theater_context(request, record, orphan),
+        "_stage.html", await theater_context(request, record, orphan),
     )

@@ -83,7 +83,7 @@ async def home(request: Request) -> HTMLResponse:
         install_url = f"{creds.html_url}/installations/new"
 
     running = _running_repos_safe()
-    return state.templates.TemplateResponse("v3/home.html", {
+    return state.templates.TemplateResponse("home.html", {
         "repos": repos,
         "app_configured": creds is not None,
         "install_url": install_url,

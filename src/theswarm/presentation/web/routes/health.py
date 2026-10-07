@@ -333,7 +333,7 @@ async def readiness_page(request: Request) -> HTMLResponse:
 
     data = _json.loads(payload.body.decode())
     templates = request.app.state.templates
-    return templates.TemplateResponse("v3/health.html", {"request": request, "data": data})
+    return templates.TemplateResponse("health.html", {"request": request, "data": data})
 
 
 @router.get("/diagnostics/claude")

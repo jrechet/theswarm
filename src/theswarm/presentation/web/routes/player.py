@@ -247,7 +247,7 @@ async def player(request: Request, report_id: str):
         return _refused(request, actor)
     context = await player_context(request, report, public=False)
     context["member"] = member or request.query_params.get("as") == "member"
-    return request.app.state.templates.TemplateResponse("v3/demo.html", context)
+    return request.app.state.templates.TemplateResponse("demo.html", context)
 
 
 @public_router.get("/d/{short}", response_class=HTMLResponse)
@@ -264,5 +264,5 @@ async def public_player(request: Request, short: str):
     if match is None:
         return HTMLResponse("No such demo", status_code=404)
     return request.app.state.templates.TemplateResponse(
-        "v3/demo_public.html", await player_context(request, match, public=True),
+        "demo_public.html", await player_context(request, match, public=True),
     )

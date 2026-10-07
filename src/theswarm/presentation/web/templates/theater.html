@@ -1,5 +1,5 @@
-{% extends "v3/base.html" %}
-{% import "v3/_ui.html" as ui %}
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}Cycle {{ record.id[:8] }} — TheSwarm{% endblock %}
 {% block crumbs %}
   <a href="{{ project.customer_href }}" class="text-muted hover:text-ink">{{ project.customer_name }}</a>
@@ -40,7 +40,7 @@
     </div>
   </div>
 
-  <div id="stage">{% include "v3/_stage.html" %}</div>
+  <div id="stage">{% include "_stage.html" %}</div>
 </div>
 {% endblock %}
 {% block scripts %}

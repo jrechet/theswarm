@@ -67,7 +67,7 @@ async def _rows(service: GlobalSettings | None) -> tuple[list[dict], bool, str]:
 
 async def _page(request: Request, error: str = "", status_code: int = 200) -> HTMLResponse:
     rows, vault_ok, vault_error = await _rows(_service(request))
-    return request.app.state.templates.TemplateResponse("v3/settings_instance.html", {
+    return request.app.state.templates.TemplateResponse("settings_instance.html", {
         "rows": rows, "vault_ok": vault_ok, "vault_error": error or vault_error,
     }, status_code=status_code)
 
