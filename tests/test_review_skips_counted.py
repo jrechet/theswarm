@@ -27,6 +27,14 @@ cycle_e2e = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(cycle_e2e)
 
 
+
+async def _v3(client, path, **kw):
+    """A V2 address registers the project under Internal and redirects (303,
+    under the base path); the page itself is read at its V3 address."""
+    await client.get(path.split("?")[0], **kw)
+    name = path.split("?")[0][len("/r/"):].split("/", 1)[1]
+    return await client.get(f"/c/internal/p/{name}", **kw)
+
 def _runtime():
     rt = SimpleNamespace(
         announce=AsyncMock(), progress=AsyncMock(), base_state={},
@@ -154,7 +162,7 @@ async def test_the_repo_page_says_how_many_reviews_were_skipped(tmp_path, monkey
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
             with patch("theswarm.tools.github.GitHubClient") as klass:
                 klass.return_value.get_issues = AsyncMock(return_value=[])
-                html = (await client.get("/r/o/r")).text
+                html = (await _v3(client, "/r/o/r")).text
     finally:
         await conn.close()
 

@@ -35,6 +35,14 @@ REPO = "jrechet/concert-tour-app"
 # ── The handler: parsing and decisions ───────────────────────────────
 
 
+
+async def _v3(client, path, **kw):
+    """A V2 address registers the project under Internal and redirects (303,
+    under the base path); the page itself is read at its V3 address."""
+    await client.get(path.split("?")[0], **kw)
+    name = path.split("?")[0][len("/r/"):].split("/", 1)[1]
+    return await client.get(f"/c/internal/p/{name}", **kw)
+
 def _labeled(label="swarm:go", sender="jrechet", number=41, is_pr=False):
     issue = {"number": number, "title": "Do it", "body": "please"}
     if is_pr:
@@ -286,7 +294,7 @@ async def test_the_repo_page_links_to_the_memory(web):
     client, app = web
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=[])
-        response = await client.get(f"/r/{REPO}")
+        response = await _v3(client, f"/r/{REPO}")
     assert f"/swarm/r/{REPO}/memory" in response.text
 
 

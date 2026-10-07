@@ -23,6 +23,14 @@ from theswarm.presentation.web.sse import SSEHub
 REPO = "jrechet/concert-tour-app"
 
 
+
+async def _v3(client, path, **kw):
+    """A V2 address registers the project under Internal and redirects (303,
+    under the base path); the page itself is read at its V3 address."""
+    await client.get(path.split("?")[0], **kw)
+    name = path.split("?")[0][len("/r/"):].split("/", 1)[1]
+    return await client.get(f"/c/internal/p/{name}", **kw)
+
 def _record(**overrides) -> dict:
     record = {
         "repo": REPO, "passed": True, "state": "completed", "prs": [263], "unfinished": [],
@@ -81,7 +89,7 @@ async def test_the_repo_page_reads_the_posted_runs_before_the_shipped_file(web, 
     await web.post("/api/evals/runs", json=_record())
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=[])
-        page = await web.get(f"/r/{REPO}")
+        page = await _v3(web, f"/r/{REPO}")
     assert page.status_code == 200
     assert "100% built" in page.text
     assert "stale" not in page.text
@@ -93,5 +101,5 @@ async def test_without_posted_runs_the_shipped_file_still_draws_the_trend(web, t
     monkeypatch.setattr(evals, "HISTORY_PATH", history)
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=[])
-        page = await web.get(f"/r/{REPO}")
+        page = await _v3(web, f"/r/{REPO}")
     assert 'data-testid="evals"' in page.text and "100% built" in page.text
