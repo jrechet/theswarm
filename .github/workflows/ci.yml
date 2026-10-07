@@ -79,6 +79,11 @@ jobs:
   e2e-smoke:
     name: E2E smoke walk (required)
     runs-on: ubuntu-latest
+    # Image Playwright de la meme version que uv.lock (same fix as
+    # .forgejo/workflows/ci.yml): Chromium and its OS dependencies are
+    # already in the image, so the install step below no longer needs
+    # --with-deps and its apt-get of system libraries on every run.
+    container: mcr.microsoft.com/playwright/python:v1.58.0-noble
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -92,7 +97,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
       - name: Install Playwright browsers
-        run: uv run playwright install --with-deps chromium
+        run: uv run playwright install chromium
       - name: Run the route smoke walk and the axe pass
         run: |
           uv run pytest tests/e2e/test_smoke_walk.py \
