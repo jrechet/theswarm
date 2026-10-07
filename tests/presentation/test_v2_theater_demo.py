@@ -90,6 +90,6 @@ async def test_a_failed_cycle_does_not_wait_for_a_demo(tmp_path):
 def test_the_poll_loop_keeps_going_while_the_demo_is_pending():
     from pathlib import Path
 
-    js = Path("src/theswarm/presentation/web/templates/v2/theater.html").read_text()
+    js = Path("src/theswarm/presentation/web/templates/v3/theater.html").read_text()
 
     assert "data-demo-pending" in js
