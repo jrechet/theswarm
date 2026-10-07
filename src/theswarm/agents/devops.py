@@ -402,7 +402,10 @@ def _runner_labels(runner) -> list[str]:
     return [l.get("name", "") if isinstance(l, dict) else str(getattr(l, "name", l)) for l in (labels or [])]
 
 
-def _read_github_sync(repo_name: str, token: str) -> dict:
+DEVOPS_BRANCH_PREFIX = "devops/"  # the branches DevOps's improvement PRs (D4) are on
+
+
+def _read_github_sync(repo_name: str, token: str, deploy_workflow: str = "ci.yml") -> dict:
     from github import Github
 
     repo = Github(token, timeout=GITHUB_TIMEOUT_SECONDS).get_repo(repo_name)
@@ -413,22 +416,50 @@ def _read_github_sync(repo_name: str, token: str) -> dict:
     except Exception as exc:  # noqa: BLE001 — the token may not administer the repo
         out["runners_error"] = str(exc)[:200]
     runs = []
+    objects = []
     for run in repo.get_workflow_runs():
         runs.append(_run_dict(run))
+        objects.append(run)
         if len(runs) >= RUN_LIMIT:
             break
     out["runs"] = runs
+    try:
+        out["jobs"] = _jobs_of(objects, runs, repo.default_branch, deploy_workflow)
+    except Exception as exc:  # noqa: BLE001 — the measures are not worth losing the rest
+        out["jobs_error"] = str(exc)[:200]
+    try:
+        out["devops_prs"] = [{"number": pr.number, "title": pr.title, "html_url": pr.html_url, "head": pr.head.ref}
+                             for pr in repo.get_pulls(state="open") if str(pr.head.ref).startswith(DEVOPS_BRANCH_PREFIX)]
+    except Exception as exc:  # noqa: BLE001
+        out["devops_prs_error"] = str(exc)[:200]
     return out
 
 
-async def read_github(repo_name: str, token: str = "") -> dict:
+def _jobs_of(objects: list, runs: list[dict], default_branch: str, workflow: str) -> list[dict]:
+    """The jobs of the last completed runs of the deploy workflow on the default branch (D4's measures)."""
+    from theswarm.agents.devops_measures import JOB_RUN_LIMIT, job_dict
+
+    jobs: list[dict] = []
+    read = 0
+    for run, row in zip(objects, runs):
+        path = str(row.get("path", ""))
+        if row.get("head_branch") != default_branch or row.get("status") != "completed" or not (path.endswith("/" + workflow) or path == workflow):
+            continue
+        jobs.extend(job_dict(job, row.get("id")) for job in run.jobs())
+        read += 1
+        if read >= JOB_RUN_LIMIT:
+            break
+    return jobs
+
+
+async def read_github(repo_name: str, token: str = "", deploy_workflow: str = "ci.yml") -> dict:
     """main's head, the runners and the last workflow runs, off the API in a thread."""
     token = token or os.environ.get("GITHUB_TOKEN", "")
     if not repo_name:
         raise ValueError("no repository declared in stack.ci")
     if not token:
         raise ValueError("GITHUB_TOKEN is not set")
-    return await asyncio.wait_for(asyncio.to_thread(_read_github_sync, repo_name, token), GITHUB_TIMEOUT_SECONDS + 5)
+    return await asyncio.wait_for(asyncio.to_thread(_read_github_sync, repo_name, token, deploy_workflow), GITHUB_TIMEOUT_SECONDS + 5)
 
 
 def deploy_run_of(runs: list[dict], workflow: str = "ci.yml", branch: str = "main") -> dict | None:
@@ -557,8 +588,9 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
     workflow = next((c.get("deploy_workflow") for c in stack.get("ci", []) or [] if c.get("deploy_workflow")), "ci.yml")
 
     # GitHub: main's head, the deploy run, the runners, the failed runs.
+    gh: dict = {}
     try:
-        gh = await (github or read_github)(repo)
+        gh = await (github or read_github)(repo) if github is not None else await read_github(repo, deploy_workflow=workflow)
     except Exception as exc:  # noqa: BLE001
         findings += [_unknown("deploy", "Last deploy", exc), _unknown("runners", "Runners", exc), _unknown("failed_runs", "Workflow runs", exc)]
     else:
@@ -601,12 +633,24 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
 
     # The day's harness run on the test bed.
     target = str((stack.get("harness") or {}).get("repo") or "")
+    records: list[dict] = []
     if harness is not None and target:
         try:
-            findings.append(harness_finding(await harness(target), now.date()))
+            records = list(await harness(target))
+            findings.append(harness_finding(records, now.date()))
         except Exception as exc:  # noqa: BLE001
             findings.append(_unknown("harness", "Harness", exc))
 
+    # D4 — what DevOps measures: the CI's pace per job, the cycle's price.
+    if isinstance(gh_jobs := (gh.get("jobs") if isinstance(gh, dict) else None), list):
+        from theswarm.agents.devops_measures import ci_measures, cycle_measure, measures_facts, measures_finding
+
+        jobs = ci_measures(gh_jobs)
+        cycle = cycle_measure(records)
+        findings.append(measures_finding(jobs, cycle))
+        facts["measures"] = measures_facts(jobs, cycle)
+    if isinstance(gh, dict) and isinstance(gh.get("devops_prs"), list):
+        facts["devops_prs"] = gh["devops_prs"]
     return OpsReport(tuple(findings), read_at=now, stack=stack_summary(stack),
                      took_s=(_now() - started).total_seconds(), facts=facts)
 

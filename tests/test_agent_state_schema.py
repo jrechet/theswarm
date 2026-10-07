@@ -41,7 +41,7 @@ HELPER_ONLY_KEYS = {
 # dicts are findings and readings (an owner file, a df line), not state. When
 # D2 gives it a station in the graph, that node's returns go through
 # AgentState like every other and the module leaves this list.
-NOT_GRAPH_MODULES = {"devops.py"}
+NOT_GRAPH_MODULES = {"devops.py", "devops_measures.py"}
 
 
 def _returned_dict_keys(path: pathlib.Path) -> set[str]:
