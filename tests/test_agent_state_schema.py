@@ -36,6 +36,14 @@ HELPER_ONLY_KEYS = {
 }
 
 
+# Modules under agents/ that are not graph nodes and hand nothing to the
+# cycle state: DevOps D1 reads the pipeline outside the cycle graph, and its
+# dicts are findings and readings (an owner file, a df line), not state. When
+# D2 gives it a station in the graph, that node's returns go through
+# AgentState like every other and the module leaves this list.
+NOT_GRAPH_MODULES = {"devops.py"}
+
+
 def _returned_dict_keys(path: pathlib.Path) -> set[str]:
     keys: set[str] = set()
     for node in ast.walk(ast.parse(path.read_text())):
@@ -53,6 +61,8 @@ def test_no_agent_returns_an_undeclared_state_key():
     undeclared: dict[str, set[str]] = {}
 
     for path in sorted(AGENTS_DIR.glob("*.py")):
+        if path.name in NOT_GRAPH_MODULES:
+            continue
         for key in _returned_dict_keys(path) - declared - HELPER_ONLY_KEYS:
             undeclared.setdefault(key, set()).add(path.name)
 
