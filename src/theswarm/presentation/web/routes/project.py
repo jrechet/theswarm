@@ -14,6 +14,7 @@ is In review, the rest of those labels is stalled) is V2's, kept in
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Form, Request
@@ -47,6 +48,15 @@ CYCLE_CHIPS = {
     "failed": ("Failed", "broken"),
     "cancelled": ("Cancelled", "waiting"),
 }
+
+
+_HTML_COMMENT = re.compile(r"<!--.*?-->[ \t]*\n?", re.S)
+
+
+def shown_body(body: str | None) -> str:
+    """An issue's body as a page shows it: without the HTML comments the
+    swarm leaves in it (the request marker, `<!-- swarm:request … -->`)."""
+    return _HTML_COMMENT.sub("", body or "").strip()
 
 
 # ── Where ────────────────────────────────────────────────────────────
@@ -359,7 +369,7 @@ async def _member_feature(state, customer, project, urls, number, issue, pinned,
                  "label": piece_label(c.get("status", ""))} for c in pinned.children]
     return {
         "customer": customer, "project": _project_dict(customer, project, base), "urls": urls,
-        "issue": {"number": number, "title": issue.get("title", ""), "body": issue.get("body") or ""},
+        "issue": {"number": number, "title": issue.get("title", ""), "body": shown_body(issue.get("body"))},
         "children": children, "done": pinned.done, "stage": stage, "demo_href": demo_href,
         "actor": actor, "as_member": as_member,
     }
@@ -409,7 +419,7 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
         "project": _project_dict(customer, project, base),
         "urls": urls,
         "issue": {
-            "number": number, "title": issue.get("title", ""), "body": issue.get("body") or "",
+            "number": number, "title": issue.get("title", ""), "body": shown_body(issue.get("body")),
             "url": issue.get("html_url", f"https://github.com/{full_name}/issues/{number}"),
             "label": label, "kind": kind, "closed": issue.get("state") == "closed",
         },

@@ -130,8 +130,8 @@ async def _request(visitor, title: str = "Export invoices as PDF", body: str = "
     return match.group(1)
 
 
-def _issue(number: int, title: str, status: str = "backlog", state: str = "open") -> dict:
-    return {"number": number, "title": title, "body": "", "state": state,
+def _issue(number: int, title: str, status: str = "backlog", state: str = "open", body: str = "") -> dict:
+    return {"number": number, "title": title, "body": body, "state": state,
             "labels": [{"name": f"status:{status}"}], "html_url": f"https://github.com/{REPO}/issues/{number}"}
 
 
@@ -400,6 +400,21 @@ class TestAMembersFeature:
             ctx.stop()
         assert 'data-stage="delivered"' in r.text and 'data-testid="member-demo"' in r.text
         assert 'href="/demos/rep-1"' in r.text and "$" not in r.text
+
+    async def test_the_request_marker_is_not_shown_on_either_feature_page(self, owner, visitor):
+        await _nadia(owner, visitor)
+        body = "Toutes nos salles, triées par nom.\n\nRequested by Nadia (TLphone), 07 Oct 2026.\n\n<!-- swarm:request 65ae5d7f357c -->"
+        ctx, _ = _github(issues=[_issue(42, "Export invoices as PDF", "backlog", body=body)])
+        try:
+            member = await visitor.get(FEATURE, headers=HTML)
+            pinned_issue.clear_cache()
+            page = await owner.get(FEATURE, headers=HTML)
+        finally:
+            ctx.stop()
+        for r in (member, page):
+            assert r.status_code == 200
+            assert "swarm:request" not in r.text and "Requested by Nadia (TLphone)" in r.text
+            assert "Toutes nos salles" in r.text
 
     async def test_another_customer_s_feature_is_refused(self, owner, visitor):
         await _nadia(owner, visitor)
