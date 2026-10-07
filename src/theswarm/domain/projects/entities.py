@@ -77,6 +77,13 @@ class Project:
     source_dir: str = "src/"
     config: ProjectConfig = field(default_factory=ProjectConfig)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    # The customer this project belongs to (V3 M2, migration v033): every
+    # project that existed before went to "internal".
+    customer_id: str = "internal"
+
+    def with_customer(self, customer_id: str) -> Project:
+        """Return a new Project assigned to another customer."""
+        return replace(self, customer_id=customer_id)
 
     def with_detected_framework(
         self,
@@ -98,6 +105,7 @@ class Project:
             source_dir=source_dir or self.source_dir,
             config=self.config,
             created_at=self.created_at,
+            customer_id=self.customer_id,
         )
 
     def with_config(self, config: ProjectConfig) -> Project:

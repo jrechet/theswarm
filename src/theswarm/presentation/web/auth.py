@@ -17,6 +17,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import re
 import os
 import secrets
 import time
@@ -34,8 +35,30 @@ SESSION_TTL_SECONDS = 14 * 24 * 3600
 #   /auth/     — OAuth dance (étape 1)
 #   /webhooks/ — GitHub webhook authenticates with its own HMAC signature
 #   /d/        — deliberately public demo short-links
+#   /invite/   — a member's invitation link (V3 M2), one use, hashed, 14 days
 _PUBLIC_EXACT = frozenset({"/health", "/login"})
-_PUBLIC_PREFIXES = ("/health/", "/static/", "/auth/", "/webhooks/", "/d/")
+_PUBLIC_PREFIXES = ("/health/", "/static/", "/auth/", "/webhooks/", "/d/", "/invite/")
+
+# ── Subjects (V3 M2): the owner's login, or a member ────────────────
+# A session names its subject: the owner's GitHub login (or "owner" for the
+# access key), or `member:<id>` for a customer's member. A member may open
+# their customer's pages, the home (which sends them there) and the doors —
+# nothing else, whatever the session says.
+MEMBER_PREFIX = "member:"
+MEMBER_ALLOWED = re.compile(r"^(/|/logout|/c/[a-z0-9-]+/?)$")
+
+
+def member_subject(member_id: str) -> str:
+    return f"{MEMBER_PREFIX}{member_id}"
+
+
+def subject_parts(subject: str | None) -> tuple[str, str]:
+    """('member', id) or ('owner', login); ('', '') for no subject."""
+    if not subject:
+        return "", ""
+    if subject.startswith(MEMBER_PREFIX):
+        return "member", subject[len(MEMBER_PREFIX):]
+    return "owner", subject
 
 _LOGIN_MAX_FAILURES = 5
 _LOGIN_LOCKOUT_SECONDS = 60
@@ -217,7 +240,10 @@ class AuthWallMiddleware:
             return await response(scope, receive, send)
 
         if self._is_authenticated(headers):
-            return await self.app(scope, receive, send)
+            refusal = await self._member_refusal(scope, headers, path)
+            if refusal is None:
+                return await self.app(scope, receive, send)
+            return await refusal(scope, receive, send)
 
         login_url = f"{self.base}/login"
         if headers.get("hx-request") == "true":
@@ -239,3 +265,31 @@ class AuthWallMiddleware:
 
     def _is_authenticated(self, headers: dict[str, str]) -> bool:
         return session_login(headers) is not None or bearer_is_access_key(headers)
+
+    async def _member_refusal(self, scope, headers: dict[str, str], path: str):
+        """None when the request may go on; else the response that stops it.
+
+        A member's session (V3 M2) opens their customer's pages only, and
+        only while the member is active: a revoked member is sent to the
+        door with the cookie taken away."""
+        kind, member_id = subject_parts(session_login(headers))
+        if kind != "member":
+            return None
+        rel = path[len(self.base):] if self.base and path.startswith(self.base) else path
+        service = getattr(getattr(scope.get("app"), "state", None), "customer_service", None)
+        actor = await service.actor_for_member(member_id) if service is not None else None
+        if actor is None:
+            response = RedirectResponse(
+                f"{self.base}/login?error=Your+access+has+ended", status_code=303,
+            )
+            response.delete_cookie(SESSION_COOKIE, path=f"{self.base}/" if self.base else "/")
+            return response
+        if MEMBER_ALLOWED.match(rel or "/"):
+            return None
+        if "text/html" in headers.get("accept", ""):
+            templates = getattr(scope["app"].state, "templates", None)
+            if templates is not None:
+                return templates.TemplateResponse("v3/refused.html", {
+                    "home": f"{self.base}/", "name": actor.login,
+                }, status_code=403)
+        return JSONResponse({"detail": "This page belongs to someone else"}, status_code=403)

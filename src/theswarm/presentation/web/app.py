@@ -59,7 +59,7 @@ from theswarm.domain.cycles.events import (
 from theswarm.presentation.web.routes import analyst, api, architect, artifacts, autonomy_config, chat, chief_of_staff, cycles, dashboard, demos, designer, dev_rigour, features, fragments, health, hitl, metrics, product, projects, prompt_library, qa, refactor_programs, release, reports, scout, security, semantic_memory, settings as settings_route, sre, team, techlead, webhooks, writer
 from theswarm.presentation.web.auth import AuthWallMiddleware
 from theswarm.presentation.web.shell import ShellMiddleware, current_shell
-from theswarm.presentation.web.routes import auth_routes, github_setup, v2
+from theswarm.presentation.web.routes import auth_routes, customers, github_setup, v2
 from theswarm.presentation.web.sse import SSEHub
 
 _HERE = Path(__file__).parent
@@ -133,6 +133,17 @@ def create_web_app(
             SQLiteSprintRepository,
         )
         app.state.sprint_repo = SQLiteSprintRepository(db)
+        # V3 M2 — customers, their members, the service the doors and the rail read
+        from theswarm.application.services.customers import CustomerService
+        from theswarm.infrastructure.persistence.customer_repo import (
+            SQLiteCustomerRepository,
+            SQLiteMemberRepository,
+        )
+        app.state.customer_repo = SQLiteCustomerRepository(db)
+        app.state.member_repo = SQLiteMemberRepository(db)
+        app.state.customer_service = CustomerService(
+            app.state.customer_repo, app.state.member_repo, project_repo,
+        )
 
     # Queries
     app.state.list_projects_query = ListProjectsQuery(project_repo)
@@ -969,6 +980,7 @@ def create_web_app(
         app.state.delete_schedule_handler = DeleteScheduleHandler(schedule_repo)
 
     # Routes
+    app.include_router(customers.router)  # V3 M2: /settings/customers, /invite/{token}, /c/{slug}
     app.include_router(v2.router)  # owns `/` — the V2 flow is the front door
     app.include_router(dashboard.router)
     app.include_router(projects.router)

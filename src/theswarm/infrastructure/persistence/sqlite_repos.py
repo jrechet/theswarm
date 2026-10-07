@@ -122,6 +122,10 @@ from theswarm.infrastructure.persistence.migrations.v031_quota_wall import (
 from theswarm.infrastructure.persistence.migrations.v032_cycle_issue_number import (
     ALTERS as MIGRATION_V032_ALTERS,
 )
+from theswarm.infrastructure.persistence.migrations.v033_customers import (
+    ALTERS as MIGRATION_V033_ALTERS,
+    SQL as MIGRATION_V033,
+)
 
 log = logging.getLogger(__name__)
 
@@ -171,8 +175,20 @@ async def init_db(db_path: str = _DEFAULT_DB) -> aiosqlite.Connection:
     await _ensure_cycles_columns(db)
     await db.executescript(MIGRATION_V028)
     await db.executescript(MIGRATION_V031)
+    await db.executescript(MIGRATION_V033)
+    await _ensure_projects_columns(db)
     await db.commit()
     return db
+
+
+async def _ensure_projects_columns(db: aiosqlite.Connection) -> None:
+    """Columns added to ``projects`` after v001, only if missing (v033)."""
+    cursor = await db.execute("PRAGMA table_info(projects)")
+    rows = await cursor.fetchall()
+    existing = {row[1] for row in rows}
+    for column_name, alter_sql in MIGRATION_V033_ALTERS:
+        if column_name not in existing:
+            await db.execute(alter_sql)
 
 
 async def _ensure_memory_entries_columns(db: aiosqlite.Connection) -> None:
@@ -226,6 +242,13 @@ class SQLiteProjectRepository:
         rows = await cursor.fetchall()
         return [self._row_to_project(r) for r in rows]
 
+    async def list_for_customer(self, customer_id: str) -> list[Project]:
+        cursor = await self._db.execute(
+            "SELECT * FROM projects WHERE customer_id = ? ORDER BY repo", (customer_id,),
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_project(r) for r in rows]
+
     async def save(self, project: Project) -> None:
         config_json = json.dumps({
             "max_daily_stories": project.config.max_daily_stories,
@@ -245,14 +268,15 @@ class SQLiteProjectRepository:
             """INSERT OR REPLACE INTO projects
                (id, repo, default_branch, framework, ticket_source,
                 team_channel, schedule, test_command, source_dir,
-                config_json, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                config_json, created_at, updated_at, customer_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 project.id, str(project.repo), project.default_branch,
                 project.framework.value, project.ticket_source.value,
                 project.team_channel, project.schedule, project.test_command,
                 project.source_dir, config_json,
                 project.created_at.isoformat(), _now_iso(),
+                project.customer_id or "internal",
             ),
         )
         await self._db.commit()
@@ -284,6 +308,7 @@ class SQLiteProjectRepository:
             source_dir=row["source_dir"],
             config=ProjectConfig(**config_data) if config_data else ProjectConfig(),
             created_at=datetime.fromisoformat(row["created_at"]),
+            customer_id=(row["customer_id"] if "customer_id" in row.keys() else "") or "internal",
         )
 
 

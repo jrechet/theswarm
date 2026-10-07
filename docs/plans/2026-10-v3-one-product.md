@@ -119,8 +119,9 @@ in `templates/v3/_ui.html`. The rules:
 
 ## The data
 
-Migration v033, `sqlite_repos.py` repositories, frozen domain entities
-under `domain/customers/`:
+Migration v033 (customers, members, `projects.customer_id`; the `requests`
+table comes with M5 as v034), `customer_repo.py` repositories, frozen
+domain entities under `domain/customers/`:
 
 - `customers` — `id`, `slug` (URL-safe, never twelve hex characters: a
   cycle id is), `name`, `created_at`.

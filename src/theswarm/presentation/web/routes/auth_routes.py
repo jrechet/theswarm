@@ -46,12 +46,13 @@ def _safe_next(raw: str, base: str) -> str:
     return f"{base}/" if base else "/"
 
 
-def _set_session_cookie(response: RedirectResponse, request: Request) -> None:
+def set_session_cookie(response: RedirectResponse, request: Request, subject: str = "owner") -> None:
+    """The signed session cookie for `subject`: the owner, or `member:<id>` (V3 M2)."""
     base = request.app.state.base_path
     forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
     response.set_cookie(
         auth.SESSION_COOKIE,
-        auth.mint_session("owner"),
+        auth.mint_session(subject),
         max_age=auth.SESSION_TTL_SECONDS,
         path=f"{base}/" if base else "/",
         httponly=True,
@@ -98,7 +99,7 @@ async def login_submit(
 
     auth.record_login_success(ip)
     response = RedirectResponse(_safe_next(next, base), status_code=303)
-    _set_session_cookie(response, request)
+    set_session_cookie(response, request)
     return response
 
 
@@ -183,5 +184,5 @@ async def github_oauth_callback(
         )
 
     response = RedirectResponse(f"{base}/" if base else "/", status_code=303)
-    _set_session_cookie(response, request)
+    set_session_cookie(response, request)
     return response

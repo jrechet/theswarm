@@ -47,6 +47,23 @@ watch; the older two are deleted at its M6):
   failing query leaves an empty rail, never an error page. Since M1 every
   V2 page renders inside this shell (`v2/base.html` extends it) and the
   "Legacy" link is gone — V1 is reachable by URL only until M6.
+  **Customers and members (M2)**: migration v033 (`customers`, `members`,
+  `projects.customer_id` — every project that existed went to the customer
+  **Internal**), `domain/customers/`, `infrastructure/persistence/customer_repo.py`,
+  `application/services/customers.py` (`CustomerService`: create, assign a
+  repository, invite, accept, revoke; `Actor` and `actor_may`),
+  `routes/customers.py` (`/settings/customers`, the invitation door
+  `/invite/{token}`, `/c/{slug}` — a twelve-hex id there is still the V2
+  theater until M4). A member is invited by email: the invitation is a
+  link the owner sends by hand (no SMTP), its token kept hashed, one use,
+  fourteen days; accepting it mints a `member:<id>` session. **The wall
+  knows members** (`auth.subject_parts`, `MEMBER_ALLOWED`): a member
+  opens `/`, which sends them to their customer, `/c/{their slug}` and
+  `/logout`; everything else — a project page, the settings, `/api/*`, a
+  theater — is refused (403, `v3/refused.html`), and a revoked member is
+  sent to the door with the cookie taken away. The rail shows a member
+  one customer, no settings, no Claude health. The first customer is
+  TLphone (`jrechet/espace-client`, owner 2026-10-06).
 - **V2** — `routes/v2.py` + `templates/v2/` on Tailwind tokens (`static/v2/input.css`,
   Plex fonts vendored, no CDN). Owns `/` (repo picker fed by the GitHub App
   installation plus legacy registered projects), `/r/{owner}/{name}` (composer →

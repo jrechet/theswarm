@@ -44,10 +44,13 @@ def current_shell() -> dict:
 
 
 def actor_from_headers(headers: dict[str, str]) -> dict | None:
-    """Who the request is: the session's login, or the access key."""
-    login = auth.session_login(headers)
-    if login:
-        return {"kind": "owner", "login": login, "role": "owner"}
+    """Who the request is: the session's subject (owner or member), or the key."""
+    subject = auth.session_login(headers)
+    if subject:
+        kind, ident = auth.subject_parts(subject)
+        if kind == "member":
+            return {"kind": "member", "member_id": ident, "login": "", "role": "member"}
+        return {"kind": "owner", "login": ident, "role": "owner"}
     if auth.bearer_is_access_key(headers):
         return {"kind": "key", "login": "access key", "role": "owner"}
     return None
@@ -96,37 +99,94 @@ def active_for(path: str, base: str, projects: list[str], running: dict[str, obj
 
 async def build_shell(state, headers: dict[str, str], path: str, base: str) -> dict:
     shell = empty_shell(path)
-    shell["actor"] = actor_from_headers(headers)
+    service = getattr(state, "customer_service", None)
+
+    # Who: a member's session is only worth its active row (V3 M2).
+    actor = actor_from_headers(headers)
+    member_customer = ""
+    if actor is not None and actor["kind"] == "member":
+        real = None
+        if service is not None:
+            try:
+                real = await service.actor_for_member(actor["member_id"])
+            except Exception:  # noqa: BLE001
+                log.exception("shell: reading the member failed")
+        if real is None:
+            actor = None
+        else:
+            member_customer = real.customer_id
+            actor = {"kind": "member", "member_id": real.member_id, "login": real.login,
+                     "role": "", "customer_id": real.customer_id}
+    shell["actor"] = actor
+    shell["is_member"] = bool(member_customer)
+
     try:
         shell["claude"] = claude_status()
     except Exception:  # noqa: BLE001 — never a page's problem
         log.exception("shell: Claude status failed")
 
-    projects: list[str] = []
-    query = getattr(state, "list_projects_query", None)
-    if query is not None:
+    # The projects, grouped by customer (Internal alone when nothing is wired).
+    # The repository gives entities (a RepoUrl, a customer_id); the query's
+    # DTOs (a plain string, no customer) are the fallback.
+    projects: list = []
+    source = getattr(state, "project_repo", None) or getattr(state, "list_projects_query", None)
+    if source is not None:
         try:
-            projects = sorted({p.repo for p in await query.execute() if "/" in str(p.repo)})
+            rows = await (source.list_all() if hasattr(source, "list_all") else source.execute())
+            projects = [p for p in rows if "/" in str(p.repo)]
         except Exception:  # noqa: BLE001
             log.exception("shell: listing projects failed")
+    customers: list = []
+    if service is not None:
+        try:
+            customers = await service.list_all()
+        except Exception:  # noqa: BLE001
+            log.exception("shell: listing customers failed")
     running: dict[str, object] = {}
     try:
         running = running_repos()
     except Exception:  # noqa: BLE001
         log.exception("shell: reading the cycle tracker failed")
 
-    if projects:
-        shell["customers"] = [{
-            **CUSTOMER_INTERNAL,
-            "href": f"{base}/",
-            "projects": [{
-                "name": full_name.partition("/")[2] or full_name,
-                "full_name": full_name,
-                "href": f"{base}/r/{full_name}",
-                "running": full_name in running,
-            } for full_name in projects],
-        }]
-    shell["active"] = active_for(path, base, projects, running)
+    def project_row(p) -> dict:
+        full_name = str(p.repo)
+        return {
+            "name": full_name.partition("/")[2] or full_name, "full_name": full_name,
+            "href": f"{base}/r/{full_name}", "running": full_name in running,
+        }
+
+    groups: list[dict] = []
+    if customers:
+        for c in customers:
+            if member_customer and c.id != member_customer:
+                continue
+            rows = sorted((project_row(p) for p in projects if getattr(p, "customer_id", "internal") == c.id),
+                          key=lambda r: r["full_name"])
+            if member_customer:
+                for row in rows:
+                    row["href"] = f"{base}/c/{c.slug}"  # a member's projects have no page of their own yet (M5)
+            if rows or c.id != "internal":
+                groups.append({"name": c.name, "slug": c.slug, "initial": c.initial,
+                               "href": f"{base}/c/{c.slug}", "projects": rows})
+        if member_customer and groups:
+            shell["actor"]["role"] = groups[0]["name"]
+            shell["customer"] = groups[0]
+    elif projects:
+        groups.append({**CUSTOMER_INTERNAL, "href": f"{base}/",
+                       "projects": sorted((project_row(p) for p in projects), key=lambda r: r["full_name"])})
+    shell["customers"] = groups
+
+    full_names = [str(p.repo) for p in projects]
+    active = active_for(path, base, full_names, running)
+    rel = path[len(base):] if base and path.startswith(base) else path
+    if not active:
+        if rel.startswith("/settings"):
+            active = "settings"
+        elif rel.startswith("/c/"):
+            slug = rel[3:].split("/", 1)[0].rstrip("/")
+            if any(g["slug"] == slug for g in groups):
+                active = f"customer:{slug}"
+    shell["active"] = active
     return shell
 
 
@@ -147,7 +207,9 @@ class ShellMiddleware:
         self.base = base_path.rstrip("/")
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope.get("method", "GET") not in ("GET", "HEAD"):
+        # Every request that wants HTML — a form's POST renders a page too
+        # (the invitation link is shown on the settings page it comes from).
+        if scope["type"] != "http":
             return await self.app(scope, receive, send)
         headers = auth._headers(scope)
         path = scope.get("path", "")
