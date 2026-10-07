@@ -228,10 +228,9 @@ class TestCycleRoutes:
 
         r = await client.get("/cycles/timeline-abc")
         assert r.status_code == 200
-        assert 'data-testid="cycle-timeline"' in r.text
-        assert "timeline-bar-fill" in r.text
-        assert "1.5" in r.text  # 90 seconds → 1.5 min
-        assert "10:00:00" in r.text  # phase start time
+        assert 'data-testid="stepper"' in r.text  # the V3 theater's stepper, from the row's phases (M4)
+        assert "Morning" in r.text and "1:30" in r.text  # 90 seconds
+        assert "Started 10:00 UTC" in r.text  # the cycle's start, in the header
 
 
 # ── Health ───────────────────────────────────────────────────────

@@ -52,6 +52,20 @@ def verdict_of(gates) -> str:
     return "unverified"
 
 
+def gates_badge(gates) -> tuple[str, str]:
+    """One word for the gates: failed, or none failed with some not run, or all pass."""
+    statuses = [str(getattr(g.status, "value", g.status)) for g in gates]
+    if not statuses:
+        return "", "waiting"
+    failed = statuses.count("fail")
+    if failed:
+        return f"{failed} gate{'s' if failed != 1 else ''} failed", "bad"
+    skipped = statuses.count("skip")
+    if skipped:
+        return f"No gate failed · {skipped} not run", "waiting"
+    return "All gates pass", "ok"
+
+
 def gate_rows(gates) -> list[dict]:
     rows = []
     for g in gates:
@@ -152,6 +166,7 @@ async def player_context(request: Request, report, *, public: bool) -> dict:
     facts = await _cycle_facts(state, report)
     verdict = verdict_of(report.quality_gates)
     verdict_label, verdict_kind = VERDICTS[verdict]
+    badge, badge_kind = gates_badge(report.quality_gates)
     title = report.stories[0].title if report.stories else f"Cycle {str(report.cycle_id)[:8]}"
     if len(report.stories) > 1:
         title = f"{title} + {len(report.stories) - 1} more"
@@ -179,6 +194,7 @@ async def player_context(request: Request, report, *, public: bool) -> dict:
         "video_url": card["video_url"], "poster_url": card["thumbnail_url"],
         "screenshots": screenshots[:8],
         "gates": gate_rows(report.quality_gates),
+        "gates_badge": badge, "gates_badge_kind": badge_kind,
         "stories": story_cards(report, base),
         "summary": report.summary,
         "prev_url": f"{base}/demos/{prev_demo.id}" if prev_demo else "",

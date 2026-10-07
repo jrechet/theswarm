@@ -153,5 +153,5 @@ async def test_cycle_detail_includes_thoughts_panel(db):
         r = await c.get(f"/cycles/{cycle.id}")
 
     assert r.status_code == 200
-    assert "Thoughts & Steps" in r.text
-    assert f"/fragments/cycle/{cycle.id}/thoughts" in r.text
+    assert 'data-testid="theater"' in r.text  # the V3 theater is the cycle's page (M4)
+    assert "What happened" in r.text  # the feed: the agents' thoughts and steps

@@ -147,7 +147,9 @@ def steps_from_history(history: list[dict], status: str, now: float | None = Non
         if phase == "dev_iter":
             dev_iterations += 1
         started = float(entry.get("ts") or 0)
-        ended = float(seen[i + 1].get("ts") or 0) if i + 1 < len(seen) else None
+        ended = float(entry["end"]) if entry.get("end") else None  # a row's phase knows when it ended
+        if ended is None and i + 1 < len(seen):
+            ended = float(seen[i + 1].get("ts") or 0)
         last = i + 1 == len(seen)
         if last and status in ("running", "queued"):
             state, duration = "live", _mmss(now - started if started else None) + " …"
@@ -170,7 +172,8 @@ def steps_from_row(cycle) -> list[dict]:
     history = []
     for p in getattr(cycle, "phases", ()) or ():
         started = p.started_at.timestamp() if p.started_at else 0
-        history.append({"phase": p.phase, "ts": started})
+        ended = p.completed_at.timestamp() if getattr(p, "completed_at", None) else None
+        history.append({"phase": p.phase, "ts": started, "end": ended})
     status = getattr(cycle.status, "value", str(cycle.status))
     end = cycle.completed_at.timestamp() if getattr(cycle, "completed_at", None) else time.time()
     return steps_from_history(history, status, now=end)
@@ -264,7 +267,16 @@ async def theater_context(request: Request, record, orphan: bool = False) -> dic
     if not spent and isinstance(result, dict) and result.get("cost_usd"):
         spent = f"${float(result['cost_usd']):.2f}"
     label, kind = STATUS_CHIPS.get(status, (status.capitalize(), "waiting"))
+    resumable_from = None
+    checkpoints = getattr(state, "checkpoint_repo", None)
+    if status == "failed" and checkpoints is not None:
+        try:
+            last_ok = await checkpoints.last_ok(record.id)
+            resumable_from = last_ok.next_phase if last_ok else None
+        except Exception:  # noqa: BLE001
+            log.exception("theater: reading the checkpoints of %s failed", record.id)
     context.update({
+        "resumable_from": resumable_from,
         "steps": steps,
         "prs": prs_from_feed(context.get("feed", []), record.repo),
         "status_label": label,

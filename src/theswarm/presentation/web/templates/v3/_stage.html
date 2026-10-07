@@ -79,6 +79,15 @@
         </li>
         {% endfor %}
       </ol>
+      {# The hand-offs between them, in the order work travels: in flight, landed, or not yet. #}
+      <ol class="list-none m-0 p-0 flex flex-wrap gap-1.5 px-1" data-testid="hand-offs" aria-label="Hand-offs">
+        {% for key, e in graph.edge.items() %}
+        <li data-edge="{{ key }}" data-flow="{{ e.flow }}"
+            class="inline-flex items-center gap-1.5 h-[22px] px-2 rounded-full text-[11px] font-mono {% if e.flow == 'flowing' %}bg-live-wash text-live-deep{% elif e.flow == 'done' %}bg-ok-wash text-ok{% else %}bg-raised text-faint{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-current{% if e.flow == 'flowing' %} live-dot{% endif %}" aria-hidden="true"></span>{{ e.from }} → {{ e.to }} · {{ e.label }}{% if e.count %} · {{ e.count }}{% endif %}
+        </li>
+        {% endfor %}
+      </ol>
     </section>
 
     {# ── What happened ───────────────────────────────────────────────── #}

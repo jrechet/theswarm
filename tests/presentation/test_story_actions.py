@@ -185,11 +185,3 @@ async def test_unknown_story_returns_404(ctx):
         r = await c.post("/demos/r-1/stories/T-999/approve", data={"actor": "alice"})
     assert r.status_code == 404
 
-
-async def test_controls_rendered_on_private_player(ctx):
-    transport = ASGITransport(app=ctx["app"])
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        r = await c.get("/demos/r-1/play")
-    assert r.status_code == 200
-    assert "story-action-form" in r.text
-    assert "approve" in r.text

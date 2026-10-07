@@ -15,6 +15,10 @@
   <form method="post" action="{{ cancel_url }}" data-cancel onsubmit="return confirm('Cancel this cycle?')">
     <button type="submit" class="h-[30px] px-2.5 border border-line-strong rounded-md bg-surface text-bad text-[13px] font-medium cursor-pointer hover:bg-bad-wash">Cancel</button>
   </form>
+  {% elif resumable_from %}
+  <form method="post" action="{{ base }}/cycles/{{ record.id }}/resume" data-testid="resume">
+    <button type="submit" class="h-[30px] inline-flex items-center gap-1.5 px-2.5 rounded-md bg-ink text-on-ink text-[13px] font-medium cursor-pointer hover:opacity-90">↻ Resume from {{ resumable_from }}</button>
+  </form>
   {% endif %}
 {% endblock %}
 {% block content_class %}{% endblock %}

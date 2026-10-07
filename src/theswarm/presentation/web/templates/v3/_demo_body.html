@@ -39,7 +39,11 @@
     </figure>
 
     <section aria-labelledby="gates-title" class="flex flex-col pb-1.5 px-4 pt-3.5 bg-surface border border-line rounded-[10px]" data-testid="gates">
-      <h2 id="gates-title" class="m-0 pb-1.5 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">What QA measured</h2>
+      <div class="flex flex-wrap items-baseline gap-2.5 pb-1.5">
+        <h2 id="gates-title" class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">What QA measured</h2>
+        <span class="text-[12px] text-muted" data-testid="qa-summary">Tests: {% if summary.tests_total %}<span class="font-mono text-ink">{{ summary.tests_passing }}/{{ summary.tests_total }}</span>{% else %}not measured{% endif %} · Coverage: {% if summary.coverage_percent %}<span class="font-mono text-ink">{{ '%.1f' | format(summary.coverage_percent) }}%</span>{% else %}not measured{% endif %}</span>
+        {% if gates_badge %}<span class="ml-auto">{{ ui.chip(gates_badge, gates_badge_kind, testid='gates-badge') }}</span>{% endif %}
+      </div>
       {% for g in gates %}
       <div class="flex items-center gap-3 py-2.5 border-t border-raised text-[13px]" data-gate="{{ g.name }}" data-status="{{ g.status }}">
         <span class="w-4 h-4 rounded-full inline-flex items-center justify-center shrink-0 {% if g.kind == 'ok' %}bg-ok-wash text-ok{% elif g.kind == 'bad' %}bg-bad-wash text-bad{% elif g.kind == 'unverified' %}bg-live-wash text-live-deep{% else %}bg-raised text-faint{% endif %}" aria-hidden="true">
