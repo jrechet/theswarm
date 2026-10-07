@@ -91,6 +91,17 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
         run: uv sync --dev
+      - name: Cache Playwright's Chromium download
+        # The browser binary (~150MB, pinned by uv.lock's playwright version)
+        # is fetched from Playwright's CDN on every runner; caching it here
+        # lets the install step below skip the download on a cache hit.
+        # System-level deps (--with-deps) still install from apt each run:
+        # the runner's VM is thrown away after the job, so nothing on disk
+        # outside this cached path survives between runs anyway.
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
       - name: Install Playwright browsers
         run: uv run playwright install --with-deps chromium
       - name: Run the route smoke walk and the axe pass
