@@ -1,0 +1,37 @@
+{% extends "v3/bare.html" %}
+{% import "v3/_ui.html" as ui %}
+{% block title %}Sign in with GitHub — TheSwarm{% endblock %}
+{% block body %}
+<div class="flex flex-col gap-5 w-full max-w-[560px]" data-testid="github-oauth-setup">
+  <div class="flex flex-col gap-1">
+    <h1 class="m-0 text-[20px] font-semibold tracking-tight">Sign in with GitHub</h1>
+    <span class="text-[13px] text-muted">A plain OAuth App: the owner creates it once on GitHub and pastes two values here.</span>
+  </div>
+  {% if error %}<p class="m-0 text-[13px] text-bad border border-bad/40 bg-bad-wash rounded-[10px] px-4 py-3" data-testid="error">{{ error }}</p>{% endif %}
+  {% if saved %}<p class="m-0 text-[13px] text-ok border border-ok/40 bg-ok-wash rounded-[10px] px-4 py-3" data-testid="saved">Saved. "Sign in with GitHub" works on the sign-in page now.</p>{% endif %}
+  <section class="flex flex-col gap-3 p-5 bg-surface border border-line rounded-[10px]">
+    <h2 class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">1 · Create an OAuth App on GitHub (once)</h2>
+    <p class="m-0 text-[13px] text-muted">Open <a href="https://github.com/settings/applications/new" target="_blank" rel="noopener" class="text-ink hover:underline">github.com/settings/applications/new</a> and fill in exactly:</p>
+    <dl class="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
+      <dt class="text-faint">Application name</dt><dd class="m-0 font-mono">TheSwarm</dd>
+      <dt class="text-faint">Homepage URL</dt><dd class="m-0 font-mono break-all">{{ homepage_url }}</dd>
+      <dt class="text-faint">Authorization callback URL</dt><dd class="m-0 font-mono break-all">{{ callback_url }}</dd>
+    </dl>
+    <p class="m-0 text-[13px] text-muted">Register it, then click <strong class="font-medium text-ink">Generate a new client secret</strong>.</p>
+  </section>
+  <form class="flex flex-col gap-4 p-5 bg-surface border border-line rounded-[10px]" method="post" action="{{ base }}/setup/github-oauth" data-testid="github-oauth-form">
+    <h2 class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">2 · Paste the two values</h2>
+    <div class="flex flex-col gap-1.5">
+      <label for="client_id" class="text-[13px] font-medium">Client ID</label>
+      <input id="client_id" name="client_id" autocomplete="off" required class="h-9 px-2.5 border border-line-strong rounded-md bg-surface text-[14px] text-ink font-mono">
+    </div>
+    <div class="flex flex-col gap-1.5">
+      <label for="client_secret" class="text-[13px] font-medium">Client secret</label>
+      <input id="client_secret" name="client_secret" type="password" autocomplete="off" required class="h-9 px-2.5 border border-line-strong rounded-md bg-surface text-[14px] text-ink font-mono">
+    </div>
+    <p class="m-0 text-[12px] text-faint">Stored encrypted in this server's vault; only the owner's GitHub account is allowed through.</p>
+    <div>{{ ui.btn('Save', kind='primary', type='submit', testid='save') }}</div>
+  </form>
+  <p class="m-0 text-[12px] text-faint"><a href="{{ base }}/" class="hover:text-ink">← Home</a></p>
+</div>
+{% endblock %}

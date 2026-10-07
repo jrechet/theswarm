@@ -1,0 +1,43 @@
+{% extends "v3/base.html" %}
+{% import "v3/_ui.html" as ui %}
+{% block title %}Settings — Instance{% endblock %}
+{% block crumbs %}
+  <a href="{{ base }}/settings/customers" class="text-muted hover:text-ink">Settings</a>
+  <span class="text-line-strong">/</span>
+  <span class="text-ink font-medium">Instance</span>
+{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-6" data-testid="settings-instance" data-vault="{{ 'ok' if vault_ok else 'off' }}">
+  <nav class="flex items-center gap-1 text-[13px]" aria-label="Settings sections">
+    <a href="{{ base }}/settings/customers" class="h-8 inline-flex items-center px-3 rounded-md text-muted hover:text-ink hover:bg-raised">Customers</a>
+    <a href="{{ base }}/settings/instance" aria-current="page" class="h-8 inline-flex items-center px-3 rounded-md bg-raised text-ink font-medium">Instance</a>
+  </nav>
+  <div class="flex flex-col gap-0.5">
+    <h1 class="m-0 text-[20px] font-semibold tracking-tight">Instance</h1>
+    <span class="text-[13px] text-muted">The keys and URLs this instance runs on. Stored encrypted in the vault; a value set here overrides the environment on the next request.</span>
+  </div>
+  {% if vault_error %}
+  <p class="m-0 text-[13px] {% if vault_ok %}text-bad border-bad/40 bg-bad-wash{% else %}text-live-deep border-live/40 bg-live-wash{% endif %} border rounded-[10px] px-4 py-3" data-testid="vault-error">{{ vault_error }}</p>
+  {% endif %}
+  <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+    {% for row in rows %}
+    <div class="flex flex-col gap-2.5 px-4 py-3.5 border-t border-line first:border-t-0" data-testid="setting" data-key="{{ row.key }}" data-set="{{ 'true' if row.is_set else 'false' }}">
+      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span class="font-medium text-[14px]">{{ row.label }}</span>
+        <span class="font-mono text-[11px] text-faint">{{ row.key }}</span>
+        <span class="ml-auto">
+          {% if row.is_set %}{{ ui.chip('Set · ' ~ row.source, 'verified') }}{% elif row.required %}{{ ui.chip('Missing', 'broken') }}{% else %}{{ ui.chip('Unset', 'waiting') }}{% endif %}
+        </span>
+      </div>
+      <p class="m-0 text-[13px] text-muted">{{ row.description }}{% if row.is_set %} <span class="font-mono text-ink">{{ row.shown }}</span>{% endif %}</p>
+      <form method="post" action="{{ base }}/settings/instance/{{ row.key }}" class="flex flex-wrap items-center gap-2">
+        <label for="v-{{ row.key }}" class="sr-only">{{ row.label }}</label>
+        <input id="v-{{ row.key }}" name="value" type="{{ 'password' if row.secret else 'text' }}" autocomplete="off" placeholder="{{ 'a new value' if row.is_set else 'paste the value' }}" class="h-8 px-2.5 border border-line-strong rounded-md bg-surface text-[13px] text-ink font-mono flex-[1_1_280px] min-w-0">
+        {{ ui.btn('Save', kind='primary', type='submit') }}
+        {% if row.is_set %}<button type="submit" name="value" value="" formnovalidate class="h-8 px-2.5 rounded-md text-[12px] text-muted hover:text-bad hover:bg-bad-wash cursor-pointer" onclick="return confirm('Clear {{ row.label }}?');">Clear</button>{% endif %}
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

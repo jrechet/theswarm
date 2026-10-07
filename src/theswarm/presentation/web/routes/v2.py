@@ -413,7 +413,7 @@ async def memory_page(request: Request, owner: str, name: str) -> HTMLResponse:
         }
         for category in memory_store.CATEGORIES
     ]
-    return state.templates.TemplateResponse("v2/memory.html", {
+    return state.templates.TemplateResponse("v3/memory.html", {
         "owner": owner, "repo_name": name,
         "groups": [g for g in groups if g["entries"]],
         "total": len(entries),

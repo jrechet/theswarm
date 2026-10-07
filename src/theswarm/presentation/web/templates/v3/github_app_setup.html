@@ -1,0 +1,42 @@
+{% extends "v3/bare.html" %}
+{% import "v3/_ui.html" as ui %}
+{% block title %}GitHub App — TheSwarm{% endblock %}
+{% block body %}
+<div class="flex flex-col gap-5 w-full max-w-[560px]" data-testid="github-app-setup">
+  <div class="flex flex-col gap-1">
+    <h1 class="m-0 text-[20px] font-semibold tracking-tight">GitHub App</h1>
+    <span class="text-[13px] text-muted">The swarm's identity on GitHub: it reads and writes only the repositories it is installed on.</span>
+  </div>
+  {% if error %}<p class="m-0 text-[13px] text-bad border border-bad/40 bg-bad-wash rounded-[10px] px-4 py-3" data-testid="error">{{ error }}</p>{% endif %}
+  {% if creds %}
+  <section class="flex flex-col gap-3 p-5 bg-surface border border-line rounded-[10px]" data-testid="github-app-connected">
+    <p class="m-0 text-[14px]">{{ ui.chip('Connected', 'verified') }} <span class="ml-2">app <strong class="font-semibold">{{ creds.slug or creds.app_id }}</strong>{% if created %} was just created{% endif %}.</span></p>
+    <p class="m-0 text-[13px] text-muted">Next: install it on the repositories you trust the swarm with. You can change that list on GitHub at any time.</p>
+    <div class="flex flex-wrap items-center gap-3">
+      {{ ui.btn('Choose repositories on GitHub', href=creds.html_url ~ '/installations/new', kind='primary') }}
+      <a href="{{ creds.html_url }}" class="text-[13px] text-muted hover:text-ink">App settings on GitHub →</a>
+    </div>
+  </section>
+  {% else %}
+  <form class="flex flex-col gap-4 p-5 bg-surface border border-line rounded-[10px]" action="https://github.com/settings/apps/new" method="post" id="manifest-form" data-testid="github-app-form">
+    <p class="m-0 text-[13px] text-muted">One click creates a GitHub App under your account. GitHub sends its credentials straight back to this server, which stores them encrypted — nothing to copy.</p>
+    <input type="hidden" name="manifest" id="manifest" value="{{ manifest_json }}">
+    <div class="flex flex-col gap-1.5">
+      <label for="app-name" class="text-[13px] font-medium">App name <span class="font-normal text-faint">— unique on GitHub</span></label>
+      <input type="text" id="app-name" value="{{ default_name }}" autocomplete="off" class="h-9 px-2.5 border border-line-strong rounded-md bg-surface text-[14px] text-ink">
+    </div>
+    <div>{{ ui.btn('Create the app on GitHub', kind='primary', type='submit') }}</div>
+    <p class="m-0 text-[12px] text-faint">It only touches repositories you explicitly install it on: <code>issues</code>, <code>contents</code>, <code>pull requests</code>, <code>checks</code> — nothing account-wide.</p>
+  </form>
+  <script>
+    document.getElementById("manifest-form").addEventListener("submit", function () {
+      var field = document.getElementById("manifest");
+      var manifest = JSON.parse(field.value);
+      manifest.name = document.getElementById("app-name").value || manifest.name;
+      field.value = JSON.stringify(manifest);
+    });
+  </script>
+  {% endif %}
+  <p class="m-0 text-[12px] text-faint"><a href="{{ base }}/" class="hover:text-ink">← Home</a></p>
+</div>
+{% endblock %}

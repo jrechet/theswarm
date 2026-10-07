@@ -66,7 +66,7 @@ async def github_app_setup(request: Request) -> HTMLResponse:
     templates = request.app.state.templates
     creds = await github_app.load_credentials()
     manifest = build_manifest(request, DEFAULT_APP_NAME)
-    return templates.TemplateResponse("github_app_setup.html", {
+    return templates.TemplateResponse("v3/github_app_setup.html", {
         "creds": creds,
         "manifest_json": json.dumps(manifest),
         "default_name": DEFAULT_APP_NAME,
@@ -89,7 +89,7 @@ async def github_app_callback(request: Request, code: str = ""):
         log.error("Manifest conversion failed: %s %s",
                   resp.status_code, resp.text[:200])
         templates = request.app.state.templates
-        return templates.TemplateResponse("github_app_setup.html", {
+        return templates.TemplateResponse("v3/github_app_setup.html", {
             "creds": None,
             "manifest_json": json.dumps(
                 build_manifest(request, DEFAULT_APP_NAME),
@@ -129,7 +129,7 @@ async def github_app_callback(request: Request, code: str = ""):
 def _oauth_page(request: Request, saved: bool = False, error: str = "") -> HTMLResponse:
     templates = request.app.state.templates
     ext = external_base(request)
-    return templates.TemplateResponse("github_oauth_setup.html", {
+    return templates.TemplateResponse("v3/github_oauth_setup.html", {
         "homepage_url": ext,
         "callback_url": f"{ext}/auth/github/callback",
         "saved": saved,

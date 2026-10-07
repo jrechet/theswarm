@@ -8,6 +8,10 @@
 {% endblock %}
 {% block content %}
 <div class="flex flex-col gap-6" data-testid="settings-customers">
+  <nav class="flex items-center gap-1 text-[13px]" aria-label="Settings sections">
+    <a href="{{ base }}/settings/customers" aria-current="page" class="h-8 inline-flex items-center px-3 rounded-md bg-raised text-ink font-medium">Customers</a>
+    <a href="{{ base }}/settings/instance" class="h-8 inline-flex items-center px-3 rounded-md text-muted hover:text-ink hover:bg-raised" data-testid="settings-instance-link">Instance</a>
+  </nav>
 
   <div class="flex flex-wrap items-center gap-3">
     <div class="flex flex-col gap-0.5">
