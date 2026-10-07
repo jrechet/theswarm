@@ -577,6 +577,7 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
                  claude: Callable[[], dict] | None = None,
                  harness: Callable[[str], Awaitable[list[dict]]] | None = None,
                  build: Callable[[], str] | None = None, here: Callable[[], list[dict]] | None = None,
+                 load: Callable[[], dict | None] | None = None,
                  now: datetime | None = None) -> OpsReport:
     """Every check, each on its own; a reader that fails is an unknown finding."""
     started = _now()
@@ -621,7 +622,7 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
         findings.append(load_finding(name, read.get("load"), key=f"load_{name}"))
 
     # This process: its box's load, its disk, Claude's walls.
-    findings.append(load_finding("here", local_load(), key="load_here"))
+    findings.append(load_finding("here", (load or local_load)(), key="load_here"))
     try:
         findings.append(disk_finding("here", (here or local_disk)(), key="disk_here"))
     except Exception as exc:  # noqa: BLE001
