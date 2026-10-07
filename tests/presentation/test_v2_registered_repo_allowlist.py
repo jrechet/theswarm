@@ -105,7 +105,10 @@ async def test_repo_registered_via_picker_is_played_without_refusal(web, monkeyp
         cycle_id = r.headers["location"].rsplit("/", 1)[-1]
 
         tracker = get_cycle_tracker()
-        await _wait_for(lambda: tracker.get(cycle_id).status != CycleStatus.QUEUED)
+        # Wait for the cycle to run, not for the record to leave the queue: since D2 the
+        # record is `running` while the preflight is still asked (an await before the
+        # cycle call), and a loaded runner asserted "Called 0 times" in that gap.
+        await _wait_for(lambda: mock_run.called or tracker.get(cycle_id).status == CycleStatus.FAILED)
 
     record = tracker.get(cycle_id)
     assert record.status != CycleStatus.FAILED
