@@ -144,12 +144,15 @@ class _Claude:
 
 
 class _GitHub:
-    def __init__(self):
-        self.prs = []
+    def __init__(self, open_prs=()):
+        self.prs, self.open_prs = [], list(open_prs)
+
+    async def get_open_prs(self):
+        return self.open_prs
 
     async def create_pr(self, branch, base, title, body=""):
         self.prs.append({"branch": branch, "base": base, "title": title, "body": body})
-        return {"number": 310, "html_url": "https://github.com/jrechet/theswarm/pull/310"}
+        return {"number": 310, "head": branch, "base": base}  # as GitHubClient._pr_to_dict answers: no html_url
 
 
 REPORT = SimpleNamespace(facts={"measures": {"jobs": [{"name": "tests", "runs": 8, "median_min": 9.0, "p90_min": 12.0, "setup_min": 0.3, "failures": 1}],
@@ -166,6 +169,8 @@ class TestTheImprovementPR:
             assert not imp.allowed_path(bad), bad
         assert imp.branch_name("Cache uv downloads between CI runs!", T0) == "devops/cache-uv-downloads-between-ci-runs-20261007"
         assert imp.branch_name("", T0) == "devops/improvement-20261007"
+        assert imp.plain_title("ci: cache Playwright's Chromium download") == "cache Playwright's Chromium download"
+        assert imp.plain_title("feat(ci)!: Cache uv") == "Cache uv" and imp.plain_title("Cache uv") == "Cache uv"
 
     def test_the_measures_as_words(self):
         words = imp.measures_words(REPORT.facts)
@@ -212,6 +217,18 @@ class TestTheImprovementPR:
         out = await imp.propose_improvement(STACK, REPORT, _Broken(None), github, git=git, now=T0)
         assert out["status"] == "failed" and out["reason"] == "RuntimeError: quota"
         assert (await imp.propose_improvement({"ci": []}, REPORT, _Claude(PROPOSED), github, git=git))["status"] == "failed"
+
+    async def test_a_prefixed_title_a_pr_without_its_url_and_a_pr_already_open(self, tmp_path):
+        clone = tmp_path / "clone"
+        clone.mkdir()
+        git = _Git(str(clone))
+        github = _GitHub()
+        out = await imp.propose_improvement(STACK, REPORT, _Claude({**PROPOSED, "title": "ci: Cache uv downloads between CI runs"}), github, git=git, now=T0)
+        assert out["title"] == "Cache uv downloads between CI runs" and github.prs[0]["title"] == "ci(devops): Cache uv downloads between CI runs"
+        assert out["branch"] == "devops/cache-uv-downloads-between-ci-runs-20261007" and out["url"] == "https://github.com/jrechet/theswarm/pull/310"
+        again = _GitHub(open_prs=[{"number": 309, "head": "devops/cache-uv-downloads-between-ci-runs-20261007", "title": "x"}])
+        out = await imp.propose_improvement(STACK, REPORT, _Claude(PROPOSED), again, git=git, now=T0)
+        assert out["status"] == "opened" and out["pr"] == 309 and again.prs == [] and out["url"].endswith("/pull/309")
 
 
 class TestTheWatchImproves:

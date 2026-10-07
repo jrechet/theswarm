@@ -64,6 +64,14 @@ def allowed_path(path: str) -> bool:
     return any(clean == p or (p.endswith("/") and clean.startswith(p)) for p in PIPELINE_PATHS)
 
 
+_PREFIX_RE = re.compile(r"^\s*[a-z]+(\([^)]*\))?!?:\s*", re.IGNORECASE)
+
+
+def plain_title(title: str) -> str:
+    """The title without a conventional prefix Claude may have added (`ci: …`): the PR adds its own."""
+    return _PREFIX_RE.sub("", title or "").strip()
+
+
 def branch_name(title: str, when: datetime | None = None) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40].rstrip("-") or "improvement"
     return f"{BRANCH_PREFIX}{slug}-{(when or datetime.now(timezone.utc)).strftime('%Y%m%d')}"
@@ -108,6 +116,16 @@ def pr_body(outcome: Improvement, facts: dict | None, report_at: datetime | None
             "the owner merges — DevOps never merges. The next daily report reads the measures after.\n")
 
 
+async def _open_pr_on(github, branch: str) -> dict | None:
+    lister = getattr(github, "get_open_prs", None)
+    if lister is None:
+        return None
+    try:
+        return next((p for p in await lister() if p.get("head") == branch), None)
+    except Exception:  # noqa: BLE001 — then a new PR, and GitHub says if one exists
+        return None
+
+
 async def propose_improvement(stack: dict, report, claude, github, *, workspace_root: str = "", git=git_tools,
                               now: datetime | None = None) -> dict:
     """Measure → one Claude call → a branch, the files, a PR. The answer is a dict the card shows.
@@ -130,6 +148,7 @@ async def propose_improvement(stack: dict, report, claude, github, *, workspace_
         if not structured:
             return {"status": "failed", "reason": "Claude answered no structured improvement"}
         outcome = Improvement.model_validate(structured)
+        outcome = outcome.model_copy(update={"title": plain_title(outcome.title)})
         if outcome.status != "proposed" or not outcome.files:
             return {"status": "nothing", "reason": outcome.rationale or "no change worth a pull request"}
         refused = [f.path for f in outcome.files if not allowed_path(f.path)]
@@ -144,10 +163,13 @@ async def propose_improvement(stack: dict, report, claude, github, *, workspace_
         if not await git.commit_all(clone, f"ci: {outcome.title}\n\n{outcome.rationale}\n\nExpected gain: {outcome.expected_gain}"):
             return {"status": "nothing", "reason": "the proposed files are what main already has"}
         await git.push_branch(clone, branch)
-        pr = await github.create_pr(branch, "main", f"ci(devops): {outcome.title}",
-                                    pr_body(outcome, getattr(report, "facts", None), getattr(report, "read_at", None)))
+        pr = await _open_pr_on(github, branch)  # a second ask the same day lands on the PR already open
+        if pr is None:
+            pr = await github.create_pr(branch, "main", f"ci(devops): {outcome.title}",
+                                        pr_body(outcome, getattr(report, "facts", None), getattr(report, "read_at", None)))
+        url = pr.get("html_url") or f"https://github.com/{repo}/pull/{pr.get('number')}"
         log.info("DevOps opened PR #%s: %s", pr.get("number"), outcome.title)
-        return {"status": "opened", "pr": pr.get("number"), "url": pr.get("html_url", ""), "title": outcome.title,
+        return {"status": "opened", "pr": pr.get("number"), "url": url, "title": outcome.title,
                 "expected_gain": outcome.expected_gain, "branch": branch}
     except Exception as exc:  # noqa: BLE001 — the answer is the record
         log.exception("DevOps: the improvement failed")
