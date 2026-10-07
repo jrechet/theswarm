@@ -35,6 +35,13 @@ from theswarm.presentation.web.app import create_web_app
 from theswarm.presentation.web.sse import SSEHub
 
 
+
+async def _v3(client, path, **kw):
+    """A V2 address registers the project and redirects (303, under the base
+    path); the page itself is read at its V3 address inside Internal."""
+    await client.get(path.split("?")[0], **kw)
+    return await client.get(path.replace("/r/jrechet/", "/c/internal/p/"), **kw)
+
 @pytest.fixture(autouse=True)
 def _isolate_cycle_tracker():
     """The tracker is a process singleton — leave it as we found it."""
@@ -89,11 +96,11 @@ async def test_repo_registered_via_picker_is_played_without_refusal(web, monkeyp
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=[])
         # Registers jrechet/yakoi, which is absent from app.state.allowed_repos.
-        r = await client.get("/r/jrechet/yakoi")
+        r = await _v3(client, "/r/jrechet/yakoi")
     assert r.status_code == 200
 
     with patch("theswarm.cycle.run_daily_cycle", side_effect=quick) as mock_run:
-        r = await client.post("/r/jrechet/yakoi/issues/2/play")
+        r = await client.post("/c/internal/p/yakoi/features/2/play")
         assert r.status_code == 303
         cycle_id = r.headers["location"].rsplit("/", 1)[-1]
 

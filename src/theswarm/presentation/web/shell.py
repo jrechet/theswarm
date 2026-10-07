@@ -162,9 +162,10 @@ async def build_shell(state, headers: dict[str, str], path: str, base: str) -> d
                 continue
             rows = sorted((project_row(p) for p in projects if getattr(p, "customer_id", "internal") == c.id),
                           key=lambda r: r["full_name"])
-            if member_customer:
-                for row in rows:
-                    row["href"] = f"{base}/c/{c.slug}"  # a member's projects have no page of their own yet (M5)
+            for row in rows:
+                # The project's page lives inside its customer (M3); a member's
+                # projects have no page of their own yet (M5): their customer's.
+                row["href"] = f"{base}/c/{c.slug}" if member_customer else f"{base}/c/{c.slug}/p/{row['name']}"
             if rows or c.id != "internal":
                 groups.append({"name": c.name, "slug": c.slug, "initial": c.initial,
                                "href": f"{base}/c/{c.slug}", "projects": rows})
@@ -183,9 +184,14 @@ async def build_shell(state, headers: dict[str, str], path: str, base: str) -> d
         if rel.startswith("/settings"):
             active = "settings"
         elif rel.startswith("/c/"):
-            slug = rel[3:].split("/", 1)[0].rstrip("/")
-            if any(g["slug"] == slug for g in groups):
-                active = f"customer:{slug}"
+            parts = rel.split("/")  # ["", "c", slug, "p", name, ...]
+            slug = parts[2] if len(parts) > 2 else ""
+            group = next((g for g in groups if g["slug"] == slug), None)
+            if group is not None:
+                match = None
+                if len(parts) > 4 and parts[3] == "p":
+                    match = next((p for p in group["projects"] if p["name"] == parts[4]), None)
+                active = match["full_name"] if match else f"customer:{slug}"
     shell["active"] = active
     return shell
 

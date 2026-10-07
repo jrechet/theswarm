@@ -38,6 +38,13 @@ WEB = ROOT / "src" / "theswarm" / "presentation" / "web"
 REPO = "jrechet/concert-tour-app"
 
 
+
+async def _v3(client, path, **kw):
+    """A V2 address registers the project and redirects (303, under the base
+    path); the page itself is read at its V3 address inside Internal."""
+    await client.get(path.split("?")[0], **kw)
+    return await client.get(path.replace("/r/jrechet/", "/c/internal/p/"), **kw)
+
 @pytest.fixture(autouse=True)
 def _isolate_tracker():
     from theswarm.api import get_cycle_tracker
@@ -139,7 +146,7 @@ class TestTheShell:
         await _register(app)
         with patch("theswarm.tools.github.GitHubClient") as klass:
             klass.return_value.get_issues = AsyncMock(return_value=[])
-            r = await client.get(f"/r/{REPO}", headers=HTML)
+            r = await _v3(client, f"/r/{REPO}", headers=HTML)
         assert r.status_code == 200
         assert 'data-testid="rail"' in r.text
         assert 'aria-current="page"' not in r.text.split('data-testid="rail-customers"')[0]  # home is not active

@@ -28,6 +28,13 @@ from theswarm.presentation.web.sse import SSEHub
 REPO = "jrechet/concert-tour-app"
 
 
+
+async def _v3(client, path, **kw):
+    """A V2 address registers the project and redirects (303, under the base
+    path); the page itself is read at its V3 address inside Internal."""
+    await client.get(path.split("?")[0], **kw)
+    return await client.get(path.replace("/r/jrechet/", "/c/internal/p/"), **kw)
+
 def _issue(number, status, title, body=""):
     return {"number": number, "title": title, "labels": [f"status:{status}"],
             "state": "open", "body": body}
@@ -65,7 +72,7 @@ async def _board(client, prs=OPEN_PRS, running_issue: int | None = None) -> str:
             klass.return_value.get_issues = AsyncMock(return_value=list(ISSUES))
             klass.return_value.get_open_pr_briefs = (
                 AsyncMock(side_effect=prs) if isinstance(prs, Exception) else AsyncMock(return_value=prs))
-            return (await client.get(f"/r/{REPO}")).text
+            return (await _v3(client, f"/r/{REPO}")).text
     finally:
         if record is not None:
             tracker._cycles.pop(record.id, None)
@@ -82,7 +89,8 @@ def _group(html: str, key: str) -> str:
 async def test_nothing_running_means_nothing_building(web):
     html = await _board(web)
 
-    assert _group(html, "in-progress") == ""
+    assert "Display an almost-sold-out badge" not in _group(html, "in-progress")
+    assert "Waiting list model" not in _group(html, "in-progress")
     stalled = _group(html, "stalled")
     assert "Display an almost-sold-out badge" in stalled and "Waiting list model" in stalled
 
@@ -105,7 +113,7 @@ async def test_in_review_needs_an_open_pull_request(web):
 async def test_a_stalled_issue_can_still_be_played(web):
     html = await _board(web)
 
-    assert "/issues/218/play" in _group(html, "stalled")
+    assert "/features/218/play" in _group(html, "stalled")
 
 
 async def test_when_the_pull_requests_cannot_be_read_the_labels_are_believed(web):

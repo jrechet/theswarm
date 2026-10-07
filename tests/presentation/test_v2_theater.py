@@ -177,7 +177,8 @@ async def test_a_historical_finished_cycle_keeps_its_theater(web):
 async def test_play_now_lands_on_the_theater(web):
     client, _ = web
     with patch("theswarm.api.run_api_cycle", new=AsyncMock()):
-        r = await client.post("/r/jrechet/concert-tour-app/issues/7/play")
+        await client.get("/r/jrechet/concert-tour-app")  # registers it under Internal
+        r = await client.post("/c/internal/p/concert-tour-app/features/7/play")
 
     assert r.status_code == 303
     assert "/swarm/c/" in r.headers["location"]

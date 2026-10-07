@@ -30,6 +30,13 @@ from theswarm.presentation.web.sse import SSEHub
 from theswarm.tools import github_app
 
 
+
+async def _v3(client, path, **kw):
+    """A V2 address registers the project and redirects (303, under the base
+    path); the page itself is read at its V3 address inside Internal."""
+    await client.get(path.split("?")[0], **kw)
+    return await client.get(path.replace("/r/jrechet/", "/c/internal/p/"), **kw)
+
 @pytest.fixture(autouse=True)
 def _clean_github_app():
     github_app.reset_state()
@@ -153,7 +160,7 @@ async def test_repo_page_truncates_a_long_github_error(web):
         klass.return_value.get_issues = AsyncMock(
             side_effect=RuntimeError(long_message),
         )
-        r = await client.get("/r/jrechet/concert-tour-app")
+        r = await _v3(client, "/r/jrechet/concert-tour-app")
 
     assert r.status_code == 200
     assert long_message[:160] in r.text
@@ -166,7 +173,7 @@ async def test_repo_page_error_and_empty_board_are_mutually_exclusive(web):
         klass.return_value.get_issues = AsyncMock(
             side_effect=RuntimeError("bad credentials"),
         )
-        r = await client.get("/r/jrechet/concert-tour-app")
+        r = await _v3(client, "/r/jrechet/concert-tour-app")
 
     assert r.status_code == 200
     assert "bad credentials" in r.text

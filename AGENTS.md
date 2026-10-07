@@ -64,6 +64,17 @@ watch; the older two are deleted at its M6):
   sent to the door with the cookie taken away. The rail shows a member
   one customer, no settings, no Claude health. The first customer is
   TLphone (`jrechet/espace-client`, owner 2026-10-06).
+  **The project and the feature (M3)**: `routes/project.py` —
+  `/c/{slug}/p/{name}` (the composer: Create only makes the issue, Create
+  and play also starts the cycle; the board: Backlog, Ready, Building, In
+  review as V2's truth drew them, the stalled ones named below; Delivered
+  from the demo reports; the trend; the recent cycles) and `/f/{n}` (one
+  feature: what was asked, its sub-tasks from `pinned_issue`, its cycles,
+  its demo, Play). `/r/{owner}/{name}` registers an unknown repository
+  under Internal and redirects there; the composer and Play moved off
+  `routes/v2.py`, which keeps `/`, the memory page and the theater until
+  M4/M6. A project page needs a registered project: the home's repository
+  list goes through `/r/` for that reason.
 - **V2** — `routes/v2.py` + `templates/v2/` on Tailwind tokens (`static/v2/input.css`,
   Plex fonts vendored, no CDN). Owns `/` (repo picker fed by the GitHub App
   installation plus legacy registered projects), `/r/{owner}/{name}` (composer →
