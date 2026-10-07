@@ -1139,8 +1139,33 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   `debian` has passwordless sudo and the docker group, so the three
   commands are exact there; prod's container still has no ssh key, so
   an approval from prod records `failed: not reachable from here`
-  until the owner mounts one (DEPENDENCIES.md). D4 (improvement PRs)
-  is in the plan.
+  until the owner mounts one (DEPENDENCIES.md).
+  **D4 — improvements as PRs (2026-10-07).** *What it measures*
+  (`agents/devops_measures.py`): the GitHub reader brings back the
+  jobs of the last eight completed runs of the deploy workflow on main
+  (`_jobs_of`, `JOB_RUN_LIMIT`) and the open `devops/` pull requests;
+  `ci_measures` makes one measure per job — median and p90 duration,
+  the median setup wait (GitHub's "Set up runner" step, where the
+  server-wide CI slot sits), the failures — and `cycle_measure` the
+  harness's median cost and length. The `measures` finding ("CI pace")
+  closes every report, a warning when the setup wait costs more than
+  the job itself (`slot_dominates`); the numbers ride the report's
+  `facts["measures"]`. *The improvement* (`agents/devops_improve.py`,
+  `schemas.Improvement`): one Claude call (read profile) in a clone of
+  the swarm's repository, the measures and the pipeline's files in the
+  prompt, answers a validated title, why, the gain expected and the
+  files' whole content — the workflows, the Dockerfile, the compose and
+  ignore files only (`PIPELINE_PATHS`; a path outside them fails the
+  proposal), or `nothing` with why. The branch is `devops/<slug>-<date>`
+  (foreign to `is_swarm_branch`: the TechLead reviews it like any other
+  PR, the owner merges — DevOps never merges), the PR body carries the
+  measures *before* so the next report reads the after. **The owner asks
+  for it with one click** on the Ops card ("Propose an improvement →",
+  `POST /ops/improve`, owner only; `OpsWatch.start_improvement`, one at
+  a time, in the background): the card says running, then the PR
+  opened, nothing (why) or failed (why) (`GET /api/devops/improvement`),
+  and lists the open `devops/` PRs. Nothing runs on a schedule: an
+  improvement is a Claude call and a PR, and the owner decides when.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.
