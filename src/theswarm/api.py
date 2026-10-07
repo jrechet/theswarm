@@ -131,6 +131,27 @@ def get_cycle_tracker() -> CycleTracker:
     return _tracker
 
 
+_PREFLIGHT = None
+
+
+def set_preflight(preflight) -> None:
+    """DevOps D2: the go/no-go asked before any cycle starts (the server sets
+    it to the watch's `preflight`; None asks nobody — tests, the CLI)."""
+    global _PREFLIGHT
+    _PREFLIGHT = preflight
+
+
+async def _ask_preflight():
+    """The preflight's answer, or None when nobody answers (a failing reader never blocks)."""
+    if _PREFLIGHT is None:
+        return None
+    try:
+        return await _PREFLIGHT()
+    except Exception:  # noqa: BLE001
+        log.exception("Preflight could not be read — the cycle goes on")
+        return None
+
+
 def set_cycle_checkpointer(checkpointer: object | None) -> None:
     global _cycle_checkpointer
     _cycle_checkpointer = checkpointer
@@ -336,6 +357,20 @@ async def _run_api_cycle(
             error=f"Repo '{repo}' not in allowed list: {effective_repos}",
             completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
+        return
+
+    # DevOps D2 — the preflight: a cycle that would die or lie is not started.
+    answer = await _ask_preflight()
+    if answer is not None and not answer.go:
+        tracker.update_status(
+            cycle_id, CycleStatus.FAILED,
+            error=f"preflight: {'; '.join(answer.reasons)}",
+            completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        )
+        log.warning("Cycle %s not started — preflight no-go: %s", cycle_id, "; ".join(answer.reasons))
+        if event_bus is not None:
+            from theswarm.domain.cycles.events import CycleBlocked
+            await event_bus.publish(CycleBlocked(project_id=project_id or repo, reason="preflight: " + "; ".join(answer.reasons)))
         return
 
     # Reject early when there is no usable GitHub credential for the repo —

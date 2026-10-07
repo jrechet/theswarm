@@ -1090,8 +1090,26 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   in the server's loop and posts the daily report on the PO's channel
   once a day after 07:30 UTC when Mattermost is connected; `python -m
   theswarm devops [--json]` is one read, exit 1 when something is bad.
-  The suite declares no stack (`SWARM_STACK_FILE` in conftest). D2–D4
-  (preflight and deploy watch, proposals with approval, improvement
+  The suite declares no stack (`SWARM_STACK_FILE` in conftest).
+  **D2 — preflight and deploy watch (2026-10-07).** `devops.preflight_of`
+  reads a go/no-go off a fresh report: a bad Claude, a full disk here,
+  no runner or a stale CI slot (`NO_GO_KEYS`) stop a cycle before it is
+  spent on them; a warning or an unknown never does. The server hands
+  `OpsWatch.preflight` to `api.set_preflight`, and `_run_api_cycle` asks
+  it first on every path to a cycle (Play, the API, the doors, the
+  gateway): a no-go is a `failed` record with `preflight: …` as its
+  error and a `CycleBlocked` on the bus; a reader that fails never
+  blocks. The harness asks `POST /api/devops/preflight` before it opens
+  an issue (`cycle_e2e.preflight_answer`; a server without it is read
+  as before). **Every merge is watched**: when main moved past this
+  build, the watch adds `deploy_watch` — bad when the deploy run failed
+  or after 45 min without landing (`DEPLOY_WATCH_MINUTES`) — and posts
+  it on the PO's channel once per main sha (`OpsWatch.alert_deploy`).
+  **The CI gate triages**: `ci_gate.triage` reads a red as the
+  pipeline's when every failing check never started or names the
+  runner, the slot, the deploy (`_INFRA_STATES`, `_INFRA_WORDS`); the
+  TechLead then leaves the PR waiting (`"infra"`) instead of sending it
+  back with a note. D3 (proposals with approval) and D4 (improvement
   PRs) are in the plan.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
