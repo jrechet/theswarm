@@ -885,6 +885,9 @@ async def start_server(
         if swarm_po_chat is not None:
             ops_watch.configure_chat(swarm_po_chat, settings.agents.swarm_po.channel)
         asyncio.create_task(ops_watch.run_loop())
+        from theswarm import api as _api
+
+        _api.set_preflight(ops_watch.preflight)  # D2: no cycle starts past a no-go
         log.info("DevOps: watching the declared stack every %ss", ops_watch._interval)
 
     # ── Auto-seed dogfood demos (idempotent) ─────────────────────

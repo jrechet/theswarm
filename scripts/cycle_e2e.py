@@ -201,6 +201,13 @@ def claude_answer(*, api=None) -> dict:
     return body if status == 200 and isinstance(body, dict) and body.get("claude") else {}
 
 
+def preflight_answer(*, api=None) -> dict:
+    """DevOps D2: `POST /api/devops/preflight` — go or no-go with the reasons;
+    {} from a server without it (then /health and the probe decide, as before)."""
+    status, body = (api or _api)("/api/devops/preflight", {})
+    return body if status == 200 and isinstance(body, dict) and "go" in body else {}
+
+
 def start_cycle(repo: str, issue: int) -> str:
     if not wait_for_health():
         sys.exit(f"FAIL start: {BASE}/health never answered 200 in {HEALTH_WAIT_SECONDS}s")
@@ -479,6 +486,14 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
     if rejected:
         message = (f"the swarm's Claude credentials are expired ({rejected}) — a person must "
                    "renew them; no issue created, no cycle started, nothing measured")
+        print(f"\nNOT MEASURED — {message}")
+        annotate("warning", f"{repo}" + (f" [{feature.id}]" if feature else "") + f": {message}")
+        return True, {}
+    # DevOps D2: the preflight — a bad disk, no runner, a stale slot stop the
+    # run before it opens an issue; a server without it is read as before.
+    flight = preflight_answer()
+    if flight and not flight.get("go", True):
+        message = "the preflight says no-go: " + "; ".join(flight.get("reasons") or []) + " — no issue created, no cycle started, nothing measured"
         print(f"\nNOT MEASURED — {message}")
         annotate("warning", f"{repo}" + (f" [{feature.id}]" if feature else "") + f": {message}")
         return True, {}

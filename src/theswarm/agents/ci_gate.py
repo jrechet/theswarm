@@ -37,6 +37,13 @@ _OWN_CONTEXTS = frozenset({"theswarm/review"})
 _RED = frozenset({"failure", "error", "timed_out", "action_required", "startup_failure"})
 _PENDING = frozenset({"pending", "queued", "in_progress", "waiting", "requested", "expected"})
 _NO_SIGNAL = frozenset({"cancelled", "skipped", "neutral", "stale"})
+# A red that is the pipeline's, not the code's (DevOps D2): the job never
+# started, the runner or the slot, the deploy. Such a PR waits for the next
+# pass instead of going back to the Dev with a note that would send it
+# hunting for a bug that does not exist.
+_INFRA_STATES = frozenset({"startup_failure", "action_required"})
+_INFRA_WORDS = ("runner", "set up job", "deploy", "infra", "self-hosted", "slot", "lost communication",
+                "no space left", "docker", "registry")
 
 
 @dataclass(frozen=True)
@@ -99,6 +106,19 @@ class SharedWait:
 
     def left(self) -> float:
         return max(0.0, self._deadline - self._clock())
+
+
+def triage(verdict: CiVerdict) -> str:
+    """"code" or "infra": every failing check must read as the pipeline's for
+    the red to be infra — one failing test job makes it the code's."""
+    if verdict.state != "red" or not verdict.failing:
+        return "code"
+    for check in verdict.failing:
+        words = f"{check.get('name', '')} {check.get('summary', '')}".lower()
+        if check.get("state") in _INFRA_STATES or any(w in words for w in _INFRA_WORDS):
+            continue
+        return "code"
+    return "infra"
 
 
 def failing_issues(verdict: CiVerdict) -> list[dict]:

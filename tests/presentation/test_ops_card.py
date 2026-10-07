@@ -138,3 +138,16 @@ class TestTheOpsCard:
             assert r.status_code == 403
             r = await nadia.get("/c/tlphone", headers=HTML)
             assert r.status_code == 200 and 'data-testid="ops-card"' not in r.text
+
+
+class TestThePreflightRoute:
+    async def test_the_harness_asks_and_gets_the_reasons(self, app, owner):
+        _watch(app, _report(Finding("disk_here", "Disk (here)", "bad", "96% used, 34G free"), FINE))
+        r = await owner.post("/api/devops/preflight")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["go"] is False and body["reasons"] == ["Disk (here): 96% used, 34G free"] and body["word"].startswith("no-go")
+
+    async def test_without_a_stack_it_is_go(self, owner):
+        r = await owner.post("/api/devops/preflight")
+        assert r.status_code == 200 and r.json()["go"] is True and "no stack" in r.json()["word"]

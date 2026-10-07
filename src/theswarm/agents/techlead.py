@@ -985,6 +985,11 @@ async def _ci_gate_before_merge(
     if verdict.state != "red":
         return verdict.state
     names = ", ".join(c.get("name", "") for c in verdict.failing)
+    if ci_gate.triage(verdict) == "infra":
+        # DevOps D2: the pipeline is red, not the code — the PR waits.
+        log.warning("PR #%d: approved, but CI is red on the pipeline's side (%s) — left open, not sent back",
+                    pr_number, names)
+        return "infra"
     log.warning("PR #%d: approved, but CI is red (%s) — not merged, back to the Dev",
                 pr_number, names)
     pr = {"number": pr_number, "head": head_branch or "", **open_pr}

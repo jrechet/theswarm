@@ -34,6 +34,17 @@ async def api_devops_refresh(request: Request) -> JSONResponse:
     return JSONResponse({**report.as_dict(), "error": watch.error})
 
 
+@router.post("/api/devops/preflight")
+async def api_devops_preflight(request: Request) -> JSONResponse:
+    """Go or no-go for a cycle about to start (D2): the harness asks before
+    it opens an issue; a server without a stack says go with nothing read."""
+    watch = _watch(request)
+    if watch is None:
+        return JSONResponse({"go": True, "reasons": [], "word": "go (no stack declared)", "findings": []})
+    answer = await watch.preflight()
+    return JSONResponse(answer.as_dict())
+
+
 @router.post("/ops/refresh")
 async def ops_refresh(request: Request) -> RedirectResponse:
     """The Ops card's button: read everything again, back to the home."""

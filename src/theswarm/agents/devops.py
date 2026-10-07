@@ -596,6 +596,61 @@ def _claude_status() -> dict:
     return claude_status()
 
 
+# ── The preflight (D2): go or no-go before a cycle starts ────────────
+
+
+# What stops a cycle before it starts: a finding that would make it die
+# or lie. A warning never stops it; an unknown never does either — the
+# cycle's own checks (repo access, credentials) still run.
+NO_GO_KEYS = ("claude", "disk_here", "runners", "ci_slot")
+
+
+@dataclass(frozen=True)
+class Preflight:
+    go: bool
+    reasons: tuple[str, ...]
+    report: OpsReport
+
+    @property
+    def word(self) -> str:
+        return "go" if self.go else "no-go: " + "; ".join(self.reasons)
+
+    def as_dict(self) -> dict:
+        return {"go": self.go, "reasons": list(self.reasons), "word": self.word, **self.report.as_dict()}
+
+
+def preflight_of(report: OpsReport) -> Preflight:
+    """The go/no-go a report answers: a bad Claude, a full disk here, no
+    runner, a stale CI slot stop a cycle before it is spent on them."""
+    reasons = tuple(f"{f.label}: {f.detail}" for f in report.findings if f.key in NO_GO_KEYS and f.status == BAD)
+    return Preflight(go=not reasons, reasons=reasons, report=report)
+
+
+# ── The deploy watch (D2): did the last merge land? ──────────────────
+
+
+DEPLOY_WATCH_MINUTES = 45
+
+
+def deploy_watch_finding(main_sha: str, build_sha: str, run: dict | None, main_since: datetime | None,
+                         now: datetime | None = None, minutes: int = DEPLOY_WATCH_MINUTES) -> Finding | None:
+    """A deploy that failed, or main that moved and did not reach the box in
+    `minutes`: the alert D2 raises after every merge. None while it is fine."""
+    now = now or _now()
+    short_main, short_build = (main_sha or "")[:7], (build_sha or "")[:7]
+    if not short_main or not short_build or short_main == short_build:
+        return None
+    url = (run or {}).get("html_url", "") or ""
+    if run and run.get("status") == "completed" and run.get("conclusion") not in (None, "success"):
+        return Finding("deploy_watch", "Deploy watch", BAD,
+                       f"the deploy of {short_main} failed ({run.get('conclusion')}); this box still runs {short_build}", url)
+    waited = _minutes(now - main_since) if main_since else 0
+    if waited >= minutes:
+        return Finding("deploy_watch", "Deploy watch", BAD,
+                       f"main moved to {short_main} {waited} min ago and this box still runs {short_build} — the deploy did not land", url)
+    return None
+
+
 # ── The report, in words ─────────────────────────────────────────────
 
 

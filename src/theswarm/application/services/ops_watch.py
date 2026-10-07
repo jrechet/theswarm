@@ -15,7 +15,16 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Awaitable, Callable
 
-from theswarm.agents.devops import UNKNOWN, Finding, OpsReport, format_report
+from theswarm.agents.devops import (
+    BAD,
+    UNKNOWN,
+    Finding,
+    OpsReport,
+    Preflight,
+    deploy_watch_finding,
+    format_report,
+    preflight_of,
+)
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +58,9 @@ class OpsWatch:
         self._error: str = ""
         self.posted_on: date | None = None
         self.last_post: str = ""
+        # The deploy watch (D2): when main moved past this build, and what was alerted.
+        self._main_seen: tuple[str, datetime] | None = None
+        self.alerted: set[str] = set()
 
     def configure_chat(self, chat, channel: str) -> None:
         """The daily report goes to this chat and channel (the server's, once connected)."""
@@ -66,7 +78,7 @@ class OpsWatch:
         """Read everything again; a failure keeps the last report and is remembered."""
         async with self._lock:
             try:
-                self._last = await self._gather()
+                self._last = self._watch_deploy(await self._gather())
                 self._error = ""
             except Exception as exc:  # noqa: BLE001 — never a page's problem
                 log.exception("DevOps: the refresh failed")
@@ -77,6 +89,63 @@ class OpsWatch:
                         read_at=self._clock(),
                     )
             return self._last
+
+    def _watch_deploy(self, report: OpsReport) -> OpsReport:
+        """Add the deploy-watch finding when main moved and did not land, or its deploy failed."""
+        deploy = next((f for f in report.findings if f.key == "deploy"), None)
+        main_sha, build_sha, run = self._deploy_facts(deploy)
+        now = self._clock()
+        if not main_sha or not build_sha or main_sha == build_sha:
+            self._main_seen = None
+            return report
+        if self._main_seen is None or self._main_seen[0] != main_sha:
+            self._main_seen = (main_sha, now)
+        finding = deploy_watch_finding(main_sha, build_sha, run, self._main_seen[1], now)
+        if finding is None:
+            return report
+        return OpsReport(report.findings + (finding,), report.read_at, report.stack, report.took_s)
+
+    @staticmethod
+    def _deploy_facts(deploy: Finding | None) -> tuple[str, str, dict | None]:
+        """main's head, this build and the deploy run, as the deploy finding's words carry them."""
+        import re
+
+        if deploy is None:
+            return "", "", None
+        same = re.search(r"this build is main's head ([0-9a-f]{7})", deploy.detail)
+        if same:
+            return same.group(1), same.group(1), None
+        moved = re.search(r"main is at ([0-9a-f]{7}), this build is ([0-9a-f]{7})", deploy.detail)
+        if not moved:
+            return "", "", None
+        run = None
+        failed = re.search(r"last deploy run (\w+)", deploy.detail)
+        if failed and failed.group(1) not in ("success",):
+            run = {"status": "completed", "conclusion": failed.group(1), "html_url": deploy.url}
+        elif re.search(r"deploy run (in_progress|queued|waiting)", deploy.detail):
+            run = {"status": "in_progress", "conclusion": None, "html_url": deploy.url}
+        return moved.group(1), moved.group(2), run
+
+    async def alert_deploy(self) -> bool:
+        """Post the deploy-watch alert on the chat, once per main sha; True when posted."""
+        report = self._last
+        if report is None or self._chat is None or not self._channel:
+            return False
+        finding = next((f for f in report.findings if f.key == "deploy_watch" and f.status == BAD), None)
+        if finding is None or self._main_seen is None or self._main_seen[0] in self.alerted:
+            return False
+        try:
+            await self._chat.post_message(self._channel, f"### DevOps — deploy watch\n🔴 **{finding.detail}**" + (f" [↗]({finding.url})" if finding.url else ""))
+        except Exception:  # noqa: BLE001
+            log.exception("DevOps: the deploy alert could not be posted")
+            return False
+        self.alerted.add(self._main_seen[0])
+        log.warning("DevOps: deploy alert posted — %s", finding.detail)
+        return True
+
+    async def preflight(self) -> Preflight:
+        """Go or no-go for a cycle about to start, on a fresh read (D2)."""
+        return preflight_of(await self.refresh())
 
     async def latest(self) -> OpsReport:
         """The last report, read once when there is none yet."""
@@ -104,6 +173,7 @@ class OpsWatch:
         while True:
             try:
                 await self.refresh()
+                await self.alert_deploy()
                 await self.post_daily()
             except asyncio.CancelledError:
                 raise
