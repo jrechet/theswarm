@@ -225,9 +225,77 @@ rig (`scripts/record_v2_demo.py`, port 8095) and listed in
    Home and the player, and the SMTP door if the owner wants it. *Demo:
    the product on a phone.*
 
+The DevOps persona (D1–D4, below) starts once M4 has landed and runs
+beside M5–M7: engine work, its own PRs, its own demos.
+
 Order matters once: M2 before M3 (the project URL needs its customer),
 M4 before M5 (a member's demo is the player). M1 ships first because the
 shell alone makes the product read as one.
+
+## The DevOps persona — D1 to D4
+
+Decision (owner, 2026-10-07): a fifth persona, **DevOps**. "Fully aware
+of how to build, test and deploy the project. Ensures CI/CD is
+operational and can suggest improvements. Knows the connected stack —
+currently mine: jrec.fr, GitHub, the Forge." It is engine work,
+independent of M5–M7, and starts once M4 has landed.
+
+**What it owns**: the pipeline, not the code. Three moments. A
+*preflight* before a cycle starts (runners alive, the CI slot free,
+Claude's credentials, disk, the last deploy landed). A *deploy watch*
+after every merge to main (the image on the running container, `/health`
+answering, else roll back or alert — what `cd.yml` does blind today, with
+someone reading the outcome). A *daily ops report* with the improvements
+it proposes. This session alone spent hours on exactly these: watching
+deploys, clearing the CI slot, re-pinning a runner, checking Claude's
+credentials.
+
+**The stack is declared, not guessed**: a `stack:` section in
+`theswarm.yaml` names the hosts (ssh), the CI providers, the registry,
+the deploy method, the logs, the runner pools; credentials live in the
+vault, never in a prompt. The owner's stack today: jrec.fr (Docker Swarm,
+Traefik, Seq, the CI slot lock), GitHub (Actions, GHCR, secrets), the
+Forge (mirror, self-hosted runners). A customer's project declares its
+own later, or none — then DevOps watches GitHub only.
+
+**Power with a leash**: it reads and diagnoses freely. Anything that
+changes a machine — restart a runner, clear the slot, re-pin an image,
+prune — is a **proposal** the owner approves with one click on the Home,
+beside the customers' requests; the policy hook (`decide_tool_use`)
+refuses every such verb outside an approved proposal. It never merges.
+
+**In the product**: an Ops card on the owner's Home (pipeline health,
+the last deploy, Claude, the proposals waiting); a fifth station in the
+theater only in the cycles where it acts (preflight, deploy watch); the
+TechLead's CI gate learns infra-red from code-red — a runner offline is
+not the Dev's fault, the PR waits instead of going back.
+
+**Milestones, each with its demo**:
+
+- **D1 — The stack and the daily report.** The `stack:` declaration,
+  `agents/devops.py` read-only (runners, slot, last deploy, health,
+  credentials, disk, the day's harness run, failed workflow runs), the
+  Ops card, the daily report on Mattermost when configured. *Demo: the
+  Ops card with a real finding — the CI slot held by a stale job, as on
+  2026-10-05.*
+- **D2 — Preflight and deploy watch.** Go/no-go with the reason before
+  the API wrapper and the harness start a cycle; every merge to main
+  watched to the running container and `/health`, the alert otherwise;
+  the CI gate's triage. *Demo: a merge watched to prod; a red CI triaged
+  as infra, the PR left waiting.*
+- **D3 — Proposals with approval.** The inbox entry, the one click, the
+  policy hook's allowlist, the result reported; nothing run on its own.
+  *Demo: a stale slot proposed, approved, cleared.*
+- **D4 — Improvements as PRs.** From what it measures (CI durations,
+  flaky tests, deploy waits, cache misses, cost per cycle): PRs on the
+  workflows and the Dockerfile, reviewed by the TechLead like any other.
+  *Demo: a PR that shortens the CI, measured before and after.*
+
+**Non-goals**: DevOps never merges, never acts on a customer's machines
+without a declared stack, never holds a credential outside the vault.
+Two ideas the owner's question raised are folded into existing roles,
+not personas: the PO writes the customer-facing summary when a demo
+lands; the owner's spend view gets anomaly alerts.
 
 ## Non-goals
 
