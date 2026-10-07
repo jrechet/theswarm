@@ -277,10 +277,10 @@ async def _feature_title(full_name: str, number: int | None) -> str:
 
 def _demo_row(state, report, project_name: str) -> dict:
     """A demo as a member's list shows it: the title, the verdict, when."""
-    from theswarm.presentation.web.routes import player, v2
+    from theswarm.presentation.web.routes import common, player
 
     base = state.base_path
-    card = v2._demo_card(state, report)
+    card = common._demo_card(state, report)
     verdict = player.verdict_of(report.quality_gates)
     label, kind = {"verified": ("Verified", "verified"), "broken": ("Broken", "broken")}.get(verdict, ("Unverified", "unverified"))
     title = report.stories[0].title if report.stories else f"Cycle {str(report.cycle_id)[:8]}"
@@ -300,7 +300,7 @@ async def member_overview(state, customer, projects) -> dict:
     never a link into the theater."""
     from theswarm.application.services.progress_bridge import get_phase_history
     from theswarm.presentation.web.member_steps import stage_for
-    from theswarm.presentation.web.routes import v2
+    from theswarm.presentation.web.routes import common
 
     base = state.base_path
     building: list[dict] = []
@@ -309,7 +309,7 @@ async def member_overview(state, customer, projects) -> dict:
     report_repo = getattr(state, "report_repo", None)
     for project in projects:
         full_name = str(project.repo)
-        record = v2._running_for_repo(full_name)
+        record = common._running_for_repo(full_name)
         if record is not None:
             history = get_phase_history(record.id)
             phase = history[-1].get("phase", "") if history else ""

@@ -22,7 +22,7 @@ from theswarm.infrastructure.persistence.sqlite_repos import (
     init_db,
 )
 from theswarm.presentation.web.app import create_web_app
-from theswarm.presentation.web.routes.v2 import _graph, _stations
+from theswarm.presentation.web.routes.stage import _graph, _stations
 from theswarm.presentation.web.sse import SSEHub
 
 

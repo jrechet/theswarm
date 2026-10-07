@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from theswarm.presentation.web.routes import v2
+from theswarm.presentation.web.routes import stage
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -57,13 +57,13 @@ _PR_RE = re.compile(r"#(\d+)")
 async def theater_target(state, cycle_id: str) -> str | None:
     """The cycle to draw for `cycle_id`: its continuation after a restart,
     itself when it is known (live or on its row), None when nothing is."""
-    if v2._tracker_record(cycle_id) is not None:
+    if stage._tracker_record(cycle_id) is not None:
         return cycle_id
     cycle = await state.get_cycle_status_query.execute(cycle_id)
     resumed_as = getattr(cycle, "resumed_as", "") if cycle is not None else ""
     if resumed_as and (
-        v2._tracker_record(resumed_as) is not None
-        or await v2._archived_record(state, resumed_as) is not None
+        stage._tracker_record(resumed_as) is not None
+        or await stage._archived_record(state, resumed_as) is not None
     ):
         return resumed_as
     return cycle_id if cycle is not None else None
@@ -89,10 +89,10 @@ def _orphan_record(cycle):
 async def _record_for(state, cycle_id: str):
     """(record, orphan): the live record, the finished row, or a row nothing
     runs any more; (None, False) when the cycle does not exist."""
-    record = v2._tracker_record(cycle_id)
+    record = stage._tracker_record(cycle_id)
     if record is not None:
         return record, False
-    record = await v2._archived_record(state, cycle_id)
+    record = await stage._archived_record(state, cycle_id)
     if record is not None:
         return record, False
     cycle_repo = getattr(state, "cycle_repo", None)
@@ -246,7 +246,7 @@ async def theater_context(request: Request, record, orphan: bool = False) -> dic
     from theswarm.application.services.progress_bridge import get_phase_history
 
     state = request.app.state
-    context = await v2._stage_context(request, record)
+    context = await stage._stage_context(request, record)
     status = record.status.value
     history = get_phase_history(record.id)
     steps = steps_from_history(history, status) if history else []

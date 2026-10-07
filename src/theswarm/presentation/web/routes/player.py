@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from theswarm.presentation.web.routes import v2
+from theswarm.presentation.web.routes import common
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -162,7 +162,7 @@ async def _cycle_facts(state, report) -> dict:
 async def player_context(request: Request, report, *, public: bool) -> dict:
     state = request.app.state
     base = state.base_path
-    card = v2._demo_card(state, report)
+    card = common._demo_card(state, report)
     facts = await _cycle_facts(state, report)
     verdict = verdict_of(report.quality_gates)
     verdict_label, verdict_kind = VERDICTS[verdict]

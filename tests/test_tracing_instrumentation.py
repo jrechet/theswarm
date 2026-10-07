@@ -234,7 +234,7 @@ async def test_the_completion_handler_keeps_the_trace_id():
 
 def test_the_tracker_record_has_a_trace_id_and_the_theater_links_it(monkeypatch):
     from theswarm.api import CycleRecord, CycleStatus
-    from theswarm.presentation.web.routes.v2 import trace_url
+    from theswarm.presentation.web.routes.stage import trace_url
 
     record = CycleRecord(
         id="x", repo="o/r", description="", callback_url="",

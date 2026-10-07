@@ -101,7 +101,7 @@ def _report(rid: str = "rep-1", *, when: datetime | None = None, failed: int = 0
 
 async def _home(client):
     """The home with GitHub stubbed out: no App, no repositories, OAuth ready."""
-    with patch("theswarm.presentation.web.routes.v2.github_app") as gh:
+    with patch("theswarm.presentation.web.routes.common.github_app") as gh:
         gh.load_credentials = AsyncMock(return_value=None)
         gh.list_user_repositories = AsyncMock(return_value=[])
         gh.oauth_client = AsyncMock(return_value=object())
@@ -232,7 +232,7 @@ class TestTheHome:
         client, app = web
         r = await _home(client)
         assert "Connect GitHub" in r.text
-        with patch("theswarm.presentation.web.routes.v2.github_app") as gh:
+        with patch("theswarm.presentation.web.routes.common.github_app") as gh:
             gh.load_credentials = AsyncMock(return_value=None)
             gh.list_user_repositories = AsyncMock(return_value=[
                 {"full_name": REPO, "description": "the test bed", "language": "Python", "pushed_at": "2026-10-06"},

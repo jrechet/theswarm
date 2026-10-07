@@ -159,7 +159,7 @@ def _repo_allowed(request, repo: str) -> bool:
 async def _handle_go_label(request, event) -> None:
     """`swarm:go` on an issue: build it, then take the label off so the
     same label can ask again later."""
-    from theswarm.presentation.web.routes.v2 import start_targeted_cycle
+    from theswarm.presentation.web.routes.common import start_targeted_cycle
 
     if not _owner_only(request, event) or not _repo_allowed(request, event.repo_full_name):
         return
@@ -189,7 +189,7 @@ async def _handle_instruction(request, event, instruction: str) -> None:
     behind CHANGES_MARKER, the task back to `status:ready`, a cycle pinned
     to it; the Dev resumes the PR's branch and the review runs again."""
     from theswarm.agents.techlead import _changes_comment, _task_of_pr
-    from theswarm.presentation.web.routes.v2 import start_targeted_cycle
+    from theswarm.presentation.web.routes.common import start_targeted_cycle
     from theswarm.tools.github import GitHubClient
 
     if not _owner_only(request, event) or not _repo_allowed(request, event.repo_full_name):

@@ -16,7 +16,7 @@ from theswarm.infrastructure.persistence.sqlite_repos import (
     init_db,
 )
 from theswarm.presentation.web.app import create_web_app
-from theswarm.presentation.web.routes.v2 import _stations
+from theswarm.presentation.web.routes.stage import _stations
 from theswarm.presentation.web.sse import SSEHub
 
 
@@ -185,7 +185,7 @@ async def test_play_now_lands_on_the_theater(web):
 
 
 def test_a_continuation_names_the_cycle_it_resumes():
-    from theswarm.presentation.web.routes.v2 import resumed_from
+    from theswarm.presentation.web.routes.stage import resumed_from
 
     assert resumed_from("Resume of 747bb89eced2 from dev_loop") == "747bb89eced2"
     assert resumed_from("Add a venue filter") == ""

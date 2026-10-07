@@ -74,7 +74,7 @@ async def test_the_door_answers_before_its_work_is_done(web):
 
     gh = MagicMock(remove_label=AsyncMock(side_effect=slow_remove))
     body, headers = _signed(_labeled(), "issues")
-    with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle", started), \
+    with patch("theswarm.presentation.web.routes.common.start_targeted_cycle", started), \
          patch("theswarm.tools.github.GitHubClient", return_value=gh):
         before = time.monotonic()
         response = await client.post("/webhooks/github", content=body, headers=headers)
@@ -92,7 +92,7 @@ async def test_work_that_fails_is_a_log_line_not_a_lost_delivery(web, caplog):
     client, app = web
     started = AsyncMock(side_effect=RuntimeError("GitHub is down"))
     body, headers = _signed(_labeled(), "issues")
-    with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle", started):
+    with patch("theswarm.presentation.web.routes.common.start_targeted_cycle", started):
         response = await client.post("/webhooks/github", content=body, headers=headers)
         await webhooks_mod.drain_background(app)
 
@@ -107,7 +107,7 @@ async def test_a_stranger_s_label_is_still_answered_and_starts_nothing(web):
     payload = _labeled()
     payload["sender"] = {"login": "stranger"}
     body, headers = _signed(payload, "issues")
-    with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle", started):
+    with patch("theswarm.presentation.web.routes.common.start_targeted_cycle", started):
         response = await client.post("/webhooks/github", content=body, headers=headers)
         await webhooks_mod.drain_background(app)
 
