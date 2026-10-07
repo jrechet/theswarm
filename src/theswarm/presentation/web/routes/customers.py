@@ -217,17 +217,18 @@ async def accept_invitation(request: Request, token: str):
 async def customer_page(request: Request, slug: str):
     state = request.app.state
     actor = await current_actor(request)
-    if looks_like_cycle_id(slug):
-        # Still the V2 theater (M4 moves it to /cycles/): the owner's only.
+    service = getattr(state, "customer_service", None)
+    customer = None
+    if service is not None and not looks_like_cycle_id(slug):
+        customer = await service.by_slug(slug)
+    if customer is None:
+        # Not a customer: still the V2 theater's address (M4 moves it to
+        # /cycles/), whatever shape the cycle id has — the owner's only.
         if actor is None or not actor.is_owner:
             return _refused(request, actor)
         from theswarm.presentation.web.routes.v2 import theater
 
         return await theater(request, slug)
-    service = getattr(state, "customer_service", None)
-    customer = await service.by_slug(slug) if service is not None else None
-    if customer is None:
-        return HTMLResponse("No such customer", status_code=404)
     if actor is None or (not actor.is_owner and actor.customer_id != customer.id):
         return _refused(request, actor)
     if not actor.is_owner:
