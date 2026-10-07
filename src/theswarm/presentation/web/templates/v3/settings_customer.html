@@ -47,7 +47,7 @@
       <div class="flex flex-wrap items-center gap-3.5 px-4 py-2.5 border-b border-line text-[13px]" data-testid="customer-project">
         <span class="w-1.5 h-1.5 rounded-full bg-line-strong" aria-hidden="true"></span>
         <span class="font-mono flex-[1_1_200px]">{{ p.repo }}</span>
-        <a href="{{ base }}/r/{{ p.repo }}" class="text-[12px] text-muted hover:text-ink">Open</a>
+        <a href="{{ base }}/c/{{ customer.slug }}/p/{{ p.repo.name }}" class="text-[12px] text-muted hover:text-ink">Open</a>
       </div>
       {% else %}
       <div class="px-4 py-3 text-[13px] text-faint border-b border-line">No project yet.</div>

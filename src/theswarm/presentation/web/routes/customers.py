@@ -238,7 +238,7 @@ async def customer_page(request: Request, slug: str):
     return state.templates.TemplateResponse("v3/customer.html", {
         "customer": customer,
         "projects": [{"full_name": str(p.repo), "name": p.repo.name, "owner": p.repo.owner,
-                      "href": f"{state.base_path}/r/{p.repo}"} for p in projects],
+                      "href": f"{state.base_path}/c/{customer.slug}/p/{p.repo.name}"} for p in projects],
         "members": [m for m in members if m.state != "revoked"],
         "is_owner": actor.is_owner,
         "actor": actor,

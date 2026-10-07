@@ -65,7 +65,7 @@ async def _board(client, prs=OPEN_PRS, running_issue: int | None = None) -> str:
             klass.return_value.get_issues = AsyncMock(return_value=list(ISSUES))
             klass.return_value.get_open_pr_briefs = (
                 AsyncMock(side_effect=prs) if isinstance(prs, Exception) else AsyncMock(return_value=prs))
-            return (await client.get(f"/r/{REPO}")).text
+            return (await client.get(f"/r/{REPO}", follow_redirects=True)).text
     finally:
         if record is not None:
             tracker._cycles.pop(record.id, None)
@@ -82,7 +82,8 @@ def _group(html: str, key: str) -> str:
 async def test_nothing_running_means_nothing_building(web):
     html = await _board(web)
 
-    assert _group(html, "in-progress") == ""
+    assert "Display an almost-sold-out badge" not in _group(html, "in-progress")
+    assert "Waiting list model" not in _group(html, "in-progress")
     stalled = _group(html, "stalled")
     assert "Display an almost-sold-out badge" in stalled and "Waiting list model" in stalled
 

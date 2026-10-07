@@ -120,7 +120,7 @@ async def test_repo_page_registers_the_project_on_first_visit(web):
     client, app = web
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=[])
-        r = await client.get("/r/jrechet/concert-tour-app")
+        r = await client.get("/r/jrechet/concert-tour-app", follow_redirects=True)
 
     assert r.status_code == 200
     projects = await app.state.list_projects_query.execute()
@@ -138,7 +138,7 @@ async def test_repo_page_groups_issues_by_status(web):
     ]
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=issues)
-        r = await client.get("/r/jrechet/concert-tour-app")
+        r = await client.get("/r/jrechet/concert-tour-app", follow_redirects=True)
 
     text = r.text
     # Labelled in progress, and no cycle is running: stalled, not building
@@ -155,7 +155,7 @@ async def test_repo_page_survives_github_being_down(web):
         klass.return_value.get_issues = AsyncMock(
             side_effect=RuntimeError("api.github.com unreachable"),
         )
-        r = await client.get("/r/jrechet/concert-tour-app")
+        r = await client.get("/r/jrechet/concert-tour-app", follow_redirects=True)
 
     assert r.status_code == 200
     assert "GitHub didn&#39;t answer" in r.text or "GitHub didn't answer" in r.text
@@ -170,7 +170,7 @@ async def test_composer_creates_an_issue_from_free_text(web):
         create = AsyncMock(return_value={"number": 12})
         klass.return_value.create_issue = create
         r = await client.post(
-            "/r/jrechet/concert-tour-app/issues",
+            "/c/internal/p/concert-tour-app/features",
             data={"body": "Add a waiting list\nFans join when a show sells out."},
         )
 
@@ -196,13 +196,13 @@ async def test_the_feature_just_written_is_on_the_board_while_github_lags(web):
         ])
         get_issue = AsyncMock(return_value=fresh)
         klass.return_value.get_issue = get_issue
-        r = await client.get("/r/jrechet/concert-tour-app?new=386")
+        r = await client.get("/r/jrechet/concert-tour-app?new=386", follow_redirects=True)
 
     assert r.status_code == 200
     get_issue.assert_awaited_once_with(386)
     assert "Show how full a concert is" in r.text
     assert 'data-testid="fresh-issue"' in r.text
-    assert "/issues/386/play" in r.text
+    assert "/features/386/play" in r.text
 
 
 async def test_a_listed_new_issue_is_not_fetched_twice(web):
@@ -213,10 +213,10 @@ async def test_a_listed_new_issue_is_not_fetched_twice(web):
         klass.return_value.get_issues = AsyncMock(return_value=[listed])
         get_issue = AsyncMock()
         klass.return_value.get_issue = get_issue
-        r = await client.get("/r/jrechet/concert-tour-app?new=386")
+        r = await client.get("/r/jrechet/concert-tour-app?new=386", follow_redirects=True)
 
     get_issue.assert_not_awaited()
-    assert r.text.count("/issues/386/play") == 1
+    assert r.text.count("/features/386/play") == 1
     assert 'data-testid="fresh-issue"' in r.text
 
 
@@ -225,10 +225,10 @@ async def test_a_closed_or_missing_new_issue_is_left_off_the_board(web):
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=[])
         klass.return_value.get_issue = AsyncMock(return_value=None)
-        r = await client.get("/r/jrechet/concert-tour-app?new=999")
+        r = await client.get("/r/jrechet/concert-tour-app?new=999", follow_redirects=True)
 
     assert r.status_code == 200
-    assert "/issues/999/play" not in r.text
+    assert "/features/999/play" not in r.text
 
 
 async def test_composer_truncates_a_runaway_title(web):
@@ -237,7 +237,7 @@ async def test_composer_truncates_a_runaway_title(web):
         create = AsyncMock(return_value={"number": 13})
         klass.return_value.create_issue = create
         await client.post(
-            "/r/jrechet/concert-tour-app/issues",
+            "/c/internal/p/concert-tour-app/features",
             data={"body": "x" * 300},
         )
 
@@ -250,7 +250,7 @@ async def test_composer_ignores_empty_submissions(web):
         create = AsyncMock()
         klass.return_value.create_issue = create
         r = await client.post(
-            "/r/jrechet/concert-tour-app/issues", data={"body": "   "},
+            "/c/internal/p/concert-tour-app/features", data={"body": "   "},
         )
 
     assert r.status_code == 303
@@ -263,7 +263,8 @@ async def test_composer_ignores_empty_submissions(web):
 async def test_play_starts_a_cycle_pinned_to_the_issue(web, _isolate_cycle_tracker):
     client, _ = web
     with patch("theswarm.api.run_api_cycle", new=AsyncMock()) as run:
-        r = await client.post("/r/jrechet/concert-tour-app/issues/7/play")
+        r = await client.get("/r/jrechet/concert-tour-app")  # registers it under Internal
+        r = await client.post("/c/internal/p/concert-tour-app/features/7/play")
         import asyncio
         await asyncio.sleep(0)  # let the created task reach the mock
 
@@ -288,7 +289,7 @@ async def test_running_cycle_shows_the_follow_banner(web, _isolate_cycle_tracker
                "labels": ["status:in-progress"]}]
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=issues)
-        r = await client.get("/r/jrechet/concert-tour-app")
+        r = await client.get("/r/jrechet/concert-tour-app", follow_redirects=True)
 
     assert 'data-testid="running-banner"' in r.text
     assert f"/swarm/c/{record.id}" in r.text

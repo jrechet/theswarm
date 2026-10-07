@@ -37,7 +37,7 @@ async def web(tmp_path):
 async def _page(client):
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=[])
-        return await client.get(f"/r/{REPO}")
+        return await client.get(f"/r/{REPO}", follow_redirects=True)
 
 
 async def test_the_trend_is_drawn_from_the_harness_history(web, tmp_path, monkeypatch):

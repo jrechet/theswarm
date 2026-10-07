@@ -139,7 +139,7 @@ class TestTheShell:
         await _register(app)
         with patch("theswarm.tools.github.GitHubClient") as klass:
             klass.return_value.get_issues = AsyncMock(return_value=[])
-            r = await client.get(f"/r/{REPO}", headers=HTML)
+            r = await client.get(f"/r/{REPO}", headers=HTML, follow_redirects=True)
         assert r.status_code == 200
         assert 'data-testid="rail"' in r.text
         assert 'aria-current="page"' not in r.text.split('data-testid="rail-customers"')[0]  # home is not active

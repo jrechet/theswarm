@@ -267,7 +267,6 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
         "columns": columns,
         "has_issues": bool(issues),
         "issues_error": issues_error,
-        "credential_error": v2._is_credential_error(issues_error) if hasattr(v2, "_is_credential_error") else False,
         "running_cycle": running_cycle,
         "latest_demo": await v2._latest_demo(state, full_name),
         "delivered": await _delivered(state, full_name, base),

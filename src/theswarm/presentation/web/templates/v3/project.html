@@ -54,7 +54,7 @@
   </form>
 
   {% if issues_error %}
-  <p class="m-0 text-[13px] text-bad border border-bad/30 bg-bad-wash rounded-[10px] px-4 py-3" data-testid="{{ 'issues-credential-error' if credential_error else 'issues-error' }}">
+  <p class="m-0 text-[13px] text-bad border border-bad/30 bg-bad-wash rounded-[10px] px-4 py-3" data-testid="issues-error">
     GitHub didn't answer: {{ issues_error }}</p>
   {% endif %}
 

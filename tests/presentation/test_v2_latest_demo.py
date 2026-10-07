@@ -78,7 +78,7 @@ def _report(rid="rep-1", *, project=REPO, when=None, with_video=True) -> DemoRep
 async def _page(client):
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=[])
-        return await client.get(f"/r/{REPO}")
+        return await client.get(f"/r/{REPO}", follow_redirects=True)
 
 
 class TestTheCard:

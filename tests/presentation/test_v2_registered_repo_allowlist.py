@@ -89,11 +89,11 @@ async def test_repo_registered_via_picker_is_played_without_refusal(web, monkeyp
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issues = AsyncMock(return_value=[])
         # Registers jrechet/yakoi, which is absent from app.state.allowed_repos.
-        r = await client.get("/r/jrechet/yakoi")
+        r = await client.get("/r/jrechet/yakoi", follow_redirects=True)
     assert r.status_code == 200
 
     with patch("theswarm.cycle.run_daily_cycle", side_effect=quick) as mock_run:
-        r = await client.post("/r/jrechet/yakoi/issues/2/play")
+        r = await client.post("/c/internal/p/yakoi/features/2/play")
         assert r.status_code == 303
         cycle_id = r.headers["location"].rsplit("/", 1)[-1]
 

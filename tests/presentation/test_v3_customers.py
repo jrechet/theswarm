@@ -123,7 +123,7 @@ class TestSettings:
         r = await _home(owner)
         assert r.status_code == 200
         assert 'data-testid="rail-customer"' in r.text and ">TLphone<" in r.text
-        assert f'href="/r/{REPO}"' in r.text
+        assert 'href="/c/tlphone/p/espace-client"' in r.text
         assert 'data-testid="rail-settings"' in r.text
 
     async def test_a_nameless_customer_is_refused(self, owner):
@@ -144,7 +144,7 @@ class TestSettings:
         r = await owner.get(f"/c/{slug}", headers=HTML)
         assert r.status_code == 200
         assert 'data-testid="customer-page" data-slug="tlphone"' in r.text
-        assert f'href="/r/{REPO}"' in r.text  # the owner's links go to the project
+        assert 'href="/c/tlphone/p/espace-client"' in r.text  # the owner's links go to the project
         assert "What this customer's members see" in r.text
 
     async def test_an_unknown_customer_is_404(self, owner):

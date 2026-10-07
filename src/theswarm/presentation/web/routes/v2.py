@@ -308,54 +308,6 @@ async def _with_fresh_issue(client, issues: list[dict], number: int | None) -> l
     return [issue, *issues]
 
 
-@router.get("/r/{owner}/{name}", response_class=HTMLResponse)
-async def repo_page(
-    request: Request, owner: str, name: str, new: int | None = None,
-) -> HTMLResponse:
-    state = request.app.state
-    full_name = f"{owner}/{name}"
-    await _ensure_project(state, owner, name)
-
-    issues: list[dict] = []
-    issues_error = ""
-    try:
-        from theswarm.tools.github import GitHubClient
-
-        client = GitHubClient(full_name)
-        issues = await _with_fresh_issue(client, await client.get_issues(), new)
-    except Exception as exc:  # noqa: BLE001 — surfaced in the page banner
-        log.exception("V2: listing issues for %s failed", full_name)
-        issues_error = str(exc)[:160]
-
-    running = _running_for_repo(full_name)
-    prs = await _open_pr_briefs(client) if not issues_error else None
-    by_status: dict[str, list[dict]] = {key: [] for key, _ in _GROUPS}
-    for issue in issues:
-        status = _board_status(issue, running, prs)
-        row = dict(issue)
-        row["building"] = bool(
-            running is not None
-            and getattr(running, "issue_number", None) == issue.get("number"),
-        )
-        row["cycle_id"] = getattr(running, "id", "") if row["building"] else ""
-        row["fresh"] = bool(new) and issue.get("number") == new
-        by_status.get(status, by_status["backlog"]).append(row)
-
-    groups = [
-        {"key": key, "label": label, "issues": by_status[key]}
-        for key, label in _GROUPS
-    ]
-    return state.templates.TemplateResponse("v2/repo.html", {
-        "owner": owner, "repo_name": name,
-        "groups": groups,
-        "has_issues": bool(issues),
-        "issues_error": issues_error,
-        "running_cycle": running,
-        "latest_demo": await _latest_demo(state, full_name),
-        "evals": await _evals_trend(state, full_name),
-    })
-
-
 async def _open_pr_briefs(client) -> list[dict] | None:
     """The open PRs, or None when they cannot be read — then the labels are
     believed, rather than an issue called stalled on a failed read."""
@@ -444,46 +396,6 @@ _MEMORY_LABELS = {
     "architecture": "Architecture decisions",
     "learnings": "Learnings",
 }
-
-
-@router.post("/r/{owner}/{name}/issues")
-async def compose_issue(
-    request: Request, owner: str, name: str, body: str = Form(default=""),
-):
-    """The composer: free text in, GitHub issue out."""
-    base = request.app.state.base_path
-    text = body.strip()
-    back = RedirectResponse(f"{base}/r/{owner}/{name}", status_code=303)
-    if not text:
-        return back
-
-    first_line, _, rest = text.partition("\n")
-    title = first_line.strip()[:_COMPOSER_TITLE_MAX] or "Untitled feature"
-    issue_body = rest.strip()
-
-    from theswarm.tools.github import GitHubClient
-
-    created = await GitHubClient(f"{owner}/{name}").create_issue(
-        title=title, body=issue_body, labels=["status:backlog"],
-    )
-    log.info("V2: composed issue %r on %s/%s", title, owner, name)
-    number = created.get("number") if isinstance(created, dict) else None
-    if isinstance(number, int):
-        return RedirectResponse(f"{base}/r/{owner}/{name}?new={number}", status_code=303)
-    return back
-
-
-@router.post("/r/{owner}/{name}/issues/{issue_number}/play")
-async def play(
-    request: Request, owner: str, name: str, issue_number: int,
-):
-    """Start a cycle pinned to one issue and follow it."""
-    state = request.app.state
-    record = await start_targeted_cycle(
-        state, owner, name, issue_number, f"Play on issue #{issue_number}",
-    )
-    base = state.base_path
-    return RedirectResponse(f"{base}/c/{record.id}", status_code=303)
 
 
 async def start_targeted_cycle(state, owner: str, name: str, issue_number: int, description: str):
