@@ -257,6 +257,7 @@ features:
     max_cost_usd: 8
     max_duration_s: 3600
   - id: venues-list
+    built_by: "filmed Play (V3 M5 demo), cycle 8bc840149d23, 2026-10-07, PRs #605–#606"
     text: |-
       List the venues
       GET /api/v1/venues returns every venue with its name, city, country and capacity, sorted by name; ?min_capacity=N keeps the venues that hold at least N people; 422 for a negative min_capacity.
