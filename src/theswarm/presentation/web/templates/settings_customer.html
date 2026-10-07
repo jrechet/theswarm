@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Settings — {{ customer.name }}{% endblock %}
+{% block crumbs %}
+  <a href="{{ base }}/settings/customers" class="text-muted hover:text-ink">Settings</a>
+  <span class="text-line-strong">/</span>
+  <a href="{{ base }}/settings/customers" class="text-muted hover:text-ink">Customers</a>
+  <span class="text-line-strong">/</span>
+  <span class="text-ink font-medium">{{ customer.name }}</span>
+{% endblock %}
+{% block actions %}
+  {{ ui.btn('Open ' ~ customer.name, href=base ~ '/c/' ~ customer.slug, kind='secondary', icon='eye') }}
+{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-7" data-testid="settings-customer" data-slug="{{ customer.slug }}">
+
+  <div class="flex items-center gap-3">
+    {{ ui.customer_mark(customer.initial, 28) }}
+    <div class="flex flex-col gap-0.5">
+      <h1 class="m-0 text-[20px] font-semibold tracking-tight">{{ customer.name }}</h1>
+      <span class="text-[12px] text-muted font-mono">/c/{{ customer.slug }}</span>
+    </div>
+  </div>
+
+  {% if error %}<p class="m-0 text-[13px] text-bad" role="alert" data-testid="error">{{ error }}</p>{% endif %}
+
+  {% if invitation_url %}
+  <div class="flex flex-col gap-2 p-4 bg-live-wash border border-live/40 rounded-[10px]" data-testid="invitation">
+    <span class="text-[13px] font-semibold text-live-deep">Send this link to {{ invited.email }} — it is shown only now</span>
+    <span class="text-[12px] text-muted">One use, good for fourteen days. Opening it signs {{ invited.name }} in to {{ customer.name }} and nothing else.</span>
+    <div class="flex gap-2">
+      <input type="text" readonly value="{{ invitation_url }}" aria-label="Invitation link" data-testid="invitation-url"
+             class="flex-1 h-8 px-3 border border-line-strong rounded-md bg-surface font-mono text-[12px] text-ink min-w-0">
+      <button type="button" data-copy="{{ invitation_url }}" class="h-8 px-3 rounded-md bg-ink text-on-ink text-[13px] font-medium cursor-pointer">Copy</button>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Projects ───────────────────────────────────────────────────── #}
+  <section class="flex flex-col gap-3" aria-labelledby="projects">
+    <div class="flex flex-col gap-0.5">
+      <h2 id="projects" class="m-0 text-[16px] font-semibold tracking-tight">Projects of {{ customer.name }}</h2>
+      <span class="text-[13px] text-muted">A project is a GitHub repository the swarm may work on. Its members see its progress and demos.</span>
+    </div>
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for p in projects %}
+      <div class="flex flex-wrap items-center gap-3.5 px-4 py-2.5 border-b border-line text-[13px]" data-testid="customer-project">
+        <span class="w-1.5 h-1.5 rounded-full bg-line-strong" aria-hidden="true"></span>
+        <span class="font-mono flex-[1_1_200px]">{{ p.repo }}</span>
+        <a href="{{ base }}/c/{{ customer.slug }}/p/{{ p.repo.name }}" class="text-[12px] text-muted hover:text-ink">Open</a>
+      </div>
+      {% else %}
+      <div class="px-4 py-3 text-[13px] text-faint border-b border-line">No project yet.</div>
+      {% endfor %}
+      <form method="post" action="{{ base }}/settings/customers/{{ customer.slug }}/projects" class="flex flex-wrap items-center gap-2.5 px-4 py-3 bg-canvas">
+        <label for="full_name" class="text-[13px] font-medium">Add a repository</label>
+        <input id="full_name" name="full_name" type="text" required placeholder="owner/name" list="known-repos" autocomplete="off"
+               class="h-8 px-3 border border-line-strong rounded-md bg-surface text-ink text-[13px] font-mono flex-[1_1_240px] min-w-0">
+        <datalist id="known-repos">{% for name in unassigned %}<option value="{{ name }}">{% endfor %}</datalist>
+        {{ ui.btn('Add to ' ~ customer.name, kind='secondary', type='submit', testid='add-project') }}
+        {% if unassigned %}<span class="text-[12px] text-faint">{{ unassigned | length }} registered elsewhere</span>{% endif %}
+      </form>
+    </div>
+  </section>
+
+  {# ── Members ────────────────────────────────────────────────────── #}
+  {% if customer.slug != 'internal' %}
+  <section class="flex flex-col gap-3" aria-labelledby="members">
+    <div class="flex flex-col gap-0.5">
+      <h2 id="members" class="m-0 text-[16px] font-semibold tracking-tight">Members of {{ customer.name }}</h2>
+      <span class="text-[13px] text-muted">They sign in with the link you send them. They see {{ customer.name }} and nothing else.</span>
+    </div>
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for m in members %}
+      <div class="flex flex-wrap items-center gap-3.5 px-4 py-2.5 border-b border-line text-[13px]" data-testid="member" data-state="{{ m.state }}">
+        <span class="w-6 h-6 rounded-full bg-raised border border-line-strong shrink-0" aria-hidden="true"></span>
+        <span class="flex flex-col leading-tight flex-[1_1_200px] min-w-0">
+          <span class="font-medium truncate">{{ m.name }}</span>
+          <span class="text-[12px] text-faint font-mono truncate">{{ m.email }}</span>
+        </span>
+        {% if m.state == 'active' %}{{ ui.chip('Active', 'verified') }}
+        {% elif m.state == 'invited' %}{{ ui.chip('Invited', 'review') }}
+        {% elif m.state == 'expired' %}{{ ui.chip('Link expired', 'waiting') }}
+        {% else %}{{ ui.chip('Revoked', 'broken') }}{% endif %}
+        <span class="text-[12px] text-faint w-[150px]">{% if m.last_seen_at %}seen {{ m.last_seen_at.strftime('%d %b %H:%M') }}{% elif m.state == 'invited' %}not yet in{% endif %}</span>
+        {% if m.state != 'revoked' %}
+        <form method="post" action="{{ base }}/settings/customers/{{ customer.slug }}/members/{{ m.id }}/revoke">
+          <button type="submit" class="h-7 px-2.5 border border-line-strong rounded-md bg-surface text-muted text-[12px] cursor-pointer hover:text-bad">Revoke</button>
+        </form>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="px-4 py-3 text-[13px] text-faint border-b border-line">Nobody yet.</div>
+      {% endfor %}
+      <form method="post" action="{{ base }}/settings/customers/{{ customer.slug }}/members" class="flex flex-wrap items-center gap-2.5 px-4 py-3 bg-canvas">
+        <label for="email" class="text-[13px] font-medium">Invite</label>
+        <input id="email" name="email" type="email" required placeholder="name@{{ customer.slug }}.fr"
+               class="h-8 px-3 border border-line-strong rounded-md bg-surface text-ink text-[13px] flex-[1_1_200px] min-w-0">
+        <input name="display_name" type="text" placeholder="Their name (optional)" aria-label="Their name"
+               class="h-8 px-3 border border-line-strong rounded-md bg-surface text-ink text-[13px] flex-[1_1_160px] min-w-0">
+        {{ ui.btn('Make the invitation link', kind='primary', type='submit', testid='invite') }}
+      </form>
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.querySelectorAll("[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      navigator.clipboard && navigator.clipboard.writeText(b.dataset.copy).then(function () { b.textContent = "Copied"; });
+    });
+  });
+</script>
+{% endblock %}

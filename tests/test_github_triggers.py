@@ -143,7 +143,7 @@ async def test_the_go_label_starts_a_targeted_cycle_and_is_removed(web):
     gh = MagicMock()
     gh.remove_label = AsyncMock()
     body, headers = _signed(_labeled(), "issues")
-    with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle", started), \
+    with patch("theswarm.presentation.web.routes.common.start_targeted_cycle", started), \
          patch("theswarm.tools.github.GitHubClient", return_value=gh):
         response = await client.post("/webhooks/github", content=body, headers=headers)
         await webhooks_mod.drain_background(app)  # the door answers first, works after
@@ -159,7 +159,7 @@ async def test_a_label_from_someone_else_starts_nothing(web):
     client, app = web
     started = AsyncMock()
     body, headers = _signed(_labeled(sender="stranger"), "issues")
-    with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle", started):
+    with patch("theswarm.presentation.web.routes.common.start_targeted_cycle", started):
         response = await client.post("/webhooks/github", content=body, headers=headers)
         await webhooks_mod.drain_background(app)
     assert response.status_code == 202
@@ -181,7 +181,7 @@ async def test_two_labels_in_a_minute_are_one_cycle(web):
     started = AsyncMock(return_value=MagicMock(id="cyc-1"))
     gh = MagicMock(remove_label=AsyncMock())
     body, headers = _signed(_labeled(), "issues")
-    with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle", started), \
+    with patch("theswarm.presentation.web.routes.common.start_targeted_cycle", started), \
          patch("theswarm.tools.github.GitHubClient", return_value=gh):
         await client.post("/webhooks/github", content=body, headers=headers)
         await client.post("/webhooks/github", content=body, headers=headers)
@@ -203,7 +203,7 @@ async def test_an_instruction_on_a_pr_goes_to_the_dev_as_a_changes_note(web):
     gh.remove_label = AsyncMock()
     gh.create_pr_comment = AsyncMock()
     body, headers = _signed(_comment("@swarm add a test for the empty case"), "issue_comment")
-    with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle", started), \
+    with patch("theswarm.presentation.web.routes.common.start_targeted_cycle", started), \
          patch("theswarm.tools.github.GitHubClient", return_value=gh):
         response = await client.post("/webhooks/github", content=body, headers=headers)
         await webhooks_mod.drain_background(app)
@@ -227,7 +227,7 @@ async def test_an_instruction_on_a_pr_without_a_task_is_answered_not_run(web):
     gh.get_pr = AsyncMock(return_value={"number": 78, "title": "Untracked", "body": "", "head": "x", "head_sha": "y"})
     gh.create_pr_comment = AsyncMock()
     body, headers = _signed(_comment("@swarm do it", number=78), "issue_comment")
-    with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle", started), \
+    with patch("theswarm.presentation.web.routes.common.start_targeted_cycle", started), \
          patch("theswarm.tools.github.GitHubClient", return_value=gh):
         await client.post("/webhooks/github", content=body, headers=headers)
         await webhooks_mod.drain_background(app)

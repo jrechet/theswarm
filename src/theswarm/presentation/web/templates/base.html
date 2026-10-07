@@ -1,109 +1,122 @@
+{#- The V3 shell: one rail, one top bar, the content — on every page.
+    docs/plans/2026-10-v3-one-product.md, M1. The rail reads `shell`, set
+    per request by presentation/web/shell.py; a page sets its breadcrumb
+    (`crumbs`) and the level's actions (`actions`). -#}
+{% import "_ui.html" as ui %}
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-base="{{ base }}">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}TheSwarm{% endblock %}</title>
-  <link rel="stylesheet" href="{{ base }}/static/vendor/pico-2.min.css?v={{ asset_v }}">
-  <link rel="stylesheet" href="{{ base }}/static/css/dashboard.css?v={{ asset_v }}">
-  <script src="{{ base }}/static/vendor/htmx-2.0.4.min.js?v={{ asset_v }}" defer></script>
+  <link rel="stylesheet" href="{{ base }}/static/v3/app.css?v={{ asset_v }}">
+  <script>
+    // The theme before the first paint: a stored choice wins, else the OS.
+    try { var t = localStorage.getItem("swarm-theme"); if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+  </script>
+  {% block head %}{% endblock %}
 </head>
-<body>
-  <button id="sidebar-toggle"
-          class="sidebar-toggle"
-          type="button"
-          aria-controls="sidebar"
-          aria-expanded="true"
-          title="Toggle sidebar (\\)">
-    <span aria-hidden="true">☰</span>
-    <span class="visually-hidden">Toggle sidebar</span>
-  </button>
+<body class="bg-canvas text-ink font-sans antialiased min-h-screen text-[14px] leading-[1.45]">
+<div class="min-h-screen flex flex-col md:flex-row">
 
-  <aside id="sidebar" class="sidebar">
-    <a href="{{ base }}/" class="sidebar-logo">
-      <span class="sidebar-logo-mark">⬡</span>
-      <span class="sidebar-logo-text">TheSwarm</span>
-    </a>
-
-    <!-- div + role=navigation instead of <nav>: Pico styles every <nav>
-         (flex row, centered items, negative ul margins) and its element
-         selectors kept outranking our overrides. Opting out of the tag
-         opts out of the whole fight. -->
-    <div class="sidebar-nav" role="navigation" aria-label="Main navigation">
-      {# The nav answers one job: build a feature and watch it happen.
-         Everything else lives under Advanced, collapsed — the surfaces still
-         exist, they just stop competing with the main path. #}
-      <ul class="nav-primary">
-        <li><a href="{{ base }}/projects/" data-icon="▤"><span>Projects</span></a></li>
-        <li><a href="{{ base }}/cycles/" data-icon="↻"><span>Cycles</span></a></li>
-        <li><a href="{{ base }}/demos/" data-icon="▶"><span>Demos</span></a></li>
-      </ul>
-
-      <details>
-        <summary>Advanced</summary>
-        <ul>
-          <li><a href="{{ base }}/dashboard" data-icon="◇"><span>Dashboard</span></a></li>
-          <li><a href="{{ base }}/team" data-icon="◉"><span>Team</span></a></li>
-          <li><a href="{{ base }}/chat" data-icon="✉"><span>Chat</span></a></li>
-          <li><a href="{{ base }}/proposals" data-icon="✦"><span>Proposals</span></a></li>
-          <li><a href="{{ base }}/reports/" data-icon="▦"><span>Reports</span></a></li>
-          <li><a href="{{ base }}/features/" data-icon="★"><span>Features</span></a></li>
-          <li><a href="{{ base }}/architect/paved-road" data-icon="△"><span>Architect</span></a></li>
-          <li><a href="{{ base }}/chief-of-staff/routing" data-icon="◈"><span>Chief of Staff</span></a></li>
-          <li><a href="{{ base }}/intel/feed" data-icon="◎"><span>Scout</span></a></li>
-          <li><a href="{{ base }}/semantic-memory" data-icon="❖"><span>Memory</span></a></li>
-          <li><a href="{{ base }}/prompt-library" data-icon="❡"><span>Prompts</span></a></li>
-          <li><a href="{{ base }}/refactor-programs" data-icon="⟲"><span>Refactors</span></a></li>
-        </ul>
-      </details>
-
-      <details open>
-        <summary>System</summary>
-        <ul>
-          <li><a href="{{ base }}/settings" data-icon="⚙"><span>Settings</span></a></li>
-          <li><a href="{{ base }}/health/ready/page" data-icon="♥"><span>Health</span></a></li>
-        </ul>
-      </details>
+  <nav aria-label="Main" data-testid="rail"
+       class="w-full md:w-[232px] md:shrink-0 bg-surface border-b md:border-b-0 md:border-r border-line flex flex-col gap-4 px-3 py-3.5 md:h-screen md:sticky md:top-0 md:overflow-y-auto">
+    <div class="flex items-center justify-between h-8 px-2">
+      <a href="{{ base }}/" class="flex items-center gap-2 text-[15px] font-semibold tracking-tight" data-testid="brand">
+        {{ ui.live_dot(10, pulse=False) }}theswarm
+      </a>
+      <span class="font-mono text-[11px] text-faint">v3</span>
     </div>
 
-    <footer class="sidebar-footer">
-      <div class="sidebar-status" id="sse-status" title="Server-sent events stream — used for live cycle updates">
-        <span class="status-dot connecting"></span>
-        <span class="sidebar-status-label">Live updates: connecting…</span>
-      </div>
-      <button type="button"
-              id="notifications-toggle"
-              class="sidebar-notify"
-              data-state="idle"
-              title="Enable browser notifications for new demos"
-              hidden>
-        <span data-field="icon">🔔</span>
-        <span class="sidebar-notify-label" data-field="label">Notify me</span>
-      </button>
-    </footer>
+    <div class="flex md:flex-col flex-wrap gap-0.5">
+      {{ ui.rail_item('Home', base ~ '/', active=(shell.active == 'home'), icon='home', testid='rail-home') }}
+      {% if shell.is_member %}{{ ui.rail_item('Your requests', base ~ '/requests', active=(shell.active == 'requests'), icon='inbox', testid='rail-requests') }}{% elif shell.actor %}{{ ui.rail_item('Requests', base ~ '/requests', active=(shell.active == 'requests'), icon='inbox', badge=(shell.requests_waiting if shell.requests_waiting else ''), testid='rail-requests') }}{% endif %}
+    </div>
 
-    <div class="sidebar-resize-handle" id="sidebar-resize-handle" aria-hidden="true" title="Drag to resize"></div>
-  </aside>
+    {% if shell.is_member and shell.customer %}
+    <div class="flex items-center gap-2.5 p-2 border border-line rounded-lg" data-testid="rail-member-customer">
+      {{ ui.customer_mark(shell.customer.initial, 24) }}
+      <span class="flex flex-col leading-tight min-w-0"><span class="font-semibold text-[13px] truncate">{{ shell.customer.name }}</span><span class="text-[11px] text-faint">your workspace</span></span>
+    </div>
+    {% endif %}
 
-  <main class="app-main">
-    <div class="container">
-      <div id="readiness-banner" class="readiness-banner" hidden>
-        <strong>Setup incomplete.</strong>
-        <span data-field="summary"></span>
-        <a data-field="link" href="{{ base }}/health/ready/page">View details →</a>
-        <button type="button" class="readiness-banner-dismiss" aria-label="Dismiss" data-action="dismiss">×</button>
+    {% if shell.customers %}
+    <div class="flex flex-col gap-1.5" data-testid="rail-customers">
+      <div class="text-[11px] font-medium tracking-[0.06em] uppercase text-faint px-2">{% if shell.is_member %}Projects{% else %}Customers{% endif %}</div>
+      {% for c in shell.customers %}
+      <div class="flex flex-col gap-0.5">
+        {% if not shell.is_member %}
+        <a href="{{ c.href }}" data-testid="rail-customer" class="flex items-center gap-2.5 h-8 px-2 rounded-md text-[13px] font-medium {% if shell.active == 'customer:' ~ c.slug %}bg-raised{% else %}hover:bg-raised{% endif %}">
+          {{ ui.customer_mark(c.initial) }}<span class="truncate">{{ c.name }}</span>
+        </a>
+        {% endif %}
+        <div class="flex md:flex-col flex-wrap gap-0.5">
+          {% for p in c.projects %}
+          <a href="{{ p.href }}" data-testid="rail-project" data-running="{{ 'true' if p.running else 'false' }}"
+             class="flex items-center gap-2.5 h-7 rounded-md text-[13px] {% if shell.is_member %}px-2{% else %}pl-9 pr-2{% endif %} {% if shell.active == p.full_name %}bg-raised text-ink font-medium{% else %}text-muted hover:text-ink hover:bg-raised{% endif %}">
+            <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if p.running %}bg-live live-dot{% else %}bg-line-strong{% endif %}" aria-hidden="true"></span>
+            <span class="truncate">{{ p.name }}</span>
+          </a>
+          {% endfor %}
+        </div>
       </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="hidden md:flex mt-auto flex-col gap-0.5 border-t border-line pt-2.5">
+      {% if not shell.is_member %}
+      {{ ui.rail_item('Settings', base ~ '/settings/customers', active=(shell.active == 'settings'), icon='settings', testid='rail-settings') }}
+      <div class="flex items-center gap-2.5 h-8 px-2 text-[13px] text-muted" data-testid="claude-chip" data-status="{{ shell.claude.status }}">
+        <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if shell.claude.status == 'ok' %}bg-ok{% elif shell.claude.status == 'unknown' %}bg-line-strong{% else %}bg-bad{% endif %}" aria-hidden="true"></span>
+        <span class="truncate">{{ shell.claude.label }}</span>
+        {% if shell.claude.detail %}<span class="ml-auto font-mono text-[11px] text-faint truncate">{{ shell.claude.detail }}</span>{% endif %}
+      </div>
+      {% endif %}
+      {% if shell.actor %}
+      <div class="flex items-center gap-2.5 h-9 px-2 text-[13px]">
+        <span class="w-[22px] h-[22px] rounded-full bg-raised border border-line-strong shrink-0" aria-hidden="true"></span>
+        <span class="flex flex-col leading-tight min-w-0"><span class="font-medium truncate" data-testid="actor">{{ shell.actor.login }}</span><span class="text-[11px] text-faint">{{ shell.actor.role }}</span></span>
+        <form method="post" action="{{ base }}/logout" class="ml-auto">
+          <button type="submit" class="text-[12px] text-faint hover:text-ink cursor-pointer">Sign out</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </nav>
+
+  <main class="flex-1 min-w-0 flex flex-col">
+    <header class="min-h-[52px] flex items-center gap-4 px-7 border-b border-line flex-wrap py-2">
+      <nav aria-label="Breadcrumb" class="text-[13px] text-muted flex items-center gap-2 min-w-0" data-testid="crumbs">
+        {% block crumbs %}<span class="text-ink font-medium">{% block crumb %}TheSwarm{% endblock %}</span>{% endblock %}
+      </nav>
+      <div class="ml-auto flex items-center gap-2">
+        {% block actions %}{% block nav_extra %}{% endblock %}{% endblock %}
+        <button type="button" data-theme-toggle aria-label="Toggle dark mode"
+                class="w-[30px] h-[30px] inline-flex items-center justify-center border border-line-strong rounded-md bg-surface text-muted hover:text-ink cursor-pointer">
+          {{ ui.ui_icon('moon', 14) }}
+        </button>
+      </div>
+    </header>
+    <div class="p-7 w-full {% block content_class %}max-w-[1160px]{% endblock %}">
       {% block content %}{% endblock %}
     </div>
   </main>
-
-  <div id="demo-toast-host" class="demo-toast-host" aria-live="polite" aria-atomic="false"></div>
-  {% include "partials/_demo_toast.html" %}
-
-  <script src="{{ base }}/static/js/sidebar.js?v={{ asset_v }}" defer></script>
-  <script src="{{ base }}/static/js/sse.js?v={{ asset_v }}" defer></script>
-  <script src="{{ base }}/static/js/notifications.js?v={{ asset_v }}" defer></script>
-  <script src="{{ base }}/static/js/todays-demo.js?v={{ asset_v }}" defer></script>
-  <script src="{{ base }}/static/js/readiness-banner.js?v={{ asset_v }}" defer></script>
+</div>
+<script>
+  (function () {
+    var button = document.querySelector("[data-theme-toggle]");
+    if (!button) return;
+    button.addEventListener("click", function () {
+      var root = document.documentElement;
+      var dark = root.getAttribute("data-theme") === "dark" ||
+        (!root.getAttribute("data-theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      var next = dark ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("swarm-theme", next); } catch (e) {}
+    });
+  })();
+</script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

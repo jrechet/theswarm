@@ -19,8 +19,8 @@ Claude Code specifics on top of the shared guide above:
   disabled on the repo: `gh pr merge <n> --squash` once CI is green. A ~2 min
   window of 404s during the rolling update is normal — wait for the task to be
   `Running` and `/health` to answer 200 before judging.
-- After touching `templates/v3/**`, `templates/v2/**`, `templates/login.html`
-  or `static/v3/input.css`, run `bash scripts/build-css.sh` (fetches the
+- After touching `templates/**` or `static/v3/input.css`, run
+  `bash scripts/build-css.sh` (fetches the
   pinned Tailwind binary into `./tmp/bin`). `static/v3/app.css` is generated
   and gitignored; the Docker `css` stage builds it for prod. The V3 plan and
   its milestones: `docs/plans/2026-10-v3-one-product.md`; the approved

@@ -70,11 +70,11 @@ async def test_the_cycle_s_report_carries_qa_s_video():
 async def test_the_repo_card_then_has_a_video_url():
     from types import SimpleNamespace
 
-    from theswarm.presentation.web.routes import v2
+    from theswarm.presentation.web.routes import common
 
     report = ReportGenerator().generate(_cycle(), videos=[VIDEO])
 
-    card = v2._demo_card(SimpleNamespace(base_path="/swarm"), report)
+    card = common._demo_card(SimpleNamespace(base_path="/swarm"), report)
 
     assert card["video_url"].startswith("/swarm/artifacts/")
     assert card["video_url"].endswith("recording_cf0ac328.webm")

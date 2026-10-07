@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Readiness — TheSwarm{% endblock %}
+{% block crumbs %}
+  <span class="text-ink font-medium">Readiness</span>
+  <span class="text-line-strong">/</span>
+  <span>every component a cycle needs</span>
+{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-6" data-testid="readiness" data-status="{{ data.status }}">
+  <div class="flex flex-wrap items-center gap-4">
+    <div class="flex flex-col gap-1 flex-[1_1_300px]">
+      <h1 class="m-0 text-[20px] font-semibold tracking-tight">Readiness</h1>
+      <span class="text-[13px] text-muted">Pre-flight: every component a cycle needs, read now and again every 8 seconds. Up <span class="font-mono" data-uptime>{{ (data.uptime_seconds / 60) | round | int }} min</span>.</span>
+    </div>
+    {% set kind = 'verified' if data.status == 'ok' else ('broken' if data.status == 'error' else 'unverified') %}
+    <span data-overall>{{ ui.chip(data.status | capitalize, kind, testid='readiness-status') }}</span>
+  </div>
+  <div class="bg-surface border border-line rounded-[10px] overflow-hidden" id="ready-grid" data-testid="ready-grid">
+    {% for name, c in data.checks.items() %}
+    <div class="flex flex-wrap items-baseline gap-3 px-4 py-2.5 border-t border-line first:border-t-0 text-[13px]" data-testid="ready-row" data-check="{{ name }}" data-status="{{ c.status }}">
+      <span class="w-2 h-2 rounded-full shrink-0 relative top-px {% if c.status == 'ok' %}bg-ok{% elif c.status == 'warn' %}bg-live{% elif c.status == 'error' %}bg-bad{% else %}bg-line-strong{% endif %}" aria-hidden="true"></span>
+      <span class="font-medium w-[140px] shrink-0">{{ name | replace('_', ' ') | capitalize }}</span>
+      <span class="text-muted flex-[1_1_320px] min-w-0 break-words">{{ c.detail }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="m-0 text-[12px] text-faint">The same facts as JSON: <a href="{{ base }}/health/ready" class="font-mono text-ink hover:underline">/health/ready</a>, and the liveness probe at <a href="{{ base }}/health" class="font-mono text-ink hover:underline">/health</a>.</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  (function () {
+    var grid = document.getElementById("ready-grid");
+    var page = document.querySelector("[data-testid=readiness]");
+    if (!grid || !page) return;
+    var colors = {ok: "bg-ok", warn: "bg-live", error: "bg-bad"};
+    function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+    function draw(data) {
+      page.dataset.status = data.status;
+      var overall = document.querySelector("[data-overall] [data-testid=readiness-status]");
+      if (overall) overall.lastChild.textContent = cap(data.status);
+      var up = document.querySelector("[data-uptime]");
+      if (up) up.textContent = Math.round(data.uptime_seconds / 60) + " min";
+      grid.innerHTML = "";
+      Object.keys(data.checks).forEach(function (name) {
+        var c = data.checks[name];
+        var row = document.createElement("div");
+        row.className = "flex flex-wrap items-baseline gap-3 px-4 py-2.5 border-t border-line first:border-t-0 text-[13px]";
+        row.dataset.testid = "ready-row"; row.dataset.check = name; row.dataset.status = c.status;
+        var dot = document.createElement("span");
+        dot.className = "w-2 h-2 rounded-full shrink-0 relative top-px " + (colors[c.status] || "bg-line-strong");
+        var label = document.createElement("span"); label.className = "font-medium w-[140px] shrink-0"; label.textContent = cap(name.replace(/_/g, " "));
+        var detail = document.createElement("span"); detail.className = "text-muted flex-[1_1_320px] min-w-0 break-words"; detail.textContent = c.detail || "";
+        row.appendChild(dot); row.appendChild(label); row.appendChild(detail); grid.appendChild(row);
+      });
+    }
+    setInterval(function () {
+      fetch("{{ base }}/health/ready", {headers: {accept: "application/json"}}).then(function (r) { return r.json(); }).then(draw).catch(function () {});
+    }, 8000);
+  })();
+</script>
+{% endblock %}

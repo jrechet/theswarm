@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}{{ repo_name }} — what the swarm learned{% endblock %}
+{% block crumbs %}
+  <a href="{{ base }}/r/{{ owner }}/{{ repo_name }}" class="text-muted hover:text-ink">{{ repo_name }}</a>
+  <span class="text-line-strong">/</span>
+  <span class="text-ink font-medium">Memory</span>
+{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-7" data-testid="memory-page">
+  <div class="flex flex-col gap-1">
+    <h1 class="m-0 text-[20px] font-semibold tracking-tight">What the swarm learned</h1>
+    <span class="text-[13px] text-muted">{{ total }} entr{{ 'y' if total == 1 else 'ies' }} in <span class="font-mono">AGENT_MEMORY.jsonl</span>, written by the agents after each cycle on <span class="font-mono">{{ owner }}/{{ repo_name }}</span>.</span>
+  </div>
+  {% if error %}
+  <p class="m-0 text-[13px] text-bad border border-bad/40 bg-bad-wash rounded-[10px] px-4 py-3" data-testid="memory-error">Could not read the memory: {{ error }}</p>
+  {% endif %}
+  {% for group in groups %}
+  <section class="flex flex-col gap-3" aria-labelledby="mem-{{ group.key }}" data-testid="memory-{{ group.key }}">
+    {{ ui.section_label(group.label, group.entries | length ~ ' entr' ~ ('y' if group.entries | length == 1 else 'ies'), id='mem-' ~ group.key) }}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for entry in group.entries %}
+      <div class="flex flex-col gap-1 px-4 py-3 border-t border-line first:border-t-0">
+        <p class="m-0 text-[14px] leading-relaxed">{{ entry.content }}</p>
+        <p class="m-0 font-mono text-[11px] text-faint">
+          {%- if entry.timestamp %}{{ entry.timestamp[:10] }}{% endif %}
+          {%- if entry.confidence is defined %} · confidence {{ (entry.confidence * 100) | round | int }}%{% endif %}
+          {%- if entry.source %} · {{ entry.source }}{% endif %}
+        </p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+  {% if not groups and not error %}
+  <p class="m-0 text-[13px] text-muted px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px]">Nothing learned yet — the first cycle writes the first entry.</p>
+  {% endif %}
+</div>
+{% endblock %}

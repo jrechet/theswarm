@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}#{{ issue.number }} {{ issue.title }} — TheSwarm{% endblock %}
+{% block crumbs %}
+  <a href="{{ urls.customer }}" class="text-muted hover:text-ink">{{ customer.name }}</a>
+  <span class="text-line-strong">/</span>
+  <a href="{{ urls.page }}" class="text-muted hover:text-ink">{{ project.name }}</a>
+  <span class="text-line-strong">/</span>
+  <span class="text-ink font-medium font-mono">#{{ issue.number }}</span>
+{% endblock %}
+{% block actions %}
+  <a href="{{ issue.url }}" class="text-[12px] text-muted hover:text-ink">GitHub ↗</a>
+  {% if building %}
+  {{ ui.btn('Open the theater', href=cycle_href, kind='secondary', icon='eye', testid='follow') }}
+  {% elif not issue.closed %}
+  <form method="post" action="{{ play_url }}">{{ ui.btn('Play', kind='primary', icon='play', type='submit', testid='play') }}</form>
+  {% endif %}
+{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-6" data-testid="feature-page" data-number="{{ issue.number }}">
+
+  <div class="flex flex-col gap-2">
+    <div class="flex flex-wrap items-center gap-3">
+      <h1 class="m-0 text-[22px] font-semibold tracking-tight"><span class="font-mono text-faint font-medium text-[18px]">#{{ issue.number }}</span> {{ issue.title }}</h1>
+      {{ ui.chip(issue.label, issue.kind, pulse=(issue.kind == 'running'), testid='feature-status') }}
+    </div>
+    {% if children %}
+    <span class="text-[13px] text-muted">{{ done }} of {{ children | length }} sub-task{{ 's' if children | length != 1 }} done{% if building %} · the swarm is on it{% endif %}</span>
+    {% endif %}
+  </div>
+
+  {% if error %}<p class="m-0 text-[13px] text-bad" data-testid="feature-error">{{ error }}</p>{% endif %}
+
+  <div class="grid gap-3 items-start" style="grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr))">
+    <section aria-labelledby="body-title" class="flex flex-col gap-2 p-4 bg-surface border border-line rounded-[10px]">
+      <h2 id="body-title" class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">What was asked</h2>
+      {% if issue.body %}<div class="text-[14px] leading-relaxed whitespace-pre-wrap break-words" data-testid="feature-body">{{ issue.body }}</div>
+      {% else %}<p class="m-0 text-[13px] text-faint">The title is the whole brief.</p>{% endif %}
+    </section>
+
+    <section aria-labelledby="tasks-title" class="flex flex-col gap-0 p-4 pb-1 bg-surface border border-line rounded-[10px]">
+      <h2 id="tasks-title" class="m-0 pb-2 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">The feature, piece by piece</h2>
+      {% for child in children %}
+      <a href="{{ child.href }}" data-testid="sub-task" data-status="{{ child.status }}" class="flex items-start gap-2.5 py-2.5 border-t border-line text-[13px] hover:bg-raised -mx-1 px-1 rounded">
+        <span class="w-4 h-4 rounded-full border-[1.5px] shrink-0 mt-0.5 {% if child.status == 'done' %}border-ok bg-ok{% elif child.status == 'in-progress' %}border-live bg-live{% elif child.status == 'review' %}border-info bg-info-wash{% elif child.status == 'dropped' %}border-line-strong bg-raised{% else %}border-line-strong{% endif %}" aria-hidden="true"></span>
+        <span class="flex flex-col gap-0.5 min-w-0">
+          <span><span class="font-mono text-faint text-[12px]">#{{ child.number }}</span> {{ child.title }}</span>
+          <span class="text-[12px] text-muted">{{ child.label }}</span>
+        </span>
+      </a>
+      {% else %}
+      <p class="m-0 py-3 text-[13px] text-faint border-t border-line">Not broken down yet — Play lets the TechLead cut it into sub-tasks.</p>
+      {% endfor %}
+    </section>
+  </div>
+
+  <section aria-labelledby="cycles-title" class="flex flex-col p-4 pb-1.5 bg-surface border border-line rounded-[10px]" data-testid="feature-cycles">
+    <div class="flex items-baseline gap-2.5 pb-2.5">
+      <h2 id="cycles-title" class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">Cycles on this feature</h2>
+      <span class="text-[12px] text-faint">{{ cycles | length }}</span>
+    </div>
+    {% for c in cycles %}
+    <a href="{{ c.href }}" class="flex flex-wrap items-center gap-3 py-2.5 border-t border-line text-[13px] hover:bg-raised -mx-1 px-1 rounded">
+      <span class="font-mono text-[12px] text-faint w-[72px]">{{ c.short }}</span>
+      <span class="flex-1 min-w-0 truncate text-muted">{{ c.when }}</span>
+      {{ ui.chip(c.label, c.kind, pulse=(c.kind == 'running')) }}
+      <span class="font-mono text-[12px] text-muted w-[120px] text-right">{{ c.duration }}{% if c.cost %} · {{ c.cost }}{% endif %}</span>
+      {% if c.demo_url %}<a href="{{ c.demo_url }}" class="text-[12px] font-medium text-live-deep" data-testid="feature-demo">Demo →</a>{% endif %}
+    </a>
+    {% else %}
+    <p class="m-0 py-3 text-[13px] text-faint border-t border-line">No cycle yet.</p>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

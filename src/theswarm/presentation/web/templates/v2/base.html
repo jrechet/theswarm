@@ -1,7 +1,0 @@
-{#- V2 pages wear the V3 shell (docs/plans/2026-10-v3-one-product.md, M1):
-    their content renders unchanged in the V3 content area, with the V2
-    colour names aliased onto the V3 tokens in static/v3/input.css. M3 and
-    M4 replace these pages; M6 deletes this file. -#}
-{% extends "v3/base.html" %}
-{# The breadcrumb is the page's title without the product's name. #}
-{% block crumb %}{{ self.title() | replace(' — TheSwarm', '') | replace('TheSwarm — ', '') }}{% endblock %}

@@ -31,22 +31,44 @@ Two packages in `src/`: `theswarm` (agents, cycle, web) and `theswarm_common`
 - `infrastructure/` — SQLite (aiosqlite) repos, Playwright recorder, scheduler, webhooks
 - `presentation/` — CLI (argparse), web (FastAPI + Jinja + SSE), TUI (Textual)
 
-Three UI generations coexist in `presentation/web/`, and V3 is the one being
-built (`docs/plans/2026-10-v3-one-product.md`, the owner's decisions of
-2026-10-06: one product for several customers whose members sign in and
-watch; the older two are deleted at its M6):
-- **V3** — `templates/v3/` (`base.html` the shell: one rail, one top bar, the
-  content; `bare.html` the doors; `_ui.html` the components as macros;
-  `home.html`) on the tokens of `static/v3/input.css` (cool neutrals, light
-  and dark, Geist and Geist Mono vendored, amber is the brand and the live
-  signal only, the V2 colour names aliased onto the V3 tokens until M6).
-  The rail is built once per HTML request by `shell.py`
-  (`ShellMiddleware` → `current_shell()`, handed to every template as
-  `shell`): home, the customers and their projects (Internal until M2),
-  the project the page is about, Claude's health, who is signed in; a
-  failing query leaves an empty rail, never an error page. Since M1 every
-  V2 page renders inside this shell (`v2/base.html` extends it) and the
-  "Legacy" link is gone — V1 is reachable by URL only until M6.
+One generation of UI lives in `presentation/web/` since M6 of
+`docs/plans/2026-10-v3-one-product.md` (the owner's decisions of 2026-10-06:
+one product for several customers whose members sign in and watch; V1's
+28 route modules, 105 templates and 48 assets and V2's module, templates
+and aliases were deleted on 2026-10-07):
+- **The system and the shell (M1)** — `templates/` (`base.html` the shell:
+  one rail, one top bar, the content; `bare.html` the doors; `_ui.html` the
+  components as macros) on the tokens of `static/v3/input.css` (cool
+  neutrals, light and dark, Geist and Geist Mono vendored, amber is the
+  brand and the live signal only; `bash scripts/build-css.sh` after a
+  template change, the `css` Docker stage in prod). The rail is built
+  once per HTML request by `shell.py` (`ShellMiddleware` → `current_shell()`,
+  handed to every template as `shell`): home, the requests waiting, the
+  customers and their projects, the project the page is about, Claude's
+  health, who is signed in; a failing query leaves an empty rail, never an
+  error page.
+- **The route modules**: `routes/home.py` (`/`), `customers.py`
+  (`/settings/customers`, `/invite/{token}`, `/c/{slug}`), `project.py`
+  (`/c/{slug}/p/{name}`, its features, `/r/{owner}/{name}` → there, the
+  memory page `/r/{owner}/{name}/memory`), `theater.py` (`/cycles/{id}`, its
+  stage, the resume), `player.py` (`/demos/{id}`, `/d/{short}`),
+  `requests_routes.py` (`/requests`), `instance_settings.py`
+  (`/settings/instance`: the vault-backed keys and URLs V1's settings page
+  wrote), `ops.py` (`/api/devops`, `/ops/refresh`), `health.py`
+  (`/health`, `/health/ready`, `/health/ready/page` — the readiness page
+  refreshes itself with `fetch`, HTMX is gone), `github_setup.py` (the
+  GitHub doors on the bare layout), `auth_routes.py`, `api.py`,
+  `webhooks.py`, `artifacts.py`, `metrics.py` (Prometheus text, behind the
+  wall — a machine endpoint, kept). What the pages share is
+  `routes/common.py` (the demo card, the board's truth, the project
+  registry, the running cycle, Play — `github_app` lives there so one
+  patch target covers every page) and the theater's data is
+  `routes/stage.py` (the stations, the flow graph from the announced
+  phases, the stage context, a finished cycle drawn from its row, the
+  trace link). The `SSEHub` and `/api/events` stay (the API is the
+  harness's contract); no page listens to it — the theater polls
+  `/cycles/{id}/stage` every 3 s. V1's story approve/reject flows went with
+  V1: nothing publishes `StoryApproved`/`StoryRejected` any more.
   **Customers and members (M2)**: migration v033 (`customers`, `members`,
   `projects.customer_id` — every project that existed went to the customer
   **Internal**), `domain/customers/`, `infrastructure/persistence/customer_repo.py`,
@@ -60,7 +82,7 @@ watch; the older two are deleted at its M6):
   knows members** (`auth.subject_parts`, `MEMBER_ALLOWED`): a member
   opens `/`, which sends them to their customer, `/c/{their slug}` and
   `/logout`; everything else — a project page, the settings, `/api/*`, a
-  theater — is refused (403, `v3/refused.html`), and a revoked member is
+  theater — is refused (403, `refused.html`), and a revoked member is
   sent to the door with the cookie taken away. The rail shows a member
   one customer, no settings, no Claude health. The first customer is
   TLphone (`jrechet/espace-client`, owner 2026-10-06).
@@ -89,7 +111,7 @@ watch; the older two are deleted at its M6):
   and none failing verified, else unverified), the video QA recorded,
   what QA measured, a story per PR, who can see it; `/demos/{id}/play`
   redirects there; `/d/{short}` is the public read-only page outside the
-  wall (`v3/demo_public.html`, the bare layout). V1's player, its JS and
+  wall (`demo_public.html`, the bare layout). V1's player, its JS and
   its speed test are gone; V1's demos list and compare stay until M6.
   **What a member sees (M5)**: a **request** is the one thing a customer
   writes — migration v034 (`requests`), `domain/customers/requests.py`
@@ -108,7 +130,7 @@ watch; the older two are deleted at its M6):
   the cycle's last announced phase onto Planning · Building · Checking ·
   Delivered — the latest demos, their requests, three counts), their
   `/c/{slug}/p/{name}/f/{n}` the same four steps and the demo
-  (`v3/feature_member.html`), their `/demos/{id}` the player without the
+  (`feature_member.html`), their `/demos/{id}` the player without the
   cost, the cycle or the public link (`player.member`); the owner sees
   any of it as they do with `?as=member`. The wall (`MEMBER_ALLOWED`)
   opens those addresses to a member and nothing more — a project page,
@@ -123,42 +145,6 @@ watch; the older two are deleted at its M6):
   page after page — a theater's first load took tens of seconds on
   concert-tour-app and the demo's wait timed out (2026-10-07); a failed
   read is never kept.
-- **V2** — `routes/v2.py` + `templates/v2/` on Tailwind tokens (`static/v2/input.css`,
-  Plex fonts vendored, no CDN). Owns `/` (repo picker fed by the GitHub App
-  installation plus legacy registered projects), `/r/{owner}/{name}` (composer →
-  GitHub issue, issue board, ▶ Play — the composer lands on `?new=N` and the page
-  reads that issue by number, highlighted: GitHub's list trails a creation by
-  seconds and the feature just written was missing; the board groups by what is
-  happening, not by the labels: Building is the running cycle's issue and its
-  sub-tasks, In review an issue an open PR names (`[#N]`/`Closes #N`, one
-  `get_open_pr_briefs` listing), and the rest of those labels is Stalled —
-  concert-tour-app read "Building 17" with nothing running; a failed PR read
-  keeps the labels' word; `scripts/clean_stale_labels.py` puts such labels
-  back in line — closed when merged, review when a PR is open, not planned
-  before `--close-before`, else ready, each with a comment; dry run by
-  default, never while a cycle runs on the repo), `/c/{cycle_id}` (the theater: agent rail from
-  `ProgressBridge` live messages, pinned issue breakdown via
-  `application/services/pinned_issue.py` — a sub-task closed as completed
-  is done whatever label it kept, one closed as not planned is "dropped";
-  lineup-add's #454, closed "already satisfied" with no status label, read
-  as unbuilt and the finished story as "2/3 done" — feed from the cycle event store — the
-  agents' `AgentActivity`, fragments of streamed code left out
-  (`progress_bridge.is_telling`; it read Sprint D's AgentThought, which nothing
-  emits, and said "Nothing yet" on every cycle until 2026-09-28); the
-  page polls `/c/{id}/stage` every 3 s and only swaps the DOM on change; **it
-  ends on the demo**: once the cycle's report is stored, the stage shows it —
-  the video, the counts, "Watch the demo →" to the player — and a completed
-  cycle whose report has not landed yet (it is saved just after the status)
-  keeps the page polling, `data-demo-pending`, two minutes at most).
-- **V1** — everything else (`/dashboard`, `/projects/`, `/cycles/`, HTMX
-  fragments, the 14 role surfaces). Demoted, not deleted. The theater draws a
-  *finished* cycle the in-memory tracker no longer knows from its row —
-  stations done, feed from the event store, demo card from the report store,
-  pinned issue from `cycles.issue_number` (v032, written by `CycleStarted`);
-  before, every deploy sent those links to the V1 archive and their demo was
-  gone. Only a row still `running` that nothing runs goes to `/cycles/{id}`
-  (archive view).
-
 `presentation/web/auth.py` is the wall (pure ASGI, fail-safe closed); doors are
 `routes/auth_routes.py` (access key + GitHub OAuth) and the GitHub App setup in
 `routes/github_setup.py`.

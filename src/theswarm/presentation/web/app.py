@@ -56,10 +56,10 @@ from theswarm.domain.cycles.events import (
     CycleStarted,
     PhaseChanged,
 )
-from theswarm.presentation.web.routes import analyst, api, architect, artifacts, autonomy_config, chat, chief_of_staff, cycles, dashboard, demos, designer, dev_rigour, features, fragments, health, hitl, metrics, product, projects, prompt_library, qa, refactor_programs, release, reports, scout, security, semantic_memory, settings as settings_route, sre, team, techlead, webhooks, writer
+from theswarm.presentation.web.routes import api, artifacts, health, metrics, webhooks
 from theswarm.presentation.web.auth import AuthWallMiddleware
 from theswarm.presentation.web.shell import ShellMiddleware, current_shell
-from theswarm.presentation.web.routes import auth_routes, customers, github_setup, ops, player, project, requests_routes, theater, v2
+from theswarm.presentation.web.routes import auth_routes, customers, github_setup, home, instance_settings, ops, player, project, requests_routes, theater
 from theswarm.presentation.web.sse import SSEHub
 
 _HERE = Path(__file__).parent
@@ -1011,46 +1011,19 @@ def create_web_app(
         app.state.delete_schedule_handler = DeleteScheduleHandler(schedule_repo)
 
     # Routes
-    app.include_router(theater.router)  # V3 M4: /cycles/{id}, the theater; before V1's cycles pages
+    app.include_router(theater.router)  # V3 M4: /cycles/{id}, the theater
     app.include_router(project.router)  # V3 M3: /c/{slug}/p/{name}, its features, /r/{owner}/{name} → there
     app.include_router(customers.router)  # V3 M2: /settings/customers, /invite/{token}, /c/{slug}
     app.include_router(requests_routes.router)  # V3 M5: /requests — the inbox, a member's list and composer
     app.include_router(ops.router)  # DevOps D1: /api/devops, /ops/refresh
-    app.include_router(v2.router)  # owns `/` — the V2 flow is the front door
-    app.include_router(dashboard.router)
-    app.include_router(projects.router)
-    app.include_router(cycles.router)
-    app.include_router(team.router)
-    app.include_router(chat.router)
-    app.include_router(hitl.router)
-    app.include_router(product.router)
-    app.include_router(techlead.router)
-    app.include_router(dev_rigour.router)
-    app.include_router(qa.router)
-    app.include_router(scout.router)
-    app.include_router(designer.router)
-    app.include_router(security.router)
-    app.include_router(sre.router)
-    app.include_router(analyst.router)
-    app.include_router(writer.router)
-    app.include_router(release.router)
-    app.include_router(architect.router)
-    app.include_router(chief_of_staff.router)
-    app.include_router(refactor_programs.router)
-    app.include_router(semantic_memory.router)
-    app.include_router(prompt_library.router)
-    app.include_router(autonomy_config.router)
+    app.include_router(instance_settings.router)  # V3 M6: /settings/instance — the vault-backed keys and URLs
+    app.include_router(home.router)  # owns `/`: the owner's home, a member's customer
     app.include_router(health.router)
-    app.include_router(reports.router)
     app.include_router(webhooks.router)
     app.include_router(artifacts.router)
-    app.include_router(demos.router)  # V1's list and compare, until M6
     app.include_router(player.router)  # V3 M4: /demos/{id}, /demos/{id}/play → there
     app.include_router(player.public_router)  # /d/{short}, outside the wall
-    app.include_router(metrics.router)
-    app.include_router(features.router)
-    app.include_router(fragments.router)
-    app.include_router(settings_route.router)
+    app.include_router(metrics.router)  # Prometheus text, behind the wall — a machine endpoint, not a page
     app.include_router(api.router)
     app.include_router(auth_routes.router)
     app.include_router(github_setup.router)

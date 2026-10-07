@@ -58,7 +58,7 @@ async def member_home(request: Request) -> RedirectResponse | None:
 
 def _refused(request: Request, actor: Actor | None) -> HTMLResponse:
     base = request.app.state.base_path
-    return request.app.state.templates.TemplateResponse("v3/refused.html", {
+    return request.app.state.templates.TemplateResponse("refused.html", {
         "home": f"{base}/", "name": actor.login if actor else "",
     }, status_code=403)
 
@@ -98,7 +98,7 @@ async def _customers_rows(state) -> list[dict]:
 @router.get("/settings/customers", response_class=HTMLResponse)
 async def settings_customers(request: Request, error: str = "") -> HTMLResponse:
     state = request.app.state
-    return state.templates.TemplateResponse("v3/settings_customers.html", {
+    return state.templates.TemplateResponse("settings_customers.html", {
         "rows": await _customers_rows(state), "error": error,
     })
 
@@ -110,7 +110,7 @@ async def create_customer(request: Request, name: str = Form(default="")):
     try:
         customer = await state.customer_service.create(name)
     except CustomerError as exc:
-        return state.templates.TemplateResponse("v3/settings_customers.html", {
+        return state.templates.TemplateResponse("settings_customers.html", {
             "rows": await _customers_rows(state), "error": str(exc),
         }, status_code=400)
     return RedirectResponse(f"{base}/settings/customers/{customer.slug}", status_code=303)
@@ -140,7 +140,7 @@ async def settings_customer(request: Request, slug: str, error: str = "") -> HTM
     if customer is None:
         return HTMLResponse("No such customer", status_code=404)
     return state.templates.TemplateResponse(
-        "v3/settings_customer.html", await _customer_context(request, customer, error=error),
+        "settings_customer.html", await _customer_context(request, customer, error=error),
     )
 
 
@@ -155,7 +155,7 @@ async def assign_project(request: Request, slug: str, full_name: str = Form(defa
         await state.customer_service.assign_project(full_name, customer)
     except ValueError as exc:
         return state.templates.TemplateResponse(
-            "v3/settings_customer.html",
+            "settings_customer.html",
             await _customer_context(request, customer, error=f"Not a repository name: {exc}"),
             status_code=400,
         )
@@ -175,13 +175,13 @@ async def invite_member(
         member, token = await state.customer_service.invite(customer, email, display_name)
     except CustomerError as exc:
         return state.templates.TemplateResponse(
-            "v3/settings_customer.html",
+            "settings_customer.html",
             await _customer_context(request, customer, error=str(exc)), status_code=400,
         )
     invitation_url = f"{_external_base(request)}/invite/{token}"
     log.info("Customer %s: invited %s (member %s)", customer.slug, member.email, member.id)
     return state.templates.TemplateResponse(
-        "v3/settings_customer.html",
+        "settings_customer.html",
         await _customer_context(request, customer, invited=member, invitation_url=invitation_url),
     )
 
@@ -255,7 +255,7 @@ async def customer_page(request: Request, slug: str):
     }
     if member_view:
         context.update(await member_overview(state, customer, projects))
-    return state.templates.TemplateResponse("v3/customer.html", context)
+    return state.templates.TemplateResponse("customer.html", context)
 
 
 # ── A member's overview (V3 M5) ──────────────────────────────────────
@@ -277,10 +277,10 @@ async def _feature_title(full_name: str, number: int | None) -> str:
 
 def _demo_row(state, report, project_name: str) -> dict:
     """A demo as a member's list shows it: the title, the verdict, when."""
-    from theswarm.presentation.web.routes import player, v2
+    from theswarm.presentation.web.routes import common, player
 
     base = state.base_path
-    card = v2._demo_card(state, report)
+    card = common._demo_card(state, report)
     verdict = player.verdict_of(report.quality_gates)
     label, kind = {"verified": ("Verified", "verified"), "broken": ("Broken", "broken")}.get(verdict, ("Unverified", "unverified"))
     title = report.stories[0].title if report.stories else f"Cycle {str(report.cycle_id)[:8]}"
@@ -300,7 +300,7 @@ async def member_overview(state, customer, projects) -> dict:
     never a link into the theater."""
     from theswarm.application.services.progress_bridge import get_phase_history
     from theswarm.presentation.web.member_steps import stage_for
-    from theswarm.presentation.web.routes import v2
+    from theswarm.presentation.web.routes import common
 
     base = state.base_path
     building: list[dict] = []
@@ -309,7 +309,7 @@ async def member_overview(state, customer, projects) -> dict:
     report_repo = getattr(state, "report_repo", None)
     for project in projects:
         full_name = str(project.repo)
-        record = v2._running_for_repo(full_name)
+        record = common._running_for_repo(full_name)
         if record is not None:
             history = get_phase_history(record.id)
             phase = history[-1].get("phase", "") if history else ""

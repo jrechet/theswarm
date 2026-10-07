@@ -229,7 +229,7 @@ class TestTheComposer:
         client, app = web
         ctx = _github(created={"number": 15})
         try:
-            with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle",
+            with patch("theswarm.presentation.web.routes.common.start_targeted_cycle",
                        new=AsyncMock(return_value=type("R", (), {"id": "cyc123cyc123"})())) as start:
                 r = await client.post(f"{PAGE}/features", data={"body": "Export invoices as PDF", "play": "1"})
         finally:
@@ -245,7 +245,7 @@ class TestTheComposer:
 
     async def test_play_on_a_feature(self, web):
         client, app = web
-        with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle",
+        with patch("theswarm.presentation.web.routes.common.start_targeted_cycle",
                    new=AsyncMock(return_value=type("R", (), {"id": "cyc123cyc123"})())) as start:
             r = await client.post(f"{PAGE}/features/11/play")
         assert r.status_code == 303 and r.headers["location"] == "/swarm/cycles/cyc123cyc123"

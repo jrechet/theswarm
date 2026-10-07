@@ -36,16 +36,8 @@ async def client(app):
 class TestDashboardRoutes:
     """Dashboard and core routes work."""
 
-    async def test_dashboard_home(self, client):
-        resp = await client.get("/dashboard")
-        assert resp.status_code == 200
-
     async def test_health(self, client):
         resp = await client.get("/health")
-        assert resp.status_code == 200
-
-    async def test_projects_list(self, client):
-        resp = await client.get("/projects", follow_redirects=True)
         assert resp.status_code == 200
 
 

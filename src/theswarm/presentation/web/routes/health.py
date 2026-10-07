@@ -326,16 +326,14 @@ async def readiness(request: Request) -> JSONResponse:
 
 @router.get("/health/ready/page", response_class=HTMLResponse)
 async def readiness_page(request: Request) -> HTMLResponse:
-    """Human-readable readiness page rendered with the standard sidebar shell."""
+    """The readiness checks as a page, in the V3 shell (M6); it refreshes
+    itself from /health/ready every 8 s."""
     payload = await readiness(request)
     import json as _json
 
     data = _json.loads(payload.body.decode())
     templates = request.app.state.templates
-    return templates.TemplateResponse(
-        "health_ready.html",
-        {"request": request, "data": data},
-    )
+    return templates.TemplateResponse("health.html", {"request": request, "data": data})
 
 
 @router.get("/diagnostics/claude")

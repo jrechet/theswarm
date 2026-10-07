@@ -71,28 +71,3 @@ class TestWebhookRoute:
             },
         )
         assert resp.status_code == 401
-
-
-class TestReportRoutes:
-    async def test_reports_list_empty(self, client):
-        resp = await client.get("/reports/")
-        assert resp.status_code == 200
-
-    async def test_report_not_found(self, client):
-        # Without report_repo configured, template will still render
-        resp = await client.get("/reports/nonexistent")
-        assert resp.status_code == 404
-
-    async def test_reports_with_repo(self, app, client, tmp_path):
-        from theswarm.infrastructure.persistence.sqlite_repos import init_db as init
-        from theswarm.infrastructure.recording.report_repo import SQLiteReportRepository
-
-        conn = await init(str(tmp_path / "reports.db"))
-        app.state.report_repo = SQLiteReportRepository(conn)
-
-        resp = await client.get("/reports/")
-        assert resp.status_code == 200
-
-        resp = await client.get("/reports/api/missing")
-        assert resp.status_code == 404
-        await conn.close()

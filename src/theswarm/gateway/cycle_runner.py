@@ -83,10 +83,9 @@ async def run_swarm_cycle(gw: SwarmGateway, user_id: str, repo_name: str = "") -
                     merged = sum(1 for r in result.get("reviews", []) if r.get("decision") == "APPROVE")
                     summary = f"🏁 **Cycle terminé !**\n"
                     summary += f"PRs: {len(prs)} opened, {merged} merged | Cost: ${cost:.2f}\n"
-                    # Include report link if base_url is configured
+                    # The home carries the demo to review (the V1 report page went with M6)
                     if dash.base_url and cycle_date:
-                        report_url = f"{dash.base_url}/reports/{cycle_date}"
-                        summary += f"\n📊 [Voir le rapport]({report_url})"
+                        summary += f"\n📊 [Voir la démo]({dash.base_url}/)"
                     else:
                         report = result.get("daily_report", "")
                         if report:

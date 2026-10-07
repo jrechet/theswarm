@@ -8,7 +8,7 @@ its cycles, its demo. `/r/{owner}/{name}` (V2) redirects here.
 
 The board's truth (what a running cycle works on is Building, an open PR
 is In review, the rest of those labels is stalled) is V2's, kept in
-`routes/v2.py` until M6 moves it here.
+`routes/common.py` until M6 moves it here.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from theswarm.presentation.web.routes import v2
+from theswarm.presentation.web.routes import common
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -104,7 +104,7 @@ async def legacy_repo(request: Request, owner: str, name: str, new: int | None =
     """A V2 link: the project's page in its customer (registered under Internal if new)."""
     state = request.app.state
     base = state.base_path
-    await v2._ensure_project(state, owner, name)
+    await common._ensure_project(state, owner, name)
     full_name = f"{owner}/{name}"
     slug = "internal"
     project = next((p for p in await state.project_repo.list_all() if str(p.repo) == full_name), None)
@@ -200,7 +200,7 @@ async def _delivered(state, full_name: str, base: str, limit: int = 6) -> list[d
     cycle_repo = getattr(state, "cycle_repo", None)
     cards = []
     for report in reports:
-        card = v2._demo_card(state, report)
+        card = common._demo_card(state, report)
         issue_number = None
         if cycle_repo is not None:
             try:
@@ -216,7 +216,7 @@ async def _delivered(state, full_name: str, base: str, limit: int = 6) -> list[d
         card.update({
             "issue_number": issue_number,
             "title": title or (f"Cycle {str(report.cycle_id)[:8]}"),
-            "when": v2._when(report.created_at),
+            "when": common._when(report.created_at),
             "gates_total": len(gates),
             "gates_label": "Gates pass" if not failed else f"{len(failed)} gate{'s' if len(failed) != 1 else ''} failed",
             "gates_kind": "ok" if not failed else "bad",
@@ -256,17 +256,17 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
         from theswarm.tools.github import GitHubClient
 
         client = GitHubClient(full_name)
-        issues = await v2._with_fresh_issue(client, await client.get_issues(), new)
+        issues = await common._with_fresh_issue(client, await client.get_issues(), new)
     except Exception as exc:  # noqa: BLE001 — surfaced in the page banner
         log.exception("project: listing issues for %s failed", full_name)
         issues_error = str(exc)[:160]
 
-    running = v2._running_for_repo(full_name)
-    prs = await v2._open_pr_briefs(client) if client is not None and not issues_error else None
+    running = common._running_for_repo(full_name)
+    prs = await common._open_pr_briefs(client) if client is not None and not issues_error else None
     by_key: dict[str, list[dict]] = {key: [] for key, _, _ in COLUMNS}
     stalled: list[dict] = []
     for issue in issues:
-        status = v2._board_status(issue, running, prs)
+        status = common._board_status(issue, running, prs)
         row = _issue_row(issue, status, running, urls)
         row["fresh"] = bool(new) and issue.get("number") == new
         if status == "stalled":
@@ -281,7 +281,7 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
         running_cycle = {"id": running.id, "issue_number": running.issue_number,
                          "href": f"{base}/cycles/{running.id}", "since": _clock(running.started_at or running.created_at)}
 
-    return state.templates.TemplateResponse("v3/project.html", {
+    return state.templates.TemplateResponse("project.html", {
         "customer": customer,
         "project": _project_dict(customer, project, base),
         "urls": urls,
@@ -290,9 +290,9 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
         "has_issues": bool(issues),
         "issues_error": issues_error,
         "running_cycle": running_cycle,
-        "latest_demo": await v2._latest_demo(state, full_name),
+        "latest_demo": await common._latest_demo(state, full_name),
         "delivered": await _delivered(state, full_name, base),
-        "evals": await v2._evals_trend(state, full_name),
+        "evals": await common._evals_trend(state, full_name),
         "recent": await _recent_cycles(state, project, base),
     })
 
@@ -314,7 +314,7 @@ async def compose(request: Request, slug: str, name: str, body: str = Form(defau
     if not text:
         return RedirectResponse(urls["page"], status_code=303)
     first_line, _, rest = text.partition("\n")
-    title = first_line.strip()[:v2._COMPOSER_TITLE_MAX] or "Untitled feature"
+    title = first_line.strip()[:common._COMPOSER_TITLE_MAX] or "Untitled feature"
 
     from theswarm.tools.github import GitHubClient
 
@@ -326,7 +326,7 @@ async def compose(request: Request, slug: str, name: str, body: str = Form(defau
     if not isinstance(number, int):
         return RedirectResponse(urls["page"], status_code=303)
     if play:
-        record = await v2.start_targeted_cycle(
+        record = await common.start_targeted_cycle(
             state, project.repo.owner, project.repo.name, number, f"Play on issue #{number}",
         )
         return RedirectResponse(f"{base}/cycles/{record.id}", status_code=303)
@@ -339,7 +339,7 @@ async def play(request: Request, slug: str, name: str, number: int):
     customer, project = await _resolve(state, slug, name)
     if project is None:
         return HTMLResponse("No such project", status_code=404)
-    record = await v2.start_targeted_cycle(
+    record = await common.start_targeted_cycle(
         state, project.repo.owner, project.repo.name, number, f"Play on issue #{number}",
     )
     return RedirectResponse(f"{state.base_path}/cycles/{record.id}", status_code=303)
@@ -401,10 +401,10 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
     if pinned.issue is None:
         return HTMLResponse(f"No such feature: #{number}", status_code=404)
     issue = pinned.issue
-    running = v2._running_for_repo(full_name)
+    running = common._running_for_repo(full_name)
     building = bool(running is not None and getattr(running, "issue_number", None) == number)
     if member_view:
-        return state.templates.TemplateResponse("v3/feature_member.html", await _member_feature(
+        return state.templates.TemplateResponse("feature_member.html", await _member_feature(
             state, customer, project, urls, number, issue, pinned, running if building else None, actor, as_member,
         ))
     status = "in-progress" if building else ("done" if issue.get("state") == "closed" else issue_status(issue))
@@ -414,7 +414,7 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
         c_label, c_kind = STATUS_CHIPS.get(child.get("status", ""), (child.get("status", "open"), "waiting"))
         children.append({**child, "label": c_label, "kind": c_kind, "href": f"{urls['feature']}{child['number']}"})
 
-    return state.templates.TemplateResponse("v3/feature.html", {
+    return state.templates.TemplateResponse("feature.html", {
         "customer": customer,
         "project": _project_dict(customer, project, base),
         "urls": urls,
@@ -431,3 +431,50 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
         "cycles": await _recent_cycles(state, project, base, limit=10, issue_number=number),
         "error": pinned.error,
     })
+
+
+# ── What the swarm learned (from the V2 module, M6) ──────────────────
+
+
+@router.get("/r/{owner}/{name}/memory", response_class=HTMLResponse)
+async def memory_page(request: Request, owner: str, name: str) -> HTMLResponse:
+    """What the swarm learned about this repository (V2 M8): AGENT_MEMORY.jsonl,
+    read from the repo, grouped by category."""
+    from theswarm import memory_store
+    from theswarm.tools.github import GitHubClient
+
+    state = request.app.state
+    full_name = f"{owner}/{name}"
+    entries: list[dict] = []
+    error = ""
+    try:
+        entries = await memory_store.load_entries(GitHubClient(full_name))
+    except Exception as exc:  # noqa: BLE001 — surfaced on the page
+        log.exception("V2: loading the memory of %s failed", full_name)
+        error = str(exc)[:160]
+    groups = [
+        {
+            "key": category,
+            "label": _MEMORY_LABELS.get(category, category),
+            "entries": sorted(
+                (e for e in entries if e.get("category") == category),
+                key=lambda e: (e.get("timestamp") or ""), reverse=True,
+            ),
+        }
+        for category in memory_store.CATEGORIES
+    ]
+    return state.templates.TemplateResponse("memory.html", {
+        "owner": owner, "repo_name": name,
+        "groups": [g for g in groups if g["entries"]],
+        "total": len(entries),
+        "error": error,
+    })
+
+
+_MEMORY_LABELS = {
+    "stack": "Stack",
+    "conventions": "Conventions",
+    "errors": "Mistakes to avoid",
+    "architecture": "Architecture decisions",
+    "learnings": "Learnings",
+}

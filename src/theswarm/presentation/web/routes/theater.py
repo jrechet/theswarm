@@ -10,6 +10,7 @@ V2's `_stage_context`, kept in routes/v2.py until M6 moves it.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
@@ -18,7 +19,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from theswarm.presentation.web.routes import v2
+from theswarm.presentation.web.routes import stage
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -56,13 +57,13 @@ _PR_RE = re.compile(r"#(\d+)")
 async def theater_target(state, cycle_id: str) -> str | None:
     """The cycle to draw for `cycle_id`: its continuation after a restart,
     itself when it is known (live or on its row), None when nothing is."""
-    if v2._tracker_record(cycle_id) is not None:
+    if stage._tracker_record(cycle_id) is not None:
         return cycle_id
     cycle = await state.get_cycle_status_query.execute(cycle_id)
     resumed_as = getattr(cycle, "resumed_as", "") if cycle is not None else ""
     if resumed_as and (
-        v2._tracker_record(resumed_as) is not None
-        or await v2._archived_record(state, resumed_as) is not None
+        stage._tracker_record(resumed_as) is not None
+        or await stage._archived_record(state, resumed_as) is not None
     ):
         return resumed_as
     return cycle_id if cycle is not None else None
@@ -88,10 +89,10 @@ def _orphan_record(cycle):
 async def _record_for(state, cycle_id: str):
     """(record, orphan): the live record, the finished row, or a row nothing
     runs any more; (None, False) when the cycle does not exist."""
-    record = v2._tracker_record(cycle_id)
+    record = stage._tracker_record(cycle_id)
     if record is not None:
         return record, False
-    record = await v2._archived_record(state, cycle_id)
+    record = await stage._archived_record(state, cycle_id)
     if record is not None:
         return record, False
     cycle_repo = getattr(state, "cycle_repo", None)
@@ -245,7 +246,7 @@ async def theater_context(request: Request, record, orphan: bool = False) -> dic
     from theswarm.application.services.progress_bridge import get_phase_history
 
     state = request.app.state
-    context = await v2._stage_context(request, record)
+    context = await stage._stage_context(request, record)
     status = record.status.value
     history = get_phase_history(record.id)
     steps = steps_from_history(history, status) if history else []
@@ -296,6 +297,42 @@ async def theater_context(request: Request, record, orphan: bool = False) -> dic
 # ── The routes ───────────────────────────────────────────────────────
 
 
+@router.post("/cycles/{cycle_id}/resume")
+async def resume(request: Request, cycle_id: str) -> RedirectResponse:
+    """Resume a failed cycle from the phase after its last good checkpoint
+    (Sprint G5), on V3 since M5: the theater's button posts here, and the
+    continuation opens in the theater. V1's route of the same address goes
+    with V1 at M6."""
+    from theswarm.api import CycleRequest, get_cycle_tracker, run_api_cycle
+
+    state = request.app.state
+    base = state.base_path
+    checkpoint_repo = getattr(state, "checkpoint_repo", None)
+    if checkpoint_repo is None:
+        return RedirectResponse(f"{base}/cycles/{cycle_id}", status_code=303)
+    last_ok = await checkpoint_repo.last_ok(cycle_id)
+    resume_from = last_ok.next_phase if last_ok else None
+    if resume_from is None:  # nothing to resume from: back to the theater, nothing done
+        return RedirectResponse(f"{base}/cycles/{cycle_id}", status_code=303)
+
+    original = await state.get_cycle_status_query.execute(cycle_id)
+    repo = original.project_id if original is not None else ""
+    tracker = get_cycle_tracker()
+    req = CycleRequest(repo=repo, description=f"Resume of {cycle_id} from {resume_from}")
+    record = tracker.create(req)
+    task = asyncio.create_task(run_api_cycle(
+        record.id, repo, req.description, "", getattr(state, "allowed_repos", []),
+        event_bus=getattr(state, "event_bus", None), report_repo=getattr(state, "report_repo", None),
+        base_path=base, project_repo=getattr(state, "project_repo", None),
+        cycle_repo=getattr(state, "cycle_repo", None), project_id=repo,
+        checkpoint_repo=checkpoint_repo, resume_from=resume_from,
+        role_assignment_service=getattr(state, "role_assignment_service", None),
+    ))
+    tracker.set_task(record.id, task)
+    log.info("Cycle %s resumed as %s from phase %s", cycle_id, record.id, resume_from)
+    return RedirectResponse(f"{base}/cycles/{record.id}", status_code=303)
+
+
 @router.get("/cycles/{cycle_id}", response_class=HTMLResponse)
 async def theater(request: Request, cycle_id: str):
     state = request.app.state
@@ -309,7 +346,7 @@ async def theater(request: Request, cycle_id: str):
     record, orphan = await _record_for(state, cycle_id)
     if record is None:
         return HTMLResponse("Cycle not found", status_code=404)
-    return state.templates.TemplateResponse("v3/theater.html", await theater_context(request, record, orphan))
+    return state.templates.TemplateResponse("theater.html", await theater_context(request, record, orphan))
 
 
 @router.get("/cycles/{cycle_id}/stage", response_class=HTMLResponse)
@@ -318,5 +355,5 @@ async def theater_stage(request: Request, cycle_id: str):
     if record is None:
         return HTMLResponse("", status_code=404)
     return request.app.state.templates.TemplateResponse(
-        "v3/_stage.html", await theater_context(request, record, orphan),
+        "_stage.html", await theater_context(request, record, orphan),
     )

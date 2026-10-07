@@ -111,7 +111,7 @@ def test_an_interrupted_run_is_never_a_regression():
 
 
 def test_the_panel_draws_an_interrupted_run_apart():
-    template = (ROOT / "src/theswarm/presentation/web/templates/v3/project.html").read_text()
+    template = (ROOT / "src/theswarm/presentation/web/templates/project.html").read_text()
 
     assert "run.outcome == 'interrupted'" in template
     assert "evals.interrupted" in template

@@ -256,12 +256,7 @@ class AuthWallMiddleware:
             return await refusal(scope, receive, send)
 
         login_url = f"{self.base}/login"
-        if headers.get("hx-request") == "true":
-            response = JSONResponse(
-                {"detail": "Session expired"}, status_code=401,
-                headers={"HX-Redirect": login_url},
-            )
-        elif method == "GET" and "text/html" in headers.get("accept", ""):
+        if method == "GET" and "text/html" in headers.get("accept", ""):
             query = scope.get("query_string", b"").decode()
             target = path + (f"?{query}" if query else "")
             response = RedirectResponse(
@@ -299,7 +294,7 @@ class AuthWallMiddleware:
         if "text/html" in headers.get("accept", ""):
             templates = getattr(scope["app"].state, "templates", None)
             if templates is not None:
-                return templates.TemplateResponse("v3/refused.html", {
+                return templates.TemplateResponse("refused.html", {
                     "home": f"{self.base}/", "name": actor.login,
                 }, status_code=403)
         return JSONResponse({"detail": "This page belongs to someone else"}, status_code=403)

@@ -1,67 +1,37 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TheSwarm — Sign in with GitHub</title>
-  <style>
-    :root { --paper:#FAF9F6; --ink:#1C1E21; --soft:#6B7178; --rule:#DDDCD6; --accent:#B8860B; --ok:#4B7A3F; --error:#A8452B; }
-    * { box-sizing: border-box; }
-    body { margin:0; min-height:100vh; display:grid; place-items:center; background:var(--paper);
-           color:var(--ink); font:16px/1.55 system-ui,-apple-system,sans-serif; padding:2rem 1rem; }
-    main { width:min(32rem,92vw); display:flex; flex-direction:column; gap:1.25rem; }
-    h1 { font-size:1.3rem; margin:0; }
-    h2 { font-size:1rem; margin:0; }
-    p { margin:0; color:var(--soft); font-size:0.95rem; }
-    .card { border:1px solid var(--rule); border-radius:8px; padding:1.25rem; background:#fff; display:flex; flex-direction:column; gap:0.9rem; }
-    .ok { color:var(--ok); font-weight:600; }
-    .error { color:var(--error); }
-    dl { display:grid; grid-template-columns:max-content 1fr; gap:0.35rem 1rem; margin:0; font-size:0.9rem; }
-    dt { color:var(--soft); }
-    dd { margin:0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:0.85rem; word-break:break-all; }
-    label { font-size:0.85rem; color:var(--soft); display:block; margin-bottom:0.25rem; }
-    input { font:inherit; padding:0.55rem 0.7rem; border:1px solid var(--rule); border-radius:6px; width:100%; background:#fff; color:var(--ink); }
-    button, a.button { font:inherit; font-weight:600; padding:0.6rem 1rem; border:none; border-radius:6px; background:var(--ink); color:var(--paper); cursor:pointer; text-decoration:none; text-align:center; display:inline-block; }
-    button:hover, a.button:hover { background:#000; }
-    button:focus-visible, a.button:focus-visible, input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-    a.plain { color:var(--accent); }
-    @media (prefers-color-scheme: dark) {
-      :root { --paper:#15171A; --ink:#E9EAE7; --soft:#9AA1A8; --rule:#33383E; }
-      .card { background:#1B1E22; } input { background:#1E2126; }
-      button:hover, a.button:hover { background:#fff; }
-    }
-  </style>
-</head>
-<body>
-<main>
-  <h1>Sign in with GitHub</h1>
-  {% if saved %}<p class="ok">Saved. Sign out and use “Sign in with GitHub” on the login page.</p>{% endif %}
-  {% if error %}<p class="error">{{ error }}</p>{% endif %}
-
-  <div class="card">
-    <h2>1 · Create an OAuth App on GitHub (once)</h2>
-    <p>Open <a class="plain" href="https://github.com/settings/applications/new" target="_blank" rel="noopener">github.com/settings/applications/new</a> and fill in exactly:</p>
-    <dl>
-      <dt>Application name</dt><dd>TheSwarm</dd>
-      <dt>Homepage URL</dt><dd>{{ homepage_url }}</dd>
-      <dt>Authorization callback URL</dt><dd>{{ callback_url }}</dd>
-    </dl>
-    <p>Register it, then click <strong>Generate a new client secret</strong>.</p>
+{% extends "bare.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Sign in with GitHub — TheSwarm{% endblock %}
+{% block body %}
+<div class="flex flex-col gap-5 w-full max-w-[560px]" data-testid="github-oauth-setup">
+  <div class="flex flex-col gap-1">
+    <h1 class="m-0 text-[20px] font-semibold tracking-tight">Sign in with GitHub</h1>
+    <span class="text-[13px] text-muted">A plain OAuth App: the owner creates it once on GitHub and pastes two values here.</span>
   </div>
-
-  <form class="card" method="post" action="{{ base }}/setup/github-oauth">
-    <h2>2 · Paste the two values</h2>
-    <div>
-      <label for="client_id">Client ID</label>
-      <input id="client_id" name="client_id" autocomplete="off" required>
+  {% if error %}<p class="m-0 text-[13px] text-bad border border-bad/40 bg-bad-wash rounded-[10px] px-4 py-3" data-testid="error">{{ error }}</p>{% endif %}
+  {% if saved %}<p class="m-0 text-[13px] text-ok border border-ok/40 bg-ok-wash rounded-[10px] px-4 py-3" data-testid="saved">Saved. "Sign in with GitHub" works on the sign-in page now.</p>{% endif %}
+  <section class="flex flex-col gap-3 p-5 bg-surface border border-line rounded-[10px]">
+    <h2 class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">1 · Create an OAuth App on GitHub (once)</h2>
+    <p class="m-0 text-[13px] text-muted">Open <a href="https://github.com/settings/applications/new" target="_blank" rel="noopener" class="text-ink hover:underline">github.com/settings/applications/new</a> and fill in exactly:</p>
+    <dl class="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
+      <dt class="text-faint">Application name</dt><dd class="m-0 font-mono">TheSwarm</dd>
+      <dt class="text-faint">Homepage URL</dt><dd class="m-0 font-mono break-all">{{ homepage_url }}</dd>
+      <dt class="text-faint">Authorization callback URL</dt><dd class="m-0 font-mono break-all">{{ callback_url }}</dd>
+    </dl>
+    <p class="m-0 text-[13px] text-muted">Register it, then click <strong class="font-medium text-ink">Generate a new client secret</strong>.</p>
+  </section>
+  <form class="flex flex-col gap-4 p-5 bg-surface border border-line rounded-[10px]" method="post" action="{{ base }}/setup/github-oauth" data-testid="github-oauth-form">
+    <h2 class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">2 · Paste the two values</h2>
+    <div class="flex flex-col gap-1.5">
+      <label for="client_id" class="text-[13px] font-medium">Client ID</label>
+      <input id="client_id" name="client_id" autocomplete="off" required class="h-9 px-2.5 border border-line-strong rounded-md bg-surface text-[14px] text-ink font-mono">
     </div>
-    <div>
-      <label for="client_secret">Client secret</label>
-      <input id="client_secret" name="client_secret" type="password" autocomplete="off" required>
+    <div class="flex flex-col gap-1.5">
+      <label for="client_secret" class="text-[13px] font-medium">Client secret</label>
+      <input id="client_secret" name="client_secret" type="password" autocomplete="off" required class="h-9 px-2.5 border border-line-strong rounded-md bg-surface text-[14px] text-ink font-mono">
     </div>
-    <p>Stored encrypted in this server's vault; only this GitHub account (<code>jrechet</code>) is allowed through.</p>
-    <button type="submit">Save</button>
+    <p class="m-0 text-[12px] text-faint">Stored encrypted in this server's vault; only the owner's GitHub account is allowed through.</p>
+    <div>{{ ui.btn('Save', kind='primary', type='submit', testid='save') }}</div>
   </form>
-</main>
-</body>
-</html>
+  <p class="m-0 text-[12px] text-faint"><a href="{{ base }}/" class="hover:text-ink">← Home</a></p>
+</div>
+{% endblock %}

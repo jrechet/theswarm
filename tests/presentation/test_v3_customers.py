@@ -72,7 +72,7 @@ async def visitor(app):
 
 def _home(client):
     """The owner's home with GitHub stubbed out."""
-    with patch("theswarm.presentation.web.routes.v2.github_app") as gh:
+    with patch("theswarm.presentation.web.routes.common.github_app") as gh:
         gh.load_credentials = AsyncMock(return_value=None)
         gh.list_user_repositories = AsyncMock(return_value=[])
         gh.oauth_client = AsyncMock(return_value=object())

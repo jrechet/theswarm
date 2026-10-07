@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from theswarm.presentation.web.routes import v2
+from theswarm.presentation.web.routes import common
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -162,7 +162,7 @@ async def _cycle_facts(state, report) -> dict:
 async def player_context(request: Request, report, *, public: bool) -> dict:
     state = request.app.state
     base = state.base_path
-    card = v2._demo_card(state, report)
+    card = common._demo_card(state, report)
     facts = await _cycle_facts(state, report)
     verdict = verdict_of(report.quality_gates)
     verdict_label, verdict_kind = VERDICTS[verdict]
@@ -247,7 +247,7 @@ async def player(request: Request, report_id: str):
         return _refused(request, actor)
     context = await player_context(request, report, public=False)
     context["member"] = member or request.query_params.get("as") == "member"
-    return request.app.state.templates.TemplateResponse("v3/demo.html", context)
+    return request.app.state.templates.TemplateResponse("demo.html", context)
 
 
 @public_router.get("/d/{short}", response_class=HTMLResponse)
@@ -264,5 +264,5 @@ async def public_player(request: Request, short: str):
     if match is None:
         return HTMLResponse("No such demo", status_code=404)
     return request.app.state.templates.TemplateResponse(
-        "v3/demo_public.html", await player_context(request, match, public=True),
+        "demo_public.html", await player_context(request, match, public=True),
     )
