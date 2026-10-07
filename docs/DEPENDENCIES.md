@@ -49,6 +49,7 @@ flowchart LR
 | Dependency | Controlled by | Cost | Credential | Risk | Replaceable by | Decision |
 |---|---|---|---|---|---|---|
 | GitHub (repos, issues, PRs) | Microsoft | free tier | — | platform lock-in, core to product | GitLab port (large) | ✔ settled (core) |
+| **ssh from the DevOps persona to jrec.fr** (D1, read-only: the CI slot's owner files, `df`) | Owner | free | the ambient ssh key — the laptop's today; **prod's container has none**, so its Ops card reads the host as "not reachable from here" until a read-only key is mounted | a mounted key reaches the host as `debian`; keep it read-only (a `command=` restriction in `authorized_keys`) | the host's facts over a bind mount of `/srv/gh-runner-work/ci-slots` instead of ssh | ⏳ owner's decision (proposed 2026-10-07) |
 | **GitHub App `theswarm-jrec`** | **Owner's account** | free | private key + client secret, in Fernet vault | key leak → repo write access on installed repos only | static `GITHUB_TOKEN` (documented fallback) | ✔ owner, 2026-09-01 |
 | GitHub Actions + GHCR | Microsoft | free tier | `GITHUB_TOKEN` (ephemeral) | CI outage blocks deploys | self-hosted runner exists | ✔ settled |
 | Claude Code CLI (subscription) | Anthropic | owner's Max plan | OAuth session mounted in container | session expiry (seen 3×) → cycles fail | Claude API | ✖ retired in V2 M7 (2026-09-25): the SDK's bundled binary replaced it, Node left the image |

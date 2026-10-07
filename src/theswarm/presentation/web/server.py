@@ -879,6 +879,14 @@ async def start_server(
     app.state.memory_compaction_service = compaction_service
     asyncio.create_task(run_compaction_loop(compaction_service))
 
+    # ── DevOps D1: the watch loop; the daily report on the PO's channel ──
+    ops_watch = getattr(app.state, "ops_watch", None)
+    if ops_watch is not None:
+        if swarm_po_chat is not None:
+            ops_watch.configure_chat(swarm_po_chat, settings.agents.swarm_po.channel)
+        asyncio.create_task(ops_watch.run_loop())
+        log.info("DevOps: watching the declared stack every %ss", ops_watch._interval)
+
     # ── Auto-seed dogfood demos (idempotent) ─────────────────────
     # Every deploy re-runs seed_self so new sprint videos under
     # ``docs/demos/sprint-*.webm`` are picked up without a manual CLI step.

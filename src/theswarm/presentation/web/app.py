@@ -59,7 +59,7 @@ from theswarm.domain.cycles.events import (
 from theswarm.presentation.web.routes import analyst, api, architect, artifacts, autonomy_config, chat, chief_of_staff, cycles, dashboard, demos, designer, dev_rigour, features, fragments, health, hitl, metrics, product, projects, prompt_library, qa, refactor_programs, release, reports, scout, security, semantic_memory, settings as settings_route, sre, team, techlead, webhooks, writer
 from theswarm.presentation.web.auth import AuthWallMiddleware
 from theswarm.presentation.web.shell import ShellMiddleware, current_shell
-from theswarm.presentation.web.routes import auth_routes, customers, github_setup, player, project, requests_routes, theater, v2
+from theswarm.presentation.web.routes import auth_routes, customers, github_setup, ops, player, project, requests_routes, theater, v2
 from theswarm.presentation.web.sse import SSEHub
 
 _HERE = Path(__file__).parent
@@ -962,6 +962,27 @@ def create_web_app(
     else:
         app.state.eval_run_repo = None
 
+    # DevOps D1 — the stack declared in theswarm.yaml, read on a cadence; the
+    # server starts the loop, the home and /api/devops read the last report.
+    # SWARM_STACK_FILE names another file (the suite points it at none).
+    import os as _os
+
+    from theswarm.agents.devops import gather as devops_gather, load_stack
+    from theswarm.application.services.ops_watch import OpsWatch
+
+    stack = load_stack(_os.environ.get("SWARM_STACK_FILE", "theswarm.yaml"))
+    if stack:
+        async def _harness_runs(repo: str) -> list[dict]:
+            store = getattr(app.state, "eval_run_repo", None)
+            return await store.list_for_repo(repo, limit=10) if store is not None else []
+
+        app.state.ops_watch = OpsWatch(
+            lambda: devops_gather(stack, harness=_harness_runs),
+            interval_s=int(_os.environ.get("SWARM_DEVOPS_INTERVAL_SECONDS", "600") or 600),
+        )
+    else:
+        app.state.ops_watch = None
+
     # Sprint C F6 — VCS factory for story approve/reject/comment
     app.state.vcs_factory = vcs_factory
 
@@ -994,6 +1015,7 @@ def create_web_app(
     app.include_router(project.router)  # V3 M3: /c/{slug}/p/{name}, its features, /r/{owner}/{name} → there
     app.include_router(customers.router)  # V3 M2: /settings/customers, /invite/{token}, /c/{slug}
     app.include_router(requests_routes.router)  # V3 M5: /requests — the inbox, a member's list and composer
+    app.include_router(ops.router)  # DevOps D1: /api/devops, /ops/refresh
     app.include_router(v2.router)  # owns `/` — the V2 flow is the front door
     app.include_router(dashboard.router)
     app.include_router(projects.router)

@@ -118,6 +118,7 @@ async def home(request: Request) -> HTMLResponse:
         "running_repos": set(running),
         "to_review": await _recent_demos(state),
         "requests": await _requests_waiting(state),
+        "ops": await _ops_card(state),
         "today": datetime.now(timezone.utc).strftime("%A %d %B, %H:%M UTC").replace(" 0", " "),
     })
 
@@ -173,6 +174,22 @@ def _now_cards(state, running: dict[str, object]) -> list[dict]:
         })
     cards.sort(key=lambda c: c["sort"], reverse=True)
     return cards
+
+
+async def _ops_card(state) -> dict | None:
+    """The DevOps card (D1): the last report, never a wait for ssh or GitHub."""
+    watch = getattr(state, "ops_watch", None)
+    if watch is None:
+        return None
+    report = watch.last()
+    if report is None:
+        return {"status": "unknown", "stack": "", "read_at": "", "rows": [], "pending": True, "error": watch.error}
+    return {
+        "status": report.status, "stack": report.stack,
+        "read_at": report.read_at.astimezone(timezone.utc).strftime("%H:%M UTC"),
+        "rows": [f.as_dict() for f in report.findings], "pending": False, "error": watch.error,
+        "counts": report.counts,
+    }
 
 
 async def _requests_waiting(state, limit: int = 5) -> list[dict]:

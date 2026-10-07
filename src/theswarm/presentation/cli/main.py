@@ -132,6 +132,11 @@ def create_parser() -> argparse.ArgumentParser:
     # validate
     sub.add_parser("validate", help="Validate startup configuration")
 
+    # devops (D1): read the declared stack once and print the report
+    devops_p = sub.add_parser("devops", help="Read the pipeline as the DevOps persona does and print the report")
+    devops_p.add_argument("--json", action="store_true", help="print the report as JSON")
+    devops_p.add_argument("--stack", default="theswarm.yaml", help="the theswarm.yaml whose stack: to read")
+
     return parser
 
 
@@ -363,6 +368,22 @@ async def cmd_schedule(args: argparse.Namespace) -> None:
             return
         for s in schedules:
             print(f"  {s.project_id:<20} {s.cron:<20} last_run={s.last_run or 'never'}")
+
+
+async def cmd_devops(args: argparse.Namespace) -> None:
+    """DevOps D1: one read of the declared stack, printed; exit 1 when something is bad."""
+    import json
+
+    from theswarm.agents.devops import BAD, format_report, gather, load_stack
+
+    stack = load_stack(args.stack)
+    if not stack:
+        print(f"No stack: declared in {args.stack} — nothing to read.")
+        sys.exit(2)
+    report = await gather(stack)
+    print(json.dumps(report.as_dict(), indent=2) if args.json else format_report(report, title="DevOps — the pipeline now"))
+    if report.status == BAD:
+        sys.exit(1)
 
 
 async def cmd_validate(args: argparse.Namespace) -> None:
@@ -637,6 +658,7 @@ def main(argv: list[str] | None = None) -> None:
         "agents-doc": cmd_agents_doc,
         "record-demos": cmd_record_demos,
         "validate": cmd_validate,
+        "devops": cmd_devops,
         "status": cmd_status,
         "dev-seed": cmd_dev_seed,
         "seed-self": cmd_seed_self,

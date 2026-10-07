@@ -1051,6 +1051,28 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   relative link is useless on GitHub), what was built and the two
   behaviour gates. Once per cycle (`<!-- swarm:demo <cycle> -->`), only on
   targeted cycles, a failure logged and nothing else lost.
+- **DevOps, the fifth persona (D1, 2026-10-07)** reads the pipeline and
+  touches nothing: `agents/devops.py` — the stack declared in
+  `theswarm.yaml` (`stack:` hosts with ssh and the CI slot directory, the
+  CI providers, the registry, the deploy, the logs, the harness target),
+  pure checks (`slot_finding` on the owner file acquire.sh writes — five
+  lines: runner, repo, ISO time, container, kind — stale past 180 min;
+  `deploy_finding` main's head against `SWARM_BUILD_SHA`, the compose
+  file hands the deploy's `TS_TAG` to the container; `runners_finding`,
+  `failed_runs_finding`, `disk_finding`, `claude_finding`,
+  `harness_finding`) and readers (GitHub through PyGithub in a thread,
+  a host over ssh with the ambient keys — the laptop's today, prod reads
+  the host once a key is mounted, an owner's decision noted in
+  `docs/DEPENDENCIES.md`). `gather` never raises: a reader that fails is
+  an `unknown` finding with the reason. `application/services/ops_watch.py`
+  keeps the last report (the Ops card on the home and `/api/devops` never
+  wait for ssh), refreshes every `SWARM_DEVOPS_INTERVAL_SECONDS` (600)
+  in the server's loop and posts the daily report on the PO's channel
+  once a day after 07:30 UTC when Mattermost is connected; `python -m
+  theswarm devops [--json]` is one read, exit 1 when something is bad.
+  The suite declares no stack (`SWARM_STACK_FILE` in conftest). D2–D4
+  (preflight and deploy watch, proposals with approval, improvement
+  PRs) are in the plan.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.
