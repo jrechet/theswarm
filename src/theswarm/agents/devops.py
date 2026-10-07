@@ -312,14 +312,24 @@ def build_sha() -> str:
     return out.stdout.strip() if out.returncode == 0 else ""
 
 
+def _existing(path: str) -> str:
+    """The path, or its nearest ancestor that exists (a workspace directory not made yet)."""
+    current = Path(path).expanduser()
+    while not current.exists() and current != current.parent:
+        current = current.parent
+    return str(current)
+
+
 def local_disk(paths: list[str] | None = None) -> list[dict]:
+    """This process's disk: the workspaces' volume (or the home), one row per mount."""
     rows = []
     for path in paths or [os.environ.get("SWARM_WORKSPACE_DIR") or os.path.expanduser("~")]:
+        probe = _existing(path)
         try:
-            usage = shutil.disk_usage(path)
+            usage = shutil.disk_usage(probe)
         except OSError:
             continue
-        rows.append({"path": path, "percent": int(round(100 * usage.used / usage.total)) if usage.total else 0,
+        rows.append({"path": probe, "percent": int(round(100 * usage.used / usage.total)) if usage.total else 0,
                      "free": _human(usage.free)})
     return rows
 

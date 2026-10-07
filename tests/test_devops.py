@@ -114,6 +114,8 @@ class TestTheRest:
         assert d.disk_finding("jrec.fr", [{"path": "/", "percent": 97}]).status == "bad"
         assert d.disk_finding("jrec.fr", []).status == "unknown"
         assert d.local_disk([str(Path.home())])[0]["percent"] >= 0
+        not_yet = str(Path.home() / "no-such-workspaces-dir" / "deeper")  # a workspace directory not made yet
+        assert d.local_disk([not_yet])[0]["path"] == str(Path.home()) and d._existing("/") == "/"
 
     def test_claude(self):
         assert d.claude_finding({"status": "ok"}).status == "ok"
