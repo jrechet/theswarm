@@ -304,6 +304,16 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   redeployed mid-cycle once (`5f8f0f63f58c`: two deploys in a minute while
   QA was still finishing). A new agent write-to-main path goes into
   `paths-ignore` too.
+- **The healthcheck's grace is the boot under load** (`docker-compose.yml`,
+  `start_period: 180s`, five 10 s probes): the boot takes ~15 s on an idle
+  box and more than 100 s when other repositories' CI jobs hold it — on
+  2026-10-07 (load 19, areza's and espace-client's runners busy) 15 s of
+  grace and three probes killed every new 753dbf9 container before
+  uvicorn listened (curl 7, exit 137, "unhealthy container"), the
+  service flapped for half an hour after a deploy the job had read
+  healthy, and prod answered Traefik's 404. The CI slot caps GitHub
+  runner *jobs*, not the box: the DevOps card reads the hosts' load
+  (`load_finding`, warn past 1× the cores, bad past 2×).
 - Waiting for a deploy: check the **running container's** image
   (`docker inspect $(docker ps -q -f name=theswarm_theswarm)`), not the
   service spec — the spec updates when the rollout *starts*, and `/health`

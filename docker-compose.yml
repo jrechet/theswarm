@@ -44,12 +44,19 @@ services:
       # named volume needs no host preparation.
       - swarm-workspaces:/home/botuser/.swarm-workspaces
     restart: unless-stopped
+    # The boot takes ~15 s on an idle box and more than 100 s under load: on
+    # 2026-10-07 two other repositories' CI jobs held the box at a load of
+    # 19, every probe answered curl 7 (nothing listening yet) and 15 s of
+    # grace plus three probes killed each new container before uvicorn
+    # listened (exit 137, "unhealthy container"), again and again, while
+    # the deploy job had read the first one healthy. The grace period is
+    # the boot under load; /health bounds its own DB probe at 1 s.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8091/health"]
       interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
     networks:
       - default
       - mattermost_mattermost-internal
