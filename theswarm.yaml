@@ -40,3 +40,34 @@ demo:
   env:
     SWARM_AUTH_DISABLED: "1"
     BASE_PATH: ""
+
+# The owner's stack, declared for the DevOps persona (D1) — never guessed.
+# Credentials stay in the environment and the vault: this names where things
+# live. `hosts[].ssh` is read with the ambient keys (the laptop's today; prod
+# reads the host only once a key is mounted — the owner's decision).
+stack:
+  hosts:
+    - name: jrec.fr
+      ssh: debian@jrec.fr
+      port: 5422
+      roles: [docker-swarm, traefik, seq, github-runners]
+      ci_slot_dir: /srv/gh-runner-work/ci-slots
+      ci_slot_stale_minutes: 180
+      disk_paths: ["/", "/srv"]
+  ci:
+    - provider: github-actions
+      repo: jrechet/theswarm
+      runners: [self-hosted, jre-server]
+      deploy_workflow: ci.yml  # the deploy is a job of the CI run on main (cd.yml is workflow_called)
+    - provider: forgejo
+      url: https://forge.jrec.fr/jrechet/theswarm
+      role: mirror
+  registry: ghcr.io/jrechet/theswarm
+  deploy:
+    method: docker-swarm
+    service: theswarm_theswarm
+    url: https://bots.jrec.fr/swarm
+  logs:
+    seq: https://logs.jrec.fr
+  harness:
+    repo: jrechet/concert-tour-app

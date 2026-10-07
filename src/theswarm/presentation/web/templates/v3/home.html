@@ -31,6 +31,31 @@
     {% endif %}
   </section>
 
+  {# ── Ops: the pipeline as DevOps reads it (D1) ────────────────── #}
+  {% if ops %}
+  <section aria-labelledby="ops-title" id="ops" class="flex flex-col gap-3" data-testid="ops-card" data-status="{{ ops.status }}">
+    {% call ui.section_label('Ops', ('DevOps · ' ~ ops.stack ~ ' · read ' ~ ops.read_at) if ops.read_at else 'DevOps · reading…', id='ops-title') %}
+      <form method="post" action="{{ base }}/ops/refresh" class="ml-auto"><button type="submit" class="text-[12px] text-muted hover:text-ink cursor-pointer" data-testid="ops-refresh">Read again →</button></form>
+    {% endcall %}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      <div class="flex items-center gap-2.5 px-4 h-10 border-b border-line text-[13px] font-medium">
+        <span class="w-2 h-2 rounded-full shrink-0 {% if ops.status == 'ok' %}bg-ok{% elif ops.status == 'warn' %}bg-live{% elif ops.status == 'bad' %}bg-bad{% else %}bg-line-strong{% endif %}" aria-hidden="true"></span>
+        {% if ops.status == 'ok' %}The pipeline is fine{% elif ops.status == 'warn' %}Something to look at{% elif ops.status == 'bad' %}Something is wrong{% elif ops.pending %}Reading the stack…{% else %}Nothing could be read{% endif %}
+        {% if ops.error %}<span class="ml-auto text-[12px] text-bad font-normal truncate" data-testid="ops-error">last read failed: {{ ops.error }}</span>{% endif %}
+      </div>
+      {% for f in ops.rows %}
+      <div class="flex flex-wrap items-baseline gap-3 px-4 py-2.5 border-t border-line first:border-t-0 text-[13px]" data-testid="ops-row" data-key="{{ f.key }}" data-status="{{ f.status }}">
+        <span class="w-2 h-2 rounded-full shrink-0 relative top-px {% if f.status == 'ok' %}bg-ok{% elif f.status == 'warn' %}bg-live{% elif f.status == 'bad' %}bg-bad{% else %}bg-line-strong{% endif %}" aria-hidden="true"></span>
+        <span class="font-medium w-[120px] shrink-0">{{ f.label }}</span>
+        <span class="text-muted flex-[1_1_320px] min-w-0 break-words">{{ f.detail }}{% if f.url %} <a href="{{ f.url }}" class="text-ink hover:underline">↗</a>{% endif %}</span>
+      </div>
+      {% else %}
+      <div class="px-4 py-3 text-[13px] text-faint">The first read is on its way.</div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
   {# ── Requests: what customers wrote, waiting for the owner (M5) ── #}
   {% if requests %}
   <section aria-labelledby="requests" class="flex flex-col gap-3" data-testid="requests-waiting">

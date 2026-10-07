@@ -19,6 +19,9 @@ services:
       # ~/.claude, a typed message stream). The `claude -p` CLI backend was
       # retired in M7; the way back is a revert, not this line.
       - SWARM_CLAUDE_BACKEND=sdk
+      # The build's commit (DevOps D1): the deploy exports TS_TAG=<sha>, and
+      # the Ops card compares it with main's head to say the deploy landed.
+      - SWARM_BUILD_SHA=${TS_TAG:-}
       # Identity for the swarm's Dev agent git commits. Without these
       # `git commit` fails with 'Author identity unknown' (rc=128).
       - GIT_AUTHOR_NAME=TheSwarm Dev Agent
