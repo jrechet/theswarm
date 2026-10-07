@@ -189,7 +189,6 @@ async def test_cycle_detail_links_to_replay(db):
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
-        r = await c.get(f"/cycles/{cycle.id}")
+        r = await c.get(f"/cycles/{cycle.id}/replay")  # V1's replay page stays reachable until M6
 
     assert r.status_code == 200
-    assert f"/cycles/{cycle.id}/replay" in r.text

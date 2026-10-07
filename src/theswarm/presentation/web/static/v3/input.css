@@ -172,6 +172,15 @@
 .live-dot {
   animation: live-ring 1.6s ease-out infinite;
 }
+/* The stepper's live phase: stripes travelling along the bar. */
+@keyframes live-sweep {
+  to { background-position: 28px 0; }
+}
+.live-step {
+  background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.45) 0 8px, transparent 8px 14px);
+  background-size: 28px 100%;
+  animation: live-sweep 1.2s linear infinite;
+}
 @keyframes swarm-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }

@@ -73,9 +73,9 @@ async def test_public_url_renders_player(app_and_report):
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         r = await c.get(f"/d/{report.public_slug}")
     assert r.status_code == 200
-    assert "player-stage" in r.text
+    assert 'data-testid="player"' in r.text
     # Public marker rendered
-    assert "player-public-badge" in r.text
+    assert 'data-testid="public-badge"' in r.text
 
 
 async def test_public_url_hides_approve_controls(app_and_report):
@@ -84,7 +84,7 @@ async def test_public_url_hides_approve_controls(app_and_report):
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         r = await c.get(f"/d/{report.public_slug}")
     assert r.status_code == 200
-    assert "story-action-form" not in r.text
+    assert 'data-testid="visibility"' not in r.text  # no cost, no links, nothing to approve
 
 
 async def test_unknown_slug_returns_404(app_and_report):

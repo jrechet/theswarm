@@ -122,7 +122,7 @@ async def test_theater_renders_rail_issue_and_feed(web):
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issue = AsyncMock(return_value=pinned_issue)
         klass.return_value.get_issues = AsyncMock(return_value=children)
-        r = await client.get(f"/c/{record.id}")
+        r = await client.get(f"/cycles/{record.id}")
 
     assert r.status_code == 200
     assert 'data-testid="agent-rail"' in r.text
@@ -137,7 +137,7 @@ async def test_stage_fragment_carries_the_status_for_the_poll_loop(web):
     record = _record(status="running")
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issue = AsyncMock(return_value=None)
-        r = await client.get(f"/c/{record.id}/stage")
+        r = await client.get(f"/cycles/{record.id}/stage")
 
     assert r.status_code == 200
     assert 'data-status="running"' in r.text
@@ -145,7 +145,7 @@ async def test_stage_fragment_carries_the_status_for_the_poll_loop(web):
 
 async def test_unknown_cycle_is_a_404(web):
     client, _ = web
-    r = await client.get("/c/does-not-exist")
+    r = await client.get("/cycles/does-not-exist")
     assert r.status_code == 404
 
 
@@ -168,7 +168,7 @@ async def test_a_historical_finished_cycle_keeps_its_theater(web):
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issue = AsyncMock(return_value=None)
         klass.return_value.get_issues = AsyncMock(return_value=[])
-        r = await client.get("/c/cafe1234cafe")
+        r = await client.get("/cycles/cafe1234cafe")
 
     assert r.status_code == 200
     assert 'data-status="completed"' in r.text
@@ -181,8 +181,7 @@ async def test_play_now_lands_on_the_theater(web):
         r = await client.post("/c/internal/p/concert-tour-app/features/7/play")
 
     assert r.status_code == 303
-    assert "/swarm/c/" in r.headers["location"]
-    assert "/cycles/" not in r.headers["location"]
+    assert "/swarm/cycles/" in r.headers["location"]  # the theater, never the V1 archive (gone in M4)
 
 
 def test_a_continuation_names_the_cycle_it_resumes():
@@ -203,7 +202,7 @@ async def test_the_theater_of_a_continuation_links_its_earlier_phases(web):
     ))
     tracker.update_status(record.id, CycleStatus.RUNNING)
 
-    html = (await client.get(f"/c/{record.id}")).text
+    html = (await client.get(f"/cycles/{record.id}")).text
 
     assert 'data-testid="resumed-from"' in html
     assert "/swarm/cycles/747bb89eced2" in html
@@ -247,7 +246,7 @@ async def test_the_theater_draws_it_done(web):
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issue = AsyncMock(return_value={"number": 451, "title": "Lineup"})
         klass.return_value.get_issues = AsyncMock(return_value=_LINEUP_CHILDREN)
-        r = await client.get(f"/c/{record.id}")
+        r = await client.get(f"/cycles/{record.id}")
 
     assert "3/5 done" in r.text
     assert 'data-child="454" data-status="done"' in r.text

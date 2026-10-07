@@ -1,0 +1,117 @@
+{% extends "v3/base.html" %}
+{% import "v3/_ui.html" as ui %}
+{% block title %}Cycle {{ record.id[:8] }} — TheSwarm{% endblock %}
+{% block crumbs %}
+  <a href="{{ project.customer_href }}" class="text-muted hover:text-ink">{{ project.customer_name }}</a>
+  <span class="text-line-strong">/</span>
+  <a href="{{ project.href }}" class="text-muted hover:text-ink">{{ project.name }}</a>
+  <span class="text-line-strong">/</span>
+  <span class="text-ink font-medium font-mono">cycle {{ record.id[:8] }}</span>
+{% endblock %}
+{% block actions %}
+  <span id="status-pill" data-status="{{ record.status.value }}">{{ ui.chip(status_label ~ (' · ' ~ elapsed if elapsed and record.status.value in ('running', 'queued') else ''), status_kind, pulse=(status_kind == 'running'), testid='cycle-status') }}</span>
+  {% if trace_url %}<a href="{{ trace_url }}" target="_blank" rel="noopener" class="h-[30px] inline-flex items-center px-2.5 border border-line-strong rounded-md bg-surface text-[13px] text-ink">trace ↗</a>{% endif %}
+  {% if record.status.value in ('running', 'queued') %}
+  <form method="post" action="{{ cancel_url }}" data-cancel onsubmit="return confirm('Cancel this cycle?')">
+    <button type="submit" class="h-[30px] px-2.5 border border-line-strong rounded-md bg-surface text-bad text-[13px] font-medium cursor-pointer hover:bg-bad-wash">Cancel</button>
+  </form>
+  {% elif resumable_from %}
+  <form method="post" action="{{ base }}/cycles/{{ record.id }}/resume" data-testid="resume">
+    <button type="submit" class="h-[30px] inline-flex items-center gap-1.5 px-2.5 rounded-md bg-ink text-on-ink text-[13px] font-medium cursor-pointer hover:opacity-90">↻ Resume from {{ resumable_from }}</button>
+  </form>
+  {% endif %}
+{% endblock %}
+{% block content_class %}{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-5" data-testid="theater" data-cycle="{{ record.id }}">
+  <div class="flex flex-col gap-1.5">
+    <h1 class="m-0 text-[22px] font-semibold tracking-tight text-balance">
+      {% if pinned.issue %}<span class="font-mono text-faint font-medium text-[18px]">#{{ pinned.issue.number }}</span> {{ pinned.issue.title }}
+      {% elif record.issue_number %}Feature <span class="font-mono">#{{ record.issue_number }}</span>
+      {% else %}{{ record.description or "The daily cycle" }}{% endif %}
+    </h1>
+    <div class="text-[13px] text-muted flex flex-wrap gap-x-3.5 gap-y-1.5">
+      {% if started %}<span>Started {{ started }}</span>{% endif %}
+      {% if dev_iterations %}<span>Dev iteration <span class="font-mono text-ink">{{ dev_iterations }}</span></span>{% endif %}
+      {% if spent %}<span>Spent <span class="font-mono text-ink">{{ spent }}</span></span>{% endif %}
+      {% if elapsed and record.status.value not in ('running', 'queued') %}<span><span class="font-mono text-ink">{{ elapsed }}</span></span>{% endif %}
+      {% if resumed_from %}<span data-testid="resumed-from">resumed after a restart · <a href="{{ base }}/cycles/{{ resumed_from }}" class="hover:text-ink">earlier phases in <span class="font-mono">{{ resumed_from[:8] }}</span> ↗</a></span>{% endif %}
+      {% if pinned.issue and project.feature_href %}<a href="{{ project.feature_href }}{{ pinned.issue.number }}" class="hover:text-ink">the feature's page →</a>{% endif %}
+    </div>
+  </div>
+
+  <div id="stage">{% include "v3/_stage.html" %}</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  var stage = document.getElementById("stage");
+  var filter = null;
+
+  function applyFilter() {
+    var note = document.getElementById("feed-filter-note");
+    stage.querySelectorAll(".feed-entry").forEach(function (row) {
+      row.style.display = (!filter || row.dataset.agent === filter) ? "" : "none";
+    });
+    stage.querySelectorAll(".station").forEach(function (b) {
+      b.classList.toggle("ring-2", filter === b.dataset.role);
+      b.classList.toggle("ring-live", filter === b.dataset.role);
+    });
+    if (note) note.textContent = filter ? "— " + filter + " only (click again to clear)" : "";
+  }
+
+  stage.addEventListener("click", function (event) {
+    var station = event.target.closest(".station");
+    if (!station) return;
+    filter = (filter === station.dataset.role) ? null : station.dataset.role;
+    applyFilter();
+  });
+
+  var FINAL = ["completed", "failed", "cancelled"];
+  // A completed cycle's report lands a moment after its status: while the
+  // stage says data-demo-pending, keep polling — two minutes at most.
+  var pendingPolls = 40;
+  function isFinal(el) { return !!el && FINAL.indexOf(el.dataset.status) !== -1; }
+  function settled(el) { return isFinal(el) && !el.hasAttribute("data-demo-pending"); }
+  var lastHtml = null;
+  function tick() {
+    if (settled(document.getElementById("stage-inner"))) return;
+    fetch("{{ stage_url }}", {headers: {"Accept": "text/html"}})
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) {
+        if (html && lastHtml === null) {
+          lastHtml = html;
+        } else if (html && html !== lastHtml) {
+          lastHtml = html;
+          var feed = stage.querySelector('[data-testid="feed"]');
+          var scrollTop = feed ? feed.scrollTop : 0;
+          stage.innerHTML = html;
+          applyFilter();
+          var fresh = stage.querySelector('[data-testid="feed"]');
+          if (fresh) fresh.scrollTop = scrollTop;
+          // The header's chip lives outside the stage: take the stage's word for it.
+          var pill = stage.querySelector("[data-status-pill]");
+          var header = document.getElementById("status-pill");
+          if (pill && header) { header.innerHTML = pill.innerHTML; header.dataset.status = stage.querySelector("#stage-inner").dataset.status; }
+        }
+        var probe = document.createElement("div");
+        if (html) probe.innerHTML = html;
+        var now = probe.querySelector("#stage-inner") || document.getElementById("stage-inner");
+        if (settled(now)) { window.location.reload(); return; }
+        if (isFinal(now) && pendingPolls-- <= 0) return;
+        setTimeout(tick, 3000);
+      })
+      .catch(function () { setTimeout(tick, 6000); });
+  }
+  setTimeout(tick, 3000);
+
+  var cancel = document.querySelector("[data-cancel]");
+  if (cancel) cancel.addEventListener("submit", function (event) {
+    event.preventDefault();
+    fetch(cancel.action, {method: "POST", headers: {"Accept": "application/json"}})
+      .then(function () { window.location.reload(); });
+  });
+})();
+</script>
+{% endblock %}

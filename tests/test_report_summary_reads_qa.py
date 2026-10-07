@@ -75,7 +75,7 @@ async def _player(tmp_path, summary, gates=()):
                          EventBus(), SSEHub(), report_repo=reports, db=conn)
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
-            return (await client.get("/demos/rpt-1/play")).text
+            return (await client.get("/demos/rpt-1")).text
     finally:
         await conn.close()
 

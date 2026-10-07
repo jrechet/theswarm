@@ -204,7 +204,7 @@ def film_demo(p, repo: str, cycle_id: str,
     issue's sub-tasks are shown first."""
     browser, context, video_dir = _film(p, "demo")
     page = context.new_page()
-    page.goto(f"{BASE}/c/{cycle_id}", wait_until="domcontentloaded")
+    page.goto(f"{BASE}/cycles/{cycle_id}", wait_until="domcontentloaded")
     _caption(page, opening)
     pinned = page.locator('[data-testid="pinned-issue"]')
     if breakdown and pinned.count():

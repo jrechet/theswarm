@@ -89,8 +89,8 @@ def active_for(path: str, base: str, projects: list[str], running: dict[str, obj
         for full_name in projects:
             if rel == f"/r/{full_name}" or rel.startswith(f"/r/{full_name}/"):
                 return full_name
-    if rel.startswith("/c/"):
-        cycle_id = rel[3:].split("/", 1)[0]
+    if rel.startswith("/cycles/") or rel.startswith("/c/"):
+        cycle_id = rel.split("/", 2)[2].split("/", 1)[0]
         for full_name, record in running.items():
             if getattr(record, "id", "") == cycle_id:
                 return full_name

@@ -222,13 +222,16 @@ async def customer_page(request: Request, slug: str):
     if service is not None and not looks_like_cycle_id(slug):
         customer = await service.by_slug(slug)
     if customer is None:
-        # Not a customer: still the V2 theater's address (M4 moves it to
-        # /cycles/), whatever shape the cycle id has — the owner's only.
+        # Not a customer: the theater's V2 address, kept alive for every
+        # link already shared — the owner's only; a member is refused.
         if actor is None or not actor.is_owner:
             return _refused(request, actor)
-        from theswarm.presentation.web.routes.v2 import theater
+        from theswarm.presentation.web.routes.theater import theater_target
 
-        return await theater(request, slug)
+        target = await theater_target(state, slug)
+        if target is None:
+            return HTMLResponse("Cycle not found", status_code=404)
+        return RedirectResponse(f"{state.base_path}/cycles/{target}", status_code=303)
     if actor is None or (not actor.is_owner and actor.customer_id != customer.id):
         return _refused(request, actor)
     if not actor.is_owner:

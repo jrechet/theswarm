@@ -1,0 +1,158 @@
+{% import "v3/_ui.html" as ui %}
+{# The stage: everything that moves while a cycle runs. Re-rendered whole by
+   the page's poll loop; data-status lets the client stop polling. #}
+<div id="stage-inner" data-status="{{ record.status.value }}"{% if demo_pending %} data-demo-pending{% endif %} class="flex flex-col gap-5">
+  {# The header's status chip is outside the polled stage: the page copies this one over it after every swap. #}
+  <template data-status-pill>{{ ui.chip(status_label ~ (' · ' ~ elapsed if elapsed and record.status.value in ('running', 'queued') else ''), status_kind, pulse=(status_kind == 'running'), testid='cycle-status') }}</template>
+
+  {% if orphan %}
+  <p class="m-0 text-[13px] text-muted border border-dashed border-line-strong rounded-[10px] px-4 py-3" data-testid="orphan">
+    Nothing runs this cycle any more — a restart took it and nothing resumed it. This is what the database knows.</p>
+  {% endif %}
+
+  {# ── The demo, once the cycle made it ─────────────────────────────── #}
+  {% if demo %}
+  <section aria-labelledby="stage-demo-title" data-testid="stage-demo"
+    class="flex flex-wrap gap-5 items-center p-4 bg-surface border border-ok/40 rounded-[10px]">
+    <a href="{{ demo.play_url }}" class="block shrink-0 w-full sm:w-64 rounded-md overflow-hidden border border-line bg-[#14171C]" aria-label="Watch the demo">
+      {% if demo.video_url %}
+      <video class="block w-full aspect-video object-cover" preload="metadata" muted playsinline autoplay loop{% if demo.thumbnail_url %} poster="{{ demo.thumbnail_url }}"{% endif %}>
+        <source src="{{ demo.video_url }}" type="video/webm">
+      </video>
+      {% elif demo.thumbnail_url %}
+      <img class="block w-full aspect-video object-cover" src="{{ demo.thumbnail_url }}" alt="" width="512" height="288">
+      {% endif %}
+    </a>
+    <div class="min-w-0 flex-1 flex flex-col gap-2">
+      <h2 id="stage-demo-title" class="m-0 text-[16px] font-semibold">The demo is ready</h2>
+      <p class="m-0 text-[13px] text-muted">
+        {{ demo.prs_merged }} PR{{ 's' if demo.prs_merged != 1 }} merged
+        {%- if demo.prs_held %} · {{ demo.prs_held }} held for review{% endif %}
+        {%- if demo.stories_total %} · {{ demo.stories_completed }}/{{ demo.stories_total }} stories{% endif %}
+        {%- if demo.screenshot_count %} · {{ demo.screenshot_count }} screenshot{{ 's' if demo.screenshot_count != 1 }}{% endif %}
+        {%- if demo.cost_usd %} · <span class="font-mono">${{ '%.2f' | format(demo.cost_usd) }}</span>{% endif %}
+      </p>
+      {{ ui.btn('Watch the demo →', href=demo.play_url, kind='primary') }}
+    </div>
+  </section>
+  {% elif demo_pending %}
+  <p class="m-0 text-[13px] text-muted flex items-center gap-2" data-testid="stage-demo-pending">
+    {{ ui.live_dot(6) }}Recording the demo…</p>
+  {% endif %}
+
+  {# ── The phases, in the order work travelled ───────────────────────── #}
+  {% if steps %}
+  <ol aria-label="Phases" data-testid="stepper" class="list-none m-0 p-4 flex gap-2 bg-surface border border-line rounded-[10px] overflow-x-auto">
+    {% for s in steps %}
+    <li class="flex flex-col gap-2 flex-[1_1_90px] min-w-[84px]" data-step="{{ s.key }}" data-state="{{ s.state }}">
+      <span class="h-[5px] rounded-[3px] {% if s.state == 'done' %}bg-ok{% elif s.state == 'live' %}bg-live live-step{% elif s.state == 'failed' %}bg-bad{% else %}bg-line{% endif %}" aria-hidden="true"></span>
+      <span class="flex flex-col gap-px">
+        <span class="text-[12px] font-medium whitespace-nowrap truncate {% if s.state == 'live' %}text-live-deep{% elif s.state == 'todo' %}text-faint{% else %}text-muted{% endif %}" title="{{ s.label }}">{{ s.label }}</span>
+        <span class="font-mono text-[11px] text-faint whitespace-nowrap">{{ s.time }}</span>
+      </span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+
+  <div class="grid gap-3 items-start" style="grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr))" data-testid="flow">
+
+    {# ── The four agents ─────────────────────────────────────────────── #}
+    <section aria-labelledby="agents-title" class="flex flex-col gap-2">
+      <h2 id="agents-title" class="m-0 h-7 flex items-center px-1 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">The four agents</h2>
+      <ol class="list-none m-0 p-0 flex flex-col gap-2" data-testid="agent-rail">
+        {% for s in graph.nodes %}
+        <li>
+          <button type="button" data-role="{{ s.key }}" data-state="{{ s.state }}"
+            class="station w-full text-left p-3.5 bg-surface border rounded-[10px] flex flex-col gap-1.5 cursor-pointer {% if s.state == 'active' %}border-live/50{% elif s.state == 'failed' %}border-bad/50{% else %}border-line{% endif %}{% if s.state == 'waiting' %} opacity-60{% endif %}">
+            <span class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full {% if s.state == 'active' %}bg-live live-dot{% elif s.state == 'done' %}bg-ok{% elif s.state == 'failed' %}bg-bad{% else %}bg-line-strong{% endif %}" aria-hidden="true"></span>
+              <span class="font-semibold text-[13px]">{{ s.name }}</span>
+              <span class="ml-auto text-[12px] font-medium {% if s.state == 'active' %}text-live-deep{% elif s.state == 'done' %}text-ok{% elif s.state == 'failed' %}text-bad{% else %}text-faint{% endif %}">
+                {%- if s.state == 'active' %}{% if s.phase %}<span data-testid="node-phase">{{ s.phase }}</span>{% else %}working{% endif %}{% elif s.state == 'done' %}done{% elif s.state == 'failed' %}failed{% else %}waiting{% endif -%}
+              </span>
+            </span>
+            <span class="text-[13px] text-muted leading-[1.4] line-clamp-2 min-h-[2.8em]">
+              {%- if s.message %}{{ s.message }}{% elif s.state == 'waiting' %}Waiting…{% elif s.state == 'done' %}Done.{% endif -%}
+            </span>
+          </button>
+        </li>
+        {% endfor %}
+      </ol>
+      {# The hand-offs between them, in the order work travels: in flight, landed, or not yet. #}
+      <ol class="list-none m-0 p-0 flex flex-wrap gap-1.5 px-1" data-testid="hand-offs" aria-label="Hand-offs">
+        {% for key, e in graph.edge.items() %}
+        <li data-edge="{{ key }}" data-flow="{{ e.flow }}"
+            class="inline-flex items-center gap-1.5 h-[22px] px-2 rounded-full text-[11px] font-mono {% if e.flow == 'flowing' %}bg-live-wash text-live-deep{% elif e.flow == 'done' %}bg-ok-wash text-ok{% else %}bg-raised text-faint{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full bg-current{% if e.flow == 'flowing' %} live-dot{% endif %}" aria-hidden="true"></span>{{ e.from }} → {{ e.to }} · {{ e.label }}{% if e.count %} · {{ e.count }}{% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+    </section>
+
+    {# ── What happened ───────────────────────────────────────────────── #}
+    <section aria-labelledby="stage-feed" class="flex flex-col gap-2 min-w-0">
+      <h2 id="stage-feed" class="m-0 h-7 flex items-center px-1 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">What happened <span id="feed-filter-note" class="normal-case tracking-normal ml-2 text-muted"></span></h2>
+      {% if feed %}
+      <ol class="list-none m-0 p-0 px-3.5 bg-surface border border-line rounded-[10px] max-h-[32rem] overflow-y-auto" data-testid="feed">
+        {% for e in feed %}
+        <li class="feed-entry flex gap-3 py-2 border-t border-raised first:border-t-0 text-[13px] leading-[1.4]" data-agent="{{ e.agent }}">
+          <span class="font-mono text-[11px] text-faint shrink-0 pt-0.5 w-14">{{ e.time }}</span>
+          <span class="shrink-0 w-14 font-medium {% if e.agent == 'dev' %}text-live-deep{% elif e.agent == 'techlead' %}text-info{% elif e.agent == 'po' %}text-ok{% elif e.agent == 'qa' %}text-wait{% else %}text-faint{% endif %}">{{ e.glyph }}</span>
+          <span class="min-w-0 {% if e.kind == 'step' %}text-muted{% elif e.kind in ('pr_opened', 'review') %}font-medium{% endif %}">{{ e.text }}</span>
+        </li>
+        {% endfor %}
+      </ol>
+      {% else %}
+      <p class="m-0 text-[13px] text-faint border border-dashed border-line-strong rounded-[10px] py-5 text-center">Nothing yet — the swarm announces itself here.</p>
+      {% endif %}
+    </section>
+
+    {# ── The feature, piece by piece; the pull requests ──────────────── #}
+    <section class="flex flex-col gap-2 min-w-0">
+      <h2 class="m-0 h-7 flex items-center px-1 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">The feature, piece by piece</h2>
+      {% if pinned.issue %}
+      <div class="flex flex-col px-3.5 py-2.5 bg-surface border border-line rounded-[10px]" data-testid="pinned-issue">
+        <div class="flex items-baseline justify-between gap-3 flex-wrap pb-1">
+          <span class="text-[13px] font-semibold"><span class="font-mono text-faint font-normal">#{{ pinned.issue.number }}</span> {{ pinned.issue.title }}</span>
+          {% if pinned.children %}<span class="font-mono text-[11px] text-faint">{{ pinned.done }}/{{ pinned.children | length }} done</span>{% endif %}
+        </div>
+        {% for child in pinned.children %}
+        <div class="flex gap-2.5 py-2 border-t border-raised text-[13px]" data-child="{{ child.number }}" data-status="{{ child.status }}">
+          <span class="w-4 h-4 rounded-full border-[1.5px] shrink-0 mt-0.5 {% if child.status in ('review', 'done') %}border-ok bg-ok{% elif child.status == 'in-progress' %}border-live bg-live live-dot{% elif child.status == 'dropped' %}border-line-strong bg-raised{% else %}border-line-strong{% endif %}" aria-hidden="true"></span>
+          <span class="flex flex-col gap-0.5 min-w-0">
+            <span class="{% if child.status == 'dropped' %}text-faint line-through{% endif %}"><span class="font-mono text-faint text-[12px]">#{{ child.number }}</span> {{ child.title }}</span>
+            <span class="text-[12px] {% if child.status in ('review', 'done') %}text-ok{% elif child.status == 'in-progress' %}text-live-deep{% else %}text-faint{% endif %}">{% if child.status == 'done' %}merged{% elif child.status == 'review' %}in review{% elif child.status == 'in-progress' %}building now{% elif child.status == 'dropped' %}dropped{% else %}{{ child.status or 'to do' }}{% endif %}</span>
+          </span>
+        </div>
+        {% else %}
+        {% if record.status.value == 'running' %}<p class="m-0 py-2 text-[13px] text-faint border-t border-raised">The TechLead hasn't split it yet.</p>{% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="flex flex-col gap-2 px-3.5 py-3 bg-surface border border-line rounded-[10px]" data-testid="pull-requests">
+        <span class="text-[12px] font-medium text-muted">Pull requests</span>
+        {% for pr in prs %}
+        <a href="{{ pr.href }}" class="flex flex-wrap items-center gap-2 text-[13px]">
+          <span class="font-mono text-faint text-[12px]">#{{ pr.number }}</span>
+          <span class="flex-1 min-w-0 truncate">{{ pr.text }}</span>
+        </a>
+        {% else %}
+        <span class="text-[13px] text-faint">None yet.</span>
+        {% endfor %}
+      </div>
+
+      {% if not demo %}
+      <div class="flex flex-col items-center gap-1.5 px-3.5 py-5 border border-dashed border-line-strong rounded-[10px] text-center text-[13px] text-faint">
+        {{ ui.ui_icon('film', 20) }}
+        <span>When the cycle ends, the demo lands here: the video, the gates, the verdict.</span>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+
+  {% if record.error %}
+  <p class="m-0 text-[13px] text-bad border border-bad/30 bg-bad-wash rounded-[10px] px-4 py-3 font-mono break-words">{{ record.error }}</p>
+  {% endif %}
+</div>

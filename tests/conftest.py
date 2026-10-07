@@ -46,6 +46,8 @@ def _no_dotenv_for_tests(monkeypatch):
     every later test. `tests/presentation/test_cli_loads_dotenv.py` lifts it."""
     if "SWARM_SKIP_DOTENV" not in os.environ:
         monkeypatch.setenv("SWARM_SKIP_DOTENV", "1")
+    # The theater's pinned issue is kept 20 s in prod; a test wants every read.
+    monkeypatch.setenv("SWARM_PINNED_CACHE_SECONDS", "0")
 
 
 @pytest.fixture(autouse=True)

@@ -68,7 +68,7 @@ async def announce_demo(
         comments = await github.get_issue_comments(issue)
         if any(marker in str(c.get("body", "")) for c in comments or ()):
             return False
-        play_url = f"{external_url.rstrip('/')}/demos/{event.report_id}/play"
+        play_url = f"{external_url.rstrip('/')}/demos/{event.report_id}"
         await github.add_comment(issue, demo_comment(report, play_url))
     except Exception:  # noqa: BLE001 — an announcement is a courtesy
         log.warning("announcing the demo of %s on %s#%s failed",

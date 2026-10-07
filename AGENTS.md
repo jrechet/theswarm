@@ -72,9 +72,31 @@ watch; the older two are deleted at its M6):
   feature: what was asked, its sub-tasks from `pinned_issue`, its cycles,
   its demo, Play). `/r/{owner}/{name}` registers an unknown repository
   under Internal and redirects there; the composer and Play moved off
-  `routes/v2.py`, which keeps `/`, the memory page and the theater until
-  M4/M6. A project page needs a registered project: the home's repository
-  list goes through `/r/` for that reason.
+  `routes/v2.py`, which keeps `/` and the memory page until M6. A project
+  page needs a registered project: the home's repository list goes
+  through `/r/` for that reason.
+  **The cycle and the demo (M4)**: `routes/theater.py` — `/cycles/{id}`
+  is the theater (the stepper from the phases the cycle announced, the
+  row's phases after a restart; the four agents; what happened; the
+  feature piece by piece; the pull requests read off the feed; it ends on
+  the demo) and `/cycles/{id}/stage` what the page polls; the data is
+  still V2's `_stage_context` in `routes/v2.py`. `/c/{id}` (V2's address,
+  on every link already shared) redirects there through the customers
+  route — `theater_target` follows a continuation — and a row still
+  running that nothing runs is drawn and says so (V1's archive used to).
+  `routes/player.py` — `/demos/{id}` is the player: the verdict read off
+  the behaviour gates (`verdict_of`: any failing is broken, one passing
+  and none failing verified, else unverified), the video QA recorded,
+  what QA measured, a story per PR, who can see it; `/demos/{id}/play`
+  redirects there; `/d/{short}` is the public read-only page outside the
+  wall (`v3/demo_public.html`, the bare layout). V1's player, its JS and
+  its speed test are gone; V1's demos list and compare stay until M6.
+  **The pinned issue is kept 20 s** (`pinned_issue.load_pinned_issue`,
+  `SWARM_PINNED_CACHE_SECONDS`, 0 in the suite): the stage polls every
+  3 s and every render listed every issue of the repository, all states,
+  page after page — a theater's first load took tens of seconds on
+  concert-tour-app and the demo's wait timed out (2026-10-07); a failed
+  read is never kept.
 - **V2** — `routes/v2.py` + `templates/v2/` on Tailwind tokens (`static/v2/input.css`,
   Plex fonts vendored, no CDN). Owns `/` (repo picker fed by the GitHub App
   installation plus legacy registered projects), `/r/{owner}/{name}` (composer →

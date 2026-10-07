@@ -156,7 +156,7 @@ async def _recent_cycles(state, project, base: str, limit: int = 6, issue_number
             except Exception:  # noqa: BLE001
                 log.exception("project: reading the report of %s failed", c.id)
         rows.append({
-            "id": str(c.id), "short": str(c.id)[:8], "href": f"{base}/c/{c.id}",
+            "id": str(c.id), "short": str(c.id)[:8], "href": f"{base}/cycles/{c.id}",
             "status": status, "label": label, "kind": kind,
             "issue_number": c.issue_number,
             "when": c.started_at.strftime("%d %b %H:%M") if c.started_at else "",
@@ -262,7 +262,7 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
     running_cycle = None
     if running is not None:
         running_cycle = {"id": running.id, "issue_number": running.issue_number,
-                         "href": f"{base}/c/{running.id}", "since": _clock(running.started_at or running.created_at)}
+                         "href": f"{base}/cycles/{running.id}", "since": _clock(running.started_at or running.created_at)}
 
     return state.templates.TemplateResponse("v3/project.html", {
         "customer": customer,
@@ -312,7 +312,7 @@ async def compose(request: Request, slug: str, name: str, body: str = Form(defau
         record = await v2.start_targeted_cycle(
             state, project.repo.owner, project.repo.name, number, f"Play on issue #{number}",
         )
-        return RedirectResponse(f"{base}/c/{record.id}", status_code=303)
+        return RedirectResponse(f"{base}/cycles/{record.id}", status_code=303)
     return RedirectResponse(f"{urls['page']}?new={number}", status_code=303)
 
 
@@ -325,7 +325,7 @@ async def play(request: Request, slug: str, name: str, number: int):
     record = await v2.start_targeted_cycle(
         state, project.repo.owner, project.repo.name, number, f"Play on issue #{number}",
     )
-    return RedirectResponse(f"{state.base_path}/c/{record.id}", status_code=303)
+    return RedirectResponse(f"{state.base_path}/cycles/{record.id}", status_code=303)
 
 
 # ── One feature ──────────────────────────────────────────────────────
@@ -369,7 +369,7 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
         "children": children,
         "done": pinned.done,
         "building": building,
-        "cycle_href": f"{base}/c/{running.id}" if building else "",
+        "cycle_href": f"{base}/cycles/{running.id}" if building else "",
         "play_url": f"{urls['play']}{number}/play",
         "cycles": await _recent_cycles(state, project, base, limit=10, issue_number=number),
         "error": pinned.error,

@@ -175,10 +175,11 @@ domain entities under `domain/customers/`:
 | `/settings/{section}` | owner | customers, members, github, access, claude, instance |
 | `/api/*` | owner | unchanged, the harness's contract |
 
-Old links keep working: `/r/{owner}/{name}` → the project, `/c/{twelve
-hex}` → `/cycles/{id}` (the slug grammar refuses that shape),
-`/demos/{id}/play` → `/demos/{id}`. The demo announcer posts the new
-player link.
+Old links keep working: `/r/{owner}/{name}` → the project, a `/c/{id}`
+that is no customer → `/cycles/{id}` (a continuation's origin → the
+continuation; the slug grammar refuses twelve hex characters so the two
+never collide), `/demos/{id}/play` → `/demos/{id}`. The demo announcer
+posts the new player link.
 
 ## Milestones — each lands as its own PR with a demo, deployed, verified on prod
 

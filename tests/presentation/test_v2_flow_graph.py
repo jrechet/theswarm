@@ -234,7 +234,7 @@ async def test_the_stage_draws_the_hand_off_in_flight(web):
 
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issue = AsyncMock(return_value=None)
-        r = await web.get(f"/c/{record.id}/stage")
+        r = await web.get(f"/cycles/{record.id}/stage")
 
     assert r.status_code == 200
     assert 'data-testid="flow"' in r.text
@@ -251,7 +251,7 @@ async def test_the_arcs_follow_the_review(web):
 
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issue = AsyncMock(return_value=None)
-        r = await web.get(f"/c/{record.id}/stage")
+        r = await web.get(f"/cycles/{record.id}/stage")
 
     assert 'data-edge="dev-techlead" data-flow="flowing"' in r.text
     assert 'data-edge="techlead-qa" data-flow="idle"' in r.text
@@ -263,7 +263,7 @@ async def test_a_cycle_without_phases_still_renders(web):
 
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issue = AsyncMock(return_value=None)
-        r = await web.get(f"/c/{record.id}/stage")
+        r = await web.get(f"/cycles/{record.id}/stage")
 
     assert r.status_code == 200
     assert 'data-testid="agent-rail"' in r.text

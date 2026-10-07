@@ -12,7 +12,8 @@ Claude Code specifics on top of the shared guide above:
   `ssh -p5422 debian@jrec.fr cat swarm-access-key.txt` — never paste it into
   chat or files). Trigger a cycle with
   `POST /swarm/api/cycle {"repo": "jrechet/concert-tour-app", "issue_number": N}`
-  and follow it at `/swarm/c/{cycle_id}` (the theater) or `GET /swarm/api/cycles/{id}`.
+  and follow it at `/swarm/cycles/{cycle_id}` (the theater; `/swarm/c/{id}` still
+  redirects there) or `GET /swarm/api/cycles/{id}`.
 - Prefer Seq (`logs.jrec.fr`) over `gh run watch` to verify a deploy; the deploy
   signal is the service image tag matching the main commit SHA. Auto-merge is
   disabled on the repo: `gh pr merge <n> --squash` once CI is green. A ~2 min

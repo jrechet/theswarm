@@ -88,44 +88,6 @@ async def browse_demos(
     )
 
 
-async def _render_player(
-    request: Request,
-    report,
-    *,
-    is_public: bool,
-) -> HTMLResponse:
-    templates = request.app.state.templates
-    report_repo = getattr(request.app.state, "report_repo", None)
-    slides = _build_slides(report)
-
-    prev_demo = None
-    next_demo = None
-    if report_repo is not None and not is_public:
-        project_reports = await report_repo.list_by_project(
-            report.project_id, limit=50,
-        )
-        for i, r in enumerate(project_reports):
-            if r.id == report.id:
-                if i > 0:
-                    next_demo = project_reports[i - 1]
-                if i < len(project_reports) - 1:
-                    prev_demo = project_reports[i + 1]
-                break
-
-    return templates.TemplateResponse(
-        "demo_player.html",
-        {
-            "request": request,
-            "report": report,
-            "slides": slides,
-            "slide_count": len(slides),
-            "prev_demo": prev_demo,
-            "next_demo": next_demo,
-            "is_public": is_public,
-        },
-    )
-
-
 @router.get("/compare")
 async def compare_demos(
     request: Request,
@@ -162,51 +124,6 @@ async def compare_demos(
             "report_b": report_b,
         },
     )
-
-
-@router.get("/{report_id}/play")
-async def play_demo(request: Request, report_id: str) -> HTMLResponse:
-    """Full-screen demo player for a single report."""
-    templates = request.app.state.templates
-    report_repo = getattr(request.app.state, "report_repo", None)
-
-    report = None
-    if report_repo is not None:
-        report = await report_repo.get(report_id)
-
-    if report is None:
-        return templates.TemplateResponse(
-            "demo_not_found.html",
-            {"request": request, "report_id": report_id},
-            status_code=404,
-        )
-
-    return await _render_player(request, report, is_public=False)
-
-
-@public_router.get("/d/{short}")
-async def play_public_demo(request: Request, short: str) -> HTMLResponse:
-    """Read-only public demo player resolved by short slug."""
-    templates = request.app.state.templates
-    report_repo = getattr(request.app.state, "report_repo", None)
-
-    match = None
-    if report_repo is not None:
-        short_norm = short.lower()
-        recent = await report_repo.list_recent(limit=500)
-        for r in recent:
-            if r.public_slug == short_norm:
-                match = r
-                break
-
-    if match is None:
-        return templates.TemplateResponse(
-            "demo_not_found.html",
-            {"request": request, "report_id": short},
-            status_code=404,
-        )
-
-    return await _render_player(request, match, is_public=True)
 
 
 async def _resolve_story_pr(report_repo, report_id: str, ticket_id: str):
@@ -355,77 +272,3 @@ async def comment_story(
     return JSONResponse({"ok": True, "action": "comment"})
 
 
-def _build_slides(report) -> list[dict]:
-    """Build an ordered list of slide descriptors from a DemoReport.
-
-    Top-level walkthrough videos are surfaced right after the title slide so
-    viewers land on the demo video without having to click through stories.
-    """
-    slides: list[dict] = []
-
-    # Slide 0: Title
-    slides.append({
-        "type": "title",
-        "project": report.project_id,
-        "date": report.created_at.strftime("%Y-%m-%d %H:%M UTC"),
-        "summary": report.summary,
-        "gates_pass": report.all_gates_pass,
-        # "No gate failed" is not "all passed" when some never ran.
-        "gates_not_run": sum(1 for g in report.quality_gates if g.status.value == "skip"),
-    })
-
-    # Top-level walkthrough videos come right after the title
-    videos = [a for a in report.artifacts if a.type.value == "video"]
-    for v in videos:
-        slides.append({
-            "type": "artifact_video",
-            "artifact": v,
-        })
-
-    # Per-story slides
-    for i, story in enumerate(report.stories):
-        slides.append({
-            "type": "story",
-            "index": i,
-            "story": story,
-        })
-
-        # Before/after comparison slide if screenshots exist
-        if story.screenshots_before or story.screenshots_after:
-            slides.append({
-                "type": "screenshots",
-                "index": i,
-                "story": story,
-            })
-
-        # Per-story video slide
-        if story.video:
-            slides.append({
-                "type": "video",
-                "index": i,
-                "story": story,
-            })
-
-    # Quality gates slide
-    if report.quality_gates:
-        slides.append({
-            "type": "quality_gates",
-            "gates": report.quality_gates,
-        })
-
-    # Demo screenshots (top-level artifacts)
-    screenshots = [a for a in report.artifacts if a.type.value == "screenshot"]
-    if screenshots:
-        slides.append({
-            "type": "gallery",
-            "artifacts": screenshots,
-        })
-
-    # Agent learnings
-    if report.agent_learnings:
-        slides.append({
-            "type": "learnings",
-            "learnings": report.agent_learnings,
-        })
-
-    return slides

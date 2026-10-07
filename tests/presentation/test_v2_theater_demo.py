@@ -51,7 +51,7 @@ async def _stage(tmp_path, status: str, *, with_report: bool) -> str:
             klass.return_value.get_issue = AsyncMock(return_value={"number": 397, "title": "Next concert"})
             klass.return_value.get_issues = AsyncMock(return_value=[])
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
-                return (await client.get(f"/c/{record.id}/stage")).text
+                return (await client.get(f"/cycles/{record.id}/stage")).text
     finally:
         tracker._cycles.pop(record.id, None)
         await conn.close()
@@ -61,7 +61,7 @@ async def test_a_completed_cycle_shows_its_demo(tmp_path):
     html = await _stage(tmp_path, "completed", with_report=True)
 
     assert 'data-testid="stage-demo"' in html
-    assert 'href="/swarm/demos/rpt-c60953aa/play"' in html
+    assert 'href="/swarm/demos/rpt-c60953aa"' in html
     assert "/swarm/artifacts/20260928/video/demo.webm" in html
     assert "3 PRs merged" in html
     assert "data-demo-pending" not in html
@@ -90,6 +90,6 @@ async def test_a_failed_cycle_does_not_wait_for_a_demo(tmp_path):
 def test_the_poll_loop_keeps_going_while_the_demo_is_pending():
     from pathlib import Path
 
-    js = Path("src/theswarm/presentation/web/templates/v2/theater.html").read_text()
+    js = Path("src/theswarm/presentation/web/templates/v3/theater.html").read_text()
 
     assert "data-demo-pending" in js
