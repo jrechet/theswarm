@@ -58,6 +58,7 @@ stack:
     - provider: github-actions
       repo: jrechet/theswarm
       runners: [self-hosted, jre-server]
+      runner_service: github_runner_runner_theswarm  # what D3 proposes to restart when a runner is offline
       deploy_workflow: ci.yml  # the deploy is a job of the CI run on main (cd.yml is workflow_called)
     - provider: forgejo
       url: https://forge.jrec.fr/jrechet/theswarm

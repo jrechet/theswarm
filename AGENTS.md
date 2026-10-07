@@ -1109,8 +1109,38 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   pipeline's when every failing check never started or names the
   runner, the slot, the deploy (`_INFRA_STATES`, `_INFRA_WORDS`); the
   TechLead then leaves the PR waiting (`"infra"`) instead of sending it
-  back with a note. D3 (proposals with approval) and D4 (improvement
-  PRs) are in the plan.
+  back with a note.
+  **D3 — proposals with approval (2026-10-07).** DevOps reads and
+  diagnoses freely; anything that changes a machine is a *proposal*
+  (`domain/ops/proposals.py`: `Proposal`, frozen; `KINDS` — clear the
+  CI slot, restart the runner, redeploy main — each with the exact
+  command it means on the host, the proposal's whole power). The watch
+  hands every report to `ProposalService.raise_from`
+  (`application/services/proposals.py`, `on_report` in `OpsWatch`): a
+  bad `ci_slot` that says stale, a bad `runners` (with `ci[].runner_service`
+  declared), a bad `deploy_watch` (the image main built on the service —
+  the report's `facts` carry main's full sha beside the findings'
+  words) become one open proposal per kind and host, kept in
+  `ops_proposals` (v035, `infrastructure/persistence/ops_repo.py`). The
+  owner sees them on the home beside the Ops card, *DevOps proposes: …*
+  with the command, and decides with one click
+  (`POST /ops/proposals/{id}/approve|refuse`, `routes/ops.py`, owner
+  only — the wall refuses a member): approve runs the command on the
+  host now — over the same ssh D1 reads with (`devops.run_host`), or a
+  local shell when the host is this box (`local: true`; `sudo: false`
+  when its slots are DevOps's own) — and keeps the answer on the card
+  (`run` or `failed: …`, who approved it; `GET /api/devops/proposals`);
+  a refusal stands, a decided proposal is never re-run, the next stale
+  read raises a new one. Nothing runs without an approval row. **The
+  leash**: the policy hook (`tools/claude._SDK_BASH_DENY`) refuses the
+  machine verbs to every agent — `sudo`, `docker service|stack|swarm|node`,
+  `systemctl`, `rm` under `/srv`, `/etc`, `/var`, `/home` — a proposal
+  is the only way they run. On jrec.fr the slots are root's and
+  `debian` has passwordless sudo and the docker group, so the three
+  commands are exact there; prod's container still has no ssh key, so
+  an approval from prod records `failed: not reachable from here`
+  until the owner mounts one (DEPENDENCIES.md). D4 (improvement PRs)
+  is in the plan.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.

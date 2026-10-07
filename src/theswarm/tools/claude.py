@@ -572,6 +572,12 @@ _SDK_BASH_DENY: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(^|[\s/'\"])\.env(\.[\w.-]+)?\b"), ".env files hold secrets"),
     (re.compile(r"\bgit\s+config\b"), "git config is owned by the pipeline"),
     (re.compile(r"\bgit\s+remote\s+(set-url|add)\b"), "remotes are owned by the pipeline"),
+    # DevOps D3: anything that changes a machine is a proposal the owner
+    # approves on the home — never a verb an agent runs on its own.
+    (re.compile(r"(^|[\s;&|(])sudo\b"), "a hand on the machine is a DevOps proposal the owner approves, never an agent's command"),
+    (re.compile(r"\bdocker\s+(service|stack|swarm|node)\b"), "the swarm's services are a DevOps proposal the owner approves, never an agent's command"),
+    (re.compile(r"\bsystemctl\b"), "the box's services are a DevOps proposal the owner approves, never an agent's command"),
+    (re.compile(r"\brm\s+(-\w*\s+)*/(srv|etc|var|home)\b"), "the box's directories are a DevOps proposal the owner approves, never an agent's command"),
 )
 
 

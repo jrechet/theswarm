@@ -43,6 +43,24 @@
         {% if ops.status == 'ok' %}The pipeline is fine{% elif ops.status == 'warn' %}Something to look at{% elif ops.status == 'bad' %}Something is wrong{% elif ops.pending %}Reading the stack…{% else %}Nothing could be read{% endif %}
         {% if ops.error %}<span class="ml-auto text-[12px] text-bad font-normal truncate" data-testid="ops-error">last read failed: {{ ops.error }}</span>{% endif %}
       </div>
+      {% for p in proposals.open %}
+      <div class="flex flex-wrap items-center gap-3 px-4 py-3 border-t border-line bg-live-wash/40" data-testid="proposal" data-proposal="{{ p.id }}" data-kind="{{ p.kind }}">
+        <span class="w-2 h-2 rounded-full shrink-0 bg-live live-dot" aria-hidden="true"></span>
+        <span class="flex flex-col gap-0.5 flex-[1_1_320px] min-w-0">
+          <span class="font-medium text-[13px]">DevOps proposes: {{ p.title }}</span>
+          <span class="text-[12px] text-muted break-words">{{ p.why }}</span>
+          <span class="font-mono text-[11px] text-faint break-all">{{ p.command }}</span>
+        </span>
+        <form method="post" action="{{ base }}/ops/proposals/{{ p.id }}/approve" class="inline">{{ ui.btn('Approve and run', kind='primary', type='submit', testid='approve-' ~ p.id) }}</form>
+        <form method="post" action="{{ base }}/ops/proposals/{{ p.id }}/refuse" class="inline"><button type="submit" class="h-8 px-2.5 rounded-md text-[12px] text-muted hover:text-bad hover:bg-bad-wash cursor-pointer" data-testid="refuse-{{ p.id }}">Refuse</button></form>
+      </div>
+      {% endfor %}
+      {% for p in proposals.recent[:3] %}
+      <div class="flex flex-wrap items-baseline gap-3 px-4 py-2 border-t border-line text-[12px] text-muted" data-testid="proposal-decided" data-status="{{ p.status }}">
+        <span class="font-medium text-ink">{{ p.title }}</span>
+        <span>{{ p.status }}{% if p.decided_by %} by {{ p.decided_by }}{% endif %}{% if p.result %} — <span class="font-mono">{{ p.result | truncate(120, True, '…') }}</span>{% endif %}</span>
+      </div>
+      {% endfor %}
       {% for f in ops.rows %}
       <div class="flex flex-wrap items-baseline gap-3 px-4 py-2.5 border-t border-line first:border-t-0 text-[13px]" data-testid="ops-row" data-key="{{ f.key }}" data-status="{{ f.status }}">
         <span class="w-2 h-2 rounded-full shrink-0 relative top-px {% if f.status == 'ok' %}bg-ok{% elif f.status == 'warn' %}bg-live{% elif f.status == 'bad' %}bg-bad{% else %}bg-line-strong{% endif %}" aria-hidden="true"></span>

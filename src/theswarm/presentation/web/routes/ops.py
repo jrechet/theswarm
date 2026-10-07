@@ -45,6 +45,39 @@ async def api_devops_preflight(request: Request) -> JSONResponse:
     return JSONResponse(answer.as_dict())
 
 
+@router.get("/api/devops/proposals")
+async def api_proposals(request: Request) -> JSONResponse:
+    service = getattr(request.app.state, "proposal_service", None)
+    if service is None:
+        return JSONResponse({"open": [], "recent": []})
+    return JSONResponse({"open": [proposal_dict(p) for p in await service.open()],
+                         "recent": [proposal_dict(p) for p in await service.recent()]})
+
+
+@router.post("/ops/proposals/{proposal_id}/{decision}")
+async def decide_proposal(request: Request, proposal_id: str, decision: str) -> RedirectResponse:
+    """The owner's one click on the home: approve runs the command on the host now, refuse keeps the no."""
+    from theswarm.presentation.web.routes.customers import current_actor
+
+    service = getattr(request.app.state, "proposal_service", None)
+    actor = await current_actor(request)
+    base = request.app.state.base_path
+    if service is None or actor is None or not actor.is_owner or decision not in ("approve", "refuse"):
+        return RedirectResponse(f"{base}/#ops", status_code=303)
+    if decision == "approve":
+        await service.approve(proposal_id, by=actor.login)
+    else:
+        await service.refuse(proposal_id, by=actor.login)
+    return RedirectResponse(f"{base}/#ops", status_code=303)
+
+
+def proposal_dict(p) -> dict:
+    return {"id": p.id, "kind": p.kind, "host": p.host, "title": p.title, "why": p.why, "command": p.command,
+            "status": p.status, "result": p.result, "decided_by": p.decided_by,
+            "created_at": p.created_at.isoformat(), "decided_at": p.decided_at.isoformat() if p.decided_at else None,
+            "ran_at": p.ran_at.isoformat() if p.ran_at else None}
+
+
 @router.post("/ops/refresh")
 async def ops_refresh(request: Request) -> RedirectResponse:
     """The Ops card's button: read everything again, back to the home."""
