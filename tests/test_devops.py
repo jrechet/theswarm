@@ -135,13 +135,19 @@ class TestTheRest:
         assert d.claude_finding(None).status == "unknown"
 
     def test_the_harness(self):
-        today = {"feature": "venues-list", "outcome": "passed", "behaviour": "verified", "cost_usd": 2.1, "recorded_at": "2026-10-07T07:40:00Z"}
+        # The record as /api/evals/runs carries it: `timestamp`, outcome `built`.
+        today = {"feature": "venue-create", "outcome": "built", "behaviour": "verified", "cost_usd": 2.969, "timestamp": "2026-10-07T07:40:00Z"}
         f = d.harness_finding([today], NOW.date())
-        assert f.status == "ok" and "venues-list" in f.detail and "$2.10" in f.detail
+        assert f.status == "ok" and "venue-create" in f.detail and "$2.97" in f.detail
         broken = {**today, "behaviour": "broken"}
         assert d.harness_finding([broken], NOW.date()).status == "bad"
-        yesterday = {**today, "recorded_at": "2026-10-06T07:40:00Z"}
-        assert d.harness_finding([yesterday], NOW.date()).status == "warn"
+        yesterday = {**today, "feature": "venue-detail", "timestamp": "2026-10-06T07:40:00Z"}
+        warn = d.harness_finding([yesterday], NOW.date())
+        assert warn.status == "warn" and "6 Oct 07:40 UTC" in warn.detail and "venue-detail" in warn.detail
+        # The store answers oldest first: today's run still wins (prod read the oldest, 2026-10-07).
+        assert d.harness_finding([yesterday, today], NOW.date()).status == "ok"
+        assert d.harness_finding([{**yesterday, "recorded_at": "2026-10-06T07:40:00Z", "timestamp": None}], NOW.date()).status == "warn"
+        assert d.harness_finding([{**today, "outcome": "interrupted"}], NOW.date()).status == "warn"
         assert d.harness_finding([], NOW.date()).status == "unknown"
 
     def test_build_sha_prefers_the_deploy_s_tag(self, monkeypatch):
