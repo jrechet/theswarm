@@ -93,7 +93,7 @@
   <div class="flex flex-wrap items-center gap-3 px-4 py-3 bg-surface border border-line rounded-[10px] text-[13px] text-muted" data-testid="visibility">
     {{ ui.ui_icon('eye') }}
     <span>Visible to {{ project.customer_name }}{% if project.members %}'s {{ project.members }} member{{ 's' if project.members != 1 }}{% else %} (nobody invited yet){% endif %} and to you.
-      The public link <a href="{{ public_url }}" class="font-mono text-ink hover:underline" data-testid="public-link">{{ public_url }}</a> opens for anyone who has it, without the cost or the links.</span>
+      The public link <a href="{{ public_url }}" class="font-mono text-ink underline underline-offset-2" data-testid="public-link">{{ public_url }}</a> opens for anyone who has it, without the cost or the links.</span>
     <a href="{{ project.settings_href }}" class="ml-auto text-ink font-medium whitespace-nowrap">Who can see this →</a>
   </div>
   {% endif %}

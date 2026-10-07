@@ -47,7 +47,7 @@
       <div class="flex flex-wrap items-baseline gap-3 px-4 py-2.5 border-t border-line first:border-t-0 text-[13px]" data-testid="ops-row" data-key="{{ f.key }}" data-status="{{ f.status }}">
         <span class="w-2 h-2 rounded-full shrink-0 relative top-px {% if f.status == 'ok' %}bg-ok{% elif f.status == 'warn' %}bg-live{% elif f.status == 'bad' %}bg-bad{% else %}bg-line-strong{% endif %}" aria-hidden="true"></span>
         <span class="font-medium w-[120px] shrink-0">{{ f.label }}</span>
-        <span class="text-muted flex-[1_1_320px] min-w-0 break-words">{{ f.detail }}{% if f.url %} <a href="{{ f.url }}" class="text-ink hover:underline">↗</a>{% endif %}</span>
+        <span class="text-muted flex-[1_1_320px] min-w-0 break-words">{{ f.detail }}{% if f.url %} <a href="{{ f.url }}" class="text-ink underline underline-offset-2">↗</a>{% endif %}</span>
       </div>
       {% else %}
       <div class="px-4 py-3 text-[13px] text-faint">The first read is on its way.</div>
@@ -160,7 +160,7 @@
     {% if not oauth_ready %}
     <p class="text-[13px] text-faint border-t border-line pt-4">
       Sign-in with GitHub isn't set up yet —
-      <a href="{{ base }}/setup/github-oauth" class="text-live-deep hover:underline">one-time setup</a>.
+      <a href="{{ base }}/setup/github-oauth" class="text-live-deep underline underline-offset-2">one-time setup</a>.
     </p>
     {% endif %}
   </section>
