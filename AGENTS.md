@@ -91,6 +91,12 @@ watch; the older two are deleted at its M6):
   redirects there; `/d/{short}` is the public read-only page outside the
   wall (`v3/demo_public.html`, the bare layout). V1's player, its JS and
   its speed test are gone; V1's demos list and compare stay until M6.
+  **The pinned issue is kept 20 s** (`pinned_issue.load_pinned_issue`,
+  `SWARM_PINNED_CACHE_SECONDS`, 0 in the suite): the stage polls every
+  3 s and every render listed every issue of the repository, all states,
+  page after page — a theater's first load took tens of seconds on
+  concert-tour-app and the demo's wait timed out (2026-10-07); a failed
+  read is never kept.
 - **V2** — `routes/v2.py` + `templates/v2/` on Tailwind tokens (`static/v2/input.css`,
   Plex fonts vendored, no CDN). Owns `/` (repo picker fed by the GitHub App
   installation plus legacy registered projects), `/r/{owner}/{name}` (composer →
