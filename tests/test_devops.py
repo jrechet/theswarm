@@ -105,6 +105,17 @@ class TestRunnersAndRuns:
         assert d.failed_runs_finding([on_main], NOW).status == "bad"
         superseded = {"name": "CI", "head_branch": "feat/z", "conclusion": "cancelled", "updated_at": "2026-10-07T13:30:00Z"}
         assert d.failed_runs_finding([superseded], NOW).status == "ok"  # a newer push cancelled it: routine
+        # On main too, when a newer run of the same workflow was created before this one was cancelled
+        # (the concurrency group keeps one pending run): 3c6be90 and 6428250 on 2026-10-07.
+        older = {"name": "CI", "path": ".github/workflows/ci.yml", "head_branch": "main", "conclusion": "cancelled",
+                 "created_at": "2026-10-07T13:48:00Z", "updated_at": "2026-10-07T13:57:00Z"}
+        newer = {"name": "CI", "path": ".github/workflows/ci.yml", "head_branch": "main", "conclusion": None, "status": "in_progress",
+                 "created_at": "2026-10-07T13:57:00Z", "updated_at": "2026-10-07T13:58:00Z"}
+        assert d.failed_runs_finding([newer, older], NOW).status == "ok"
+        capped = {"name": "CI", "path": ".github/workflows/ci.yml", "head_branch": "main", "conclusion": "cancelled",
+                 "created_at": "2026-10-07T13:00:00Z", "updated_at": "2026-10-07T13:31:00Z"}
+        f = d.failed_runs_finding([newer, capped], NOW)  # the newer run came after the cap: a tests job that ran out
+        assert f.status == "warn" and "CI on main (cancelled)" in f.detail
         capped = {**superseded, "head_branch": "main"}
         assert d.failed_runs_finding([capped], NOW).status == "warn"  # on main, never routine
 

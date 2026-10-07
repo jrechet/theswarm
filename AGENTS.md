@@ -1079,7 +1079,11 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   lines: runner, repo, ISO time, container, kind — stale past 180 min;
   `deploy_finding` main's head against `SWARM_BUILD_SHA`, the compose
   file hands the deploy's `TS_TAG` to the container; `runners_finding`,
-  `failed_runs_finding`, `disk_finding`, `claude_finding`,
+  `failed_runs_finding` (a cancelled run counts on main only — a `tests`
+  job past its cap reads "cancelled" — and not when a newer run of the
+  same workflow replaced it: main's concurrency group keeps one pending
+  run and cancels the one before, two of them on 2026-10-07 read as
+  failures), `disk_finding`, `claude_finding`,
   `harness_finding`) and readers (GitHub through PyGithub in a thread,
   a host over ssh with the ambient keys — the laptop's today, prod reads
   the host once a key is mounted, an owner's decision noted in

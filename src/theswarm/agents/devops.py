@@ -240,9 +240,12 @@ def failed_runs_finding(runs: list[dict], now: datetime | None = None, hours: in
     now = now or _now()
     since = now - timedelta(hours=hours)
     # A cancelled run on a branch is routine (a newer push superseded it);
-    # on main it never is (a `tests` job past its cap reads "cancelled").
+    # on main it is a `tests` job past its cap (GitHub says "cancelled") —
+    # unless a newer run of the same workflow on main replaced it: the
+    # concurrency group keeps one pending run and cancels the one before.
     recent = [r for r in runs if (r.get("conclusion") in ("failure", "timed_out")
-                                  or (r.get("conclusion") == "cancelled" and r.get("head_branch") == "main"))
+                                  or (r.get("conclusion") == "cancelled" and r.get("head_branch") == "main"
+                                      and not _superseded(r, runs)))
               and (_parse_time(r.get("updated_at")) or since) >= since]
     if not recent:
         return Finding("failed_runs", "Workflow runs", OK, f"none failed in the last {hours} h")
@@ -251,6 +254,21 @@ def failed_runs_finding(runs: list[dict], now: datetime | None = None, hours: in
     status = BAD if any(r.get("head_branch") == "main" and r.get("conclusion") == "failure" for r in recent) else WARN
     return Finding("failed_runs", "Workflow runs", status, f"{len(recent)} failed in the last {hours} h: {'; '.join(names)}{more}",
                    recent[0].get("html_url", "") or "")
+
+
+def _superseded(run: dict, runs: list[dict]) -> bool:
+    """A newer run of the same workflow on the same branch, created before this one was cancelled."""
+    born = _parse_time(run.get("created_at"))
+    ended = _parse_time(run.get("updated_at"))
+    if born is None or ended is None:
+        return False
+    for other in runs:
+        if other is run or other.get("head_branch") != run.get("head_branch") or other.get("path") != run.get("path"):
+            continue
+        other_born = _parse_time(other.get("created_at"))
+        if other_born is not None and born < other_born <= ended:
+            return True
+    return False
 
 
 def disk_finding(name: str, usages: list[dict], key: str = "disk") -> Finding:
@@ -389,7 +407,8 @@ def _run_dict(run) -> dict:
         "id": getattr(run, "id", None), "name": getattr(run, "name", ""), "status": getattr(run, "status", ""),
         "conclusion": getattr(run, "conclusion", None), "head_sha": getattr(run, "head_sha", ""),
         "head_branch": getattr(run, "head_branch", ""), "event": getattr(run, "event", ""),
-        "updated_at": getattr(run, "updated_at", None), "html_url": getattr(run, "html_url", ""),
+        "updated_at": getattr(run, "updated_at", None), "created_at": getattr(run, "created_at", None),
+        "html_url": getattr(run, "html_url", ""),
         "path": getattr(run, "path", ""),
     }
 
