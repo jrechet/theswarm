@@ -10,6 +10,7 @@ V2's `_stage_context`, kept in routes/v2.py until M6 moves it.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
@@ -294,6 +295,42 @@ async def theater_context(request: Request, record, orphan: bool = False) -> dic
 
 
 # ── The routes ───────────────────────────────────────────────────────
+
+
+@router.post("/cycles/{cycle_id}/resume")
+async def resume(request: Request, cycle_id: str) -> RedirectResponse:
+    """Resume a failed cycle from the phase after its last good checkpoint
+    (Sprint G5), on V3 since M5: the theater's button posts here, and the
+    continuation opens in the theater. V1's route of the same address goes
+    with V1 at M6."""
+    from theswarm.api import CycleRequest, get_cycle_tracker, run_api_cycle
+
+    state = request.app.state
+    base = state.base_path
+    checkpoint_repo = getattr(state, "checkpoint_repo", None)
+    if checkpoint_repo is None:
+        return RedirectResponse(f"{base}/cycles/{cycle_id}", status_code=303)
+    last_ok = await checkpoint_repo.last_ok(cycle_id)
+    resume_from = last_ok.next_phase if last_ok else None
+    if resume_from is None:  # nothing to resume from: back to the theater, nothing done
+        return RedirectResponse(f"{base}/cycles/{cycle_id}", status_code=303)
+
+    original = await state.get_cycle_status_query.execute(cycle_id)
+    repo = original.project_id if original is not None else ""
+    tracker = get_cycle_tracker()
+    req = CycleRequest(repo=repo, description=f"Resume of {cycle_id} from {resume_from}")
+    record = tracker.create(req)
+    task = asyncio.create_task(run_api_cycle(
+        record.id, repo, req.description, "", getattr(state, "allowed_repos", []),
+        event_bus=getattr(state, "event_bus", None), report_repo=getattr(state, "report_repo", None),
+        base_path=base, project_repo=getattr(state, "project_repo", None),
+        cycle_repo=getattr(state, "cycle_repo", None), project_id=repo,
+        checkpoint_repo=checkpoint_repo, resume_from=resume_from,
+        role_assignment_service=getattr(state, "role_assignment_service", None),
+    ))
+    tracker.set_task(record.id, task)
+    log.info("Cycle %s resumed as %s from phase %s", cycle_id, record.id, resume_from)
+    return RedirectResponse(f"{base}/cycles/{record.id}", status_code=303)
 
 
 @router.get("/cycles/{cycle_id}", response_class=HTMLResponse)
