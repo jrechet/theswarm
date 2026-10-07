@@ -93,6 +93,7 @@ async def home(request: Request) -> HTMLResponse:
         "to_review": await _recent_demos(state),
         "requests": await _requests_waiting(state),
         "ops": await _ops_card(state),
+        "proposals": await _proposals(state),
         "today": datetime.now(timezone.utc).strftime("%A %d %B, %H:%M UTC").replace(" 0", " "),
     })
 
@@ -116,6 +117,20 @@ def _now_cards(state, running: dict[str, object]) -> list[dict]:
         })
     cards.sort(key=lambda c: c["sort"], reverse=True)
     return cards
+
+
+async def _proposals(state) -> dict:
+    """What DevOps proposes (D3): waiting for the owner, and what was decided lately."""
+    service = getattr(state, "proposal_service", None)
+    if service is None:
+        return {"open": [], "recent": []}
+    try:
+        open_ = [p for p in await service.open() if p.status == "proposed"]
+        recent = [p for p in await service.recent(limit=6) if p.status != "proposed"]
+    except Exception:  # noqa: BLE001 — the page stays
+        log.exception("home: reading the proposals failed")
+        return {"open": [], "recent": []}
+    return {"open": open_, "recent": recent}
 
 
 async def _ops_card(state) -> dict | None:

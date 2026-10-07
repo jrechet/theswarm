@@ -45,7 +45,8 @@ def due_daily(now: datetime, last_posted: date | None, hour: int = DEFAULT_REPOR
 class OpsWatch:
     def __init__(self, gather: Callable[[], Awaitable[OpsReport]], *, interval_s: int = DEFAULT_INTERVAL_SECONDS,
                  report_hour_utc: int = DEFAULT_REPORT_HOUR_UTC, report_minute: int = DEFAULT_REPORT_MINUTE,
-                 chat=None, channel: str = "", clock: Callable[[], datetime] | None = None) -> None:
+                 chat=None, channel: str = "", clock: Callable[[], datetime] | None = None,
+                 on_report: Callable[[OpsReport], Awaitable[object]] | None = None) -> None:
         self._gather = gather
         self._interval = max(30, int(interval_s))
         self._hour = report_hour_utc
@@ -53,6 +54,7 @@ class OpsWatch:
         self._chat = chat
         self._channel = channel
         self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._on_report = on_report  # D3: the proposals raised from a report's findings
         self._lock = asyncio.Lock()
         self._last: OpsReport | None = None
         self._error: str = ""
@@ -80,6 +82,11 @@ class OpsWatch:
             try:
                 self._last = self._watch_deploy(await self._gather())
                 self._error = ""
+                if self._on_report is not None:
+                    try:
+                        await self._on_report(self._last)
+                    except Exception:  # noqa: BLE001 — a proposal not raised, never a report lost
+                        log.exception("DevOps: raising proposals failed")
             except Exception as exc:  # noqa: BLE001 — never a page's problem
                 log.exception("DevOps: the refresh failed")
                 self._error = str(exc)[:200] or exc.__class__.__name__
@@ -103,7 +110,7 @@ class OpsWatch:
         finding = deploy_watch_finding(main_sha, build_sha, run, self._main_seen[1], now)
         if finding is None:
             return report
-        return OpsReport(report.findings + (finding,), report.read_at, report.stack, report.took_s)
+        return OpsReport(report.findings + (finding,), report.read_at, report.stack, report.took_s, report.facts)
 
     @staticmethod
     def _deploy_facts(deploy: Finding | None) -> tuple[str, str, dict | None]:

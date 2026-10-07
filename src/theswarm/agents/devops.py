@@ -17,7 +17,7 @@ import logging
 import os
 import shutil
 import subprocess
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -59,6 +59,7 @@ class OpsReport:
     read_at: datetime
     stack: str = ""
     took_s: float = 0.0
+    facts: dict = field(default_factory=dict)  # what the words are made of: main_sha, build_sha (full)
 
     @property
     def status(self) -> str:
@@ -508,11 +509,29 @@ def parse_host_output(text: str) -> dict:
     return {"slots": slots, "disks": disks, "load": load}
 
 
+async def run_local(host: dict, script: str) -> str:
+    """The same read-only script on this box (a host declared `local: true`)."""
+    proc = await asyncio.create_subprocess_shell(script, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        out, err = await asyncio.wait_for(proc.communicate(), SSH_TIMEOUT_SECONDS + 10)
+    except asyncio.TimeoutError:
+        proc.kill()
+        raise RuntimeError("the local script timed out")
+    if proc.returncode != 0:
+        raise RuntimeError((err.decode(errors="replace").strip() or f"exited {proc.returncode}")[:200])
+    return out.decode(errors="replace")
+
+
+async def run_host(host: dict, script: str) -> str:
+    """A script on a host: over ssh, or in a local shell when the host is this box."""
+    return await (run_local if host.get("local") else run_ssh)(host, script)
+
+
 async def read_host(host: dict, run: Callable[[dict, str], Awaitable[str]] | None = None) -> dict:
     slot_dir = host.get("ci_slot_dir", "")
     paths = " ".join(host.get("disk_paths") or ["/"])
     script = HOST_SCRIPT.format(slot_dir=slot_dir or "/nonexistent", disk_paths=paths)
-    return parse_host_output(await (run or run_ssh)(host, script))
+    return parse_host_output(await (run or run_host)(host, script))
 
 
 # ── Gather ───────────────────────────────────────────────────────────
@@ -532,6 +551,7 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
     started = _now()
     now = now or started
     findings: list[Finding] = []
+    facts: dict = {}
     repo = self_repo(stack)
     deploy_cfg = stack.get("deploy") or {}
     workflow = next((c.get("deploy_workflow") for c in stack.get("ci", []) or [] if c.get("deploy_workflow")), "ci.yml")
@@ -548,6 +568,7 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
         except Exception:  # noqa: BLE001
             this_build = ""
         findings.append(deploy_finding(gh.get("main_sha", ""), this_build, deploy_run_of(runs, workflow), repo))
+        facts.update(main_sha=gh.get("main_sha", "") or "", build_sha=this_build or "")
         if "runners" in gh:
             findings.append(runners_finding(gh["runners"]))
         else:
@@ -587,7 +608,7 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
             findings.append(_unknown("harness", "Harness", exc))
 
     return OpsReport(tuple(findings), read_at=now, stack=stack_summary(stack),
-                     took_s=(_now() - started).total_seconds(), )
+                     took_s=(_now() - started).total_seconds(), facts=facts)
 
 
 def _claude_status() -> dict:

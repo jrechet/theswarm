@@ -978,12 +978,25 @@ def create_web_app(
             store = getattr(app.state, "eval_run_repo", None)
             return await store.list_for_repo(repo, limit=10) if store is not None else []
 
+        # D3 — proposals: raised from each report, decided by the owner on the home.
+        from theswarm.agents.devops import run_host
+        from theswarm.application.services.proposals import ProposalService
+        from theswarm.infrastructure.persistence.ops_repo import SQLiteProposalRepository
+
+        app.state.proposal_service = ProposalService(SQLiteProposalRepository(db), stack, run_host) if db is not None else None
+
+        async def _raise_proposals(report):
+            if app.state.proposal_service is not None:
+                await app.state.proposal_service.raise_from(report.findings, report.facts)
+
         app.state.ops_watch = OpsWatch(
             lambda: devops_gather(stack, harness=_harness_runs),
             interval_s=int(_os.environ.get("SWARM_DEVOPS_INTERVAL_SECONDS", "600") or 600),
+            on_report=_raise_proposals,
         )
     else:
         app.state.ops_watch = None
+        app.state.proposal_service = None
 
     # Sprint C F6 — VCS factory for story approve/reject/comment
     app.state.vcs_factory = vcs_factory
