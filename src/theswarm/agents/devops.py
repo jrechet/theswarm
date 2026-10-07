@@ -293,20 +293,35 @@ def claude_finding(status: dict | None) -> Finding:
     return Finding("claude", "Claude", UNKNOWN, word)
 
 
+HARNESS_GOOD = ("built", "passed", "already_delivered")
+
+
+def _run_time(run: dict) -> datetime | None:
+    """When an eval run was recorded: `timestamp` is what /api/evals/runs carries."""
+    for key in ("timestamp", "recorded_at", "created_at", "started_at"):
+        moment = _parse_time(run.get(key))
+        if moment is not None:
+            return moment
+    return None
+
+
 def harness_finding(runs: list[dict], today: date | None = None) -> Finding:
-    """The day's harness run on the test bed, from the eval history."""
+    """The day's harness run on the test bed, from the eval history (newest first,
+    whatever order the store answers in)."""
     today = today or _now().date()
-    todays = [r for r in runs if (_parse_time(r.get("recorded_at") or r.get("created_at") or r.get("started_at")) or datetime.min.replace(tzinfo=timezone.utc)).date() == today]
+    floor = datetime.min.replace(tzinfo=timezone.utc)
+    ordered = sorted(runs, key=lambda r: _run_time(r) or floor, reverse=True)
+    todays = [r for r in ordered if (_run_time(r) or floor).date() == today]
     if not todays:
-        latest = runs[0] if runs else None
+        latest = ordered[0] if ordered else None
         if latest is None:
             return Finding("harness", "Harness", UNKNOWN, "no eval run recorded")
-        when = _clock(latest.get("recorded_at") or latest.get("created_at") or latest.get("started_at") or "")
+        when = _clock(_run_time(latest) or "")
         return Finding("harness", "Harness", WARN, f"no run today (07:00 UTC); the last one {when}: {latest.get('feature', '?')} — {latest.get('outcome') or ('passed' if latest.get('passed') else 'failed')}")
     run = todays[0]
     outcome = run.get("outcome") or ("passed" if run.get("passed") else "failed")
     behaviour = run.get("behaviour") or ""
-    status = OK if outcome in ("passed", "already_delivered") and behaviour != "broken" else BAD if outcome == "failed" or behaviour == "broken" else WARN
+    status = OK if outcome in HARNESS_GOOD and behaviour != "broken" else BAD if outcome == "failed" or behaviour == "broken" else WARN
     cost = f", ${float(run['cost_usd']):.2f}" if run.get("cost_usd") not in (None, "") else ""
     return Finding("harness", "Harness", status, f"today: {run.get('feature', '?')} — {outcome}" + (f", {behaviour}" if behaviour else "") + cost)
 
