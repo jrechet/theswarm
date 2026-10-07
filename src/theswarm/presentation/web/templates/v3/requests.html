@@ -76,7 +76,7 @@
     {% if mine %}
     <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
       {% for row in mine %}
-      <div class="flex flex-wrap items-center gap-4 px-4 py-3 border-t border-line first:border-t-0" data-testid="my-request" data-status="{{ row.request.status }}">
+      <div class="flex flex-wrap items-center gap-4 px-4 py-3 border-t border-line first:border-t-0" data-testid="my-request" data-status="{{ row.request.status }}" data-request="{{ row.request.id }}">
         <span class="flex flex-col gap-0.5 flex-[1_1_260px] min-w-0">
           <span class="font-medium">{{ row.request.title }}</span>
           <span class="text-[12px] text-muted">sent {{ row.when }}{% if row.project_name %} · {{ row.project_name }}{% endif %}{% if row.request.status == 'declined' %} · declined{% if row.request.decline_reason %}: {{ row.request.decline_reason }}{% endif %}{% endif %}</span>

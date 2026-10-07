@@ -104,7 +104,7 @@ class TestTheRequestFollowsItsFeature:
         assert await world.requests.on_demo_ready(REPO, 90, "rep-1") == 1
         delivered = await world.requests.get(r.id)
         assert delivered.status == "delivered" and delivered.demo_report_id == "rep-1"
-        assert [s["state"] for s in delivered.steps()] == ["done", "done", "done", "now"]
+        assert [s["state"] for s in delivered.steps()] == ["done", "done", "done", "done"]
 
     async def test_another_issue_or_repository_moves_nothing(self, world):
         await self._planned(world)

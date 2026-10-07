@@ -59,6 +59,8 @@ class Request:
         for i, key in enumerate(STEPS):
             if self.status == DECLINED:
                 state = "done" if i == 0 else "off"
+            elif self.status == DELIVERED:
+                state = "done"  # nothing is happening any more: four green steps
             elif i < self.step:
                 state = "done"
             elif i == self.step:

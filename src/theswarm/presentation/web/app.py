@@ -59,7 +59,7 @@ from theswarm.domain.cycles.events import (
 from theswarm.presentation.web.routes import analyst, api, architect, artifacts, autonomy_config, chat, chief_of_staff, cycles, dashboard, demos, designer, dev_rigour, features, fragments, health, hitl, metrics, product, projects, prompt_library, qa, refactor_programs, release, reports, scout, security, semantic_memory, settings as settings_route, sre, team, techlead, webhooks, writer
 from theswarm.presentation.web.auth import AuthWallMiddleware
 from theswarm.presentation.web.shell import ShellMiddleware, current_shell
-from theswarm.presentation.web.routes import auth_routes, customers, github_setup, player, project, theater, v2
+from theswarm.presentation.web.routes import auth_routes, customers, github_setup, player, project, requests_routes, theater, v2
 from theswarm.presentation.web.sse import SSEHub
 
 _HERE = Path(__file__).parent
@@ -144,6 +144,16 @@ def create_web_app(
         app.state.customer_service = CustomerService(
             app.state.customer_repo, app.state.member_repo, project_repo,
         )
+        # V3 M5 — requests: a member's need, the owner's inbox; the tracker
+        # follows the feature's cycle on the bus (building, then delivered)
+        from theswarm.application.services.requests import RequestService, RequestTracker
+        from theswarm.domain.reporting.events import DemoReady as _DemoReady
+        from theswarm.infrastructure.persistence.customer_repo import SQLiteRequestRepository
+        app.state.request_repo = SQLiteRequestRepository(db)
+        app.state.request_service = RequestService(app.state.request_repo, project_repo)
+        request_tracker = RequestTracker(app.state.request_service, project_repo)
+        event_bus.subscribe(CycleStarted, request_tracker.on_cycle_started)
+        event_bus.subscribe(_DemoReady, request_tracker.on_demo_ready)
 
     # Queries
     app.state.list_projects_query = ListProjectsQuery(project_repo)
@@ -983,6 +993,7 @@ def create_web_app(
     app.include_router(theater.router)  # V3 M4: /cycles/{id}, the theater; before V1's cycles pages
     app.include_router(project.router)  # V3 M3: /c/{slug}/p/{name}, its features, /r/{owner}/{name} → there
     app.include_router(customers.router)  # V3 M2: /settings/customers, /invite/{token}, /c/{slug}
+    app.include_router(requests_routes.router)  # V3 M5: /requests — the inbox, a member's list and composer
     app.include_router(v2.router)  # owns `/` — the V2 flow is the front door
     app.include_router(dashboard.router)
     app.include_router(projects.router)

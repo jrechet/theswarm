@@ -30,6 +30,7 @@
 
     <div class="flex md:flex-col flex-wrap gap-0.5">
       {{ ui.rail_item('Home', base ~ '/', active=(shell.active == 'home'), icon='home', testid='rail-home') }}
+      {% if shell.is_member %}{{ ui.rail_item('Your requests', base ~ '/requests', active=(shell.active == 'requests'), icon='inbox', testid='rail-requests') }}{% elif shell.actor %}{{ ui.rail_item('Requests', base ~ '/requests', active=(shell.active == 'requests'), icon='inbox', badge=(shell.requests_waiting if shell.requests_waiting else ''), testid='rail-requests') }}{% endif %}
     </div>
 
     {% if shell.is_member and shell.customer %}

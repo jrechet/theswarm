@@ -49,7 +49,7 @@ async def _customer_of(state, customer_id: str):
     return await repo.get(customer_id) if repo is not None else None
 
 
-async def _row(state, request, customer=None) -> dict:
+async def request_row(state, request, customer=None) -> dict:
     """What a request shows: who, when, where it stands, its feature and demo."""
     base = state.base_path
     customer = customer or await _customer_of(state, request.customer_id)
@@ -67,6 +67,7 @@ async def _row(state, request, customer=None) -> dict:
     return {
         "request": request,
         "customer": customer,
+        "customer_slug": slug,
         "customer_name": customer.name if customer is not None else "",
         "customer_initial": customer.initial if customer is not None else "?",
         "project_name": next((p.repo.name for p in projects if p.id == request.project_id), ""),
@@ -79,6 +80,14 @@ async def _row(state, request, customer=None) -> dict:
     }
 
 
+async def inbox_rows(state, limit: int = 50) -> list[dict]:
+    """The requests waiting for the owner, oldest first, as rows."""
+    service = getattr(state, "request_service", None)
+    if service is None:
+        return []
+    return [await request_row(state, r) for r in await service.inbox(limit=limit)]
+
+
 @router.get("/requests", response_class=HTMLResponse)
 async def requests_page(request: Request, error: str = ""):
     state = request.app.state
@@ -87,13 +96,15 @@ async def requests_page(request: Request, error: str = ""):
     if actor is None or service is None:
         return _refused(request, actor)
     if actor.is_owner:
-        inbox = [await _row(state, r) for r in await service.inbox()]
-        open_ = [await _row(state, r) for r in await service.open_requests() if r.status != "received"]
+        inbox = await inbox_rows(state)
+        open_ = [await request_row(state, r) for r in await service.open_requests() if r.status != "received"]
         return state.templates.TemplateResponse("v3/requests.html", {
             "role": "owner", "inbox": inbox, "open": open_, "error": error,
         })
     customer = await _customer_of(state, actor.customer_id)
-    mine = [await _row(state, r, customer) for r in await service.for_customer_id(actor.customer_id)]
+    if customer is None:
+        return _refused(request, actor)
+    mine = [await request_row(state, r, customer) for r in await service.for_customer(customer)]
     return state.templates.TemplateResponse("v3/requests.html", {
         "role": "member", "mine": mine, "customer": customer, "actor": actor, "error": error,
     })
@@ -123,6 +134,8 @@ async def submit_request(request: Request, title: str = Form(default=""), body: 
     if actor is None or actor.is_owner or service is None:
         return _refused(request, actor)
     customer = await _customer_of(state, actor.customer_id)
+    if customer is None:
+        return _refused(request, actor)
     chosen = None
     for p in await state.project_repo.list_for_customer(actor.customer_id):
         if str(p.repo) == project:

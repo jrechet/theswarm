@@ -4,13 +4,15 @@
 {% block crumbs %}
   <a href="{{ project.customer_href }}" class="text-muted hover:text-ink">{{ project.customer_name }}</a>
   <span class="text-line-strong">/</span>
-  <a href="{{ project.href }}" class="text-muted hover:text-ink">{{ project.name }}</a>
+  {% if member %}<span class="text-muted">{{ project.name }}</span>{% else %}<a href="{{ project.href }}" class="text-muted hover:text-ink">{{ project.name }}</a>{% endif %}
   <span class="text-line-strong">/</span>
   <span class="text-ink font-medium">Demo</span>
 {% endblock %}
 {% block actions %}
+  {% if not member %}
   <button type="button" data-copy="{{ public_url }}" class="h-[30px] inline-flex items-center gap-2 px-2.5 border border-line-strong rounded-md bg-surface text-[13px] text-ink cursor-pointer">{{ ui.ui_icon('link', 14) }}Copy the public link</button>
   {% if cycle_href %}<a href="{{ cycle_href }}" class="h-[30px] inline-flex items-center px-2.5 border border-line-strong rounded-md bg-surface text-[13px] text-ink">The cycle</a>{% endif %}
+  {% endif %}
 {% endblock %}
 {% block content_class %}{% endblock %}
 {% block content %}
