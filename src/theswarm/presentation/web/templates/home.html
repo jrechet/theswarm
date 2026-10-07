@@ -36,6 +36,7 @@
   <section aria-labelledby="ops-title" id="ops" class="flex flex-col gap-3" data-testid="ops-card" data-status="{{ ops.status }}">
     {% call ui.section_label('Ops', ('DevOps · ' ~ ops.stack ~ ' · read ' ~ ops.read_at) if ops.read_at else 'DevOps · reading…', id='ops-title') %}
       <form method="post" action="{{ base }}/ops/refresh" class="ml-auto"><button type="submit" class="text-[12px] text-muted hover:text-ink cursor-pointer" data-testid="ops-refresh">Read again →</button></form>
+      {% if ops.can_improve %}<form method="post" action="{{ base }}/ops/improve" class="ml-3"><button type="submit" class="text-[12px] text-muted hover:text-ink cursor-pointer" data-testid="ops-improve">Propose an improvement →</button></form>{% endif %}
     {% endcall %}
     <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
       <div class="flex items-center gap-2.5 px-4 h-10 border-b border-line text-[13px] font-medium">
@@ -59,6 +60,19 @@
       <div class="flex flex-wrap items-baseline gap-3 px-4 py-2 border-t border-line text-[12px] text-muted" data-testid="proposal-decided" data-status="{{ p.status }}">
         <span class="font-medium text-ink">{{ p.title }}</span>
         <span>{{ p.status }}{% if p.decided_by %} by {{ p.decided_by }}{% endif %}{% if p.result %} — <span class="font-mono">{{ p.result | truncate(120, True, '…') }}</span>{% endif %}</span>
+      </div>
+      {% endfor %}
+      {% if ops.improvement %}
+      <div class="flex flex-wrap items-baseline gap-2 px-4 py-2 border-t border-line text-[12px]" data-testid="ops-improvement" data-status="{{ ops.improvement.status }}">
+        {% if ops.improvement.status == 'running' %}<span class="w-2 h-2 rounded-full shrink-0 bg-live live-dot self-center" aria-hidden="true"></span><span class="text-muted">DevOps is reading the pipeline for an improvement…</span>
+        {% elif ops.improvement.status == 'opened' %}<span class="font-medium">DevOps opened <a class="underline underline-offset-2" href="{{ ops.improvement.url }}">PR #{{ ops.improvement.pr }}</a></span><span>— {{ ops.improvement.title }}</span>{% if ops.improvement.expected_gain %}<span class="text-muted">· expected: {{ ops.improvement.expected_gain }}</span>{% endif %}
+        {% elif ops.improvement.status == 'nothing' %}<span class="text-muted">Nothing to improve: {{ ops.improvement.reason }}</span>
+        {% else %}<span class="text-bad">The improvement failed: {{ ops.improvement.reason }}</span>{% endif %}
+      </div>
+      {% endif %}
+      {% for pr in ops.devops_prs %}
+      <div class="flex flex-wrap items-baseline gap-2 px-4 py-2 border-t border-line text-[12px]" data-testid="ops-improvement-pr" data-pr="{{ pr.number }}">
+        <span class="font-medium">Improvement open: <a class="underline underline-offset-2" href="{{ pr.html_url }}">PR #{{ pr.number }}</a></span><span>— {{ pr.title }}</span><span class="text-muted">· the TechLead reviews it, you merge</span>
       </div>
       {% endfor %}
       {% for f in ops.rows %}

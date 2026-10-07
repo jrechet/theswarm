@@ -177,10 +177,13 @@ async def _host(host):
     return {"slots": [(SLOT, STALE_OWNER)], "disks": [{"path": "/", "percent": 11, "free": "3.1T"}]}
 
 
+QUIET = lambda: {"one": 0.4, "five": 0.4, "fifteen": 0.4, "cores": 8}  # noqa: E731 — the suite's own box must not colour a report
+
+
 class TestGather:
     async def test_every_check_with_fakes(self):
         report = await d.gather(STACK, github=_github, host_reader=_host, claude=lambda: {"status": "ok"},
-                                harness=lambda repo: _harness(repo), build=lambda: "753dbf9000", here=HERE, now=NOW)
+                                harness=lambda repo: _harness(repo), build=lambda: "753dbf9000", here=HERE, load=QUIET, now=NOW)
         keys = [f.key for f in report.findings]
         assert keys == ["deploy", "runners", "failed_runs", "ci_slot", "disk_jrec.fr", "load_jrec.fr", "load_here", "disk_here", "claude", "harness"]
         by = {f.key: f for f in report.findings}
@@ -196,7 +199,7 @@ class TestGather:
         async def no_github(_):
             raise ValueError("GITHUB_TOKEN is not set")
 
-        report = await d.gather(STACK, github=no_github, host_reader=broken, claude=lambda: {"status": "ok"}, here=HERE, now=NOW)
+        report = await d.gather(STACK, github=no_github, host_reader=broken, claude=lambda: {"status": "ok"}, here=HERE, load=QUIET, now=NOW)
         by = {f.key: f for f in report.findings}
         assert by["deploy"].status == "unknown" and "GITHUB_TOKEN" in by["deploy"].detail
         assert by["ci_slot"].status == "unknown" and "not reachable from here" in by["ci_slot"].detail

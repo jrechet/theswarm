@@ -45,6 +45,29 @@ async def api_devops_preflight(request: Request) -> JSONResponse:
     return JSONResponse(answer.as_dict())
 
 
+@router.post("/ops/improve")
+async def ops_improve(request: Request) -> RedirectResponse:
+    """The owner's click (D4): DevOps measures, asks, opens the PR in the background; the card follows."""
+    from theswarm.presentation.web.routes.customers import current_actor
+
+    watch = _watch(request)
+    actor = await current_actor(request)
+    base = request.app.state.base_path
+    if watch is not None and actor is not None and actor.is_owner and watch.can_improve:
+        watch.start_improvement()
+    return RedirectResponse(f"{base}/#ops", status_code=303)
+
+
+@router.get("/api/devops/improvement")
+async def api_improvement(request: Request) -> JSONResponse:
+    watch = _watch(request)
+    if watch is None:
+        return JSONResponse({"detail": "DevOps is not configured (no stack declared)"}, status_code=404)
+    report = watch.last()
+    return JSONResponse({"improvement": watch.improvement, "can_improve": watch.can_improve,
+                         "open_prs": list((report.facts.get("devops_prs") if report else None) or [])})
+
+
 @router.get("/api/devops/proposals")
 async def api_proposals(request: Request) -> JSONResponse:
     service = getattr(request.app.state, "proposal_service", None)

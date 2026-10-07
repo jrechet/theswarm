@@ -140,12 +140,14 @@ async def _ops_card(state) -> dict | None:
         return None
     report = watch.last()
     if report is None:
-        return {"status": "unknown", "stack": "", "read_at": "", "rows": [], "pending": True, "error": watch.error}
+        return {"status": "unknown", "stack": "", "read_at": "", "rows": [], "pending": True, "error": watch.error,
+                "improvement": watch.improvement, "devops_prs": [], "can_improve": watch.can_improve}
     return {
         "status": report.status, "stack": report.stack,
         "read_at": report.read_at.astimezone(timezone.utc).strftime("%H:%M UTC"),
         "rows": [f.as_dict() for f in report.findings], "pending": False, "error": watch.error,
         "counts": report.counts,
+        "improvement": watch.improvement, "devops_prs": list(report.facts.get("devops_prs") or []), "can_improve": watch.can_improve,
     }
 
 
