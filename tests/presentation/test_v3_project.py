@@ -100,10 +100,13 @@ def _running(tracker, issue: int = 12, cycle_id: str = "abc123abc123"):
     )
 
 
-async def _cycle(app, cycle_id: str, issue: int, status=CycleStatus.COMPLETED, cost: float = 2.14) -> None:
+async def _cycle(app, cycle_id: str, issue: int, status=CycleStatus.COMPLETED, cost: float = 2.14,
+                 by_full_name: bool = False) -> None:
+    """A cycle row names its project by the registered id, or — the API's
+    cycles — by the repository's full name; the page reads both."""
     project = next(p for p in await app.state.project_repo.list_all() if str(p.repo) == REPO)
     await app.state.cycle_repo.save(Cycle(
-        id=CycleId(cycle_id), project_id=project.id, status=status, triggered_by="web",
+        id=CycleId(cycle_id), project_id=REPO if by_full_name else project.id, status=status, triggered_by="web",
         started_at=NOW, completed_at=NOW.replace(hour=9, minute=44) if status == CycleStatus.COMPLETED else None,
         total_cost_usd=cost, prs_opened=(83,), prs_merged=(83,) if status == CycleStatus.COMPLETED else (),
         issue_number=issue,
@@ -159,7 +162,7 @@ class TestThePage:
     async def test_delivered_and_the_recent_cycles_come_from_the_database(self, web):
         client, app = web
         await _cycle(app, "cafe1234cafe", issue=14)
-        await _cycle(app, "dead1234dead", issue=11, status=CycleStatus.FAILED, cost=0.4)
+        await _cycle(app, "dead1234dead", issue=11, status=CycleStatus.FAILED, cost=0.4, by_full_name=True)
         await app.state.report_repo.save(_report("rep-1", "cafe1234cafe"))
         ctx = _github()
         try:

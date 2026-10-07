@@ -132,11 +132,15 @@ async def _recent_cycles(state, project, base: str, limit: int = 6, issue_number
     report_repo = getattr(state, "report_repo", None)
     if cycle_repo is None:
         return []
-    try:
-        cycles = await cycle_repo.list_by_project(project.id, limit=50 if issue_number else limit)
-    except Exception:  # noqa: BLE001 — the page stays
-        log.exception("project: listing cycles of %s failed", project.id)
-        return []
+    # A cycle's row names its project by the registered id or by the
+    # repository's full name (the API's cycles do the latter): read both.
+    cycles: list = []
+    for key in {project.id, str(project.repo)}:
+        try:
+            cycles += await cycle_repo.list_by_project(key, limit=50 if issue_number else limit)
+        except Exception:  # noqa: BLE001 — the page stays
+            log.exception("project: listing cycles of %s failed", key)
+    cycles.sort(key=lambda c: (c.started_at or datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
     rows = []
     for c in cycles:
         if issue_number is not None and c.issue_number != issue_number:
