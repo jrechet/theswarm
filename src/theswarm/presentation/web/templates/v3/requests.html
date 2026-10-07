@@ -1,0 +1,95 @@
+{% extends "v3/base.html" %}
+{% import "v3/_ui.html" as ui %}
+{% block title %}{% if role == 'owner' %}Requests — TheSwarm{% else %}Your requests — TheSwarm{% endif %}{% endblock %}
+{% block crumbs %}
+  <span class="text-ink font-medium">{% if role == 'owner' %}Requests{% else %}Your requests{% endif %}</span>
+  {% if role == 'owner' %}<span class="text-line-strong">/</span><span>{{ inbox | length }} waiting for you</span>{% endif %}
+{% endblock %}
+{% block actions %}
+  {% if role == 'member' %}{{ ui.btn('Send a request', href=base ~ '/requests/new', kind='primary', icon='play', testid='new-request') }}{% endif %}
+{% endblock %}
+{% block content %}
+{% set STEP_CLASSES = {'done': 'text-ok bg-ok-wash', 'now': 'text-live-deep bg-live-wash', 'next': 'text-faint bg-raised', 'off': 'text-faint bg-raised line-through'} %}
+{% macro steps(rows) -%}
+<span class="flex items-center gap-1" data-testid="request-steps">
+  {% for s in rows %}<span class="inline-flex items-center h-[22px] px-2 rounded-full text-[12px] font-medium {{ STEP_CLASSES[s.state] }}" data-step="{{ s.key }}" data-state="{{ s.state }}">{{ s.label }}</span>{% endfor %}
+</span>
+{%- endmacro %}
+<div class="flex flex-col gap-7" data-testid="requests-page" data-role="{{ role }}">
+  {% if error %}<p class="m-0 text-[13px] text-bad" role="alert" data-testid="error">{{ error }}</p>{% endif %}
+
+  {% if role == 'owner' %}
+  <section class="flex flex-col gap-3" aria-labelledby="inbox">
+    {{ ui.section_label('Waiting for you', (inbox | length ~ ' request' ~ ('s' if inbox | length != 1)) if inbox else 'nothing waits', id='inbox') }}
+    {% for row in inbox %}
+    <article class="flex flex-col gap-3 p-4 bg-surface border border-line rounded-[10px]" data-testid="inbox-request" data-request="{{ row.request.id }}" id="r-{{ row.request.id }}">
+      <div class="flex flex-wrap items-start gap-3">
+        {{ ui.customer_mark(row.customer_initial, 20) }}
+        <span class="flex flex-col gap-1 flex-[1_1_320px] min-w-0">
+          <span class="font-medium text-[15px]">{{ row.request.title }}</span>
+          <span class="text-[12px] text-muted">{{ row.customer_name }}{% if row.request.author_name %} · {{ row.request.author_name }}{% endif %} · {{ row.when }}{% if row.project_name %} · {{ row.project_name }}{% endif %}</span>
+          {% if row.request.body %}<p class="m-0 mt-1 text-[13px] text-ink leading-relaxed whitespace-pre-wrap break-words">{{ row.request.body }}</p>{% endif %}
+        </span>
+        {{ ui.chip('Received', 'running') }}
+      </div>
+      <form method="post" action="{{ base }}/requests/{{ row.request.id }}/plan" class="flex flex-wrap items-center gap-2 border-t border-line pt-3" data-testid="plan-form">
+        <label for="project-{{ row.request.id }}" class="text-[13px] font-medium">Turn into a feature on</label>
+        <select id="project-{{ row.request.id }}" name="project" required class="h-8 px-2.5 border border-line-strong rounded-md bg-surface text-[13px] text-ink">
+          {% for p in row.projects %}<option value="{{ p.full_name }}"{% if p.name == row.project_name %} selected{% endif %}>{{ p.name }}</option>{% endfor %}
+        </select>
+        <input name="title" type="text" value="{{ row.request.title }}" aria-label="The feature's title" class="h-8 px-2.5 border border-line-strong rounded-md bg-surface text-[13px] text-ink flex-[1_1_260px] min-w-0">
+        {{ ui.btn('Create the feature', kind='primary', type='submit', testid='plan') }}
+      </form>
+      <form method="post" action="{{ base }}/requests/{{ row.request.id }}/decline" class="flex flex-wrap items-center gap-2" data-testid="decline-form">
+        <input name="reason" type="text" placeholder="Why not (optional)" aria-label="Why the request is declined" class="h-7 px-2.5 border border-line-strong rounded-md bg-surface text-[12px] text-ink flex-[1_1_240px] min-w-0">
+        <button type="submit" class="h-7 px-2.5 rounded-md text-[12px] text-muted hover:text-bad hover:bg-bad-wash cursor-pointer" data-testid="decline">Decline</button>
+      </form>
+    </article>
+    {% else %}
+    <div class="px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px] text-[13px] text-muted">No request waits. Customers' members write them from their overview.</div>
+    {% endfor %}
+  </section>
+
+  <section class="flex flex-col gap-3" aria-labelledby="open">
+    {{ ui.section_label('Planned and building', open | length ~ ' request' ~ ('s' if open | length != 1), id='open') }}
+    {% if open %}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for row in open %}
+      <div class="flex flex-wrap items-center gap-3 px-4 py-3 border-t border-line first:border-t-0 text-[13px]" data-testid="open-request" data-status="{{ row.request.status }}">
+        {{ ui.customer_mark(row.customer_initial, 18) }}
+        <span class="flex flex-col gap-0.5 flex-[1_1_260px] min-w-0">
+          <span class="font-medium truncate">{{ row.request.title }}</span>
+          <span class="text-[12px] text-muted">{{ row.customer_name }} · {{ row.when }}{% if row.feature_label %} · <a href="{{ row.feature_href }}" class="font-mono text-ink hover:underline">{{ row.feature_label }}</a>{% endif %}</span>
+        </span>
+        {{ steps(row.steps) }}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px] text-[13px] text-muted">Nothing is planned or building from a request right now.</div>
+    {% endif %}
+  </section>
+
+  {% else %}
+  <section class="flex flex-col gap-3" aria-labelledby="mine">
+    {{ ui.section_label('What you asked for', 'and where each stands', id='mine') }}
+    {% if mine %}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for row in mine %}
+      <div class="flex flex-wrap items-center gap-4 px-4 py-3 border-t border-line first:border-t-0" data-testid="my-request" data-status="{{ row.request.status }}">
+        <span class="flex flex-col gap-0.5 flex-[1_1_260px] min-w-0">
+          <span class="font-medium">{{ row.request.title }}</span>
+          <span class="text-[12px] text-muted">sent {{ row.when }}{% if row.project_name %} · {{ row.project_name }}{% endif %}{% if row.request.status == 'declined' %} · declined{% if row.request.decline_reason %}: {{ row.request.decline_reason }}{% endif %}{% endif %}</span>
+        </span>
+        {{ steps(row.steps) }}
+        {% if row.demo_href %}{{ ui.btn('Watch the demo →', href=row.demo_href, kind='primary', testid='my-demo') }}{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px] text-[13px] text-muted">You have not sent a request yet. Write what you need; the team turns it into work and you get the demo here.</div>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
