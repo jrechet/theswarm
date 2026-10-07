@@ -86,6 +86,10 @@
           applyFilter();
           var fresh = stage.querySelector('[data-testid="feed"]');
           if (fresh) fresh.scrollTop = scrollTop;
+          // The header's chip lives outside the stage: take the stage's word for it.
+          var pill = stage.querySelector("[data-status-pill]");
+          var header = document.getElementById("status-pill");
+          if (pill && header) { header.innerHTML = pill.innerHTML; header.dataset.status = stage.querySelector("#stage-inner").dataset.status; }
         }
         var probe = document.createElement("div");
         if (html) probe.innerHTML = html;

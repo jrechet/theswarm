@@ -2,6 +2,8 @@
 {# The stage: everything that moves while a cycle runs. Re-rendered whole by
    the page's poll loop; data-status lets the client stop polling. #}
 <div id="stage-inner" data-status="{{ record.status.value }}"{% if demo_pending %} data-demo-pending{% endif %} class="flex flex-col gap-5">
+  {# The header's status chip is outside the polled stage: the page copies this one over it after every swap. #}
+  <template data-status-pill>{{ ui.chip(status_label ~ (' · ' ~ elapsed if elapsed and record.status.value in ('running', 'queued') else ''), status_kind, pulse=(status_kind == 'running'), testid='cycle-status') }}</template>
 
   {% if orphan %}
   <p class="m-0 text-[13px] text-muted border border-dashed border-line-strong rounded-[10px] px-4 py-3" data-testid="orphan">
@@ -45,7 +47,7 @@
     <li class="flex flex-col gap-2 flex-[1_1_90px] min-w-[84px]" data-step="{{ s.key }}" data-state="{{ s.state }}">
       <span class="h-[5px] rounded-[3px] {% if s.state == 'done' %}bg-ok{% elif s.state == 'live' %}bg-live live-step{% elif s.state == 'failed' %}bg-bad{% else %}bg-line{% endif %}" aria-hidden="true"></span>
       <span class="flex flex-col gap-px">
-        <span class="text-[12px] font-medium whitespace-nowrap {% if s.state == 'live' %}text-live-deep{% elif s.state == 'todo' %}text-faint{% else %}text-muted{% endif %}">{{ s.label }}</span>
+        <span class="text-[12px] font-medium whitespace-nowrap truncate {% if s.state == 'live' %}text-live-deep{% elif s.state == 'todo' %}text-faint{% else %}text-muted{% endif %}" title="{{ s.label }}">{{ s.label }}</span>
         <span class="font-mono text-[11px] text-faint whitespace-nowrap">{{ s.time }}</span>
       </span>
     </li>

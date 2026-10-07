@@ -112,11 +112,19 @@ async def _record_for(state, cycle_id: str):
 # ── The stepper, the pull requests, the header ───────────────────────
 
 
+LABEL_MAX = 14
+
+
 def _label(phase: str, dev_iterations: int) -> str:
-    label = STEP_LABELS.get(phase, phase.replace("_", " ").capitalize())
+    """A step's word: the known phases by name, Dev with its iteration; a
+    row's free-text phase ("Checking branch protection…") cut short."""
     if phase == "dev_iter":
         return f"Dev · {dev_iterations}"
-    return label
+    if phase in STEP_LABELS:
+        return STEP_LABELS[phase]
+    text = phase.replace("_", " ").strip()
+    text = text[:1].upper() + text[1:]
+    return text if len(text) <= LABEL_MAX else text[:LABEL_MAX - 1].rstrip() + "…"
 
 
 def _mmss(seconds: float | None) -> str:
