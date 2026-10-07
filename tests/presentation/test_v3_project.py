@@ -135,7 +135,7 @@ class TestThePage:
             ctx.stop()
         assert r.status_code == 200
         assert 'data-testid="project-page" data-project="jrechet/espace-client"' in r.text
-        assert 'data-testid="running-banner"' in r.text and "/swarm/c/abc123abc123" in r.text
+        assert 'data-testid="running-banner"' in r.text and "/swarm/cycles/abc123abc123" in r.text
         for key in ("backlog", "ready", "in-progress", "review"):
             assert f'aria-labelledby="group-{key}"' in r.text
         building = r.text.split('data-column="in-progress"')[1].split("</section>")[0]
@@ -169,7 +169,7 @@ class TestThePage:
             r = await client.get(PAGE, headers=HTML)
         finally:
             ctx.stop()
-        assert 'data-testid="latest-demo"' in r.text and "/swarm/demos/rep-1/play" in r.text
+        assert 'data-testid="latest-demo"' in r.text and "/swarm/demos/rep-1" in r.text
         recent = r.text.split('data-testid="recent-cycles"')[1].split("</section>")[0]
         assert "cafe1234" in recent and "dead1234" in recent
         assert ">Completed<" in recent and ">Failed<" in recent
@@ -234,7 +234,7 @@ class TestTheComposer:
                 r = await client.post(f"{PAGE}/features", data={"body": "Export invoices as PDF", "play": "1"})
         finally:
             ctx.stop()
-        assert r.status_code == 303 and r.headers["location"] == "/swarm/c/cyc123cyc123"
+        assert r.status_code == 303 and r.headers["location"] == "/swarm/cycles/cyc123cyc123"
         start.assert_awaited_once()
         assert start.await_args.args[1:4] == ("jrechet", "espace-client", 15)
 
@@ -248,7 +248,7 @@ class TestTheComposer:
         with patch("theswarm.presentation.web.routes.v2.start_targeted_cycle",
                    new=AsyncMock(return_value=type("R", (), {"id": "cyc123cyc123"})())) as start:
             r = await client.post(f"{PAGE}/features/11/play")
-        assert r.status_code == 303 and r.headers["location"] == "/swarm/c/cyc123cyc123"
+        assert r.status_code == 303 and r.headers["location"] == "/swarm/cycles/cyc123cyc123"
         assert start.await_args.args[3] == 11
 
 
@@ -280,8 +280,8 @@ class TestTheFeature:
         assert r.text.count('data-testid="sub-task"') == 3 and "Unrelated" not in r.text
         assert 'data-status="done"' in r.text and 'data-status="dropped"' in r.text and 'data-status="in-progress"' in r.text
         assert "1 of 3 sub-tasks done" in r.text
-        assert 'data-testid="follow"' in r.text and "/swarm/c/abc123abc123" in r.text
-        assert "cafe1234" in r.text and 'data-testid="feature-demo"' in r.text and "/swarm/demos/rep-20/play" in r.text
+        assert 'data-testid="follow"' in r.text and "/swarm/cycles/abc123abc123" in r.text
+        assert "cafe1234" in r.text and 'data-testid="feature-demo"' in r.text and "/swarm/demos/rep-20" in r.text
 
     async def test_a_feature_nobody_builds_offers_play(self, web):
         client, app = web

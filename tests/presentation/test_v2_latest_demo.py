@@ -97,7 +97,7 @@ class TestTheCard:
 
         assert r.status_code == 200
         assert 'data-testid="latest-demo"' in r.text
-        assert "/swarm/demos/rep-1/play" in r.text
+        assert "/swarm/demos/rep-1" in r.text
 
     async def test_it_shows_the_video_with_the_screenshot_as_poster(self, web):
         client, app = web
@@ -186,9 +186,9 @@ class TestTheCard:
 
         r = await _page(client)
 
-        assert "/swarm/demos/rep-new/play" in r.text
+        assert "/swarm/demos/rep-new" in r.text
         card = r.text.split('data-testid="latest-demo"')[1].split('data-testid="delivered-demo"')[0]
-        assert "/swarm/demos/rep-old/play" not in card  # the older one is in the Delivered list, not the card
+        assert "/swarm/demos/rep-old" not in card  # the older one is in the Delivered list, not the card
 
 
 class TestWhenThereIsNothingToShow:

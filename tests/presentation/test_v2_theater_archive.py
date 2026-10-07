@@ -73,7 +73,7 @@ async def test_an_older_database_gains_the_column(tmp_path):
     assert "issue_number" in columns
 
 
-async def _page(conn, status: CycleStatus, path: str = f"/c/{CID}"):
+async def _page(conn, status: CycleStatus, path: str = f"/cycles/{CID}"):
     await SQLiteCycleRepository(conn).save(Cycle(
         id=CycleId(CID), project_id="jrechet/concert-tour-app", status=status,
         started_at=T, completed_at=T.replace(minute=24), issue_number=404,
@@ -103,13 +103,13 @@ async def test_a_finished_cycle_the_tracker_forgot_keeps_its_theater(conn):
 
     assert r.status_code == 200
     assert "Count the concerts per country" in r.text
-    assert 'data-testid="stage-demo"' in r.text and "/swarm/demos/rpt-7f4f/play" in r.text
+    assert 'data-testid="stage-demo"' in r.text and "/swarm/demos/rpt-7f4f" in r.text
     assert "PR #410: APPROVE" in r.text
     assert r.text.count('data-state="done"') == 4
 
 
 async def test_its_stage_answers_too(conn):
-    r = await _page(conn, CycleStatus.COMPLETED, path=f"/c/{CID}/stage")
+    r = await _page(conn, CycleStatus.COMPLETED, path=f"/cycles/{CID}/stage")
 
     assert r.status_code == 200 and 'data-status="completed"' in r.text
 
@@ -119,4 +119,4 @@ async def test_a_cycle_the_database_still_calls_running_goes_to_the_archive(conn
     says what the database knows, as before."""
     r = await _page(conn, CycleStatus.RUNNING)
 
-    assert r.status_code == 303 and r.headers["location"] == f"/swarm/cycles/{CID}"
+    assert r.status_code == 200 and 'data-testid="orphan"' in r.text  # drawn from the row, said so (M4)

@@ -59,7 +59,7 @@ from theswarm.domain.cycles.events import (
 from theswarm.presentation.web.routes import analyst, api, architect, artifacts, autonomy_config, chat, chief_of_staff, cycles, dashboard, demos, designer, dev_rigour, features, fragments, health, hitl, metrics, product, projects, prompt_library, qa, refactor_programs, release, reports, scout, security, semantic_memory, settings as settings_route, sre, team, techlead, webhooks, writer
 from theswarm.presentation.web.auth import AuthWallMiddleware
 from theswarm.presentation.web.shell import ShellMiddleware, current_shell
-from theswarm.presentation.web.routes import auth_routes, customers, github_setup, project, v2
+from theswarm.presentation.web.routes import auth_routes, customers, github_setup, player, project, theater, v2
 from theswarm.presentation.web.sse import SSEHub
 
 _HERE = Path(__file__).parent
@@ -980,6 +980,7 @@ def create_web_app(
         app.state.delete_schedule_handler = DeleteScheduleHandler(schedule_repo)
 
     # Routes
+    app.include_router(theater.router)  # V3 M4: /cycles/{id}, the theater; before V1's cycles pages
     app.include_router(project.router)  # V3 M3: /c/{slug}/p/{name}, its features, /r/{owner}/{name} → there
     app.include_router(customers.router)  # V3 M2: /settings/customers, /invite/{token}, /c/{slug}
     app.include_router(v2.router)  # owns `/` — the V2 flow is the front door
@@ -1010,8 +1011,9 @@ def create_web_app(
     app.include_router(reports.router)
     app.include_router(webhooks.router)
     app.include_router(artifacts.router)
-    app.include_router(demos.router)
-    app.include_router(demos.public_router)
+    app.include_router(demos.router)  # V1's list and compare, until M6
+    app.include_router(player.router)  # V3 M4: /demos/{id}, /demos/{id}/play → there
+    app.include_router(player.public_router)  # /d/{short}, outside the wall
     app.include_router(metrics.router)
     app.include_router(features.router)
     app.include_router(fragments.router)

@@ -36,7 +36,7 @@ def _report() -> DemoReport:
 
 def _event(issue: int | None = 404) -> DemoReady:
     return DemoReady(cycle_id=CycleId("7f4f2188cd90"), project_id="jrechet/concert-tour-app",
-                     report_id="rpt-7f4f", play_url="/swarm/demos/rpt-7f4f/play", issue_number=issue)
+                     report_id="rpt-7f4f", play_url="/swarm/demos/rpt-7f4f", issue_number=issue)
 
 
 def _github(comments=()):
@@ -47,10 +47,10 @@ def _github(comments=()):
 
 
 def test_the_comment_links_the_player_and_says_what_was_built():
-    body = demo_comment(_report(), f"{EXTERNAL}/demos/rpt-7f4f/play")
+    body = demo_comment(_report(), f"{EXTERNAL}/demos/rpt-7f4f")
 
     assert "The demo is ready" in body
-    assert "(https://bots.jrec.fr/swarm/demos/rpt-7f4f/play)" in body
+    assert "(https://bots.jrec.fr/swarm/demos/rpt-7f4f)" in body
     assert "3 PRs merged" in body and "3/3 stories" in body
     assert "386/386 tests" in body and "96.1% coverage" in body
     assert "feature pages: pass" in body
@@ -68,7 +68,7 @@ async def test_the_issue_gets_the_comment(monkeypatch):
     assert posted is True
     github.add_comment.assert_awaited_once()
     number, body = github.add_comment.await_args.args
-    assert number == 404 and "/demos/rpt-7f4f/play" in body
+    assert number == 404 and "/demos/rpt-7f4f" in body
 
 
 async def test_a_cycle_is_announced_once():

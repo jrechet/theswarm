@@ -170,7 +170,7 @@ async def test_the_old_theater_leads_to_the_running_continuation(web):
     r = await client.get("/c/old123old123")
 
     assert r.status_code == 303
-    assert r.headers["location"] == f"/swarm/c/{record.id}"
+    assert r.headers["location"] == f"/swarm/cycles/{record.id}"
 
 
 async def test_a_continuation_nobody_knows_leaves_the_origin_its_own_theater(web):
@@ -184,7 +184,7 @@ async def test_a_continuation_nobody_knows_leaves_the_origin_its_own_theater(web
     with patch("theswarm.tools.github.GitHubClient") as klass:
         klass.return_value.get_issue = AsyncMock(return_value=None)
         klass.return_value.get_issues = AsyncMock(return_value=[])
-        r = await client.get("/c/old123old123")
+        r = await client.get("/cycles/old123old123")  # the theater itself (M4); /c/ redirects here
 
     assert r.status_code == 200
     assert 'data-status="failed"' in r.text
@@ -205,7 +205,7 @@ async def test_a_finished_continuation_in_the_database_takes_the_link(web):
     r = await client.get("/c/old123old123")
 
     assert r.status_code == 303
-    assert r.headers["location"] == "/swarm/c/new456new456"
+    assert r.headers["location"] == "/swarm/cycles/new456new456"
 
 
 # ── The resumer ────────────────────────────────────────────────────────

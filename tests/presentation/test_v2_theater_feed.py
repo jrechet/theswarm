@@ -77,7 +77,7 @@ async def test_the_theater_shows_the_feed(tmp_path):
             klass.return_value.get_issue = AsyncMock(return_value={"number": 387, "title": "Occupancy"})
             klass.return_value.get_issues = AsyncMock(return_value=[])
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
-                html = (await client.get(f"/c/{record.id}")).text
+                html = (await client.get(f"/cycles/{record.id}")).text
     finally:
         tracker._cycles.pop(record.id, None)
         await conn.close()
@@ -132,7 +132,7 @@ async def test_the_feed_leaves_fragments_out(tmp_path):
             klass.return_value.get_issue = AsyncMock(return_value={"number": 387, "title": "Occupancy"})
             klass.return_value.get_issues = AsyncMock(return_value=[])
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
-                html = (await client.get(f"/c/{record.id}")).text
+                html = (await client.get(f"/cycles/{record.id}")).text
     finally:
         tracker._cycles.pop(record.id, None)
         await conn.close()

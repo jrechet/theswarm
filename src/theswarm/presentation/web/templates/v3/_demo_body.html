@@ -1,0 +1,103 @@
+{% import "v3/_ui.html" as ui %}
+<div class="flex flex-col gap-5" data-testid="player" data-report="{{ report.id }}" data-verdict="{{ verdict }}">
+
+  <div class="flex flex-wrap items-start gap-4">
+    <div class="flex flex-col gap-1.5 flex-[1_1_320px]">
+      <h1 class="m-0 text-[22px] font-semibold tracking-tight text-balance">{{ title }}</h1>
+      <div class="text-[13px] text-muted flex flex-wrap gap-x-3.5 gap-y-1.5">
+        {% if issue_number %}<span>Feature <span class="font-mono text-ink">#{{ issue_number }}</span></span>{% endif %}
+        <span>Delivered {{ when }}</span>
+        {% if duration %}<span><span class="font-mono text-ink">{{ duration }}</span>{% if cost and not public %} · <span class="font-mono text-ink">{{ cost }}</span>{% endif %}</span>
+        {% elif cost and not public %}<span><span class="font-mono text-ink">{{ cost }}</span></span>{% endif %}
+        {% if not public %}<a href="{{ cycle_href }}" class="hover:text-ink">cycle <span class="font-mono">{{ report.cycle_id | string | truncate(8, True, '') }}</span> →</a>{% endif %}
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-2 h-8 px-3 rounded-full text-[13px] font-semibold {% if verdict_kind == 'verified' %}bg-ok-wash text-ok{% elif verdict_kind == 'broken' %}bg-bad-wash text-bad{% else %}bg-live-wash text-live-deep{% endif %}" data-testid="verdict">
+      {% if verdict_kind == 'verified' %}{{ ui.ui_icon('check', 14) }}{% endif %}{{ verdict_label }}
+    </span>
+  </div>
+
+  <div class="grid gap-4 items-start" style="grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr))">
+    <figure class="m-0 flex flex-col gap-2.5">
+      <div class="relative bg-[#14171C] rounded-[10px] overflow-hidden border border-[#262B33]">
+        {% if video_url %}
+        <video class="block w-full aspect-video" controls preload="metadata" playsinline{% if poster_url %} poster="{{ poster_url }}"{% endif %} data-testid="video">
+          <source src="{{ video_url }}" type="video/webm">
+        </video>
+        {% elif poster_url %}
+        <img class="block w-full aspect-video object-cover" src="{{ poster_url }}" alt="" width="896" height="504">
+        {% else %}
+        <div class="aspect-video flex items-center justify-center text-[13px] text-[#9AA3AF]">No video was recorded for this demo.</div>
+        {% endif %}
+      </div>
+      <figcaption class="text-[12px] text-faint">Recorded by QA against the seeded demo server: the pages the feature added, then its own calls.</figcaption>
+      {% if screenshots %}
+      <ul class="m-0 p-0 list-none flex gap-2 overflow-x-auto" aria-label="Screenshots">
+        {% for shot in screenshots %}<li class="shrink-0"><a href="{{ shot }}" target="_blank" rel="noopener"><img src="{{ shot }}" alt="" loading="lazy" class="h-14 w-auto rounded border border-line bg-raised" width="100" height="56"></a></li>{% endfor %}
+      </ul>
+      {% endif %}
+    </figure>
+
+    <section aria-labelledby="gates-title" class="flex flex-col pb-1.5 px-4 pt-3.5 bg-surface border border-line rounded-[10px]" data-testid="gates">
+      <h2 id="gates-title" class="m-0 pb-1.5 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">What QA measured</h2>
+      {% for g in gates %}
+      <div class="flex items-center gap-3 py-2.5 border-t border-raised text-[13px]" data-gate="{{ g.name }}" data-status="{{ g.status }}">
+        <span class="w-4 h-4 rounded-full inline-flex items-center justify-center shrink-0 {% if g.kind == 'ok' %}bg-ok-wash text-ok{% elif g.kind == 'bad' %}bg-bad-wash text-bad{% elif g.kind == 'unverified' %}bg-live-wash text-live-deep{% else %}bg-raised text-faint{% endif %}" aria-hidden="true">
+          {% if g.kind == 'ok' %}{{ ui.ui_icon('check', 9) }}{% elif g.kind == 'bad' %}×{% else %}·{% endif %}
+        </span>
+        <span class="font-medium w-[120px] shrink-0">{{ g.label }}</span>
+        <span class="text-muted min-w-0 flex-1 truncate" title="{{ g.value }}">{{ g.about }}</span>
+        <span class="font-mono text-[12px] font-medium shrink-0 max-w-[45%] truncate {% if g.kind == 'ok' %}text-ok{% elif g.kind == 'bad' %}text-bad{% elif g.kind == 'unverified' %}text-live-deep{% else %}text-faint{% endif %}" title="{{ g.value }}">{{ g.value }}</span>
+      </div>
+      {% else %}
+      <p class="m-0 py-3 text-[13px] text-faint border-t border-raised">QA measured nothing on this cycle.</p>
+      {% endfor %}
+    </section>
+  </div>
+
+  <section aria-labelledby="built-title" class="flex flex-col gap-3">
+    <div class="flex items-baseline gap-2.5">
+      <h2 id="built-title" class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">What was built</h2>
+      <span class="text-[12px] text-faint">{{ summary.stories_completed }} of {{ summary.stories_total }} stories · {{ summary.prs_merged }} PR{{ 's' if summary.prs_merged != 1 }} merged{% if summary.prs_held %} · {{ summary.prs_held }} held{% endif %}</span>
+    </div>
+    {% if stories %}
+    <div class="grid gap-3" style="grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr))">
+      {% for s in stories %}
+      <article class="flex flex-col bg-surface border border-line rounded-[10px] overflow-hidden" data-testid="story" data-ticket="{{ s.ticket_id }}">
+        <div class="aspect-video bg-raised border-b border-line flex items-center justify-center overflow-hidden">
+          {% if s.thumbnail %}<img src="{{ s.thumbnail }}" alt="{{ s.caption }}" loading="lazy" class="block w-full h-full object-cover object-top">
+          {% else %}<span class="text-[12px] text-faint">No capture</span>{% endif %}
+        </div>
+        <div class="flex flex-col gap-1.5 p-3.5">
+          <span class="flex items-center gap-2 text-[12px] text-faint">
+            <span class="font-mono">{{ s.ticket_id if s.ticket_id.startswith('#') else '#' ~ s.ticket_id }}</span>
+            <span class="ml-auto">{% if s.merged %}{{ ui.chip('Merged', 'verified') }}{% else %}{{ ui.chip(s.status | replace('_', ' ') | capitalize, 'waiting') }}{% endif %}</span>
+          </span>
+          <span class="text-[13px] font-medium leading-[1.35]">{{ s.title }}</span>
+          {% if not public and s.pr_number %}<a href="{{ s.pr_url or '#' }}" class="text-[12px] text-muted hover:text-ink">PR #{{ s.pr_number }}{% if s.files %} · {{ s.files }} file{{ 's' if s.files != 1 }} · <span class="text-ok">+{{ s.added }}</span> <span class="text-bad">−{{ s.removed }}</span>{% endif %}</a>
+          {% elif s.files %}<span class="text-[12px] text-muted">{{ s.files }} file{{ 's' if s.files != 1 }} changed</span>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="m-0 text-[13px] text-faint border border-dashed border-line-strong rounded-[10px] px-4 py-3">The report lists no story — this cycle built nothing it could name.</p>
+    {% endif %}
+  </section>
+
+  {% if not public %}
+  <div class="flex flex-wrap items-center gap-3 px-4 py-3 bg-surface border border-line rounded-[10px] text-[13px] text-muted" data-testid="visibility">
+    {{ ui.ui_icon('eye') }}
+    <span>Visible to {{ project.customer_name }}{% if project.members %}'s {{ project.members }} member{{ 's' if project.members != 1 }}{% else %} (nobody invited yet){% endif %} and to you.
+      The public link <a href="{{ public_url }}" class="font-mono text-ink hover:underline" data-testid="public-link">{{ public_url }}</a> opens for anyone who has it, without the cost or the links.</span>
+    <a href="{{ project.settings_href }}" class="ml-auto text-ink font-medium whitespace-nowrap">Who can see this →</a>
+  </div>
+  <div class="flex items-center gap-2 text-[13px]">
+    {% if prev_url %}{{ ui.btn('← Earlier demo', href=prev_url, kind='ghost') }}{% endif %}
+    {% if next_url %}{{ ui.btn('Later demo →', href=next_url, kind='ghost') }}{% endif %}
+    <a href="{{ project.href }}" class="ml-auto text-muted hover:text-ink">All demos of {{ project.name }} →</a>
+  </div>
+  {% else %}
+  <p class="m-0 text-[12px] text-faint text-center" data-testid="public-badge">A demo by TheSwarm, shared read-only.</p>
+  {% endif %}
+</div>

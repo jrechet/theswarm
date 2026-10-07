@@ -201,7 +201,7 @@ class TestTheHome:
         _running(_isolate_tracker)
         r = await _home(client)
         assert 'data-testid="now-cycle"' in r.text
-        assert 'href="/swarm/c/abc123abc123"' in r.text
+        assert 'href="/swarm/cycles/abc123abc123"' in r.text
         assert "#85" in r.text and "Harden input validation" in r.text
         assert "since 11:19 UTC" in r.text
 
@@ -216,7 +216,7 @@ class TestTheHome:
         await app.state.report_repo.save(_report("rep-2", when=datetime.now(timezone.utc) - timedelta(days=1), failed=1))
         r = await _home(client)
         assert r.text.count('data-testid="review-demo"') == 2
-        assert "/swarm/demos/rep-1/play" in r.text and "/swarm/demos/rep-2/play" in r.text
+        assert "/swarm/demos/rep-1" in r.text and "/swarm/demos/rep-2" in r.text
         assert 'data-kind="ok"' in r.text and 'data-kind="bad"' in r.text
         assert "1 gate failed" in r.text and "Gates pass" in r.text
         assert "yesterday" in r.text and "$2.14" in r.text
