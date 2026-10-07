@@ -7,6 +7,7 @@ from datetime import datetime
 import aiosqlite
 
 from theswarm.domain.customers.entities import Customer, Member
+from theswarm.domain.customers.requests import Request
 
 
 def _iso(moment: datetime | None) -> str:
@@ -124,4 +125,77 @@ class SQLiteMemberRepository:
             accepted_at=_moment(row["accepted_at"]),
             last_seen_at=_moment(row["last_seen_at"]),
             revoked_at=_moment(row["revoked_at"]),
+        )
+
+
+class SQLiteRequestRepository:
+    """Requests (migration v034): a customer's needs and where each stands."""
+
+    COLUMNS = ("id", "customer_id", "project_id", "member_id", "author_name", "title", "body", "status",
+               "feature_repo", "feature_issue_number", "demo_report_id", "decline_reason", "created_at", "updated_at")
+
+    def __init__(self, db: aiosqlite.Connection) -> None:
+        self._db = db
+
+    async def get(self, request_id: str) -> Request | None:
+        cursor = await self._db.execute("SELECT * FROM requests WHERE id = ?", (request_id,))
+        row = await cursor.fetchone()
+        return self._row(row) if row else None
+
+    async def list_for_customer(self, customer_id: str, limit: int = 50) -> list[Request]:
+        cursor = await self._db.execute(
+            "SELECT * FROM requests WHERE customer_id = ? ORDER BY created_at DESC LIMIT ?", (customer_id, limit),
+        )
+        return [self._row(r) for r in await cursor.fetchall()]
+
+    async def list_inbox(self, limit: int = 50) -> list[Request]:
+        """What waits for the owner: received first, oldest first."""
+        cursor = await self._db.execute(
+            "SELECT * FROM requests WHERE status = 'received' ORDER BY created_at ASC LIMIT ?", (limit,),
+        )
+        return [self._row(r) for r in await cursor.fetchall()]
+
+    async def list_open(self, limit: int = 200) -> list[Request]:
+        cursor = await self._db.execute(
+            "SELECT * FROM requests WHERE status IN ('received', 'planned', 'building') "
+            "ORDER BY created_at DESC LIMIT ?", (limit,),
+        )
+        return [self._row(r) for r in await cursor.fetchall()]
+
+    async def list_by_feature(self, repo: str, issue_number: int) -> list[Request]:
+        cursor = await self._db.execute(
+            "SELECT * FROM requests WHERE feature_repo = ? AND feature_issue_number = ?", (repo, issue_number),
+        )
+        return [self._row(r) for r in await cursor.fetchall()]
+
+    async def save(self, request: Request) -> None:
+        await self._db.execute(
+            """INSERT INTO requests
+               (id, customer_id, project_id, member_id, author_name, title, body, status,
+                feature_repo, feature_issue_number, demo_report_id, decline_reason, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 customer_id = excluded.customer_id, project_id = excluded.project_id,
+                 member_id = excluded.member_id, author_name = excluded.author_name,
+                 title = excluded.title, body = excluded.body, status = excluded.status,
+                 feature_repo = excluded.feature_repo, feature_issue_number = excluded.feature_issue_number,
+                 demo_report_id = excluded.demo_report_id, decline_reason = excluded.decline_reason,
+                 updated_at = excluded.updated_at""",
+            (request.id, request.customer_id, request.project_id, request.member_id, request.author_name,
+             request.title, request.body, request.status, request.feature_repo, request.feature_issue_number,
+             request.demo_report_id, request.decline_reason, request.created_at.isoformat(),
+             request.updated_at.isoformat()),
+        )
+        await self._db.commit()
+
+    @staticmethod
+    def _row(row) -> Request:
+        return Request(
+            id=row["id"], customer_id=row["customer_id"], project_id=row["project_id"],
+            member_id=row["member_id"], author_name=row["author_name"], title=row["title"],
+            body=row["body"], status=row["status"], feature_repo=row["feature_repo"],
+            feature_issue_number=row["feature_issue_number"], demo_report_id=row["demo_report_id"],
+            decline_reason=row["decline_reason"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
         )

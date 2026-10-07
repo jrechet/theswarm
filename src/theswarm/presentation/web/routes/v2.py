@@ -117,6 +117,7 @@ async def home(request: Request) -> HTMLResponse:
         "now": _now_cards(state, running),
         "running_repos": set(running),
         "to_review": await _recent_demos(state),
+        "requests": await _requests_waiting(state),
         "today": datetime.now(timezone.utc).strftime("%A %d %B, %H:%M UTC").replace(" 0", " "),
     })
 
@@ -172,6 +173,20 @@ def _now_cards(state, running: dict[str, object]) -> list[dict]:
         })
     cards.sort(key=lambda c: c["sort"], reverse=True)
     return cards
+
+
+async def _requests_waiting(state, limit: int = 5) -> list[dict]:
+    """The requests waiting for the owner (V3 M5), for the home."""
+    service = getattr(state, "request_service", None)
+    if service is None:
+        return []
+    from theswarm.presentation.web.routes.requests_routes import inbox_rows
+
+    try:
+        return await inbox_rows(state, limit=limit)
+    except Exception:  # noqa: BLE001 — the page stays, the section is empty
+        log.exception("V2: reading the requests failed")
+        return []
 
 
 async def _recent_demos(state, limit: int = 5) -> list[dict]:

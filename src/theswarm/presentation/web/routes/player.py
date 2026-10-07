@@ -221,14 +221,33 @@ async def legacy_play(request: Request, report_id: str):
     return RedirectResponse(f"{request.app.state.base_path}/demos/{report_id}", status_code=303)
 
 
+async def _members_project(state, customer_id: str, project_id: str) -> bool:
+    """Whether the report's project (a registered id or a full name) is the member's customer's."""
+    try:
+        projects = await state.project_repo.list_for_customer(customer_id)
+    except Exception:  # noqa: BLE001
+        log.exception("player: listing the projects of %s failed", customer_id)
+        return False
+    return any(p.id == project_id or str(p.repo) == project_id for p in projects)
+
+
 @router.get("/demos/{report_id}", response_class=HTMLResponse)
 async def player(request: Request, report_id: str):
+    """The player; a member sees their own customer's demos, without the
+    cost or the links into the machinery (V3 M5) — so does the owner with
+    `?as=member`."""
+    from theswarm.presentation.web.routes.customers import _refused, current_actor
+
     report = await _report(request, report_id)
     if report is None:
         return HTMLResponse("No such demo", status_code=404)
-    return request.app.state.templates.TemplateResponse(
-        "v3/demo.html", await player_context(request, report, public=False),
-    )
+    actor = await current_actor(request)
+    member = actor is not None and not actor.is_owner
+    if member and not await _members_project(request.app.state, actor.customer_id, report.project_id):
+        return _refused(request, actor)
+    context = await player_context(request, report, public=False)
+    context["member"] = member or request.query_params.get("as") == "member"
+    return request.app.state.templates.TemplateResponse("v3/demo.html", context)
 
 
 @public_router.get("/d/{short}", response_class=HTMLResponse)

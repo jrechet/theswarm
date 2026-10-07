@@ -31,6 +31,29 @@
     {% endif %}
   </section>
 
+  {# ── Requests: what customers wrote, waiting for the owner (M5) ── #}
+  {% if requests %}
+  <section aria-labelledby="requests" class="flex flex-col gap-3" data-testid="requests-waiting">
+    {% call ui.section_label('Requests', requests | length ~ ' waiting for you', id='requests') %}
+      <a href="{{ base }}/requests" class="ml-auto text-[12px] text-muted hover:text-ink">Open the inbox →</a>
+    {% endcall %}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for r in requests %}
+      <a href="{{ base }}/requests#r-{{ r.request.id }}" data-testid="home-request"
+         class="flex flex-wrap items-center gap-3.5 px-4 py-3 border-t border-line first:border-t-0 hover:bg-raised">
+        {{ ui.customer_mark(r.customer_initial) }}
+        <span class="flex flex-col gap-0.5 flex-[1_1_240px] min-w-0">
+          <span class="font-medium truncate">{{ r.request.title }}</span>
+          <span class="text-[12px] text-muted">{{ r.customer_name }}{% if r.request.author_name %} · {{ r.request.author_name }}{% endif %} · {{ r.when }}</span>
+        </span>
+        {{ ui.chip('Received', 'running') }}
+        <span class="text-[13px] font-medium text-live-deep whitespace-nowrap">Turn into a feature →</span>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
   {# ── To review: the latest demos ───────────────────────────────── #}
   {% if to_review %}
   <section aria-labelledby="review" class="flex flex-col gap-3" data-testid="to-review">

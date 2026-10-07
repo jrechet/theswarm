@@ -14,6 +14,7 @@ is In review, the rest of those labels is stalled) is V2's, kept in
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Form, Request
@@ -47,6 +48,15 @@ CYCLE_CHIPS = {
     "failed": ("Failed", "broken"),
     "cancelled": ("Cancelled", "waiting"),
 }
+
+
+_HTML_COMMENT = re.compile(r"<!--.*?-->[ \t]*\n?", re.S)
+
+
+def shown_body(body: str | None) -> str:
+    """An issue's body as a page shows it: without the HTML comments the
+    swarm leaves in it (the request marker, `<!-- swarm:request … -->`)."""
+    return _HTML_COMMENT.sub("", body or "").strip()
 
 
 # ── Where ────────────────────────────────────────────────────────────
@@ -126,6 +136,12 @@ def _minutes(start, end) -> str:
         return ""
 
 
+def _last_phase(cycle) -> str:
+    """The last phase a cycle's row recorded, '' when it has none."""
+    phases = list(getattr(cycle, "phases", None) or ())
+    return getattr(phases[-1], "phase", "") if phases else ""
+
+
 async def _recent_cycles(state, project, base: str, limit: int = 6, issue_number: int | None = None) -> list[dict]:
     """The last cycles of a project (all of them, or one feature's), newest first."""
     cycle_repo = getattr(state, "cycle_repo", None)
@@ -164,6 +180,7 @@ async def _recent_cycles(state, project, base: str, limit: int = 6, issue_number
             "cost": f"${c.total_cost_usd:.2f}" if c.total_cost_usd else "",
             "prs_merged": len(c.prs_merged), "prs_opened": len(c.prs_opened),
             "demo_url": demo_url,
+            "last_phase": _last_phase(c),
         })
         if len(rows) >= limit:
             break
@@ -331,6 +348,33 @@ async def play(request: Request, slug: str, name: str, number: int):
 # ── One feature ──────────────────────────────────────────────────────
 
 
+async def _member_feature(state, customer, project, urls, number, issue, pinned, running, actor, as_member) -> dict:
+    """One feature as a member sees it: the four steps and the demo, the
+    pieces in plain words, never a cycle id, a cost or a GitHub link."""
+    from theswarm.application.services.progress_bridge import get_phase_history
+    from theswarm.presentation.web.member_steps import piece_label, stage_for
+
+    base = state.base_path
+    cycles = await _recent_cycles(state, project, base, limit=10, issue_number=number)
+    demo_href = next((c["demo_url"].removesuffix("/play") for c in cycles if c["demo_url"]), "")
+    closed = issue.get("state") == "closed"
+    if running is not None:
+        history = get_phase_history(running.id)
+        stage = stage_for(history[-1].get("phase", "") if history else "", "running")
+    elif cycles:
+        stage = stage_for(cycles[0]["last_phase"], cycles[0]["status"], has_demo=bool(demo_href), closed=closed)
+    else:
+        stage = stage_for("", "", closed=closed)
+    children = [{"number": c.get("number"), "title": c.get("title", ""), "status": c.get("status", ""),
+                 "label": piece_label(c.get("status", ""))} for c in pinned.children]
+    return {
+        "customer": customer, "project": _project_dict(customer, project, base), "urls": urls,
+        "issue": {"number": number, "title": issue.get("title", ""), "body": shown_body(issue.get("body"))},
+        "children": children, "done": pinned.done, "stage": stage, "demo_href": demo_href,
+        "actor": actor, "as_member": as_member,
+    }
+
+
 @router.get("/c/{slug}/p/{name}/f/{number}", response_class=HTMLResponse)
 async def feature_page(request: Request, slug: str, name: str, number: int):
     state = request.app.state
@@ -340,6 +384,15 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
         return HTMLResponse("No such project", status_code=404)
     full_name = str(project.repo)
     urls = urls_for(base, slug, name)
+    from theswarm.presentation.web.routes.customers import _refused, current_actor
+
+    # A member reads their own customer's features as four plain steps (M5);
+    # the owner may look at a feature the same way (?as=member).
+    actor = await current_actor(request)
+    if actor is None or (not actor.is_owner and actor.customer_id != customer.id):
+        return _refused(request, actor)
+    as_member = actor.is_owner and request.query_params.get("as") == "member"
+    member_view = (not actor.is_owner) or as_member
 
     from theswarm.application.services.pinned_issue import load_pinned_issue
     from theswarm.tools.github import issue_status
@@ -350,6 +403,10 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
     issue = pinned.issue
     running = v2._running_for_repo(full_name)
     building = bool(running is not None and getattr(running, "issue_number", None) == number)
+    if member_view:
+        return state.templates.TemplateResponse("v3/feature_member.html", await _member_feature(
+            state, customer, project, urls, number, issue, pinned, running if building else None, actor, as_member,
+        ))
     status = "in-progress" if building else ("done" if issue.get("state") == "closed" else issue_status(issue))
     label, kind = STATUS_CHIPS.get(status, (status, "waiting"))
     children = []
@@ -362,7 +419,7 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
         "project": _project_dict(customer, project, base),
         "urls": urls,
         "issue": {
-            "number": number, "title": issue.get("title", ""), "body": issue.get("body") or "",
+            "number": number, "title": issue.get("title", ""), "body": shown_body(issue.get("body")),
             "url": issue.get("html_url", f"https://github.com/{full_name}/issues/{number}"),
             "label": label, "kind": kind, "closed": issue.get("state") == "closed",
         },

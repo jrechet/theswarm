@@ -32,6 +32,7 @@ def empty_shell(path: str = "") -> dict:
         "claude": {"status": "unknown", "label": "Claude", "detail": ""},
         "active": "",
         "path": path,
+        "requests_waiting": 0,
     }
 
 
@@ -177,12 +178,22 @@ async def build_shell(state, headers: dict[str, str], path: str, base: str) -> d
                        "projects": sorted((project_row(p) for p in projects), key=lambda r: r["full_name"])})
     shell["customers"] = groups
 
+    # Requests waiting for the owner (V3 M5): the rail's badge, never a member's.
+    requests = getattr(state, "request_service", None)
+    if requests is not None and not member_customer:
+        try:
+            shell["requests_waiting"] = len(await requests.inbox(limit=100))
+        except Exception:  # noqa: BLE001
+            log.exception("shell: counting the requests failed")
+
     full_names = [str(p.repo) for p in projects]
     active = active_for(path, base, full_names, running)
     rel = path[len(base):] if base and path.startswith(base) else path
     if not active:
         if rel.startswith("/settings"):
             active = "settings"
+        elif rel.startswith("/requests"):
+            active = "requests"
         elif rel.startswith("/c/"):
             parts = rel.split("/")  # ["", "c", slug, "p", name, ...]
             slug = parts[2] if len(parts) > 2 else ""

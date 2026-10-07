@@ -36,16 +36,26 @@ SESSION_TTL_SECONDS = 14 * 24 * 3600
 #   /webhooks/ — GitHub webhook authenticates with its own HMAC signature
 #   /d/        — deliberately public demo short-links
 #   /invite/   — a member's invitation link (V3 M2), one use, hashed, 14 days
+#   /artifacts/<cycle>/<file> — a demo's screenshots and video: the public
+#              player (/d/) plays them without a session (the listing,
+#              /artifacts/list, stays behind the wall); the paths are keyed
+#              by cycle id, never listed to a visitor
 _PUBLIC_EXACT = frozenset({"/health", "/login"})
 _PUBLIC_PREFIXES = ("/health/", "/static/", "/auth/", "/webhooks/", "/d/", "/invite/")
+_PUBLIC_FILE = re.compile(r"^/artifacts/(?!list(/|$))[^/]+/.+")
 
 # ── Subjects (V3 M2): the owner's login, or a member ────────────────
 # A session names its subject: the owner's GitHub login (or "owner" for the
 # access key), or `member:<id>` for a customer's member. A member may open
-# their customer's pages, the home (which sends them there) and the doors —
-# nothing else, whatever the session says.
+# their customer's pages, the home (which sends them there), the doors,
+# their requests, a feature's four-step page, a demo and its files (V3 M5;
+# each route then checks the customer) — nothing else, whatever the
+# session says: never a project page, the theater, Settings or /api/*.
 MEMBER_PREFIX = "member:"
-MEMBER_ALLOWED = re.compile(r"^(/|/logout|/c/[a-z0-9-]+/?)$")
+MEMBER_ALLOWED = re.compile(
+    r"^(/|/logout|/requests(/new)?/?|/c/[a-z0-9-]+/?|/c/[a-z0-9-]+/p/[A-Za-z0-9._-]+/f/\d+/?"
+    r"|/demos/[A-Za-z0-9._-]+(/play)?/?|/artifacts/[^/]+/.+)$"
+)
 
 
 def member_subject(member_id: str) -> str:
@@ -197,7 +207,7 @@ def bearer_is_access_key(headers: dict[str, str]) -> bool:
 
 
 def _is_public(path: str) -> bool:
-    return path in _PUBLIC_EXACT or path.startswith(_PUBLIC_PREFIXES)
+    return path in _PUBLIC_EXACT or path.startswith(_PUBLIC_PREFIXES) or bool(_PUBLIC_FILE.match(path))
 
 
 def _same_origin(headers: dict[str, str]) -> bool:

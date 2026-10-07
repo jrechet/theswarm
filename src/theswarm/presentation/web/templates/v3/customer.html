@@ -7,42 +7,133 @@
   <span>{{ projects | length }} project{{ 's' if projects | length != 1 }}</span>
 {% endblock %}
 {% block actions %}
-  {% if is_owner %}{{ ui.btn('Settings', href=base ~ '/settings/customers/' ~ customer.slug, kind='secondary', icon='settings') }}{% endif %}
+  {% if is_owner and not as_member %}
+    {{ ui.btn('View as a member', href=base ~ '/c/' ~ customer.slug ~ '?as=member', kind='secondary', icon='eye', testid='view-as') }}
+    {{ ui.btn('Settings', href=base ~ '/settings/customers/' ~ customer.slug, kind='secondary', icon='settings') }}
+  {% elif not is_owner %}
+    {{ ui.btn('Send a request', href=base ~ '/requests/new', kind='primary', icon='play', testid='new-request') }}
+  {% endif %}
 {% endblock %}
 {% block content %}
-<div class="flex flex-col gap-7" data-testid="customer-page" data-slug="{{ customer.slug }}">
+{% set STEP_CLASSES = {'done': 'text-ok bg-ok-wash', 'now': 'text-live-deep bg-live-wash', 'next': 'text-faint bg-raised', 'off': 'text-faint bg-raised line-through'} %}
+{% if as_member %}
+<div class="flex flex-wrap items-center gap-3 -mx-7 -mt-7 mb-6 px-7 py-2 bg-live-wash text-live-deep text-[13px] border-b border-live/30" data-testid="view-as-banner">
+  {{ ui.ui_icon('eye', 14) }}
+  <span>You are seeing TheSwarm as <strong class="font-semibold">a member of {{ customer.name }}</strong>. They see this and nothing else.</span>
+  <a href="{{ base }}/c/{{ customer.slug }}" class="ml-auto font-medium">Back to your view →</a>
+</div>
+{% endif %}
+<div class="flex flex-col gap-7" data-testid="customer-page" data-slug="{{ customer.slug }}" data-view="{{ 'member' if member_view else 'owner' }}">
 
-  <div class="flex items-center gap-3">
-    {{ ui.customer_mark(customer.initial, 28) }}
-    <div class="flex flex-col gap-0.5">
-      <h1 class="m-0 text-[20px] font-semibold tracking-tight">{{ customer.name }}</h1>
-      <span class="text-[13px] text-muted">{% if is_owner %}What this customer's members see.{% else %}Your projects with the team.{% endif %}</span>
+  <div class="flex flex-wrap items-end gap-4">
+    <div class="flex items-center gap-3 flex-[1_1_300px]">
+      {{ ui.customer_mark(customer.initial, 28) }}
+      <div class="flex flex-col gap-0.5">
+        <h1 class="m-0 text-[20px] font-semibold tracking-tight">{% if member_view and actor and not is_owner %}Hello, {{ actor.login }}{% else %}{{ customer.name }}{% endif %}</h1>
+        <span class="text-[13px] text-muted">{% if member_view %}Your projects with the team.{% else %}What this customer's members see.{% endif %}</span>
+      </div>
     </div>
+    {% if member_view %}
+    <div class="flex gap-2 flex-wrap" data-testid="member-stats">
+      {% for s in stats %}
+      <span class="flex flex-col gap-0.5 px-3.5 py-2.5 bg-surface border border-line rounded-[10px] min-w-[92px]">
+        <span class="font-mono text-[20px] font-medium leading-[1.1] {{ s.color }}">{{ s.n }}</span>
+        <span class="text-[12px] text-muted">{{ s.label }}</span>
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
 
-  <section class="flex flex-col gap-3" aria-labelledby="projects">
+  {% if member_view %}
+  <section class="flex flex-col gap-3" aria-labelledby="now">
+    {{ ui.section_label('Being built right now', '', id='now') }}
+    {% for b in building %}
+    <a href="{{ b.href }}" class="flex flex-wrap items-center gap-5 px-5 py-4 bg-surface border border-line rounded-[10px] hover:border-line-strong" data-testid="member-building">
+      {{ ui.live_dot(10) }}
+      <span class="flex flex-col gap-1 flex-[1_1_240px] min-w-0">
+        <span class="text-[15px] font-semibold">{{ b.title }}</span>
+        <span class="text-[13px] text-muted">{{ b.project }} · {{ b.stage.detail }}</span>
+      </span>
+      <span class="flex items-center gap-1.5 flex-[2_1_300px]">
+        {% for s in b.stage.steps %}
+        <span class="flex flex-col gap-1.5 flex-[1_1_0] min-w-0" data-step="{{ s.key }}" data-state="{{ s.state }}">
+          <span class="h-1 rounded-sm {% if s.state == 'done' %}bg-ok{% elif s.state == 'now' %}bg-live{% else %}bg-line{% endif %}" aria-hidden="true"></span>
+          <span class="text-[12px] whitespace-nowrap truncate {% if s.state == 'now' %}text-live-deep{% elif s.state == 'done' %}text-muted{% else %}text-faint{% endif %}">{{ s.label }}</span>
+        </span>
+        {% endfor %}
+      </span>
+    </a>
+    {% else %}
+    <div class="px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px] text-[13px] text-muted" data-testid="member-idle">Nothing is being built right now.</div>
+    {% endfor %}
+  </section>
+
+  <section class="flex flex-col gap-3" aria-labelledby="demos" id="demos">
+    {{ ui.section_label('Latest demos', (demos | length ~ ' demo' ~ ('s' if demos | length != 1)) if demos else 'none yet', id='demos-title') }}
+    {% if demos %}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for d in demos %}
+      <a href="{{ d.href }}" data-testid="member-demo" class="flex flex-wrap items-center gap-4 px-4 py-3 border-t border-line first:border-t-0 hover:bg-raised">
+        <span class="w-16 h-10 rounded bg-[#14171C] inline-flex items-center justify-center shrink-0 overflow-hidden">
+          {% if d.thumbnail %}<img src="{{ d.thumbnail }}" alt="" width="64" height="40" class="block w-full h-full object-cover">{% else %}<span class="text-white">{{ ui.ui_icon('play', 19) }}</span>{% endif %}
+        </span>
+        <span class="flex flex-col gap-0.5 flex-[1_1_220px] min-w-0">
+          <span class="font-medium truncate">{{ d.title }}</span>
+          <span class="text-[12px] text-muted">{{ d.project }}{% if d.duration %} · {{ d.duration }}{% endif %}</span>
+        </span>
+        {{ ui.chip(d.verdict_label, d.verdict_kind) }}
+        <span class="font-mono text-[12px] text-faint w-[100px] text-right">{{ d.when }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px] text-[13px] text-muted">No demo yet — the first one lands here when the swarm delivers.</div>
+    {% endif %}
+  </section>
+
+  <section class="flex flex-col gap-3" aria-labelledby="requests">
+    {% call ui.section_label('Your requests', 'what you asked for, and where it stands', id='requests') %}
+      <a href="{{ base }}/requests" class="ml-auto text-[12px] text-muted hover:text-ink">All requests →</a>
+    {% endcall %}
+    {% if requests %}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for r in requests %}
+      <div class="flex flex-wrap items-center gap-4 px-4 py-3 border-t border-line first:border-t-0" data-testid="member-request" data-status="{{ r.request.status }}">
+        <span class="flex flex-col gap-0.5 flex-[1_1_260px] min-w-0">
+          <span class="font-medium">{{ r.request.title }}</span>
+          <span class="text-[12px] text-muted">sent {{ r.when }}{% if r.request.status == 'declined' %} · declined{% if r.request.decline_reason %}: {{ r.request.decline_reason }}{% endif %}{% endif %}</span>
+        </span>
+        <span class="flex items-center gap-1">
+          {% for s in r.steps %}<span class="inline-flex items-center h-[22px] px-2 rounded-full text-[12px] font-medium {{ STEP_CLASSES[s.state] }}">{{ s.label }}</span>{% endfor %}
+        </span>
+        {% if r.demo_href %}<a href="{{ r.demo_href }}" class="text-[12px] font-medium text-live-deep">Watch →</a>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px] text-[13px] text-muted">No request yet — <a href="{{ base }}/requests/new" class="text-ink font-medium">send the first one</a>.</div>
+    {% endif %}
+  </section>
+
+  {% else %}
+  <section aria-labelledby="projects" class="flex flex-col gap-3">
     {{ ui.section_label('Projects', '', id='projects') }}
     {% if projects %}
     <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
       {% for p in projects %}
-      {% if is_owner %}<a href="{{ p.href }}"{% else %}<div{% endif %} class="flex flex-wrap items-center gap-3.5 px-4 py-3 border-t border-line first:border-t-0 {% if is_owner %}hover:bg-raised{% endif %}" data-testid="customer-project">
+      <a href="{{ p.href }}" class="flex flex-wrap items-center gap-3.5 px-4 py-3 border-t border-line first:border-t-0 hover:bg-raised" data-testid="customer-project">
         <span class="w-1.5 h-1.5 rounded-full bg-line-strong shrink-0" aria-hidden="true"></span>
-        <span class="flex flex-col min-w-0 flex-[1_1_200px]">
-          <span class="text-[14px] leading-snug"><span class="text-faint">{{ p.owner }}/</span><span class="font-medium">{{ p.name }}</span></span>
-          {% if not is_owner %}<span class="text-[12px] text-muted">Progress and demos land here as the swarm builds.</span>{% endif %}
-        </span>
-        {% if is_owner %}<span class="text-[12px] text-muted">Open →</span>{% endif %}
-      {% if is_owner %}</a>{% else %}</div>{% endif %}
+        <span class="flex flex-col min-w-0 flex-[1_1_200px]"><span class="text-[14px] leading-snug"><span class="text-faint">{{ p.owner }}/</span><span class="font-medium">{{ p.name }}</span></span></span>
+        <span class="text-[12px] text-muted">Open →</span>
+      </a>
       {% endfor %}
     </div>
     {% else %}
-    <div class="px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px] text-[13px] text-muted">
-      {% if is_owner %}No project yet — add a repository from this customer's settings.{% else %}No project yet.{% endif %}
-    </div>
+    <div class="px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px] text-[13px] text-muted">No project yet — add a repository from this customer's settings.</div>
     {% endif %}
   </section>
-
-  {% if is_owner and customer.slug != 'internal' %}
+  {% if customer.slug != 'internal' %}
   <section class="flex flex-col gap-3" aria-labelledby="members">
     {{ ui.section_label('Members', members | length ~ ' who can sign in', id='members') }}
     <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
@@ -58,6 +149,7 @@
       {% endfor %}
     </div>
   </section>
+  {% endif %}
   {% endif %}
 
   {% if not is_owner %}
