@@ -76,6 +76,10 @@ class TestTheDeploy:
         failed = d.deploy_finding("753dbf9abc", "c345216abc", {"status": "completed", "conclusion": "failure"})
         assert failed.status == "bad"
         assert d.deploy_finding("753dbf9abc", "c345216abc", None).status == "warn"
+        # main ahead on paths the deploy ignores (the harness's daily line): the last run's head is this build
+        ignored = d.deploy_finding("e78d03eabc", "2a732c8abc", {**run_ok, "head_sha": "2a732c8abc"})
+        assert ignored.status == "ok" and "last deployed head 2a732c8" in ignored.detail and "main is at e78d03e" in ignored.detail
+        assert d.deploy_finding("e78d03eabc", "2a732c8abc", {**run_ok, "head_sha": "e78d03eabc"}).status == "warn"  # a run on main's head: it did not land
         assert d.deploy_finding("", "x", None).status == "unknown"
         assert "SWARM_BUILD_SHA" in d.deploy_finding("753dbf9abc", "", None).detail
 
