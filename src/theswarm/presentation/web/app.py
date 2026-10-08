@@ -58,7 +58,7 @@ from theswarm.domain.cycles.events import (
     CycleStarted,
     PhaseChanged,
 )
-from theswarm.presentation.web.routes import api, artifacts, health, metrics, webhooks
+from theswarm.presentation.web.routes import api, artifacts, health, metrics, performance_metrics, webhooks
 from theswarm.presentation.web.auth import AuthWallMiddleware
 from theswarm.presentation.web.shell import ShellMiddleware, current_shell
 from theswarm.presentation.web.routes import auth_routes, customers, github_setup, home, instance_settings, ops, player, project, requests_routes, spend, theater
@@ -1008,6 +1008,17 @@ def create_web_app(
     else:
         app.state.eval_run_repo = None
 
+    # #317: client-reported timing samples, written by
+    # POST /api/v1/metrics/performance; None without a database.
+    if db is not None:
+        from theswarm.infrastructure.persistence.sqlite_repos import (
+            SQLitePerformanceMetricRepository,
+        )
+
+        app.state.performance_metric_repo = SQLitePerformanceMetricRepository(db)
+    else:
+        app.state.performance_metric_repo = None
+
     # DevOps D1 — the stack declared in theswarm.yaml, read on a cadence; the
     # server starts the loop, the home and /api/devops read the last report.
     # SWARM_STACK_FILE names another file (the suite points it at none).
@@ -1097,6 +1108,7 @@ def create_web_app(
     app.include_router(player.router)  # V3 M4: /demos/{id}, /demos/{id}/play → there
     app.include_router(player.public_router)  # /d/{short}, outside the wall
     app.include_router(metrics.router)  # Prometheus text, behind the wall — a machine endpoint, not a page
+    app.include_router(performance_metrics.router)  # #317: POST /api/v1/metrics/performance
     app.include_router(api.router)
     app.include_router(auth_routes.router)
     app.include_router(github_setup.router)
