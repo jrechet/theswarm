@@ -135,6 +135,9 @@ from theswarm.infrastructure.persistence.migrations.v035_ops_proposals import (
 from theswarm.infrastructure.persistence.migrations.v036_demo_summaries import (
     SQL as MIGRATION_V036,
 )
+from theswarm.infrastructure.persistence.migrations.v037_performance_metrics import (
+    SQL as MIGRATION_V037,
+)
 
 log = logging.getLogger(__name__)
 
@@ -189,6 +192,7 @@ async def init_db(db_path: str = _DEFAULT_DB) -> aiosqlite.Connection:
     await db.executescript(MIGRATION_V034)
     await db.executescript(MIGRATION_V035)
     await db.executescript(MIGRATION_V036)
+    await db.executescript(MIGRATION_V037)
     await db.commit()
     return db
 
@@ -878,6 +882,31 @@ class SQLiteEvalRunRepository:
                 continue
         records.reverse()
         return records
+
+
+class SQLitePerformanceMetricRepository:
+    """Client-reported timing samples (#317) — one row per click, so
+    frontend latency can be lined up against what the backend did."""
+
+    def __init__(self, db: aiosqlite.Connection) -> None:
+        self._db = db
+
+    async def create(self, route: str, action: str, duration_ms: float, client_timestamp: str) -> dict:
+        created_at = _now_iso()
+        cursor = await self._db.execute(
+            """INSERT INTO performance_metrics (client_timestamp, route, action, duration_ms, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (client_timestamp, route, action, duration_ms, created_at),
+        )
+        await self._db.commit()
+        return {
+            "id": int(cursor.lastrowid or 0),
+            "client_timestamp": client_timestamp,
+            "route": route,
+            "action": action,
+            "duration_ms": duration_ms,
+            "created_at": created_at,
+        }
 
 
 class SQLiteCheckpointRepository:
