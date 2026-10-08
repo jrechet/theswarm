@@ -61,6 +61,7 @@ from theswarm.domain.cycles.events import (
 from theswarm.presentation.web.routes import api, artifacts, health, metrics, webhooks
 from theswarm.presentation.web.auth import AuthWallMiddleware
 from theswarm.presentation.web.shell import ShellMiddleware, current_shell
+from theswarm.presentation.web.timing import TimingMiddleware
 from theswarm.presentation.web.routes import auth_routes, customers, github_setup, home, instance_settings, ops, player, project, requests_routes, spend, theater
 from theswarm.presentation.web.sse import SSEHub
 
@@ -1119,5 +1120,7 @@ def create_web_app(
     app.add_middleware(ShellMiddleware, base_path=base_path.rstrip("/"))
     # Issue #38 — the wall goes up last so it fronts every route above.
     app.add_middleware(AuthWallMiddleware, base_path=base_path.rstrip("/"))
+    # Issue #316 — outermost: the clock ahead of the wall and the rail, timing the whole request.
+    app.add_middleware(TimingMiddleware)
 
     return app

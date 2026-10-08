@@ -135,6 +135,7 @@ from theswarm.infrastructure.persistence.migrations.v035_ops_proposals import (
 from theswarm.infrastructure.persistence.migrations.v036_demo_summaries import (
     SQL as MIGRATION_V036,
 )
+from theswarm.infrastructure.persistence.query_logger import instrument_connection
 
 log = logging.getLogger(__name__)
 
@@ -153,6 +154,7 @@ async def init_db(db_path: str = _DEFAULT_DB) -> aiosqlite.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     db = await aiosqlite.connect(str(path))
     db.row_factory = aiosqlite.Row
+    instrument_connection(db)  # #316 — every statement timed, slow ones logged
     await db.executescript(MIGRATION_V001)
     await db.executescript(MIGRATION_V002)
     await db.executescript(MIGRATION_V003)
