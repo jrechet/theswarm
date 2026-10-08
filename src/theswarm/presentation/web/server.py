@@ -879,6 +879,11 @@ async def start_server(
     app.state.memory_compaction_service = compaction_service
     asyncio.create_task(run_compaction_loop(compaction_service))
 
+    # ── The owner's spend alerts, on the PO's channel ──
+    spend_watch = getattr(app.state, "spend_watch", None)
+    if spend_watch is not None and swarm_po_chat is not None:
+        spend_watch.configure_chat(swarm_po_chat, settings.agents.swarm_po.channel)
+
     # ── DevOps D1: the watch loop; the daily report on the PO's channel ──
     ops_watch = getattr(app.state, "ops_watch", None)
     if ops_watch is not None:

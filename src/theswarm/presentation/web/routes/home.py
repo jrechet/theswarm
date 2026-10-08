@@ -94,6 +94,7 @@ async def home(request: Request) -> HTMLResponse:
         "requests": await _requests_waiting(state),
         "ops": await _ops_card(state),
         "proposals": await _proposals(state),
+        "spend": await _spend_card(state),
         "today": datetime.now(timezone.utc).strftime("%A %d %B, %H:%M UTC").replace(" 0", " "),
     })
 
@@ -117,6 +118,31 @@ def _now_cards(state, running: dict[str, object]) -> list[dict]:
         })
     cards.sort(key=lambda c: c["sort"], reverse=True)
     return cards
+
+
+async def _spend_card(state) -> dict | None:
+    """The owner's spend view: this month and last per customer, and the alerts the
+    rows hold. Nothing to say, no card. Never a member's (the home is the owner's)."""
+    customer_repo = getattr(state, "customer_repo", None)
+    if customer_repo is None:
+        return None
+    from theswarm.application.services.spend import BURN, usd
+    from theswarm.application.services.spend import spend_view
+
+    try:
+        view = await spend_view(state.cycle_repo, state.project_repo, customer_repo)
+    except Exception:  # noqa: BLE001 — the page stays
+        log.exception("home: reading the spend failed")
+        return None
+    if not view.anomalies and not any(s.this_month or s.last_month for s in view.customers):
+        return None
+    alerts = [{**a.as_dict(), "level": "bad" if a.kind == BURN or a.key.endswith(":full") else "warn",
+               "when": a.at.astimezone(timezone.utc).strftime("%d %b").lstrip("0")} for a in view.anomalies]
+    rows = [{"key": s.key, "name": s.name, "this_month": usd(s.this_month), "last_month": usd(s.last_month),
+             "cycles": s.cycles, "usual": usd(s.usual) if s.usual is not None else "—"} for s in view.customers]
+    return {"month": view.month, "last_month": view.last_month, "rows": rows, "alerts": alerts,
+            "total": usd(view.total), "total_last": usd(view.total_last),
+            "level": "bad" if any(a["level"] == "bad" for a in alerts) else ("warn" if alerts else "ok")}
 
 
 async def _proposals(state) -> dict:

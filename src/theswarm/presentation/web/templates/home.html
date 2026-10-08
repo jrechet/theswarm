@@ -88,6 +88,51 @@
   </section>
   {% endif %}
 
+  {# ── Spend: this month per customer, and what looks wrong (the owner's only) ── #}
+  {% if spend %}
+  <section aria-labelledby="spend-title" id="spend" class="flex flex-col gap-3" data-testid="spend-card" data-level="{{ spend.level }}">
+    {{ ui.section_label('Spend', spend.month ~ ' · against ' ~ spend.last_month, id='spend-title') }}
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for a in spend.alerts %}
+      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3 border-b border-line" data-testid="spend-alert" data-kind="{{ a.kind }}" data-level="{{ a.level }}">
+        <span class="w-2 h-2 rounded-full shrink-0 self-center {% if a.level == 'bad' %}bg-bad{% else %}bg-live{% endif %}" aria-hidden="true"></span>
+        <span class="font-medium text-[13px] flex-[1_1_260px] min-w-0">{{ a.title }}</span>
+        <span class="text-[12px] text-muted flex-[2_1_320px] min-w-0">{{ a.detail }}</span>
+        <span class="font-mono text-[12px] text-faint">{{ a.when }}</span>
+      </div>
+      {% endfor %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-[13px] border-collapse">
+          <thead><tr class="text-left text-[12px] text-faint">
+            <th scope="col" class="font-medium px-4 py-2">Customer</th>
+            <th scope="col" class="font-medium px-3 py-2 text-right">This month</th>
+            <th scope="col" class="font-medium px-3 py-2 text-right">Last month</th>
+            <th scope="col" class="font-medium px-3 py-2 text-right">Cycles</th>
+            <th scope="col" class="font-medium px-4 py-2 text-right">Usual cycle</th>
+          </tr></thead>
+          <tbody>
+          {% for r in spend.rows %}
+          <tr class="border-t border-line" data-testid="spend-row" data-customer="{{ r.key }}">
+            <th scope="row" class="font-medium text-left px-4 py-2.5">{{ r.name }}</th>
+            <td class="font-mono px-3 py-2.5 text-right">{{ r.this_month }}</td>
+            <td class="font-mono px-3 py-2.5 text-right text-muted">{{ r.last_month }}</td>
+            <td class="font-mono px-3 py-2.5 text-right text-muted">{{ r.cycles }}</td>
+            <td class="font-mono px-4 py-2.5 text-right text-muted">{{ r.usual }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+          <tfoot><tr class="border-t border-line-strong" data-testid="spend-total">
+            <th scope="row" class="font-medium text-left px-4 py-2.5">All customers</th>
+            <td class="font-mono font-semibold px-3 py-2.5 text-right">{{ spend.total }}</td>
+            <td class="font-mono px-3 py-2.5 text-right text-muted">{{ spend.total_last }}</td>
+            <td colspan="2"></td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
   {# ── Requests: what customers wrote, waiting for the owner (M5) ── #}
   {% if requests %}
   <section aria-labelledby="requests" class="flex flex-col gap-3" data-testid="requests-waiting">

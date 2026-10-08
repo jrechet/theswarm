@@ -356,6 +356,14 @@ class SQLiteCycleRepository:
         rows = await cursor.fetchall()
         return [self._row_to_cycle(r) for r in rows]
 
+    async def list_since(self, since: datetime, limit: int = 5000) -> list[Cycle]:
+        """Cycles started on or after `since` (the spend view reads two months of them)."""
+        cursor = await self._db.execute(
+            "SELECT * FROM cycles WHERE started_at >= ? ORDER BY started_at DESC LIMIT ?",
+            (since.isoformat(), limit),
+        )
+        return [self._row_to_cycle(r) for r in await cursor.fetchall()]
+
     async def list_running(self) -> list[Cycle]:
         """Cycles the DB still calls 'running'.
 
