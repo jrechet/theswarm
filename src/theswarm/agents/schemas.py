@@ -80,6 +80,15 @@ class Improvement(BaseModel):
     files: list[FileBlock] = Field(default_factory=list)
 
 
+class CustomerSummary(BaseModel):
+    """The PO's words to the customer when a demo lands (see
+    `domain/reporting/summary.py`): a headline and two or three plain
+    sentences, no machinery."""
+
+    headline: str
+    body: str
+
+
 class PlannedStory(BaseModel):
     number: int
     title: str = ""

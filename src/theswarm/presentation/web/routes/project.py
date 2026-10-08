@@ -367,8 +367,15 @@ async def _member_feature(state, customer, project, urls, number, issue, pinned,
         stage = stage_for("", "", closed=closed)
     children = [{"number": c.get("number"), "title": c.get("title", ""), "status": c.get("status", ""),
                  "label": piece_label(c.get("status", ""))} for c in pinned.children]
+    summary = None
+    summary_repo = getattr(state, "demo_summary_repo", None)
+    if summary_repo is not None and demo_href:
+        try:
+            summary = await summary_repo.get(demo_href.rstrip("/").rsplit("/", 1)[-1])
+        except Exception:  # noqa: BLE001 — the page stays
+            log.exception("member feature: reading the summary failed")
     return {
-        "customer": customer, "project": _project_dict(customer, project, base), "urls": urls,
+        "customer": customer, "customer_summary": summary, "project": _project_dict(customer, project, base), "urls": urls,
         "issue": {"number": number, "title": issue.get("title", ""), "body": shown_body(issue.get("body"))},
         "children": children, "done": pinned.done, "stage": stage, "demo_href": demo_href,
         "actor": actor, "as_member": as_member,

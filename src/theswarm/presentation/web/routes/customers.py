@@ -290,7 +290,7 @@ def _demo_row(state, report, project_name: str) -> dict:
         "id": report.id, "href": f"{base}/demos/{report.id}", "title": title, "project": project_name,
         "created_at": report.created_at, "when": player._when(report.created_at),
         "thumbnail": card["thumbnail_url"], "duration": "",
-        "verdict": verdict, "verdict_label": label, "verdict_kind": kind,
+        "verdict": verdict, "verdict_label": label, "verdict_kind": kind, "headline": "",
     }
 
 
@@ -328,6 +328,17 @@ async def member_overview(state, customer, projects) -> dict:
                 continue
             demos += [_demo_row(state, r, project.repo.name) for r in reports]
     demos.sort(key=lambda d: d["created_at"], reverse=True)
+    summary_repo = getattr(state, "demo_summary_repo", None)
+    if summary_repo is not None and demos:
+        try:
+            written = await summary_repo.get_many([d["id"] for d in demos[:6]])
+        except Exception:  # noqa: BLE001
+            log.exception("member overview: reading the summaries failed")
+            written = {}
+        for d in demos[:6]:
+            s = written.get(d["id"])
+            if s is not None and s.is_written:
+                d["headline"] = s.headline
     service = getattr(state, "request_service", None)
     if service is not None:
         from theswarm.presentation.web.routes.requests_routes import request_row

@@ -139,6 +139,27 @@ and aliases were deleted on 2026-10-07):
   (`auth._PUBLIC_FILE`: `/artifacts/<cycle>/<file>`, never `/artifacts/list`):
   the public player of M4 linked a video that answered 401 without a
   session (prod, 2026-10-07).
+  **The PO tells the customer what was built** (2026-10-08, the idea
+  the plan folded into the PO): when a demo lands (`DemoReady`),
+  `application/services/demo_summary.DemoSummaryWriter` — subscribed on
+  the bus in `app.py`, off in the suite (`SWARM_DEMO_SUMMARY=0` in
+  conftest) — reads the report, the verdict of the running app and the
+  customer's own words (the pinned issue's title and body, request
+  marker stripped) and makes one text-profile Claude call
+  (`SWARM_SUMMARY_MODEL`, default the cycles' model) answering a validated
+  `schemas.CustomerSummary`: a headline and two or three plain
+  sentences, honest about the checks (a broken check is not described
+  as working). **Plain means no machinery**: `leaks()` refuses links, PR
+  and issue numbers, costs, cycle ids, branches, test counts; a draft
+  that names any is asked again once with the words named, and skipped
+  when it still does. Kept beside the report (`demo_summaries`, v036,
+  `domain/reporting/summary.DemoSummary`, `written` or `skipped` with the
+  reason — never inside it): once per report, any failure a skipped row,
+  nothing raised. A member reads it first on their feature page, above
+  the player and under each title in their list of demos; the public
+  player carries it too. The owner sees on the player whether there is
+  one and why not, and asks the PO again (`POST /demos/{id}/summary`,
+  background, one at a time: `DemoSummaryWriter.start`).
   **The pinned issue is kept 20 s** (`pinned_issue.load_pinned_issue`,
   `SWARM_PINNED_CACHE_SECONDS`, 0 in the suite): the stage polls every
   3 s and every render listed every issue of the repository, all states,
