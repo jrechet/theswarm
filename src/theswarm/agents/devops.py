@@ -198,6 +198,13 @@ def deploy_finding(main_sha: str, build_sha: str, run: dict | None, repo: str = 
     if short_main == short_build:
         return Finding("deploy", "Last deploy", OK, f"this build is main's head {short_main}"
                        + (f"; {run_state}" if run_state else ""), url)
+    # Main may be ahead of the build on commits the deploy ignores (the
+    # harness's daily line, a demo film, a page of docs — `paths-ignore`):
+    # no run exists for them, and the last run's head is this build.
+    if run and run.get("status") == "completed" and str(run.get("head_sha") or "")[:7] == short_build:
+        return Finding("deploy", "Last deploy", OK,
+                       f"this build is the last deployed head {short_build}; main is at {short_main} on paths the deploy ignores"
+                       + (f"; {run_state}" if run_state else ""), url)
     if run and run.get("status") != "completed":
         return Finding("deploy", "Last deploy", WARN, f"main is at {short_main}, this build is {short_build} — {run_state}", url)
     if run and run.get("conclusion") not in (None, "success"):

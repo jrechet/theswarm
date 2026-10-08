@@ -109,6 +109,11 @@ class TestTheWatch:
         detail["text"] = "this build is main's head 9999999; last deploy run success at 7 Oct 16:30 UTC"
         await watch.refresh()
         assert not any(f.key == "deploy_watch" for f in watch.last().findings)
+        # main ahead on paths the deploy ignores: nothing to watch, nothing to alert
+        detail["text"] = "this build is the last deployed head 9999999; main is at 1111111 on paths the deploy ignores; last deploy run success at 8 Oct 07:40 UTC"
+        clock["now"] = NOW + timedelta(hours=3)
+        await watch.refresh()
+        assert not any(f.key == "deploy_watch" for f in watch.last().findings) and not await watch.alert_deploy()
 
 
 class TestTheTriage:

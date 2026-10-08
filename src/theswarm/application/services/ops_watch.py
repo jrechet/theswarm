@@ -161,7 +161,7 @@ class OpsWatch:
 
         if deploy is None:
             return "", "", None
-        same = re.search(r"this build is main's head ([0-9a-f]{7})", deploy.detail)
+        same = re.search(r"this build is (?:main's head|the last deployed head) ([0-9a-f]{7})", deploy.detail)
         if same:
             return same.group(1), same.group(1), None
         moved = re.search(r"main is at ([0-9a-f]{7}), this build is ([0-9a-f]{7})", deploy.detail)
