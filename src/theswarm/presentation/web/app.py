@@ -156,6 +156,40 @@ def create_web_app(
         request_tracker = RequestTracker(app.state.request_service, project_repo)
         event_bus.subscribe(CycleStarted, request_tracker.on_cycle_started)
         event_bus.subscribe(_DemoReady, request_tracker.on_demo_ready)
+        # The PO tells the customer what was built, when a demo lands (V3, folded into the PO)
+        import os as _os
+
+        from theswarm.application.services.demo_summary import DemoSummaryWriter
+        from theswarm.infrastructure.persistence.summary_repo import SQLiteDemoSummaryRepository
+        from theswarm.presentation.web.routes.player import verdict_of as _verdict_of
+
+        app.state.demo_summary_repo = SQLiteDemoSummaryRepository(db)
+
+        async def _summary_repo_name(project_id: str) -> str:
+            if "/" in project_id:
+                return project_id
+            project = await project_repo.get(project_id)
+            return str(project.repo) if project is not None else project_id
+
+        async def _what_was_asked(repo: str, number: int | None) -> str:
+            from theswarm.application.services.pinned_issue import load_pinned_issue
+            from theswarm.presentation.web.routes.project import shown_body
+
+            pinned = await load_pinned_issue(repo, number)
+            issue = pinned.issue or {}
+            return f"{issue.get('title', '')}\n{shown_body(issue.get('body'))}".strip()
+
+        def _summary_claude():
+            from theswarm.tools.claude import ClaudeCLI
+
+            return ClaudeCLI(model=_os.environ.get("SWARM_SUMMARY_MODEL", _os.environ.get("SWARM_CLAUDE_MODEL", "sonnet")))
+
+        app.state.demo_summary_writer = DemoSummaryWriter(
+            report_repo, app.state.demo_summary_repo, _summary_claude, verdict_of=_verdict_of,
+            asked_for=_what_was_asked, repo_of=_summary_repo_name,
+        ) if report_repo is not None else None
+        if app.state.demo_summary_writer is not None and _os.environ.get("SWARM_DEMO_SUMMARY", "1") != "0":
+            event_bus.subscribe(_DemoReady, app.state.demo_summary_writer.on_demo_ready)
 
     # Queries
     app.state.list_projects_query = ListProjectsQuery(project_repo)

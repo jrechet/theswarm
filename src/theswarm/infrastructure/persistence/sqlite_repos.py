@@ -132,6 +132,9 @@ from theswarm.infrastructure.persistence.migrations.v034_requests import (
 from theswarm.infrastructure.persistence.migrations.v035_ops_proposals import (
     SQL as MIGRATION_V035,
 )
+from theswarm.infrastructure.persistence.migrations.v036_demo_summaries import (
+    SQL as MIGRATION_V036,
+)
 
 log = logging.getLogger(__name__)
 
@@ -185,6 +188,7 @@ async def init_db(db_path: str = _DEFAULT_DB) -> aiosqlite.Connection:
     await _ensure_projects_columns(db)
     await db.executescript(MIGRATION_V034)
     await db.executescript(MIGRATION_V035)
+    await db.executescript(MIGRATION_V036)
     await db.commit()
     return db
 

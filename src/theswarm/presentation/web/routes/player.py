@@ -185,9 +185,21 @@ async def player_context(request: Request, report, *, public: bool) -> dict:
         except Exception:  # noqa: BLE001
             log.exception("player: listing the demos of %s failed", report.project_id)
 
+    summary_repo = getattr(state, "demo_summary_repo", None)
+    writer = getattr(state, "demo_summary_writer", None)
+    customer_summary = None
+    if summary_repo is not None:
+        try:
+            customer_summary = await summary_repo.get(report.id)
+        except Exception:  # noqa: BLE001 — the player stays
+            log.exception("player: reading the summary of %s failed", report.id)
+
     return {
         "report": report,
         "public": public,
+        "customer_summary": customer_summary,
+        "summary_writing": bool(writer is not None and writer.writing(report.id)),
+        "can_write_summary": writer is not None,
         "title": title,
         "when": _when(report.created_at),
         "verdict": verdict, "verdict_label": verdict_label, "verdict_kind": verdict_kind,
@@ -248,6 +260,25 @@ async def player(request: Request, report_id: str):
     context = await player_context(request, report, public=False)
     context["member"] = member or request.query_params.get("as") == "member"
     return request.app.state.templates.TemplateResponse("demo.html", context)
+
+
+@router.post("/demos/{report_id}/summary")
+async def write_summary(request: Request, report_id: str):
+    """The owner asks the PO to write (or write again) what the customer is told."""
+    from theswarm.presentation.web.routes.customers import _refused, current_actor
+
+    state = request.app.state
+    actor = await current_actor(request)
+    if actor is None or not actor.is_owner:
+        return _refused(request, actor)
+    report = await _report(request, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="No such demo")
+    writer = getattr(state, "demo_summary_writer", None)
+    if writer is not None:
+        facts = await _cycle_facts(state, report)
+        writer.start(report_id, issue_number=facts["issue_number"])
+    return RedirectResponse(f"{state.base_path}/demos/{report_id}", status_code=303)
 
 
 @public_router.get("/d/{short}", response_class=HTMLResponse)

@@ -80,6 +80,7 @@
         </span>
         <span class="flex flex-col gap-0.5 flex-[1_1_220px] min-w-0">
           <span class="font-medium truncate">{{ d.title }}</span>
+          {% if d.headline %}<span class="text-[13px] text-ink" data-testid="member-demo-headline">{{ d.headline }}</span>{% endif %}
           <span class="text-[12px] text-muted">{{ d.project }}{% if d.duration %} · {{ d.duration }}{% endif %}</span>
         </span>
         {{ ui.chip(d.verdict_label, d.verdict_kind) }}

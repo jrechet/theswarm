@@ -17,6 +17,23 @@
     </span>
   </div>
 
+  {% if customer_summary and customer_summary.is_written %}
+  <section class="flex flex-col gap-2 px-5 py-4 bg-surface border border-line rounded-[10px]" data-testid="customer-summary" aria-labelledby="customer-summary-title">
+    <h2 id="customer-summary-title" class="m-0 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">What was delivered</h2>
+    <p class="m-0 text-[16px] font-semibold text-balance" data-testid="summary-headline">{{ customer_summary.headline }}</p>
+    <p class="m-0 text-[14px] leading-relaxed text-ink max-w-[68ch]" data-testid="summary-body">{{ customer_summary.body }}</p>
+  </section>
+  {% endif %}
+  {% if not public and not member and can_write_summary %}
+  <div class="flex flex-wrap items-center gap-3 px-4 py-2.5 border border-dashed border-line-strong rounded-[10px] text-[13px]" data-testid="summary-owner" data-state="{% if summary_writing %}writing{% elif customer_summary and customer_summary.is_written %}written{% elif customer_summary %}skipped{% else %}none{% endif %}">
+    {% if summary_writing %}<span class="w-2 h-2 rounded-full shrink-0 bg-live live-dot" aria-hidden="true"></span><span class="text-muted">The PO is writing what the customer is told… reload in a moment.</span>
+    {% else %}
+    <span class="text-muted">{% if customer_summary and customer_summary.is_written %}Written by the {{ customer_summary.written_by }}: this is what the customer reads first.{% elif customer_summary %}No summary for the customer: {{ customer_summary.reason }}{% else %}The customer has no summary of this demo yet.{% endif %}</span>
+    <form method="post" action="{{ base }}/demos/{{ report.id }}/summary" class="ml-auto"><button type="submit" class="h-[30px] px-2.5 border border-line-strong rounded-md bg-surface text-[13px] text-ink cursor-pointer" data-testid="summary-write">{% if customer_summary and customer_summary.is_written %}Write it again{% else %}Ask the PO to write it{% endif %}</button></form>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <div class="grid gap-4 items-start" style="grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr))">
     <figure class="m-0 flex flex-col gap-2.5">
       <div class="relative bg-[#14171C] rounded-[10px] overflow-hidden border border-[#262B33]">
