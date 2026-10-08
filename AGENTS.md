@@ -160,6 +160,27 @@ and aliases were deleted on 2026-10-07):
   player carries it too. The owner sees on the player whether there is
   one and why not, and asks the PO again (`POST /demos/{id}/summary`,
   background, one at a time: `DemoSummaryWriter.start`).
+  **The owner's spend view and its alerts** (2026-10-08, the other idea the
+  plan folded away): `application/services/spend.py` — no new table, a
+  sum over `cycles.total_cost_usd` (`SQLiteCycleRepository.list_since`).
+  The home's *Spend* card (owner only, `data-testid="spend-card"`; a member's
+  pages carry no cost, `/api/spend` is behind the wall) reads this month and
+  last per customer, the cycles finished and the usual one, and lists the
+  alerts. **Four ways money goes wrong, each a pure function of the rows**:
+  *dear* (`dear_cycles`: a cycle at `DEAR_FACTOR`× the median of the
+  project's previous `PRIOR_CYCLES`, and `DEAR_FLOOR_USD` more), *burn*
+  (`burn_runs`: `BURN_RUN` failed cycles in a row, nothing merged,
+  `BURN_MIN_USD` spent), *pace* (`pace`: the month at today's rate is
+  `PACE_FACTOR`× last month's, once last month was real money and the
+  month `PACE_MIN_DAYS` old), *cap* (`caps`: a project's month reached
+  `CAP_WARN` of its own `monthly_cost_cap_usd`). A row a restart
+  interrupted and a continuation resumed (`resumed_as`) is a fragment:
+  its money counts, it is never judged nor the yardstick. `SpendWatch`
+  runs the same detectors when a cycle finishes (`CycleCompleted`,
+  `CycleFailed`, the event's cost being the truth — the row may not hold
+  it yet) and posts what that finish caused on the PO's channel, once per
+  alert key (`server.py` hands over the chat; in memory, so a restart may
+  repeat one alert).
   **The pinned issue is kept 20 s** (`pinned_issue.load_pinned_issue`,
   `SWARM_PINNED_CACHE_SECONDS`, 0 in the suite): the stage polls every
   3 s and every render listed every issue of the repository, all states,

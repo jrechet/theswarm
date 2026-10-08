@@ -61,7 +61,7 @@ from theswarm.domain.cycles.events import (
 from theswarm.presentation.web.routes import api, artifacts, health, metrics, webhooks
 from theswarm.presentation.web.auth import AuthWallMiddleware
 from theswarm.presentation.web.shell import ShellMiddleware, current_shell
-from theswarm.presentation.web.routes import auth_routes, customers, github_setup, home, instance_settings, ops, player, project, requests_routes, theater
+from theswarm.presentation.web.routes import auth_routes, customers, github_setup, home, instance_settings, ops, player, project, requests_routes, spend, theater
 from theswarm.presentation.web.sse import SSEHub
 
 _HERE = Path(__file__).parent
@@ -190,6 +190,16 @@ def create_web_app(
         ) if report_repo is not None else None
         if app.state.demo_summary_writer is not None and _os.environ.get("SWARM_DEMO_SUMMARY", "1") != "0":
             event_bus.subscribe(_DemoReady, app.state.demo_summary_writer.on_demo_ready)
+        # The owner's spend view: alerts posted on the PO's channel when a cycle finishes
+        # (the card and /api/spend read the same rows; the server hands the chat over)
+        from theswarm.application.services.spend import SpendWatch, lookups as _spend_lookups
+
+        async def _spend_lookup():
+            return await _spend_lookups(project_repo, app.state.customer_repo)
+
+        app.state.spend_watch = SpendWatch(cycle_repo, _spend_lookup)
+        event_bus.subscribe(CycleCompleted, app.state.spend_watch.on_cycle_finished)
+        event_bus.subscribe(CycleFailed, app.state.spend_watch.on_cycle_finished)
 
     # Queries
     app.state.list_projects_query = ListProjectsQuery(project_repo)
@@ -1078,6 +1088,7 @@ def create_web_app(
     app.include_router(customers.router)  # V3 M2: /settings/customers, /invite/{token}, /c/{slug}
     app.include_router(requests_routes.router)  # V3 M5: /requests — the inbox, a member's list and composer
     app.include_router(ops.router)  # DevOps D1: /api/devops, /ops/refresh
+    app.include_router(spend.router)  # the owner's spend view: /api/spend
     app.include_router(instance_settings.router)  # V3 M6: /settings/instance — the vault-backed keys and URLs
     app.include_router(home.router)  # owns `/`: the owner's home, a member's customer
     app.include_router(health.router)
