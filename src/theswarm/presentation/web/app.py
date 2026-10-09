@@ -1032,11 +1032,16 @@ def create_web_app(
         async def _raise_proposals(report):
             if app.state.proposal_service is not None:
                 await app.state.proposal_service.raise_from(report.findings, report.facts)
+            # the fifth station: a report closes the deploy watches it can answer
+            from theswarm.application.services.devops_cycles import resolve_deploys
+
+            await resolve_deploys(report, cycle_repo, app.state.cycle_event_store, event_bus.publish)
 
         app.state.ops_watch = OpsWatch(
             lambda: devops_gather(stack, harness=_harness_runs),
             interval_s=int(_os.environ.get("SWARM_DEVOPS_INTERVAL_SECONDS", "600") or 600),
             on_report=_raise_proposals,
+            preflight_gather=lambda: devops_gather(stack, light=True),
         )
         # D4 — improvements as PRs: the owner's click measures, asks Claude, opens the PR.
         from theswarm.agents.devops import self_repo

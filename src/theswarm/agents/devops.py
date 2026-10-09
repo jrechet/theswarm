@@ -431,7 +431,7 @@ def _runner_labels(runner) -> list[str]:
 DEVOPS_BRANCH_PREFIX = "devops/"  # the branches DevOps's improvement PRs (D4) are on
 
 
-def _read_github_sync(repo_name: str, token: str, deploy_workflow: str = "ci.yml") -> dict:
+def _read_github_sync(repo_name: str, token: str, deploy_workflow: str = "ci.yml", with_jobs: bool = True) -> dict:
     from github import Github
 
     repo = Github(token, timeout=GITHUB_TIMEOUT_SECONDS).get_repo(repo_name)
@@ -449,6 +449,8 @@ def _read_github_sync(repo_name: str, token: str, deploy_workflow: str = "ci.yml
         if len(runs) >= RUN_LIMIT:
             break
     out["runs"] = runs
+    if not with_jobs:  # the preflight: what stops a cycle, nothing it measures
+        return out
     try:
         out["jobs"] = _jobs_of(objects, runs, repo.default_branch, deploy_workflow)
     except Exception as exc:  # noqa: BLE001 — the measures are not worth losing the rest
@@ -478,14 +480,15 @@ def _jobs_of(objects: list, runs: list[dict], default_branch: str, workflow: str
     return jobs
 
 
-async def read_github(repo_name: str, token: str = "", deploy_workflow: str = "ci.yml") -> dict:
+async def read_github(repo_name: str, token: str = "", deploy_workflow: str = "ci.yml", with_jobs: bool = True) -> dict:
     """main's head, the runners and the last workflow runs, off the API in a thread."""
     token = token or os.environ.get("GITHUB_TOKEN", "")
     if not repo_name:
         raise ValueError("no repository declared in stack.ci")
     if not token:
         raise ValueError("GITHUB_TOKEN is not set")
-    return await asyncio.wait_for(asyncio.to_thread(_read_github_sync, repo_name, token, deploy_workflow), GITHUB_TIMEOUT_SECONDS + 5)
+    return await asyncio.wait_for(asyncio.to_thread(_read_github_sync, repo_name, token, deploy_workflow, with_jobs),
+                                  GITHUB_TIMEOUT_SECONDS + 5)
 
 
 def deploy_run_of(runs: list[dict], workflow: str = "ci.yml", branch: str = "main") -> dict | None:
@@ -604,8 +607,13 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
                  harness: Callable[[str], Awaitable[list[dict]]] | None = None,
                  build: Callable[[], str] | None = None, here: Callable[[], list[dict]] | None = None,
                  load: Callable[[], dict | None] | None = None,
-                 now: datetime | None = None) -> OpsReport:
-    """Every check, each on its own; a reader that fails is an unknown finding."""
+                 now: datetime | None = None, light: bool = False) -> OpsReport:
+    """Every check, each on its own; a reader that fails is an unknown finding.
+
+    `light` is the preflight's read: no jobs to measure, no harness — what
+    stops a cycle, read fast (a Play waits for it). GitHub and the hosts are
+    read side by side; the findings keep their order.
+    """
     started = _now()
     now = now or started
     findings: list[Finding] = []
@@ -614,10 +622,13 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
     deploy_cfg = stack.get("deploy") or {}
     workflow = next((c.get("deploy_workflow") for c in stack.get("ci", []) or [] if c.get("deploy_workflow")), "ci.yml")
 
+    hosts = list(stack.get("hosts", []) or [])
+    host_reads = [asyncio.ensure_future((host_reader or read_host)(h)) for h in hosts]  # beside GitHub
+
     # GitHub: main's head, the deploy run, the runners, the failed runs.
     gh: dict = {}
     try:
-        gh = await (github or read_github)(repo) if github is not None else await read_github(repo, deploy_workflow=workflow)
+        gh = await github(repo) if github is not None else await read_github(repo, deploy_workflow=workflow, with_jobs=not light)
     except Exception as exc:  # noqa: BLE001
         findings += [_unknown("deploy", "Last deploy", exc), _unknown("runners", "Runners", exc), _unknown("failed_runs", "Workflow runs", exc)]
     else:
@@ -635,10 +646,10 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
         findings.append(failed_runs_finding(runs, now))
 
     # The hosts, over ssh when a key is at hand (the laptop today; prod needs one mounted).
-    for host in stack.get("hosts", []) or []:
+    for host, reading in zip(hosts, host_reads):
         name = host.get("name") or host.get("ssh") or "host"
         try:
-            read = await (host_reader or read_host)(host)
+            read = await reading
         except Exception as exc:  # noqa: BLE001
             findings.append(Finding("ci_slot", "CI slot", UNKNOWN, f"{name} not reachable from here: {str(exc)[:120]}"))
             continue
@@ -661,7 +672,7 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
     # The day's harness run on the test bed.
     target = str((stack.get("harness") or {}).get("repo") or "")
     records: list[dict] = []
-    if harness is not None and target:
+    if harness is not None and target and not light:
         try:
             records = list(await harness(target))
             findings.append(harness_finding(records, now.date()))

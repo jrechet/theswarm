@@ -361,6 +361,11 @@ async def _run_api_cycle(
 
     # DevOps D2 — the preflight: a cycle that would die or lie is not started.
     answer = await _ask_preflight()
+    if answer is not None and event_bus is not None:
+        # DevOps's first act in the cycle, for its station in the theater
+        from theswarm.application.services.devops_cycles import preflight_activity, tell
+
+        await tell(event_bus.publish, preflight_activity(cycle_id, project_id or repo, answer))
     if answer is not None and not answer.go:
         tracker.update_status(
             cycle_id, CycleStatus.FAILED,
@@ -599,6 +604,15 @@ async def _run_api_cycle(
                 merged_prs=merged,
                 held_prs=held,
             ))
+            # DevOps watches the deploy a merge to the swarm's own main sets off
+            # (its second act; a later report closes it: landed, or late)
+            from theswarm.config import SELF_REPO
+
+            if merged and repo == SELF_REPO and _PREFLIGHT is not None:
+                from theswarm.agents.devops import build_sha
+                from theswarm.application.services.devops_cycles import deploy_watch_activity, tell
+
+                await tell(event_bus.publish, deploy_watch_activity(cycle_id, repo, merged, build_sha()))
 
             # F1b — persist report + publish DemoReady
             await _emit_demo_ready(

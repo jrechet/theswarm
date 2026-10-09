@@ -34,6 +34,34 @@ _ROLE_ALIASES = {
 
 _FEED_LIMIT = 250
 
+# DevOps, the fifth station (the plan: only in the cycles where it acts — the
+# preflight, and the deploy watch after a merge to the swarm's own main).
+_DEVOPS = ("devops", "OPS", "DevOps")
+_DEVOPS_LABELS = {"preflight": "Preflight", "preflight_nogo": "Preflight", "deploy_watch": "Deploy",
+                  "deploy_landed": "Deploy", "deploy_late": "Deploy"}
+
+
+def _devops_station(entries) -> dict | None:
+    """DevOps's acts in this cycle as a station; None when it did not act."""
+    acts = [e for e in entries if str(e.agent).strip().lower() == "devops" and e.kind in _DEVOPS_LABELS]
+    if not acts:
+        return None
+    preflight = next((e for e in reversed(acts) if e.kind.startswith("preflight")), None)
+    deploy = next((e for e in reversed(acts) if e.kind.startswith("deploy")), None)
+    if preflight is not None and preflight.kind == "preflight_nogo":
+        state = "failed"
+    elif deploy is not None and deploy.kind == "deploy_late":
+        state = "failed"
+    elif deploy is not None and deploy.kind == "deploy_watch":
+        state = "active"
+    else:
+        state = "done"
+    lines = [{"label": _DEVOPS_LABELS[e.kind], "kind": e.kind, "text": e.text,
+              "time": e.occurred_at.strftime("%H:%M")} for e in (preflight, deploy) if e is not None]
+    key, glyph, name = _DEVOPS
+    return {"key": key, "glyph": glyph, "name": name, "state": state, "acts": lines,
+            "message": (deploy or preflight).text, "phase": "watching the deploy" if state == "active" else ""}
+
 
 def _normalize_role(raw: str) -> str | None:
     return _ROLE_ALIASES.get(raw.strip().lower().replace("-", "_"))
@@ -190,6 +218,7 @@ async def _stage_context(request: Request, record) -> dict:
     phases = get_phase_history(record.id)
 
     feed: list[dict] = []
+    devops = None
     thoughts_query = getattr(request.app.state, "get_agent_thoughts_query", None)
     if thoughts_query is not None:
         try:
@@ -197,10 +226,11 @@ async def _stage_context(request: Request, record) -> dict:
         except Exception:  # noqa: BLE001 — the feed degrades, the page stays
             log.exception("V2: reading thoughts for %s failed", record.id)
             entries = []
-        glyphs = {key: glyph for key, glyph, _ in _STATIONS}
+        glyphs = {key: glyph for key, glyph, _ in (*_STATIONS, _DEVOPS)}
+        devops = _devops_station(entries)
         entries = [e for e in entries if e.kind == "step" or is_telling(e.text)]
         for entry in reversed(entries[-_FEED_LIMIT:]):
-            role = _normalize_role(entry.agent) or ""
+            role = _normalize_role(entry.agent) or ("devops" if str(entry.agent).strip().lower() == "devops" else "")
             feed.append({
                 "time": entry.occurred_at.strftime("%H:%M:%S"),
                 "agent": role or entry.agent,
@@ -211,6 +241,8 @@ async def _stage_context(request: Request, record) -> dict:
 
     pinned = await load_pinned_issue(record.repo, record.issue_number)
     graph = _graph(record, phases, progress, pinned)
+    if devops is not None:
+        graph["nodes"] = [devops, *graph["nodes"]]  # the preflight comes first
     demo = await _cycle_demo(request.app.state, record.id)
     return {
         "record": record,

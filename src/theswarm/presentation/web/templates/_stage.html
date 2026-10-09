@@ -57,9 +57,9 @@
 
   <div class="grid gap-3 items-start" style="grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr))" data-testid="flow">
 
-    {# ── The four agents ─────────────────────────────────────────────── #}
+    {# ── The agents: the four, and DevOps in the cycles where it acted ── #}
     <section aria-labelledby="agents-title" class="flex flex-col gap-2">
-      <h2 id="agents-title" class="m-0 h-7 flex items-center px-1 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">The four agents</h2>
+      <h2 id="agents-title" class="m-0 h-7 flex items-center px-1 text-[12px] font-medium tracking-[0.06em] uppercase text-faint">The {{ 'five' if graph.nodes | length == 5 else 'four' }} agents</h2>
       <ol class="list-none m-0 p-0 flex flex-col gap-2" data-testid="agent-rail">
         {% for s in graph.nodes %}
         <li>
@@ -72,9 +72,20 @@
                 {%- if s.state == 'active' %}{% if s.phase %}<span data-testid="node-phase">{{ s.phase }}</span>{% else %}working{% endif %}{% elif s.state == 'done' %}done{% elif s.state == 'failed' %}failed{% else %}waiting{% endif -%}
               </span>
             </span>
+            {% if s.acts %}
+            <span class="flex flex-col gap-1" data-testid="devops-acts">
+              {% for a in s.acts %}
+              <span class="flex gap-2 text-[13px] leading-[1.4]" data-act="{{ a.kind }}">
+                <span class="shrink-0 w-16 font-medium {% if a.kind in ('preflight_nogo', 'deploy_late') %}text-bad{% elif a.kind == 'deploy_watch' %}text-live-deep{% else %}text-ok{% endif %}">{{ a.label }}</span>
+                <span class="text-muted min-w-0 break-words [overflow-wrap:anywhere]">{{ a.text }} <span class="font-mono text-[11px] text-faint">{{ a.time }}</span></span>
+              </span>
+              {% endfor %}
+            </span>
+            {% else %}
             <span class="text-[13px] text-muted leading-[1.4] line-clamp-2 min-h-[2.8em]">
               {%- if s.message %}{{ s.message }}{% elif s.state == 'waiting' %}Waiting…{% elif s.state == 'done' %}Done.{% endif -%}
             </span>
+            {% endif %}
           </button>
         </li>
         {% endfor %}
@@ -98,7 +109,7 @@
         {% for e in feed %}
         <li class="feed-entry flex gap-3 py-2 border-t border-raised first:border-t-0 text-[13px] leading-[1.4]" data-agent="{{ e.agent }}">
           <span class="font-mono text-[11px] text-faint shrink-0 pt-0.5 w-14">{{ e.time }}</span>
-          <span class="shrink-0 w-14 font-medium {% if e.agent == 'dev' %}text-live-deep{% elif e.agent == 'techlead' %}text-info{% elif e.agent == 'po' %}text-ok{% elif e.agent == 'qa' %}text-wait{% else %}text-faint{% endif %}">{{ e.glyph }}</span>
+          <span class="shrink-0 w-14 font-medium {% if e.agent == 'dev' %}text-live-deep{% elif e.agent == 'techlead' %}text-info{% elif e.agent == 'po' %}text-ok{% elif e.agent == 'qa' %}text-wait{% elif e.agent == 'devops' %}text-ink{% else %}text-faint{% endif %}">{{ e.glyph }}</span>
           <span class="min-w-0 {% if e.kind == 'step' %}text-muted{% elif e.kind in ('pr_opened', 'review') %}font-medium{% endif %}">{{ e.text }}</span>
         </li>
         {% endfor %}
