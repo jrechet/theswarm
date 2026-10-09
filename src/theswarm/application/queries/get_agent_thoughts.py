@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 
@@ -14,6 +14,7 @@ class ThoughtEntry:
     detail: str
     phase: str
     occurred_at: datetime
+    metadata: dict = field(default_factory=dict)  # an AgentActivity's, for the stations
 
 
 class GetAgentThoughtsQuery:
@@ -45,6 +46,7 @@ class GetAgentThoughtsQuery:
                         detail="",
                         phase="",
                         occurred_at=r.occurred_at,
+                        metadata=dict(r.payload.get("metadata") or {}),
                     ),
                 )
                 continue

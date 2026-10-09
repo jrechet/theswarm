@@ -149,6 +149,31 @@ def set_preflight(preflight) -> None:
     _PREFLIGHT = preflight
 
 
+_PERSONA_NAMES = (("po", "Product Owner"), ("techlead", "Tech Lead"), ("dev", "Developer"), ("qa", "QA"))
+
+
+async def _tell_agent_models(event_bus, cycle_id: str, project_id: str, cycle_config) -> None:
+    """What each agent of this cycle runs on (Settings → Agents), as a line of the
+    cycle: the theater's stations read it, live and after the cycle."""
+    from theswarm.domain.cycles.events import AgentActivity
+    from theswarm.domain.cycles.value_objects import CycleId
+
+    chosen = dict(getattr(cycle_config, "agent_settings", None) or {})
+    models = {}
+    for role, _ in _PERSONA_NAMES:
+        model, effort = chosen.get(role) or (cycle_config.claude_model, "")
+        models[role] = {"model": model, "effort": effort}
+    words = ", ".join(f"{name} {models[role]['model'].capitalize()}" + (f" · {models[role]['effort']}" if models[role]['effort'] else "")
+                      for role, name in _PERSONA_NAMES)
+    try:
+        await event_bus.publish(AgentActivity(
+            cycle_id=CycleId(cycle_id), project_id=project_id, agent="system", action="agent_models",
+            detail=f"The agents run on: {words}", metadata=models,
+        ))
+    except Exception:  # noqa: BLE001 — never the cycle's problem
+        log.exception("The agents' models were not told")
+
+
 async def _ask_preflight():
     """The preflight's answer, or None when nobody answers (a failing reader never blocks)."""
     if _PREFLIGHT is None:
@@ -514,6 +539,8 @@ async def _run_api_cycle(
                 cycle_config.agent_settings = await _AGENT_SETTINGS.effective()
             except Exception:  # noqa: BLE001 — the instance's model then
                 log.exception("Agent settings could not be read — every persona on the instance's model")
+            if event_bus is not None:
+                await _tell_agent_models(event_bus, cycle_id, project_id or repo, cycle_config)
 
         from theswarm.infrastructure import tracing
 

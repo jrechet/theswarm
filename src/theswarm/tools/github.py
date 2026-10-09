@@ -144,12 +144,30 @@ class GitHubClient:
         self,
         labels: list[str] | None = None,
         state: str = "open",
+        created_after: int | None = None,
     ) -> list[dict]:
-        """Return issues matching labels, as plain dicts."""
+        """Return issues matching labels, as plain dicts.
+
+        `created_after` reads only the issues opened after that one, newest
+        first, and stops there: a feature's sub-tasks are always opened after
+        it, and concert-tour-app's 614 issues took 16 s to list whole for the
+        theater's panel (2026-10-09).
+        """
         await self._fresh()
         kwargs: dict[str, Any] = {"state": state}
         if labels:
             kwargs["labels"] = labels
+        if created_after is not None:
+            def newer() -> list[Issue]:
+                out = []
+                for issue in self._repo.get_issues(sort="created", direction="desc", **kwargs):
+                    if issue.number <= created_after:
+                        break
+                    out.append(issue)
+                return out
+
+            newest: list[Issue] = await self._run(newer)
+            return [_issue_to_dict(i) for i in newest if not _is_pull_request(i)]
         issues: list[Issue] = await self._run(
             lambda: list(self._repo.get_issues(**kwargs))
         )

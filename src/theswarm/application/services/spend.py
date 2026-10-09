@@ -23,7 +23,8 @@ table. Customers never see it. This module is two things:
 
 `SpendWatch` evaluates the same detectors when a cycle finishes
 (`CycleCompleted`, `CycleFailed`) and posts what is new on the PO's
-channel, once per alert key.
+channel, once per alert key — the keys kept in a ledger (v038), so a
+restart does not post an alert twice.
 """
 
 from __future__ import annotations
@@ -344,9 +345,11 @@ class SpendWatch:
     """When a cycle finishes, evaluates the alerts and posts what is new, once per key."""
 
     def __init__(self, cycle_repo: Any, lookup: Callable[[], Awaitable[Lookups]], *, chat: Any = None, channel: str = "",
-                 clock: Callable[[], datetime] | None = None) -> None:
+                 clock: Callable[[], datetime] | None = None, ledger: Any = None) -> None:
         self._cycles = cycle_repo
         self._lookup = lookup
+        self._ledger = ledger  # the keys already posted, kept across restarts
+        self._ledger_read = ledger is None
         self._chat = chat
         self._channel = channel
         self._clock = clock or (lambda: datetime.now(timezone.utc))
@@ -369,6 +372,9 @@ class SpendWatch:
     async def _evaluate(self, event: Any) -> None:
         if self._chat is None or not self._channel:
             return
+        if not self._ledger_read:
+            self._posted |= await self._ledger.keys()
+            self._ledger_read = True
         now = self._clock()
         cycle_id = str(getattr(event, "cycle_id", ""))
         project_id = getattr(event, "project_id", "") or ""
@@ -401,3 +407,9 @@ class SpendWatch:
         except Exception:  # noqa: BLE001 — not posted is not lost: the card shows it
             self._posted.discard(a.key)
             log.exception("SpendWatch: the alert could not be posted")
+            return
+        if self._ledger is not None:
+            try:
+                await self._ledger.add(a.key)
+            except Exception:  # noqa: BLE001 — posted is what matters; a restart may repeat this one
+                log.exception("SpendWatch: the posted alert could not be written down")

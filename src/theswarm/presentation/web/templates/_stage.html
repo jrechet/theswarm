@@ -68,6 +68,7 @@
             <span class="flex items-center gap-2">
               <span class="w-2 h-2 rounded-full {% if s.state == 'active' %}bg-live live-dot{% elif s.state == 'done' %}bg-ok{% elif s.state == 'failed' %}bg-bad{% else %}bg-line-strong{% endif %}" aria-hidden="true"></span>
               <span class="font-semibold text-[13px]">{{ s.name }}</span>
+              {% if s.model %}<span class="font-mono text-[11px] text-faint" data-testid="station-model">{{ s.model }}</span>{% endif %}
               <span class="ml-auto text-[12px] font-medium {% if s.state == 'active' %}text-live-deep{% elif s.state == 'done' %}text-ok{% elif s.state == 'failed' %}text-bad{% else %}text-faint{% endif %}">
                 {%- if s.state == 'active' %}{% if s.phase %}<span data-testid="node-phase">{{ s.phase }}</span>{% else %}working{% endif %}{% elif s.state == 'done' %}done{% elif s.state == 'failed' %}failed{% else %}waiting{% endif -%}
               </span>
