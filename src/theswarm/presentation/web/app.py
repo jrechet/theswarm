@@ -203,7 +203,9 @@ def create_web_app(
         async def _spend_lookup():
             return await _spend_lookups(project_repo, app.state.customer_repo)
 
-        app.state.spend_watch = SpendWatch(cycle_repo, _spend_lookup)
+        from theswarm.infrastructure.persistence.spend_alert_ledger import SQLiteSpendAlertLedger
+
+        app.state.spend_watch = SpendWatch(cycle_repo, _spend_lookup, ledger=SQLiteSpendAlertLedger(db))
         event_bus.subscribe(CycleCompleted, app.state.spend_watch.on_cycle_finished)
         event_bus.subscribe(CycleFailed, app.state.spend_watch.on_cycle_finished)
 

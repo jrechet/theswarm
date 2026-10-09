@@ -144,3 +144,48 @@ class TestTheApiCycle:
             await api_module.run_api_cycle(cycle_id="abc123abc126", repo="o/r", description="Play", callback_url="",
                                            allowed_repos=[], event_bus=EventBus())
         assert seen["settings"] == {}
+
+
+class TestWhatTheCycleSays:
+    @pytest.fixture(autouse=True)
+    def _hook(self):
+        api_module.set_agent_settings(None)
+        yield
+        api_module.set_agent_settings(None)
+
+    async def test_the_cycle_tells_what_each_agent_runs_on(self):
+        from theswarm.domain.cycles.events import AgentActivity
+
+        bus = EventBus()
+        told = []
+
+        async def keep(e):
+            if isinstance(e, AgentActivity) and e.action == "agent_models":
+                told.append(e)
+
+        bus.subscribe_all(keep)
+        api_module.set_agent_settings(SimpleNamespace(effective=AsyncMock(return_value={"dev": ("opus", "high"), "qa": ("haiku", "low")})))
+        with patch("theswarm.cycle.run_daily_cycle", new=AsyncMock(return_value={"cost_usd": 0.0, "prs": [], "date": "2026-10-09"})):
+            await api_module.run_api_cycle(cycle_id="abc123abc127", repo="o/r", description="Play", callback_url="",
+                                           allowed_repos=[], event_bus=bus)
+        [act] = told
+        assert act.agent == "system" and str(act.cycle_id) == "abc123abc127"
+        assert act.metadata == {"po": {"model": "sonnet", "effort": ""}, "techlead": {"model": "sonnet", "effort": ""},
+                                "dev": {"model": "opus", "effort": "high"}, "qa": {"model": "haiku", "effort": "low"}}
+        assert act.detail == "The agents run on: Product Owner Sonnet, Tech Lead Sonnet, Developer Opus · high, QA Haiku · low"
+
+    async def test_nothing_is_told_without_settings(self):
+        from theswarm.domain.cycles.events import AgentActivity
+
+        bus = EventBus()
+        told = []
+
+        async def keep(e):
+            if isinstance(e, AgentActivity) and e.action == "agent_models":
+                told.append(e)
+
+        bus.subscribe_all(keep)
+        with patch("theswarm.cycle.run_daily_cycle", new=AsyncMock(return_value={"cost_usd": 0.0, "prs": [], "date": "2026-10-09"})):
+            await api_module.run_api_cycle(cycle_id="abc123abc128", repo="o/r", description="Play", callback_url="",
+                                           allowed_repos=[], event_bus=bus)
+        assert told == []  # the CLI, the tests: no Settings → Agents, no line

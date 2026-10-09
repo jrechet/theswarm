@@ -179,7 +179,14 @@ and aliases were deleted on 2026-10-07):
   on their persona's Claude too (`claude_for`). Before this, the per-role
   models a project's effort computed (`EffortProfile`) were written into
   `model_routing` and never read: every agent ran on one model. The
-  project's effort still sets the Dev's retries.
+  project's effort still sets the Dev's retries. **The theater says what
+  each agent runs on**: the API cycle tells it at the start
+  (`api._tell_agent_models`, an `AgentActivity` of agent `system`, action
+  `agent_models`, its metadata the four personas' model and effort — only
+  where Settings → Agents is wired, so not the CLI), the feed shows the
+  line under SYS and each station a chip (`stage._models_by_role`; the
+  feed's entries carry their activity's `metadata` now). A cycle older
+  than this shows none.
   **The owner's spend view and its alerts** (2026-10-08, the other idea the
   plan folded away): `application/services/spend.py` — no new table, a
   sum over `cycles.total_cost_usd` (`SQLiteCycleRepository.list_since`).
@@ -199,8 +206,9 @@ and aliases were deleted on 2026-10-07):
   runs the same detectors when a cycle finishes (`CycleCompleted`,
   `CycleFailed`, the event's cost being the truth — the row may not hold
   it yet) and posts what that finish caused on the PO's channel, once per
-  alert key (`server.py` hands over the chat; in memory, so a restart may
-  repeat one alert).
+  alert key (`server.py` hands over the chat; the keys posted are kept in
+  `spend_alerts_posted`, v038, `spend_alert_ledger.py`, so a restart does
+  not post one twice; an alert that failed to post is not written down).
   **The pinned issue is kept 20 s** (`pinned_issue.load_pinned_issue`,
   `SWARM_PINNED_CACHE_SECONDS`, 0 in the suite): the stage polls every
   3 s and every render listed every issue of the repository, all states,
@@ -210,7 +218,12 @@ and aliases were deleted on 2026-10-07):
   20): a GitHub ReadTimeout retried by PyGithub held a theater's first
   render for 35 minutes (2026-10-09, local); the page now draws without the
   panel after the bound, the read goes on, every page that asks meanwhile
-  waits on that one read, and its answer is kept once it lands.
+  waits on that one read, and its answer is kept once it lands. **And it
+  reads only what it needs**: a feature's sub-tasks are opened after it,
+  so `get_issues(state="all", created_after=N)` reads back from the
+  newest issue and stops at the feature — 10 issues in 0.8 s for
+  concert-tour-app's #601 instead of 420 in 16 s; a theater's first render
+  measured 2.7 s after it (the request-timing middleware of #320).
 `presentation/web/auth.py` is the wall (pure ASGI, fail-safe closed); doors are
 `routes/auth_routes.py` (access key + GitHub OAuth) and the GitHub App setup in
 `routes/github_setup.py`.

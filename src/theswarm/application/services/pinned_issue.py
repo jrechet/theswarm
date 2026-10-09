@@ -108,7 +108,8 @@ async def _read(repo: str, issue_number: int, ttl: float, moment: float) -> Pinn
         issue = await client.get_issue(issue_number)
         if issue is None:
             return PinnedIssue()
-        everything = await client.get_issues(state="all")
+        # its sub-tasks were opened after it: read back from the newest, stop at it
+        everything = await client.get_issues(state="all", created_after=issue_number)
         children = tuple(
             {
                 "number": child["number"],

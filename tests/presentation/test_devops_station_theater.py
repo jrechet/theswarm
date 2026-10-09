@@ -93,3 +93,21 @@ class TestTheFifthStation:
         await store.append(record.id, "AgentActivity", T.replace(hour=10), _act("devops", "deploy_late", "The deploy has not landed: the deploy of f00d123 failed (failure)"))
         state, body = _station(await _theater(app, record.id))
         assert state == "failed" and "has not landed" in body
+
+
+class TestTheModels:
+    async def test_each_station_says_what_its_agent_runs_on(self, rig):
+        app, store, record = rig
+        models = {"po": {"model": "sonnet", "effort": ""}, "techlead": {"model": "sonnet", "effort": ""},
+                  "dev": {"model": "opus", "effort": "high"}, "qa": {"model": "haiku", "effort": "low"}}
+        await store.append(record.id, "AgentActivity", T, {**_act("system", "agent_models",
+                           "The agents run on: Product Owner Sonnet, Tech Lead Sonnet, Developer Opus · high, QA Haiku · low"), "metadata": models})
+        html = await _theater(app, record.id)
+        chips = dict(re.findall(r'data-role="(\w+)".*?data-testid="station-model">([^<]+)<', html, re.S))
+        assert chips == {"po": "Sonnet", "techlead": "Sonnet", "dev": "Opus · high", "qa": "Haiku · low"}
+        assert "The agents run on: Product Owner Sonnet" in html  # the line in the feed, under SYS
+
+    async def test_a_cycle_older_than_the_settings_shows_none(self, rig):
+        app, store, record = rig
+        await store.append(record.id, "AgentActivity", T, _act("TechLead", "progress", "Breaking down stories into tasks…"))
+        assert 'data-testid="station-model"' not in await _theater(app, record.id)

@@ -254,3 +254,33 @@ class TestTheLookups:
 
 async def _async(value):
     return value
+
+
+class TestTheLedger:
+    async def test_a_posted_alert_is_not_posted_again_after_a_restart(self, repo, tmp_path):
+        from theswarm.infrastructure.persistence.spend_alert_ledger import SQLiteSpendAlertLedger
+
+        ledger = SQLiteSpendAlertLedger(repo._db)
+        for c in usual():
+            await repo.save(c)
+        done = cycle(APP, 0.0, days_ago=0.1, status=CycleStatus.RUNNING)
+        await repo.save(done)
+        event = CycleCompleted(cycle_id=done.id, project_id=APP, total_cost_usd=9.4)
+        first = _Chat()
+        await sp.SpendWatch(repo, _lookup, chat=first, channel="c", clock=lambda: NOW, ledger=ledger).on_cycle_finished(event)
+        assert len(first.posts) == 1 and await ledger.keys() == {f"dear:{done.id}"}
+        after_restart = _Chat()  # a new process: an empty memory, the same ledger
+        await sp.SpendWatch(repo, _lookup, chat=after_restart, channel="c", clock=lambda: NOW, ledger=ledger).on_cycle_finished(event)
+        assert after_restart.posts == []
+
+    async def test_an_alert_not_posted_is_not_written_down(self, repo):
+        from theswarm.infrastructure.persistence.spend_alert_ledger import SQLiteSpendAlertLedger
+
+        ledger = SQLiteSpendAlertLedger(repo._db)
+        for c in usual():
+            await repo.save(c)
+        done = cycle(APP, 0.0, days_ago=0.1, status=CycleStatus.RUNNING)
+        await repo.save(done)
+        watch = sp.SpendWatch(repo, _lookup, chat=_Chat(fail=True), channel="c", clock=lambda: NOW, ledger=ledger)
+        await watch.on_cycle_finished(CycleCompleted(cycle_id=done.id, project_id=APP, total_cost_usd=9.4))
+        assert await ledger.keys() == set()

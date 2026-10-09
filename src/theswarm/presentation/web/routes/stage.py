@@ -41,6 +41,19 @@ _DEVOPS_LABELS = {"preflight": "Preflight", "preflight_nogo": "Preflight", "depl
                   "deploy_landed": "Deploy", "deploy_late": "Deploy"}
 
 
+def _models_by_role(entries) -> dict[str, str]:
+    """"Opus · high" per station, from what the cycle said its agents run on
+    (Settings → Agents); nothing for a cycle older than that."""
+    told = next((e for e in reversed(entries) if e.kind == "agent_models"), None)
+    if told is None:
+        return {}
+    out = {}
+    for role, choice in (getattr(told, "metadata", None) or {}).items():
+        if isinstance(choice, dict) and choice.get("model"):
+            out[role] = str(choice["model"]).capitalize() + (f" · {choice['effort']}" if choice.get("effort") else "")
+    return out
+
+
 def _devops_station(entries) -> dict | None:
     """DevOps's acts in this cycle as a station; None when it did not act."""
     acts = [e for e in entries if str(e.agent).strip().lower() == "devops" and e.kind in _DEVOPS_LABELS]
@@ -219,6 +232,7 @@ async def _stage_context(request: Request, record) -> dict:
 
     feed: list[dict] = []
     devops = None
+    models: dict[str, str] = {}
     thoughts_query = getattr(request.app.state, "get_agent_thoughts_query", None)
     if thoughts_query is not None:
         try:
@@ -228,6 +242,7 @@ async def _stage_context(request: Request, record) -> dict:
             entries = []
         glyphs = {key: glyph for key, glyph, _ in (*_STATIONS, _DEVOPS)}
         devops = _devops_station(entries)
+        models = _models_by_role(entries)
         entries = [e for e in entries if e.kind == "step" or is_telling(e.text)]
         for entry in reversed(entries[-_FEED_LIMIT:]):
             role = _normalize_role(entry.agent) or ("devops" if str(entry.agent).strip().lower() == "devops" else "")
@@ -241,6 +256,8 @@ async def _stage_context(request: Request, record) -> dict:
 
     pinned = await load_pinned_issue(record.repo, record.issue_number)
     graph = _graph(record, phases, progress, pinned)
+    for node in graph["nodes"]:
+        node["model"] = models.get(node["key"], "")
     if devops is not None:
         graph["nodes"] = [devops, *graph["nodes"]]  # the preflight comes first
     demo = await _cycle_demo(request.app.state, record.id)
