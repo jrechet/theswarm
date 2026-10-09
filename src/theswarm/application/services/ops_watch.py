@@ -46,8 +46,10 @@ class OpsWatch:
     def __init__(self, gather: Callable[[], Awaitable[OpsReport]], *, interval_s: int = DEFAULT_INTERVAL_SECONDS,
                  report_hour_utc: int = DEFAULT_REPORT_HOUR_UTC, report_minute: int = DEFAULT_REPORT_MINUTE,
                  chat=None, channel: str = "", clock: Callable[[], datetime] | None = None,
-                 on_report: Callable[[OpsReport], Awaitable[object]] | None = None) -> None:
+                 on_report: Callable[[OpsReport], Awaitable[object]] | None = None,
+                 preflight_gather: Callable[[], Awaitable[OpsReport]] | None = None) -> None:
         self._gather = gather
+        self._preflight_gather = preflight_gather  # a lighter read, what stops a cycle and nothing else
         self._interval = max(30, int(interval_s))
         self._hour = report_hour_utc
         self._minute = report_minute
@@ -193,8 +195,15 @@ class OpsWatch:
         return True
 
     async def preflight(self) -> Preflight:
-        """Go or no-go for a cycle about to start, on a fresh read (D2)."""
-        return preflight_of(await self.refresh())
+        """Go or no-go for a cycle about to start, on a fresh read (D2). With a light
+        read configured, the card's last full report is left as it was."""
+        if self._preflight_gather is None:
+            return preflight_of(await self.refresh())
+        try:
+            return preflight_of(await self._preflight_gather())
+        except Exception:  # noqa: BLE001 — a failing read never blocks: the full one decides
+            log.exception("DevOps: the light preflight read failed")
+            return preflight_of(await self.refresh())
 
     async def latest(self) -> OpsReport:
         """The last report, read once when there is none yet."""

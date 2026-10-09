@@ -7,6 +7,7 @@ creates sub-issues carrying ``Parent: #N``; reading them back answers
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -56,8 +57,24 @@ def cache_seconds() -> float:
         return CACHE_SECONDS_DEFAULT
 
 
+# A read that hangs must not hang the page (2026-10-09: a GitHub ReadTimeout
+# retried by PyGithub held a theater's first render for 35 minutes). The
+# page waits this long, then draws without the panel; the read goes on, and
+# every page that asks meanwhile waits on that one read, never a new one.
+READ_TIMEOUT_DEFAULT = 20.0
+_INFLIGHT: dict[tuple[str, int], asyncio.Task] = {}
+
+
+def read_timeout() -> float:
+    try:
+        return float(os.environ.get("SWARM_PINNED_TIMEOUT_SECONDS", READ_TIMEOUT_DEFAULT))
+    except ValueError:
+        return READ_TIMEOUT_DEFAULT
+
+
 def clear_cache() -> None:
     _CACHE.clear()
+    _INFLIGHT.clear()
 
 
 async def load_pinned_issue(repo: str, issue_number: int | None, *, now: float | None = None) -> PinnedIssue:
@@ -70,6 +87,20 @@ async def load_pinned_issue(repo: str, issue_number: int | None, *, now: float |
         hit = _CACHE.get(key)
         if hit is not None and moment - hit[0] < ttl:
             return hit[1]
+    task = _INFLIGHT.get(key)
+    if task is None or task.done():
+        task = asyncio.ensure_future(_read(repo, int(issue_number), ttl, moment))
+        _INFLIGHT[key] = task
+        task.add_done_callback(lambda t, k=key: _INFLIGHT.pop(k, None) if _INFLIGHT.get(k) is t else None)
+    try:
+        return await asyncio.wait_for(asyncio.shield(task), read_timeout())
+    except asyncio.TimeoutError:
+        log.warning("GitHub did not answer about %s#%s in %.0fs — the page goes on without it", repo, issue_number, read_timeout())
+        return PinnedIssue(error=f"GitHub did not answer in {read_timeout():.0f} s")
+
+
+async def _read(repo: str, issue_number: int, ttl: float, moment: float) -> PinnedIssue:
+    key = (repo, issue_number)
     try:
         from theswarm.tools.github import GitHubClient, is_child_of
 

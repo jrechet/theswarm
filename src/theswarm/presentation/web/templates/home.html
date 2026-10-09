@@ -34,7 +34,7 @@
   {# ── Ops: the pipeline as DevOps reads it (D1) ────────────────── #}
   {% if ops %}
   <section aria-labelledby="ops-title" id="ops" class="flex flex-col gap-3" data-testid="ops-card" data-status="{{ ops.status }}">
-    {% call ui.section_label('Ops', ('DevOps · ' ~ ops.stack ~ ' · read ' ~ ops.read_at) if ops.read_at else 'DevOps · reading…', id='ops-title') %}
+    {% call ui.section_label('DevOps', (ops.stack ~ ' · read ' ~ ops.read_at) if ops.read_at else 'reading…', id='ops-title') %}
       <form method="post" action="{{ base }}/ops/refresh" class="ml-auto"><button type="submit" class="text-[12px] text-muted hover:text-ink cursor-pointer" data-testid="ops-refresh">Read again →</button></form>
       {% if ops.can_improve %}<form method="post" action="{{ base }}/ops/improve" class="ml-3"><button type="submit" class="text-[12px] text-muted hover:text-ink cursor-pointer" data-testid="ops-improve">Propose an improvement →</button></form>{% endif %}
     {% endcall %}

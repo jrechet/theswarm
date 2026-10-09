@@ -163,7 +163,9 @@ class TestTheApiHook:
         await api_module._run_api_cycle(record.id, "o/r", "Play", "", [], event_bus=bus, project_id="o/r")
         got = tracker.get(record.id)
         assert got.status.value == "failed" and got.error == "preflight: Disk (here): 96% used"
-        assert bus.publish.await_count == 1 and bus.publish.await_args.args[0].reason.startswith("preflight:")
+        # DevOps tells its no-go first (its station in the theater), then the cycle is blocked
+        assert bus.publish.await_count == 2 and bus.publish.await_args_list[0].args[0].action == "preflight_nogo"
+        assert bus.publish.await_args.args[0].reason.startswith("preflight:")
 
     async def test_nobody_answering_or_a_failing_reader_never_blocks(self):
         assert await api_module._ask_preflight() is None

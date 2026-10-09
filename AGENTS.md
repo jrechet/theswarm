@@ -186,7 +186,11 @@ and aliases were deleted on 2026-10-07):
   3 s and every render listed every issue of the repository, all states,
   page after page — a theater's first load took tens of seconds on
   concert-tour-app and the demo's wait timed out (2026-10-07); a failed
-  read is never kept.
+  read is never kept. **And it is bounded** (`SWARM_PINNED_TIMEOUT_SECONDS`,
+  20): a GitHub ReadTimeout retried by PyGithub held a theater's first
+  render for 35 minutes (2026-10-09, local); the page now draws without the
+  panel after the bound, the read goes on, every page that asks meanwhile
+  waits on that one read, and its answer is kept once it lands.
 `presentation/web/auth.py` is the wall (pure ASGI, fail-safe closed); doors are
 `routes/auth_routes.py` (access key + GitHub OAuth) and the GitHub App setup in
 `routes/github_setup.py`.
@@ -1212,6 +1216,24 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   opened, nothing (why) or failed (why) (`GET /api/devops/improvement`),
   and lists the open `devops/` PRs. Nothing runs on a schedule: an
   improvement is a Claude call and a PR, and the owner decides when.
+  **The fifth station (2026-10-08)** — the plan's "a fifth station in the
+  theater only in the cycles where it acts": DevOps tells its acts on the
+  bus like the other agents (`AgentActivity`, agent `devops`,
+  `application/services/devops_cycles.py`), the cycle event store keeps
+  them, the theater draws them as a station before the four
+  (`stage._devops_station`, "The five agents") and under OPS in the feed.
+  Two acts: **the preflight** — `api._run_api_cycle` tells its go and what
+  it read (`preflight_words`), or its no-go and why, before the cycle is
+  refused; and **the deploy watch** — a cycle on `SELF_REPO` that merged
+  tells `deploy_watch` (with the build that was running), and
+  `resolve_deploys`, run on every DevOps report (`on_report`), closes it:
+  `deploy_landed` when this build is main's head and not the one that was
+  running (usually the new container's first report), `deploy_late` when
+  the report's deploy watch finding is bad. Each once. **The preflight
+  reads light** (`gather(light=True)`, `OpsWatch(preflight_gather=…)`: no
+  jobs to measure, no harness) and **GitHub beside the hosts**: a Play
+  waited 17 s for the full read after D4 added the jobs, 3 s now; the
+  card keeps its last full report. The home's card is called *DevOps*.
 - **Running the swarm on itself from a laptop**: use
   `scripts/local_cycle/run-targeted.sh <issue>`, never `run-cycle` — the daily
   breakdown walks the whole backlog at ~220s an issue inside a 600s phase.
