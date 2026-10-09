@@ -106,6 +106,9 @@ class CycleRuntime:
     # True from the first Dev claim until the loop handed back what it did
     # not finish; the runner's `finally` reads it after a crash.
     dev_claims_open: bool = False
+    # Settings → Agents: each persona's Claude, made once per cycle from the base one
+    # (its progress callback set by then, so the theater still hears every call).
+    claude_by_role: dict = field(default_factory=dict)
 
     async def announce(self, phase: str) -> None:
         """Tell the theater which phase runs now — a typed channel, not a
@@ -131,6 +134,19 @@ def _cycle():
     from theswarm import cycle
 
     return cycle
+
+
+def _claude_for(rt: "CycleRuntime", role: str):
+    """The persona's Claude: the base one on the model and effort the owner chose for
+    it (Settings → Agents), or the base one itself when nothing was chosen."""
+    base = rt.base_state.get("claude")
+    choice = (getattr(rt.config, "agent_settings", None) or {}).get(role)
+    if base is None or not choice or not hasattr(base, "with_settings"):
+        return base
+    if role not in rt.claude_by_role:
+        model, effort = choice
+        rt.claude_by_role[role] = base.with_settings(model, effort)
+    return rt.claude_by_role[role]
 
 
 def _invoke_agent(graph, state: dict) -> "asyncio.Task":
@@ -226,7 +242,7 @@ async def po_morning(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     await rt.progress("PO", "Starting daily planning…")
     po_state = await _run_phase(
         rt, "po_morning", "PO",
-        _invoke_agent(_cycle().build_po_graph(), {**rt.base_state, "phase": Phase.MORNING.value}),
+        _invoke_agent(_cycle().build_po_graph(), {**rt.base_state, "claude": _claude_for(rt, "po"), "phase": Phase.MORNING.value}),
     )
     tokens, cost = po_state.get("tokens_used", 0), po_state.get("cost_usd", 0.0)
     budget = _within_budget(rt, state, Role.PO, tokens)
@@ -243,7 +259,7 @@ async def techlead_breakdown(state: CycleState, runtime: Runtime[CycleRuntime]) 
     await rt.progress("TechLead", "Breaking down stories into tasks…")
     tl_state = await _run_phase(
         rt, "techlead_breakdown", "TechLead",
-        _invoke_agent(_cycle().build_techlead_graph(), {**rt.base_state, "phase": "breakdown"}),
+        _invoke_agent(_cycle().build_techlead_graph(), {**rt.base_state, "claude": _claude_for(rt, "techlead"), "phase": "breakdown"}),
     )
     tokens, cost = tl_state.get("tokens_used", 0), tl_state.get("cost_usd", 0.0)
     budget = _within_budget(rt, state, Role.TECHLEAD, tokens)
@@ -268,6 +284,7 @@ async def _dev_iter_parallel(
     graphs = [
         _invoke_agent(_cycle().build_dev_graph(), {
             **rt.base_state,
+            "claude": _claude_for(rt, "dev"),
             "phase": Phase.DEVELOPMENT.value,
             "attempted_tasks": attempted,
             "pick_lock": lock,
@@ -388,6 +405,7 @@ async def dev_iter(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
             rt, "dev_iter", "Dev",
             _invoke_agent(_cycle().build_dev_graph(), {
                 **rt.base_state,
+                "claude": _claude_for(rt, "dev"),
                 "phase": Phase.DEVELOPMENT.value,
                 "attempted_tasks": attempted,
             }),
@@ -475,7 +493,8 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
         tl_state = await _run_phase(
             rt, "techlead_review", "TechLead",
             _invoke_agent(_cycle().build_techlead_graph(), {
-                **rt.base_state, "phase": "review_loop", "reviewed_prs": reviewed,
+                **rt.base_state,
+                "claude": _claude_for(rt, "techlead"), "phase": "review_loop", "reviewed_prs": reviewed,
             }),
         )
     except PhaseTimeout:
@@ -660,7 +679,8 @@ async def qa(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
         qa_state = await _run_phase(
             rt, "qa", "QA",
             _invoke_agent(_cycle().build_qa_graph(), {
-                **rt.base_state, "phase": Phase.DEMO.value,
+                **rt.base_state,
+                "claude": _claude_for(rt, "qa"), "phase": Phase.DEMO.value,
                 # What the cycle delivered: QA reads the feature's pages off
                 # its PRs and the demo walks them.
                 "prs": delivered,
@@ -722,6 +742,7 @@ async def po_evening(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
             rt, "po_evening", "PO",
             _invoke_agent(_cycle().build_po_graph(), {
                 **rt.base_state,
+                "claude": _claude_for(rt, "po"),
                 "phase": Phase.EVENING.value,
                 "demo_report": state.get("demo_report"),
             }),

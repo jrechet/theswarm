@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Settings — Agents{% endblock %}
+{% block crumbs %}
+  <a href="{{ base }}/settings/customers" class="text-muted hover:text-ink">Settings</a>
+  <span class="text-line-strong">/</span>
+  <span class="text-ink font-medium">Agents</span>
+{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-6" data-testid="settings-agents">
+  <nav class="flex items-center gap-1 text-[13px]" aria-label="Settings sections">
+    <a href="{{ base }}/settings/customers" class="h-8 inline-flex items-center px-3 rounded-md text-muted hover:text-ink hover:bg-raised">Customers</a>
+    <a href="{{ base }}/settings/agents" aria-current="page" class="h-8 inline-flex items-center px-3 rounded-md bg-raised text-ink font-medium">Agents</a>
+    <a href="{{ base }}/settings/instance" class="h-8 inline-flex items-center px-3 rounded-md text-muted hover:text-ink hover:bg-raised">Instance</a>
+  </nav>
+  <div class="flex flex-col gap-0.5">
+    <h1 class="m-0 text-[20px] font-semibold tracking-tight">Agents</h1>
+    <span class="text-[13px] text-muted max-w-[72ch]">Which Claude each persona runs on, and how hard it thinks. Opus is the strongest and the dearest, Haiku the quickest and the cheapest. A persona you leave on the instance's default runs on {{ instance_model }} with Claude Code's own effort. A change applies from the next cycle — one already running keeps what it started with.</span>
+  </div>
+
+  {% if saved %}<p class="m-0 text-[13px] text-ok border border-ok/40 bg-ok-wash rounded-[10px] px-4 py-3" data-testid="agents-saved" role="status">Saved. The next cycle runs on these.</p>{% endif %}
+  {% if error %}<p class="m-0 text-[13px] text-bad border border-bad/40 bg-bad-wash rounded-[10px] px-4 py-3" data-testid="agents-error" role="alert">{{ error }}</p>{% endif %}
+  {% if not available %}<p class="m-0 text-[13px] text-muted border border-dashed border-line-strong rounded-[10px] px-4 py-3">Agent settings need the database; every persona runs on {{ instance_model }}.</p>{% endif %}
+
+  <form method="post" action="{{ base }}/settings/agents" class="flex flex-col gap-3" data-testid="agents-form">
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      {% for r in rows %}
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 border-t border-line first:border-t-0" data-testid="agent-row" data-persona="{{ r.key }}" data-set="{{ 'true' if r.set else 'false' }}">
+        <div class="flex flex-col gap-0.5 flex-[1_1_300px] min-w-0">
+          <span class="font-medium text-[14px]">{{ r.name }}</span>
+          <span class="text-[12px] text-muted">{{ r.what }}</span>
+          <span class="text-[12px] text-faint" data-testid="agent-runs-on">Runs on {{ r.runs_on }}{% if r.updated %} · set {{ r.updated }}{% endif %}</span>
+        </div>
+        <label class="flex flex-col gap-1 text-[12px] text-muted">Model
+          <select name="{{ r.key }}-model" class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink" data-testid="model-{{ r.key }}">
+            <option value="" {% if not r.model %}selected{% endif %}>Instance default ({{ instance_model }})</option>
+            {% for key, label in models %}<option value="{{ key }}" {% if r.model == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-[12px] text-muted">Effort
+          <select name="{{ r.key }}-effort" class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink" data-testid="effort-{{ r.key }}">
+            <option value="" {% if not r.effort %}selected{% endif %}>Claude Code's default</option>
+            {% for key, label in efforts %}<option value="{{ key }}" {% if r.effort == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="flex justify-end">{{ ui.btn('Save the five', kind='primary', type='submit', testid='agents-save') }}</div>
+  </form>
+
+  <form method="post" action="{{ base }}/settings/agents" class="flex flex-wrap items-end gap-3 px-4 py-3.5 border border-dashed border-line-strong rounded-[10px]" data-testid="agents-all">
+    <input type="hidden" name="apply-all" value="1">
+    <span class="flex flex-col gap-0.5 flex-[1_1_260px] min-w-0">
+      <span class="font-medium text-[13px]">Every persona at once</span>
+      <span class="text-[12px] text-muted">The same model and effort for the five — the instance's default puts them all back on {{ instance_model }}.</span>
+    </span>
+    <label class="flex flex-col gap-1 text-[12px] text-muted">Model
+      <select name="all-model" class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink" data-testid="all-model">
+        <option value="">Instance default ({{ instance_model }})</option>
+        {% for key, label in models %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="flex flex-col gap-1 text-[12px] text-muted">Effort
+      <select name="all-effort" class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink" data-testid="all-effort">
+        <option value="">Claude Code's default</option>
+        {% for key, label in efforts %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    {{ ui.btn('Apply to all', type='submit', testid='agents-apply-all') }}
+  </form>
+</div>
+{% endblock %}

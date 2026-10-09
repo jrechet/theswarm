@@ -160,6 +160,26 @@ and aliases were deleted on 2026-10-07):
   player carries it too. The owner sees on the player whether there is
   one and why not, and asks the PO again (`POST /demos/{id}/summary`,
   background, one at a time: `DemoSummaryWriter.start`).
+  **Settings → Agents** (2026-10-09, the owner's ask: "le modèle Claude et
+  l'effort par persona"): `/settings/agents` (owner only) sets, for the PO,
+  the TechLead, the Dev, QA and DevOps, a model alias (opus, sonnet, haiku —
+  never a dated id) and an effort (low, medium, high, max), one by one or all
+  five at once; a persona left on the default runs on `SWARM_CLAUDE_MODEL`
+  with Claude Code's own effort, as every call did before. Kept in
+  `agent_settings` (v037, `domain/agents/settings.AgentSetting`,
+  `application/services/agent_settings.AgentSettingsService`). **A cycle
+  reads them when it starts** (`api.set_agent_settings`, set by the server;
+  `CycleConfig.agent_settings`) and **every agent graph is handed its
+  persona's Claude** (`cycle_graph._claude_for`: the base wrapper on the
+  chosen model and effort — `ClaudeCLI.with_settings`, its progress
+  callback and learned timeout floor kept — made once per cycle, at all
+  seven `_invoke_agent` sites). The effort reaches Claude Code as `--effort`
+  (`ClaudeAgentOptions.effort`) and is on the call's log line and span
+  (`swarm.effort`). The PO's customer summary and DevOps's improvement run
+  on their persona's Claude too (`claude_for`). Before this, the per-role
+  models a project's effort computed (`EffortProfile`) were written into
+  `model_routing` and never read: every agent ran on one model. The
+  project's effort still sets the Dev's retries.
   **The owner's spend view and its alerts** (2026-10-08, the other idea the
   plan folded away): `application/services/spend.py` — no new table, a
   sum over `cycles.total_cost_usd` (`SQLiteCycleRepository.list_since`).

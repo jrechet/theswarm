@@ -884,6 +884,14 @@ async def start_server(
     if spend_watch is not None and swarm_po_chat is not None:
         spend_watch.configure_chat(swarm_po_chat, settings.agents.swarm_po.channel)
 
+    # ── Settings → Agents: every cycle reads each persona's model and effort ──
+    agent_settings = getattr(app.state, "agent_settings", None)
+    if agent_settings is not None:
+        await agent_settings.refresh()  # the snapshot the summary and DevOps read
+        from theswarm import api as _api_settings
+
+        _api_settings.set_agent_settings(agent_settings)
+
     # ── DevOps D1: the watch loop; the daily report on the PO's channel ──
     ops_watch = getattr(app.state, "ops_watch", None)
     if ops_watch is not None:

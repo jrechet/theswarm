@@ -132,6 +132,14 @@ def get_cycle_tracker() -> CycleTracker:
 
 
 _PREFLIGHT = None
+_AGENT_SETTINGS = None
+
+
+def set_agent_settings(service) -> None:
+    """Settings → Agents: where a cycle reads each persona's model and effort
+    (the server sets it; None leaves every persona on the instance's model)."""
+    global _AGENT_SETTINGS
+    _AGENT_SETTINGS = service
 
 
 def set_preflight(preflight) -> None:
@@ -494,17 +502,18 @@ async def _run_api_cycle(
                 if project is not None:
                     resolved = EffortProfile.apply(project.config)
                     cycle_config.max_dev_retries = resolved.max_retries
-                    phase_to_cats = {
-                        "po": ("planning", "retrospective", "doc_generation"),
-                        "techlead": ("review", "breakdown"),
-                        "dev": ("implementation",),
-                        "qa": ("doc_generation",),
-                    }
-                    for phase, model in resolved.models.items():
-                        for cat in phase_to_cats.get(phase, ()):
-                            cycle_config.model_routing[cat] = model
+                    # (the per-role models of the project's effort were never applied —
+                    # every agent ran on one model; Settings → Agents below is what is)
             except Exception:
                 log.exception("EffortProfile.apply failed (using defaults)")
+
+        # Settings → Agents: each persona's model and effort, read at the start of
+        # the cycle (a change applies to the next one)
+        if _AGENT_SETTINGS is not None:
+            try:
+                cycle_config.agent_settings = await _AGENT_SETTINGS.effective()
+            except Exception:  # noqa: BLE001 — the instance's model then
+                log.exception("Agent settings could not be read — every persona on the instance's model")
 
         from theswarm.infrastructure import tracing
 
