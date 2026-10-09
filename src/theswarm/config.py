@@ -130,6 +130,9 @@ class CycleConfig:
     github_repo: str
     team_id: str = "alpha"
     claude_model: str = "sonnet"
+    # Settings → Agents: persona → (model, effort) the owner chose; a persona
+    # absent here runs on `claude_model` with Claude Code's own effort.
+    agent_settings: dict = field(default_factory=dict)
     workspace_dir: str = ""  # auto-set if empty
 
     # Model routing: task category → model short name

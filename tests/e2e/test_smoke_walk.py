@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # What a person reads: walked by the browser, audited by axe.
 PAGES = [
-    "/", "/login", "/c/internal", "/requests", "/settings/customers", "/settings/instance",
+    "/", "/login", "/c/internal", "/requests", "/settings/customers", "/settings/instance", "/settings/agents",
     "/health/ready/page", "/setup/github-oauth", "/setup/github-app",
 ]
 # What a client reads: no 5xx, whatever the answer.

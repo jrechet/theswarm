@@ -17,6 +17,7 @@ Set ``SWARM_CLAUDE_BACKEND``:
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from contextlib import aclosing
 import json
 import logging
@@ -739,6 +740,9 @@ class ClaudeCLI:
     ``ClaudeCLI`` across the codebase.
     """
     model: str = "sonnet"
+    # How hard Claude thinks (Settings → Agents): low, medium, high or max,
+    # passed to Claude Code as `--effort`; "" leaves it to Claude Code.
+    effort: str = ""
     # 3 min: a typical Dev iteration prompt finishes in <90s. Anything
     # longer is a hang; fail fast and surface it. Old default (600s × 1.5
     # × 3 retries = 47 min) made stuck cycles indistinguishable from
@@ -782,6 +786,11 @@ class ClaudeCLI:
 
     def _resolve_model(self) -> str:
         return _MODEL_MAP.get(self.model, self.model)
+
+    def with_settings(self, model: str, effort: str = "") -> ClaudeCLI:
+        """The same wrapper on another model and effort — its progress callback, its
+        learned timeout floor and its budgets kept (a persona's Claude in a cycle)."""
+        return dataclasses.replace(self, model=model or self.model, effort=effort or "")
 
     def for_task(self, task_category: str, routing: dict[str, str] | None = None) -> ClaudeCLI:
         """Return a new ClaudeCLI configured for a specific task category."""
@@ -841,6 +850,7 @@ class ClaudeCLI:
             **{
                 "swarm.backend": backend,
                 "swarm.model": self._resolve_model(),
+                "swarm.effort": self.effort or "default",
                 "swarm.profile": _profile_for(workdir, permission_mode),
                 "swarm.prompt_chars": len(prompt or ""),
                 "swarm.timeout_s": self._effective_timeout(timeout, workdir),
@@ -964,6 +974,8 @@ class ClaudeCLI:
             hooks={"PreToolUse": [HookMatcher(hooks=[_permission_hook(profile, workdir)])]},
             max_turns=_max_turns(profile),
             resume=resume,
+            # Settings → Agents: the persona's effort reaches Claude Code as `--effort`
+            effort=self.effort or None,
             output_format=(
                 {"type": "json_schema", "schema": output_schema} if output_schema else None
             ),
@@ -1004,8 +1016,8 @@ class ClaudeCLI:
             output_schema=output_schema,
         )
         log.info(
-            "Claude SDK: model=%s profile=%s workdir=%s timeout=%ds prompt_chars=%d resume=%s",
-            model_id, profile, workdir, effective_timeout, len(prompt or ""), resume or "-",
+            "Claude SDK: model=%s effort=%s profile=%s workdir=%s timeout=%ds prompt_chars=%d resume=%s",
+            model_id, self.effort or "default", profile, workdir, effective_timeout, len(prompt or ""), resume or "-",
         )
 
         seen: dict = {"session_id": resume or "", "result": None}

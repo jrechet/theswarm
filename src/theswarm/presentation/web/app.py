@@ -62,7 +62,7 @@ from theswarm.presentation.web.routes import api, artifacts, health, metrics, we
 from theswarm.presentation.web.auth import AuthWallMiddleware
 from theswarm.presentation.web.shell import ShellMiddleware, current_shell
 from theswarm.presentation.web.timing import TimingMiddleware
-from theswarm.presentation.web.routes import auth_routes, customers, github_setup, home, instance_settings, ops, player, project, requests_routes, spend, theater
+from theswarm.presentation.web.routes import agents_settings, auth_routes, customers, github_setup, home, instance_settings, ops, player, project, requests_routes, spend, theater
 from theswarm.presentation.web.sse import SSEHub
 
 _HERE = Path(__file__).parent
@@ -157,6 +157,12 @@ def create_web_app(
         request_tracker = RequestTracker(app.state.request_service, project_repo)
         event_bus.subscribe(CycleStarted, request_tracker.on_cycle_started)
         event_bus.subscribe(_DemoReady, request_tracker.on_demo_ready)
+        # Settings → Agents: each persona's Claude model and effort, the owner's choice
+        from theswarm.application.services.agent_settings import AgentSettingsService
+        from theswarm.infrastructure.persistence.agent_settings_repo import SQLiteAgentSettingsRepository
+
+        app.state.agent_settings = AgentSettingsService(SQLiteAgentSettingsRepository(db))
+
         # The PO tells the customer what was built, when a demo lands (V3, folded into the PO)
         import os as _os
 
@@ -181,9 +187,8 @@ def create_web_app(
             return f"{issue.get('title', '')}\n{shown_body(issue.get('body'))}".strip()
 
         def _summary_claude():
-            from theswarm.tools.claude import ClaudeCLI
-
-            return ClaudeCLI(model=_os.environ.get("SWARM_SUMMARY_MODEL", _os.environ.get("SWARM_CLAUDE_MODEL", "sonnet")))
+            # the PO's Claude (Settings → Agents), else SWARM_SUMMARY_MODEL, else the instance's model
+            return app.state.agent_settings.claude_for("po", base_model=_os.environ.get("SWARM_SUMMARY_MODEL") or None)
 
         app.state.demo_summary_writer = DemoSummaryWriter(
             report_repo, app.state.demo_summary_repo, _summary_claude, verdict_of=_verdict_of,
@@ -1053,7 +1058,9 @@ def create_web_app(
                 from theswarm.tools.claude import ClaudeCLI
                 from theswarm.tools.github import GitHubClient
 
-                return await propose_improvement(stack, report, ClaudeCLI(model=_os.environ.get("SWARM_CLAUDE_MODEL", "sonnet")),
+                settings = getattr(app.state, "agent_settings", None)
+                claude = settings.claude_for("devops") if settings is not None else ClaudeCLI(model=_os.environ.get("SWARM_CLAUDE_MODEL", "sonnet"))
+                return await propose_improvement(stack, report, claude,
                                                  GitHubClient(self_repo(stack)))
 
             app.state.ops_watch.configure_improver(_improver)
@@ -1096,6 +1103,7 @@ def create_web_app(
     app.include_router(ops.router)  # DevOps D1: /api/devops, /ops/refresh
     app.include_router(spend.router)  # the owner's spend view: /api/spend
     app.include_router(instance_settings.router)  # V3 M6: /settings/instance — the vault-backed keys and URLs
+    app.include_router(agents_settings.router)  # /settings/agents — each persona's Claude model and effort
     app.include_router(home.router)  # owns `/`: the owner's home, a member's customer
     app.include_router(health.router)
     app.include_router(webhooks.router)
