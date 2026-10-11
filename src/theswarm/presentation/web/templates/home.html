@@ -19,7 +19,7 @@
         {{ ui.live_dot(10, pulse=(c.status == 'running')) }}
         <span class="flex flex-col gap-1 min-w-[240px] flex-[1_1_260px]">
           <span class="text-[16px] font-semibold tracking-tight">{% if c.issue_number %}<span class="font-mono text-faint font-medium">#{{ c.issue_number }}</span> {% endif %}{{ c.title }}</span>
-          <span class="text-[13px] text-muted">{{ c.repo }}{% if c.since %} · {{ c.status }} since {{ c.since }}{% else %} · {{ c.status }}{% endif %}</span>
+          <span class="text-[13px] text-muted">{{ c.repo }}{% if c.since %} · {{ c.status }} since {{ c.since }}{% else %} · {{ c.status }}{% endif %}{% if c.waits %} — <span data-testid="now-waits">{{ c.waits }}</span>{% endif %}</span>
         </span>
         <span class="text-[13px] font-medium text-live-deep whitespace-nowrap">Open the theater →</span>
       </a>

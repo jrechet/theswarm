@@ -70,14 +70,49 @@ def claude_status() -> dict:
     return {"status": "ok", "label": "Claude ok", "detail": ""}
 
 
-def running_repos() -> dict[str, object]:
-    """Repository → its queued or running cycle record, from the tracker."""
+def live_cycles() -> list:
+    """Every queued or running cycle in the tracker: the running ones, then
+    the queued ones in the order they will start (the oldest first)."""
     from theswarm.api import CycleStatus, get_cycle_tracker
 
+    live = [r for r in reversed(get_cycle_tracker().list_recent(limit=50))
+            if r.status in (CycleStatus.QUEUED, CycleStatus.RUNNING)]
+    return sorted(live, key=lambda r: r.status != CycleStatus.RUNNING)  # stable: oldest first within each
+
+
+def waiting_words(record, live: list | None = None) -> str:
+    """What a queued cycle waits for, in words; "" for any other. One cycle
+    per repository at a time (they share a workspace), and
+    `SWARM_MAX_CONCURRENT_CYCLES` in all."""
+    from theswarm.cycle import max_concurrent_cycles
+
+    if getattr(getattr(record, "status", None), "value", "") != "queued":
+        return ""
+    live = live_cycles() if live is None else live
+    mine = [r for r in live if r.repo == record.repo]
+    ahead = next((r for r in mine if r.status.value == "running"), None)
+    if ahead is None:
+        return f"waits for a free slot ({max_concurrent_cycles()} cycles at once)"
+    queued = [r.id for r in mine if r.status.value == "queued"]
+    place = queued.index(record.id) + 1 if record.id in queued else 1
+    if place == 1:
+        what = f"#{ahead.issue_number}" if ahead.issue_number else "the cycle"
+        return f"starts after {what}, running on this repository"
+    return f"{_ordinal(place)} in line on this repository"
+
+
+def _ordinal(n: int) -> str:
+    return {1: "1st", 2: "2nd", 3: "3rd"}.get(n, f"{n}th")
+
+
+def running_repos() -> dict[str, object]:
+    """Repository → the cycle that holds it: the one running, else the next
+    queued. The newest record used to win: four Plays on concert-tour-app
+    (2026-10-11) showed #215 "queued" where #265 was running, and the home
+    looked stuck."""
     found: dict[str, object] = {}
-    for record in get_cycle_tracker().list_recent(limit=50):
-        if record.status in (CycleStatus.QUEUED, CycleStatus.RUNNING):
-            found.setdefault(record.repo, record)
+    for record in live_cycles():
+        found.setdefault(record.repo, record)
     return found
 
 

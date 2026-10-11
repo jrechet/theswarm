@@ -202,6 +202,17 @@ def _clock(iso: str) -> str:
         return ""
 
 
+def _waits(record) -> str:
+    """What a queued cycle waits for (`shell.waiting_words`); never fails the page."""
+    from theswarm.presentation.web.shell import waiting_words
+
+    try:
+        return waiting_words(record)
+    except Exception:  # noqa: BLE001
+        log.exception("theater: reading the queue failed")
+        return ""
+
+
 def _finished_at(record) -> float | None:
     """When a finished cycle finished — its last phase stops counting there.
     Without it the report phase of a cycle done at 07:54 read 546 minutes
@@ -294,6 +305,7 @@ async def theater_context(request: Request, record, orphan: bool = False) -> dic
         "steps": steps,
         "prs": prs_from_feed(context.get("feed", []), record.repo),
         "status_label": label,
+        "waits": _waits(record),
         "status_kind": kind,
         "started": _clock(record.started_at or record.created_at),
         "elapsed": _elapsed(record),

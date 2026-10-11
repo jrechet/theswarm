@@ -86,14 +86,8 @@ async def _ensure_project(state, owner: str, name: str) -> str:
 
 
 def _running_for_repo(full_name: str) -> object | None:
-    from theswarm.api import CycleStatus, get_cycle_tracker
-
-    for record in get_cycle_tracker().list_recent(limit=50):
-        if record.repo == full_name and record.status in (
-            CycleStatus.QUEUED, CycleStatus.RUNNING,
-        ):
-            return record
-    return None
+    """The cycle that holds this repository: the one running, else the next queued."""
+    return _running_repos_safe().get(full_name)
 
 
 async def _latest_demo(state, full_name: str) -> dict | None:
