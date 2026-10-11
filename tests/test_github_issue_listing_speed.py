@@ -75,7 +75,7 @@ async def test_get_issues_filters_pull_requests_without_completion(monkeypatch):
 
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_test")
     monkeypatch.setattr(
-        gh_mod.Github, "get_repo", lambda self, name: _FakeRepo(), raising=True,
+        gh_mod.Github, "get_repo", lambda self, name, **kw: _FakeRepo(), raising=True,
     )
     client = gh_mod.GitHubClient("o/r")
 

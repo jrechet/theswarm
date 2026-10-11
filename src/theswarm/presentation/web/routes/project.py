@@ -13,6 +13,8 @@ is In review, the rest of those labels is stalled) is V2's, kept in
 
 from __future__ import annotations
 
+import asyncio
+
 import logging
 import re
 from datetime import datetime, timezone
@@ -251,18 +253,22 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
 
     issues: list[dict] = []
     issues_error = ""
-    client = None
+    prs: list[dict] | None = None
     try:
-        from theswarm.tools.github import GitHubClient
+        issues, prs = await common.board_reads(full_name)
+        if new:
+            from theswarm.tools.github import GitHubClient
 
-        client = GitHubClient(full_name)
-        issues = await common._with_fresh_issue(client, await client.get_issues(), new)
+            client = await asyncio.to_thread(GitHubClient, full_name)
+            issues = await common._with_fresh_issue(client, issues, new)
+    except asyncio.TimeoutError:
+        log.warning("project: GitHub did not answer about %s in %.0fs", full_name, common.board_timeout())
+        issues_error = f"GitHub did not answer in {common.board_timeout():.0f} s"
     except Exception as exc:  # noqa: BLE001 — surfaced in the page banner
         log.exception("project: listing issues for %s failed", full_name)
         issues_error = str(exc)[:160]
 
     running = common._running_for_repo(full_name)
-    prs = await common._open_pr_briefs(client) if client is not None and not issues_error else None
     by_key: dict[str, list[dict]] = {key: [] for key, _, _ in COLUMNS}
     stalled: list[dict] = []
     for issue in issues:
@@ -322,6 +328,7 @@ async def compose(request: Request, slug: str, name: str, body: str = Form(defau
         title=title, body=rest.strip(), labels=["status:backlog"],
     )
     number = created.get("number") if isinstance(created, dict) else None
+    common.forget_board(str(project.repo))
     log.info("project: composed issue %r on %s (play=%s)", title, project.repo, bool(play))
     if not isinstance(number, int):
         return RedirectResponse(urls["page"], status_code=303)

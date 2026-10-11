@@ -224,6 +224,25 @@ and aliases were deleted on 2026-10-07):
   newest issue and stops at the feature — 10 issues in 0.8 s for
   concert-tour-app's #601 instead of 420 in 16 s; a theater's first render
   measured 2.7 s after it (the request-timing middleware of #320).
+  **The pages never wait for GitHub twice** (2026-10-11, the owner:
+  "l'application est globalement très lente" — espace-client's board 2.8 s
+  on prod, a theater or a feature page 1.5–2.4 s, every visit after the
+  twenty seconds): `application/services/swr_cache.Swr` keeps an answer
+  fresh 20 s, then serves it at once for ten minutes while one read in
+  the background brings the next (only a key never read, or older than
+  that, makes a page wait — bounded, the read going on); a failed read is
+  never kept. The pinned issue, the board's reads (`common.board_reads`:
+  the open issues and the open PRs side by side, `SWARM_BOARD_CACHE_SECONDS`,
+  0 in the suite, forgotten after the composer and a Play) and the home's
+  repository list (`common.user_repositories`, a minute fresh) go through
+  it: the board 2.9 s → 3 ms after its first read, a feature page 25 s
+  later 2.6 s → 0.34 s (local, against GitHub). **A `GitHubClient` costs
+  nothing to build** (`get_repo(…, lazy=True)`): it made a round trip on
+  the event loop every time a page made one, stalling every request in
+  flight. Reports have an index by cycle (v039): each lookup read every
+  report's JSON, 116–275 ms under a cycle, six per project page. A
+  finished cycle's last phase stops counting at its end (its report phase
+  read 546 minutes nine hours later).
 `presentation/web/auth.py` is the wall (pure ASGI, fail-safe closed); doors are
 `routes/auth_routes.py` (access key + GitHub OAuth) and the GitHub App setup in
 `routes/github_setup.py`.
@@ -714,7 +733,10 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   demo server and read nothing of each other, so QA spends the longer of
   the two. `SWARM_QA_CAPTURE_CONCURRENCY` (default 2: two demo servers and
   two browsers in a 2 GB container) — set it to 1 on a heavy target, or
-  when a cycle's QA dies of memory. **The video lane launches once the
+  when a cycle's QA dies of memory. **The video lane closes its browser on
+  every path** (`record_demo_video`'s `finally`): it closed it only when
+  the recording failed, and every cycle left a Playwright driver and its
+  Chromium alive — 1.1 GB of prod's 2 GB after three cycles (2026-10-11). **The video lane launches once the
   screenshot lane's server has answered** (or that lane ended): two
   servers booting side by side on a new database file race on the
   target's first-boot DDL — concert-tour-app lost a lane to "table tours

@@ -98,7 +98,10 @@ class GitHubClient:
         token = os.environ.get("GITHUB_TOKEN", "")
         self._token = token
         self._gh = Github(token)
-        self._repo = self._gh.get_repo(self.repo_name)
+        # Lazy: no request until a method asks for something. Built eagerly,
+        # every client made a round trip to GitHub on the event loop — each
+        # page that made one stalled every request in flight (2026-10-11).
+        self._repo = self._gh.get_repo(self.repo_name, lazy=True)
         self._breaker = CircuitBreaker(
             name=f"github:{self.repo_name}",
             failure_threshold=5,
@@ -127,10 +130,7 @@ class GitHubClient:
         if token and token != self._token:
             self._token = token
             self._gh = Github(token)
-            loop = asyncio.get_running_loop()
-            self._repo = await loop.run_in_executor(
-                None, self._gh.get_repo, self.repo_name,
-            )
+            self._repo = self._gh.get_repo(self.repo_name, lazy=True)
 
     async def _run(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
         loop = asyncio.get_running_loop()

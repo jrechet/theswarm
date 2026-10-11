@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from datetime import datetime, timezone
 
 from theswarm.application.commands.create_project import CreateProjectCommand
+from theswarm.application.services.swr_cache import Swr
 from theswarm.tools import github_app  # noqa: F401 — the home reads it through this module
 from theswarm.tools.github import issue_status
 
@@ -174,6 +176,60 @@ async def _open_pr_briefs(client) -> list[dict] | None:
         return None
 
 
+# The board's GitHub reads, kept like the pinned issue (`swr_cache`):
+# espace-client's open issues took 2.2 s and its PRs 0.6 s more, one after
+# the other, on every visit — 2.8 s for the page on prod (2026-10-11). Both
+# are read side by side now, fresh 20 s, served while one read in the
+# background refreshes them for ten minutes after; 0 in the suite.
+def board_fresh_seconds() -> float:
+    try:
+        return float(os.environ.get("SWARM_BOARD_CACHE_SECONDS", 20))
+    except ValueError:
+        return 20.0
+
+
+def board_keep_seconds() -> float:
+    try:
+        return float(os.environ.get("SWARM_BOARD_KEEP_SECONDS", 600))
+    except ValueError:
+        return 600.0
+
+
+def board_timeout() -> float:
+    return 20.0
+
+
+_BOARD = Swr("board", fresh=board_fresh_seconds, keep=board_keep_seconds, timeout=board_timeout)
+
+
+async def board_reads(repo: str) -> tuple[list[dict], list[dict] | None]:
+    """The repository's open issues and its open PRs (None when they could
+    not be read), from GitHub or kept. Raises when the issues cannot be read."""
+    async def load():
+        from theswarm.tools.github import GitHubClient
+
+        client = await asyncio.to_thread(GitHubClient, repo)
+        issues, prs = await asyncio.gather(client.get_issues(), _open_pr_briefs(client))
+        return list(issues), prs
+
+    return await _BOARD.get(repo, load)
+
+
+# The home lists every repository the owner's token sees, page after page
+# (0.5–1.2 s on prod): kept the same way, a minute fresh, an hour served.
+_REPOS = Swr("repositories", fresh=lambda: 3 * board_fresh_seconds(), keep=lambda: 3600.0,
+             timeout=board_timeout)
+
+
+async def user_repositories() -> list[dict]:
+    return await _REPOS.get("user", lambda: github_app.list_user_repositories())
+
+
+def forget_board(repo: str) -> None:
+    """The board's next read waits for GitHub: after the composer created an issue."""
+    _BOARD.forget(repo)
+
+
 def _board_status(issue: dict, running, prs: list[dict] | None) -> str:
     """The column an issue belongs in: its label, unless the label claims
     work nothing is doing (`stalled`)."""
@@ -220,6 +276,7 @@ async def start_targeted_cycle(state, owner: str, name: str, issue_number: int, 
 
     full_name = f"{owner}/{name}"
     project_id = await _ensure_project(state, owner, name)
+    forget_board(full_name)  # the labels are about to move
 
     tracker = get_cycle_tracker()
     record = tracker.create(

@@ -202,6 +202,19 @@ def _clock(iso: str) -> str:
         return ""
 
 
+def _finished_at(record) -> float | None:
+    """When a finished cycle finished — its last phase stops counting there.
+    Without it the report phase of a cycle done at 07:54 read 546 minutes
+    at 17:00 (prod, e73bf089784a, 2026-10-11)."""
+    try:
+        if not record.completed_at:
+            return None
+        end = datetime.fromisoformat(record.completed_at)
+        return (end if end.tzinfo else end.replace(tzinfo=timezone.utc)).timestamp()
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
 def _elapsed(record) -> str:
     try:
         start = datetime.fromisoformat(record.started_at or record.created_at)
@@ -249,7 +262,7 @@ async def theater_context(request: Request, record, orphan: bool = False) -> dic
     context = await stage._stage_context(request, record)
     status = record.status.value
     history = get_phase_history(record.id)
-    steps = steps_from_history(history, status) if history else []
+    steps = steps_from_history(history, status, now=_finished_at(record)) if history else []
     spent = ""
     cycle_repo = getattr(state, "cycle_repo", None)
     if cycle_repo is not None:

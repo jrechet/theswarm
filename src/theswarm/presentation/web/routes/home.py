@@ -48,7 +48,7 @@ async def home(request: Request) -> HTMLResponse:
 
     # "Tous mes projets": everything the owner's token can see, App or not.
     try:
-        for r in await common.github_app.list_user_repositories():
+        for r in await common.user_repositories():
             full_name = r.get("full_name", "")
             if not full_name or full_name in seen:
                 continue

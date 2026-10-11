@@ -141,6 +141,9 @@ from theswarm.infrastructure.persistence.migrations.v037_agent_settings import (
 from theswarm.infrastructure.persistence.migrations.v038_spend_alerts_posted import (
     SQL as MIGRATION_V038,
 )
+from theswarm.infrastructure.persistence.migrations.v039_report_cycle_index import (
+    SQL as MIGRATION_V039,
+)
 from theswarm.infrastructure.persistence.query_logger import instrument_connection
 
 log = logging.getLogger(__name__)
@@ -199,6 +202,7 @@ async def init_db(db_path: str = _DEFAULT_DB) -> aiosqlite.Connection:
     await db.executescript(MIGRATION_V036)
     await db.executescript(MIGRATION_V037)
     await db.executescript(MIGRATION_V038)
+    await db.executescript(MIGRATION_V039)
     await db.commit()
     return db
 
