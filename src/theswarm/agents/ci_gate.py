@@ -27,6 +27,7 @@ CI_POLL_SECONDS = 20
 
 # On the task issue, next to CHANGES_MARKER: why the PR came back.
 CI_RED_MARKER = "<!-- swarm:ci-red -->"
+CI_RED_ON_HEAD = "CI red — back to the Dev"
 CI_RED_SUMMARY = (
     "This PR was approved but its CI is red, so it was not merged. Read "
     "what the failing checks below report, reproduce it locally, fix it on "

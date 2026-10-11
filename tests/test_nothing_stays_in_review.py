@@ -332,6 +332,35 @@ class TestTheWatch:
         assert [s.repo for s in sweeps] == ["jrechet/espace-client"] and good.merged == [499]
 
 
+class TestSentBackOnce:
+    """A PR the merge sends back says so on its head: the watch sweeps every
+    five minutes, and theswarm#321's head still read "Approved" after its
+    conflict went back — one more note on #317 per sweep (2026-10-11)."""
+
+    async def test_a_conflict_is_sent_back_once_however_many_sweeps(self):
+        github = _GitHub([_pr(321, 317, head_sha="s1")], statuses={"s1": APPROVED},
+                         behind={"feat/issue-317-fix": 13}, update_ok=False)
+        watch = _watch(github, "jrechet/theswarm")
+
+        await watch.sweep()
+        await watch.sweep()
+
+        notes = [c for c in github.comments.get(317, []) if techlead.CONFLICT_MARKER in c]
+        assert len(notes) == 1
+        assert github.statuses["s1"]["state"] == "failure"
+
+    async def test_a_red_ci_is_sent_back_once_however_many_sweeps(self):
+        github = _GitHub([_pr()], statuses={"h1": APPROVED},
+                         checks={"h1": [{"name": "unit-tests", "state": "failure", "summary": "2 failed"}]})
+        watch = _watch(github, "jrechet/espace-client")
+
+        await watch.sweep()
+        await watch.sweep()
+
+        notes = [c for c in github.comments.get(496, []) if "ci-red" in c]
+        assert len(notes) == 1 and github.merged == []
+
+
 class TestHeldOnItsOwnRepository:
     async def test_a_red_ci_goes_back_to_the_dev(self):
         github = _GitHub([_pr(321, 317, head_sha="s1")],

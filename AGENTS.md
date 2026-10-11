@@ -594,7 +594,10 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   `web-flow` — a Dev's own merge may hold resolutions nobody reviewed); a
   conflict goes back to the Dev. An approval of this cycle merges as
   before. On the swarm's own repository a held PR whose CI is red goes back
-  to the Dev too (it waited for a person).
+  to the Dev too (it waited for a person). **A PR the merge sends back says
+  so on its head** (`_send_back_to_dev(on_head=…)`: "merge conflict with
+  main", "CI red"): its head still read "Approved", and the watch would
+  have sent theswarm#321 back — one more note on #317 — every five minutes.
 - **A REQUEST_CHANGES review closes the loop**: the review is copied onto
   the *issue* behind `CHANGES_MARKER`, the label flips back to
   `status:ready`, and the next attempt resumes the branch the review is

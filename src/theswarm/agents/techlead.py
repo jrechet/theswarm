@@ -515,6 +515,7 @@ ABANDON_MARKER = "<!-- swarm:abandoned -->"
 # 9d3174f41829's #325): the note that sends it back carries this too, and
 # the Dev merges origin/main before anything else.
 CONFLICT_MARKER = "<!-- swarm:merge-conflict -->"
+CONFLICT_ON_HEAD = "merge conflict with main — back to the Dev"
 CONFLICT_SUMMARY = (
     "This PR was approved but conflicts with main: another change merged "
     "first. Merge origin/main into this branch and resolve every conflict "
@@ -582,12 +583,20 @@ async def _publish_review_status(github, pr: dict, decision: str, summary: str) 
 
 async def _send_back_to_dev(
     github, pr: dict, summary: str, issues: list[dict], *, conflict: bool = False,
+    on_head: str = "",
 ) -> bool:
     """Hand a reviewed-down task back to the queue. True when it went back.
 
     ``conflict``: the PR was approved but cannot merge; the note carries
-    CONFLICT_MARKER so the Dev merges main first."""
+    CONFLICT_MARKER so the Dev merges main first. ``on_head``: an approved
+    PR the merge sends back (a conflict, a red CI) gets that verdict on its
+    head too, so nothing reads the approval there again: the merge watch
+    sweeps every five minutes, and theswarm#321's head still said
+    "Approved" after its conflict went back — one more note on #317 per
+    sweep (2026-10-11)."""
     number = _task_of_pr(pr)
+    if on_head:
+        await _publish_review_status(github, pr, "REQUEST_CHANGES", on_head)
     if number is None:
         return False  # a PR nobody's task owns: the review on it is the whole story
     # Review rounds only: a conflict note carries CHANGES_MARKER too, and
@@ -962,7 +971,8 @@ async def merge_approved_prs(state: AgentState, *, ci_wait_seconds: float | None
             log.warning("PR #%d conflicts with main — sending its task back to the Dev", pr_number)
             pr = {"number": pr_number, "head": head_branch or "", **open_pr}
             try:
-                if await _send_back_to_dev(github, pr, CONFLICT_SUMMARY, [], conflict=True):
+                if await _send_back_to_dev(github, pr, CONFLICT_SUMMARY, [], conflict=True,
+                                           on_head=CONFLICT_ON_HEAD):
                     conflicted.append(pr_number)
             except Exception:
                 log.exception("Could not send PR #%d back for its conflict", pr_number)
@@ -1096,7 +1106,7 @@ async def _ci_gate_before_merge(
     try:
         await _send_back_to_dev(
             github, pr, ci_gate.CI_RED_MARKER + "\n" + ci_gate.CI_RED_SUMMARY,
-            ci_gate.failing_issues(verdict),
+            ci_gate.failing_issues(verdict), on_head=ci_gate.CI_RED_ON_HEAD,
         )
     except Exception:
         log.exception("Could not send PR #%d back for its red CI", pr_number)

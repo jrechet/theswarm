@@ -113,6 +113,7 @@ async def _merge_held_prs(
     merged_tasks: list[int] = []
     from theswarm.agents import ci_gate
     from theswarm.agents.techlead import (
+        CONFLICT_ON_HEAD,
         CONFLICT_SUMMARY,
         _send_back_to_dev,
         _task_of_pr,
@@ -129,8 +130,8 @@ async def _merge_held_prs(
                 continue
             if fresh == "conflict":
                 try:
-                    if await _send_back_to_dev(github, by_number[pr_number], CONFLICT_SUMMARY, [], conflict=True) \
-                            and sent_back is not None:
+                    if await _send_back_to_dev(github, by_number[pr_number], CONFLICT_SUMMARY, [], conflict=True,
+                                               on_head=CONFLICT_ON_HEAD) and sent_back is not None:
                         sent_back.append(pr_number)
                 except Exception:  # noqa: BLE001
                     log.exception("Could not send PR #%d back for its conflict", pr_number)
@@ -147,7 +148,7 @@ async def _merge_held_prs(
             try:
                 if await _send_back_to_dev(
                     github, by_number[pr_number], ci_gate.CI_RED_MARKER + "\n" + ci_gate.CI_RED_SUMMARY,
-                    ci_gate.failing_issues(verdict),
+                    ci_gate.failing_issues(verdict), on_head=ci_gate.CI_RED_ON_HEAD,
                 ) and sent_back is not None:
                     sent_back.append(pr_number)
             except Exception:  # noqa: BLE001
