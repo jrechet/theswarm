@@ -37,7 +37,8 @@ _repo_locks: dict[str, tuple[asyncio.AbstractEventLoop, asyncio.Lock]] = {}
 
 # How many cycles may run at once, all repositories together (V2, M5).
 # One per repo is a correctness rule (the workspace); this one is about
-# the box: a 2 GB container and one shared subscription window.
+# the box and the one shared subscription window: 1 by default, 2 in prod
+# since 2026-10-11 (docker-compose.yml, a 4 GB container).
 DEFAULT_MAX_CONCURRENT_CYCLES = 1
 _cycle_slots: dict[str, tuple[asyncio.AbstractEventLoop, int, asyncio.Semaphore]] = {}
 

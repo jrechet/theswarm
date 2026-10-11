@@ -102,7 +102,7 @@ async def test_the_screenshot_walk_seeds_before_it_walks(monkeypatch, tmp_path):
 
     monkeypatch.setattr(qa, "run_seed", seed)
     monkeypatch.setattr(qa, "_page_status", AsyncMock(return_value=200))
-    monkeypatch.setattr(qa, "e2e_port", lambda: 9998)
+    monkeypatch.setattr(qa, "e2e_port", lambda *_: 9998)
     monkeypatch.setattr(qa, "_find_system_python", lambda ws: "/venv/bin/python")
     monkeypatch.setattr(qa, "_run_demo_setup", AsyncMock())
     monkeypatch.setattr(qa, "_demo_launch", lambda ws, py, port: (["true"], {}))

@@ -146,7 +146,7 @@ def _setup_tracing() -> None:
 
 def _load_settings():
     """Load SwarmSettings from YAML + env vars."""
-    from theswarm_common.config import MattermostConfig, ServerConfig, OllamaConfig, load_yaml_with_env
+    from theswarm_common.config import MattermostConfig, ServerConfig, load_yaml_with_env
     from pydantic import BaseModel
     from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -169,7 +169,6 @@ def _load_settings():
             extra="ignore",
         )
         mattermost: MattermostConfig = MattermostConfig()
-        ollama: OllamaConfig = OllamaConfig()
         server: ServerConfig = ServerConfig(port=8091)
         agents: AgentsConfig = AgentsConfig()
 

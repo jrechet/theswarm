@@ -278,7 +278,7 @@ class _Proc:
 
 def _lane_patches(monkeypatch, port):
     monkeypatch.setattr(qa, "run_seed", AsyncMock(return_value=[]))
-    monkeypatch.setattr(qa, "e2e_port", lambda: port)
+    monkeypatch.setattr(qa, "e2e_port", lambda *_: port)
     monkeypatch.setattr(qa, "_find_system_python", lambda ws: "python")
     monkeypatch.setattr(qa, "_run_demo_setup", AsyncMock())
     monkeypatch.setattr(qa, "_demo_launch", lambda ws, py, port: (["true"], {}))
