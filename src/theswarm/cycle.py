@@ -89,6 +89,7 @@ def repo_lock(repo: str) -> asyncio.Lock:
 
 async def _merge_held_prs(
     github, held: list[int], on_progress, *, earlier=frozenset(), ci_wait_seconds: float | None = None,
+    sent_back: list[int] | None = None,
 ) -> list[int]:
     """Merge the approved PRs the review phase held back. Returns those merged.
 
@@ -128,7 +129,9 @@ async def _merge_held_prs(
                 continue
             if fresh == "conflict":
                 try:
-                    await _send_back_to_dev(github, by_number[pr_number], CONFLICT_SUMMARY, [], conflict=True)
+                    if await _send_back_to_dev(github, by_number[pr_number], CONFLICT_SUMMARY, [], conflict=True) \
+                            and sent_back is not None:
+                        sent_back.append(pr_number)
                 except Exception:  # noqa: BLE001
                     log.exception("Could not send PR #%d back for its conflict", pr_number)
                 continue
@@ -142,10 +145,11 @@ async def _merge_held_prs(
             # open, it waited for a person on the swarm's own repository.
             log.warning("PR #%d was approved but its CI is red — back to the Dev", pr_number)
             try:
-                await _send_back_to_dev(
+                if await _send_back_to_dev(
                     github, by_number[pr_number], ci_gate.CI_RED_MARKER + "\n" + ci_gate.CI_RED_SUMMARY,
                     ci_gate.failing_issues(verdict),
-                )
+                ) and sent_back is not None:
+                    sent_back.append(pr_number)
             except Exception:  # noqa: BLE001
                 log.exception("Could not send PR #%d back for its red CI", pr_number)
             continue

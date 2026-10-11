@@ -146,7 +146,8 @@ async def _sweep(github, repo: str, *, self_repo: bool) -> Sweep:
     if self_repo and held:
         from theswarm import cycle
 
-        merged += await cycle._merge_held_prs(github, held, None, earlier=set(held), ci_wait_seconds=0)
+        merged += await cycle._merge_held_prs(github, held, None, earlier=set(held), ci_wait_seconds=0,
+                                              sent_back=sent_back)
     numbers = [r["pr_number"] for r in approved]
     left = [n for n in numbers if n not in merged and n not in sent_back]
     updating = [n for n in left if n in result.get("updating_prs", [])]

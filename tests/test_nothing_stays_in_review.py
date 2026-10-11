@@ -302,6 +302,14 @@ class TestTheWatch:
 
         assert github.merged == [321] and sweep.merged == (321,)
 
+    async def test_its_own_conflict_goes_back_to_the_dev_and_is_said(self):
+        github = _GitHub([_pr(321, 317, head_sha="s1")], statuses={"s1": APPROVED},
+                         behind={"feat/issue-317-fix": 13}, update_ok=False)
+
+        [sweep] = await _watch(github, "jrechet/theswarm").sweep()
+
+        assert sweep.sent_back == (321,) and "status:ready" in github.labels[317]
+
     async def test_its_own_repository_waits_while_any_cycle_runs(self):
         github = _GitHub([_pr(321, 317, head_sha="s1")], statuses={"s1": APPROVED})
 
