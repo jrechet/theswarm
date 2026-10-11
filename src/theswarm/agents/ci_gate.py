@@ -100,9 +100,9 @@ class SharedWait:
     budget; the pass waits at most CI_WAIT_SECONDS in all.
     """
 
-    def __init__(self, clock=time.monotonic) -> None:
+    def __init__(self, clock=time.monotonic, *, seconds: float | None = None) -> None:
         self._clock = clock
-        self._deadline = clock() + CI_WAIT_SECONDS
+        self._deadline = clock() + (CI_WAIT_SECONDS if seconds is None else seconds)
 
     def left(self) -> float:
         return max(0.0, self._deadline - self._clock())

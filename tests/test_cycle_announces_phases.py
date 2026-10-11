@@ -62,8 +62,10 @@ async def test_a_cycle_with_nothing_to_build_announces_every_phase_once():
 
     phases = _phases(await _run(nothing_to_do))
 
+    # One review pass before the loop ends: what was approved and left open
+    # merges there (espace-client#499, played on 2026-10-10, never did).
     assert phases == [
-        "po_morning", "techlead_breakdown", "dev_loop", "dev_iter", "qa", "po_evening",
+        "po_morning", "techlead_breakdown", "dev_loop", "dev_iter", "techlead_review", "qa", "po_evening",
     ]
 
 

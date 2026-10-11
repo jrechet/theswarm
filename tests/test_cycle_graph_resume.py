@@ -104,14 +104,14 @@ async def test_a_cycle_killed_in_qa_resumes_at_qa_and_finishes_once(tmp_path, sa
         for p in patches:
             p.stop()
 
-    assert first_run == ["po_morning", "techlead_breakdown", "dev_loop", "dev_iter", "qa"]
+    assert first_run == ["po_morning", "techlead_breakdown", "dev_loop", "dev_iter", "techlead_review", "qa"]
     assert phases == ["qa", "po_evening"]          # resumed where it died
     assert builders["po"].calls == 2                 # morning once, evening once
-    assert builders["tl"].calls == 1
+    assert builders["tl"].calls == 2                 # the breakdown, the review the loop's end asks for
     assert builders["dev"].calls == 1
     assert builders["qa"].calls == 2                 # the crash, then the real run
     assert result["demo_report"]["overall_status"] == "green"
-    assert result["cost_usd"] == pytest.approx(0.5 * 5)  # po, tl, dev, qa, po — no double count
+    assert result["cost_usd"] == pytest.approx(0.5 * 6)  # po, tl, dev, tl, qa, po — no double count
 
 
 async def test_resuming_a_thread_that_does_not_exist_is_refused(tmp_path, saver):

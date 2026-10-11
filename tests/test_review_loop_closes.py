@@ -83,21 +83,22 @@ class TestTheHandBack:
         gh.add_labels.assert_not_awaited()
         gh.add_comment.assert_not_awaited()
 
-    async def test_a_task_sent_back_too_often_is_left_for_a_person(self):
-        """Left in review for a person — *put* there, whatever the last
-        attempt left: concert-tour-app#306 said "Leaving it in review" six
-        times while a failed attempt had requeued it to status:ready, where
-        any untargeted Dev would pick it up again."""
+    async def test_a_task_sent_back_too_often_is_given_up(self):
+        """Given up, not parked: it used to be left in review "for a person
+        to look at", and the owner reviews demos, never code —
+        concert-tour-app#307 sat there from 2026-09-29 (2026-10-11)."""
         gh = _github(comments=[{"body": CHANGES_MARKER + " round 1"}] * CHANGES_REQUESTED_CAP)
+        gh.get_issue = AsyncMock(return_value={"number": 114, "body": "", "state": "closed"})
 
         await poll_and_review_prs({"github": gh, "claude": _claude()})
 
-        gh.add_labels.assert_awaited_once_with(114, ["status:review"])
+        gh.close_pr.assert_awaited_once_with(118)
+        number, body = gh.close_issue.await_args.args[0], gh.close_issue.await_args.kwargs["comment"]
+        assert number == 114 and gh.close_issue.await_args.kwargs["not_planned"] is True
+        assert "changes were requested" in body.lower() and CHANGES_MARKER not in body
         removed = {call.args for call in gh.remove_label.await_args_list}
-        assert {(114, "status:ready"), (114, "status:in-progress")} <= removed
-        body = gh.add_comment.await_args.args[1]
-        assert CHANGES_MARKER not in body
-        assert "changes were requested" in body.lower()
+        assert {(114, "status:review"), (114, "status:ready"), (114, "status:in-progress")} <= removed
+        gh.add_labels.assert_not_awaited()
 
     async def test_a_pr_without_a_task_number_is_only_reviewed(self):
         gh = _github()
