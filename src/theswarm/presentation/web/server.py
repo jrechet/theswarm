@@ -465,6 +465,37 @@ class GatewayBridge:
 
 # ── Main startup ─────────────────────────────────────────────────────
 
+async def _relaunch_queue(app, queue) -> int:
+    """Start again the cycles that were waiting their turn when the process
+    stopped, in the order they were queued, under their own ids. A deploy
+    used to drop them: four of the owner's six Plays of 2026-10-11 were
+    waiting, kept in the tracker's memory only."""
+    from theswarm.api import get_cycle_tracker
+    from theswarm.presentation.web.routes.common import start_targeted_cycle
+
+    try:
+        waiting = await queue.list_all()
+    except Exception:  # noqa: BLE001 — a boot without the queue, as before
+        log.exception("Startup: reading the cycle queue failed")
+        return 0
+    started = 0
+    for row in waiting:
+        if get_cycle_tracker().get(row["id"]) is not None:
+            continue
+        owner, _, name = str(row["repo"]).partition("/")
+        try:
+            await start_targeted_cycle(
+                app.state, owner, name, row.get("issue_number"), row.get("description") or "",
+                cycle_id=row["id"], queued_at=row.get("queued_at"),
+            )
+            started += 1
+        except Exception:  # noqa: BLE001 — one bad row never stops the others
+            log.exception("Startup: starting queued cycle %s again failed", row.get("id"))
+    if waiting:
+        log.info("Startup: %d cycle(s) were waiting their turn — queued again", started)
+    return started
+
+
 async def _launch_resume(app, plan, allowed_repos, bus, cycle_repo, project_repo) -> None:
     """Start a fresh cycle that continues an interrupted one."""
     from theswarm.api import CycleRequest, get_cycle_tracker, run_api_cycle
@@ -533,6 +564,12 @@ async def start_server(
         db_path = os.path.join(data_dir, "theswarm.db")
 
     conn = await init_db(db_path)
+    # The cycles waiting their turn are written down (v040): a restart keeps them.
+    from theswarm import api as _api_queue
+    from theswarm.infrastructure.persistence.cycle_queue_repo import SQLiteCycleQueue
+
+    cycle_queue = SQLiteCycleQueue(conn)
+    _api_queue.set_cycle_queue(cycle_queue)
 
     # V2 runtime (M4): the durable cycle graph checkpoints on its own SQLite
     # file and connection — never the app's shared one (a busy cycle must
@@ -813,6 +850,7 @@ async def start_server(
         # only in the "resuming 0" line above (46ff31375dce, 2026-09-25).
         await record_not_resumed(cycle_repo, interrupted, plans)
 
+
     # ── WS listener for DMs ──────────────────────────────────────
     if swarm_po_chat:
         async def _on_ws_message(event: dict) -> None:
@@ -909,6 +947,11 @@ async def start_server(
         app.state.merge_watch = MergeWatch(app.state.project_repo)
         asyncio.create_task(app.state.merge_watch.run_loop())
         log.info("Merge watch: approved PRs swept every %ss", sweep_seconds())
+
+    # ── The cycles that were waiting their turn when the process stopped ──
+    # Last, once the preflight and Settings → Agents are wired, and after the
+    # continuations: each queues behind whatever now holds its repository.
+    await _relaunch_queue(app, cycle_queue)
 
     # ── Auto-seed dogfood demos (idempotent) ─────────────────────
     # Every deploy re-runs seed_self so new sprint videos under
