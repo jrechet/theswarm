@@ -841,7 +841,8 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   it into its URLs. Until 2026-09-25 the prompt never *told* it: `{{port}}`
   in a `.format` template is `{port}` afterwards, the `.replace` that
   followed matched nothing, and the model guessed 8000 — right on prod by
-  luck, wrong anywhere the port moved.
+  luck, wrong anywhere the port moved. Chosen once per *workspace* since
+  two cycles run side by side (2026-10-11).
 - **QA rewrites its E2E file every cycle that built something** (it lived
   in the workspace and was reused forever: written once, it tested the API
   of that day and never a later feature), with the cycle's PRs and pages in
@@ -1011,7 +1012,14 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   closed without touching the target's `.gitignore`. **Cycles across
   repositories share one bound**: `SWARM_MAX_CONCURRENT_CYCLES` (default
   1, `cycle.cycle_slot`), held with the repo lock by the API and the
-  gateway; a second repo now queues like a second cycle on the same repo.
+  gateway; a cycle past the bound queues like a second cycle on the same
+  repo. **Prod runs two at once since 2026-10-11** (the owner: "on ne peut
+  pas faire tourner 2 flux en même temps ?" — a Play on theswarm#317 had
+  waited behind espace-client#496): `docker-compose.yml` sets 2 and a 4 GB
+  container; each QA takes its own block of three ports
+  (`qa.e2e_port(workspace)`, never one another workspace holds — one port
+  per process would have given both the same three); both cycles draw on
+  the one subscription window. One cycle per repository stays the rule.
   **M5b, first half — one git worktree per Dev task**
   (`tools/git.add_worktree`, `SWARM_DEV_WORKTREES`, on by default, off in
   the suite whose Dev fakes mock `create_branch`): the Dev implements,

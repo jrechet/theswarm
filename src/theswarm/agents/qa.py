@@ -47,9 +47,12 @@ E2E_PORT = 8000  # preferred base port for the live servers QA launches
 # that reason alone while 8001/8002 worked fine: the message blamed the
 # target, the truth was the port.
 #
-# Chosen once per process, because the generated E2E test file bakes the
-# port into its URLs and `run_e2e_tests` has to bind the same one.
-_BASE_PORT: int | None = None
+# Chosen once per workspace, because the generated E2E test file bakes the
+# port into its URLs and `run_e2e_tests` has to bind the same one — and
+# never a block another workspace of this process holds: two cycles on two
+# repositories run side by side since 2026-10-11 (SWARM_MAX_CONCURRENT_CYCLES),
+# and one port per process would have given both QAs the same three ports.
+_BASE_PORTS: dict[str, int] = {}
 
 # How many consecutive ports QA needs: E2E, screenshots, video.
 _PORTS_NEEDED = 3
@@ -66,8 +69,10 @@ def _port_is_free(port: int) -> bool:
     return True
 
 
-def _pick_base_port(preferred: int = E2E_PORT) -> int:
-    """A base whose next `_PORTS_NEEDED` ports are all bindable.
+def _pick_base_port(preferred: int = E2E_PORT, avoid: frozenset[int] = frozenset()) -> int:
+    """A base whose next `_PORTS_NEEDED` ports are all bindable, and not one
+    of `avoid` (the blocks other workspaces hold, free while their servers
+    are down).
 
     Walks up from `preferred` in strides, then falls back to whatever the OS
     hands out. Binding is the only honest test — asking who holds a port
@@ -75,6 +80,8 @@ def _pick_base_port(preferred: int = E2E_PORT) -> int:
     """
     candidates = [preferred + stride * _PORTS_NEEDED for stride in range(20)]
     for base in candidates:
+        if base in avoid:
+            continue
         if all(_port_is_free(base + offset) for offset in range(_PORTS_NEEDED)):
             if base != preferred:
                 log.warning(
@@ -94,12 +101,12 @@ def _pick_base_port(preferred: int = E2E_PORT) -> int:
     return base
 
 
-def e2e_port() -> int:
-    """The base port this process uses for its demo servers."""
-    global _BASE_PORT
-    if _BASE_PORT is None:
-        _BASE_PORT = _pick_base_port()
-    return _BASE_PORT
+def e2e_port(workspace: str | None = None) -> int:
+    """The base port of a workspace's demo servers: E2E, +1 screenshots, +2 video."""
+    key = os.path.realpath(workspace) if workspace else ""
+    if key not in _BASE_PORTS:
+        _BASE_PORTS[key] = _pick_base_port(avoid=frozenset(_BASE_PORTS.values()))
+    return _BASE_PORTS[key]
 
 # The E2E-file generation is an enhancement: a target without one still
 # gets its unit verdict, its screenshots and its video. 90s was the CLI
@@ -308,7 +315,7 @@ async def write_e2e_tests(state: AgentState) -> dict:
     prompt = E2E_PROMPT.format(
         context=context,
         endpoints=endpoints_text,
-        port=e2e_port(),
+        port=e2e_port(state.get("workspace")),
     )
 
     if built:
@@ -778,7 +785,7 @@ async def _repair_e2e_file(claude, workspace: str, test_file: str, excerpt: str,
         log.warning("QA: E2E repair unavailable (cannot read the file: %s)", exc)
         return None
     prompt = E2E_REPAIR_PROMPT.format(
-        port=e2e_port(), why=why,
+        port=e2e_port(workspace), why=why,
         excerpt=excerpt or "(pytest printed no reason)",
         code=code[:_MAX_REPAIR_FILE_CHARS],
     )
@@ -901,7 +908,7 @@ async def _stop_server(server_proc) -> None:
 
 async def _start_e2e_server(workspace: str, python: str):
     """Launch the target on the E2E port; (process, launch error or "")."""
-    port = e2e_port()
+    port = e2e_port(workspace)
     await _run_demo_setup(workspace)
     command, env = _demo_launch(workspace, python, port)
     server_proc = await asyncio.create_subprocess_exec(
@@ -1208,7 +1215,7 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
     from theswarm.infrastructure.recording.playwright_recorder import PlaywrightRecorder
 
     python = _find_system_python(workspace)
-    port = e2e_port() + 1  # avoid conflict with E2E test server
+    port = e2e_port(workspace) + 1  # avoid conflict with E2E test server
     artifacts: list[tuple] = []
 
     # Start the FastAPI app
@@ -1409,7 +1416,7 @@ async def record_demo_video(state: AgentState) -> dict:
     )
 
     python = _find_system_python(workspace)
-    port = e2e_port() + 2  # avoid conflict with E2E and screenshot servers
+    port = e2e_port(workspace) + 2  # avoid conflict with E2E and screenshot servers
     video_artifacts: list[tuple] = []
 
     # Start the FastAPI app

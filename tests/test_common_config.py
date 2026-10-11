@@ -10,7 +10,6 @@ import yaml
 
 from theswarm_common.config import (
     MattermostConfig,
-    OllamaConfig,
     ServerConfig,
     load_yaml_with_env,
 )
@@ -37,14 +36,6 @@ def test_mattermost_config_custom_values():
     assert cfg.channel_name == "custom-channel"
 
 
-# ── OllamaConfig ────────────────────────────────────────────────────────
-
-
-def test_ollama_config_defaults():
-    cfg = OllamaConfig()
-    assert cfg.base_url == "http://host.docker.internal:11434"
-    assert cfg.model == "mistral:7b"
-    assert cfg.timeout == 300
 
 
 # ── ServerConfig ─────────────────────────────────────────────────────────
@@ -116,16 +107,6 @@ def test_load_yaml_with_env_injects_mattermost_bot_token(tmp_path):
     assert result["mattermost"]["bot_token"] == "env-token-123"
 
 
-def test_load_yaml_with_env_injects_ollama_base_url(tmp_path):
-    config_file = tmp_path / "theswarm.yaml"
-    config_file.write_text(yaml.dump({}))
-
-    with patch("dotenv.load_dotenv"), \
-         patch.dict(os.environ, {"OLLAMA_BASE_URL": "http://localhost:11434"}, clear=False):
-        result = load_yaml_with_env(config_file)
-
-    assert result["ollama"]["base_url"] == "http://localhost:11434"
-
 
 def test_load_yaml_with_env_injects_external_url(tmp_path):
     config_file = tmp_path / "theswarm.yaml"
@@ -162,7 +143,6 @@ def test_load_yaml_with_env_empty_yaml(tmp_path):
     # Clear env vars that would inject
     env_clear = {
         "MATTERMOST_BOT_TOKEN": "",
-        "OLLAMA_BASE_URL": "",
         "EXTERNAL_URL": "",
     }
     with patch("dotenv.load_dotenv"), \
@@ -182,7 +162,6 @@ def test_load_yaml_with_env_multiple_env_vars(tmp_path):
 
     env = {
         "MATTERMOST_BOT_TOKEN": "mm-tok",
-        "OLLAMA_BASE_URL": "http://ollama:11434",
         "EXTERNAL_URL": "https://ext.example.com",
     }
     with patch("dotenv.load_dotenv"), \
@@ -190,7 +169,6 @@ def test_load_yaml_with_env_multiple_env_vars(tmp_path):
         result = load_yaml_with_env(config_file)
 
     assert result["mattermost"]["bot_token"] == "mm-tok"
-    assert result["ollama"]["base_url"] == "http://ollama:11434"
     assert result["server"]["external_url"] == "https://ext.example.com"
     # Original YAML values preserved
     assert result["server"]["host"] == "0.0.0.0"

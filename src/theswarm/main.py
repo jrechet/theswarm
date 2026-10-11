@@ -10,7 +10,7 @@ import logging
 import os
 import secrets
 
-from theswarm_common.config import MattermostConfig, ServerConfig, OllamaConfig, load_yaml_with_env
+from theswarm_common.config import MattermostConfig, ServerConfig, load_yaml_with_env
 from theswarm_common.models import AgentEvent
 
 logging.basicConfig(
@@ -130,7 +130,6 @@ class SwarmSettings(BaseSettings):
     )
 
     mattermost: MattermostConfig = MattermostConfig()
-    ollama: OllamaConfig = OllamaConfig()
     server: ServerConfig = ServerConfig(port=8091)
     agents: AgentsConfig = AgentsConfig()
 

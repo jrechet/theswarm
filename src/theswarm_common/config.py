@@ -16,12 +16,6 @@ class MattermostConfig(BaseModel):
     channel_name: str = "swarm-bots-logs"
 
 
-class OllamaConfig(BaseModel):
-    base_url: str = "http://host.docker.internal:11434"
-    model: str = "mistral:7b"
-    timeout: int = 300
-
-
 class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8090
@@ -49,8 +43,6 @@ def load_yaml_with_env(config_path: str | Path = "theswarm.yaml") -> dict:
     # Inject common secrets from env vars
     if token := os.getenv("MATTERMOST_BOT_TOKEN"):
         yaml_data.setdefault("mattermost", {})["bot_token"] = token
-    if url := os.getenv("OLLAMA_BASE_URL"):
-        yaml_data.setdefault("ollama", {})["base_url"] = url
     if ext_url := os.getenv("EXTERNAL_URL"):
         yaml_data.setdefault("server", {})["external_url"] = ext_url
 

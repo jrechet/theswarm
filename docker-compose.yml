@@ -14,6 +14,13 @@ services:
       # venv: the plan's default after three green cycles at width 2
       # (section 8). 1 is the single path, the way back.
       - SWARM_DEV_PARALLELISM=2
+      # Two cycles at once, on two repositories (one per repository stays the
+      # rule: a workspace is shared). The owner, 2026-10-11: "on ne peut pas
+      # faire tourner 2 flux en même temps ?" — a Play on theswarm#317 waited
+      # behind espace-client#496 the day before. Each QA has its own ports
+      # (`qa.e2e_port(workspace)`); both cycles draw on the one subscription
+      # window. 1 is the way back.
+      - SWARM_MAX_CONCURRENT_CYCLES=2
       # V2 runtime: Claude calls go through the Agent SDK (its bundled
       # Claude Code binary, the subscription identity of the mounted
       # ~/.claude, a typed message stream). The `claude -p` CLI backend was
@@ -64,7 +71,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          # Two cycles side by side: two Dev worktrees and two QA lanes each
+          # (Claude Code, demo servers, Chromium). The box has 31 GB.
+          memory: 4G
         reservations:
           memory: 512M
       labels:

@@ -95,9 +95,18 @@ def test_the_whole_triplet_must_be_free(occupied):
     assert all(_is_free(chosen + offset) for offset in (0, 1, 2))
 
 
-def test_the_port_is_chosen_once_per_process():
+def test_the_port_is_chosen_once_per_workspace(tmp_path):
     """The generated test file bakes the port in; the server must match it."""
-    assert e2e_port() == e2e_port()
+    assert e2e_port(str(tmp_path)) == e2e_port(str(tmp_path))
+
+
+def test_two_workspaces_side_by_side_never_share_a_block(tmp_path):
+    """Two cycles on two repositories run at once since 2026-10-11: one port
+    per process gave both QAs the same three ports."""
+    first = e2e_port(str(tmp_path / "concert-tour-app"))
+    second = e2e_port(str(tmp_path / "espace-client"))
+
+    assert abs(first - second) >= 3
 
 
 def test_the_preferred_default_is_still_8000():

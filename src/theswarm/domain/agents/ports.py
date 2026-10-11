@@ -29,7 +29,7 @@ class RoleAssignmentRepository(Protocol):
 
 
 class LLMPort(Protocol):
-    """Any LLM backend: Claude, Ollama, OpenAI."""
+    """Any LLM backend (the swarm runs on Claude)."""
 
     async def generate(
         self,

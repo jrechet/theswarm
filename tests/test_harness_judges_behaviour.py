@@ -107,7 +107,7 @@ async def test_the_screenshot_walk_records_what_each_feature_page_answered(monke
             return 0
 
     monkeypatch.setattr(qa, "_page_status", status)
-    monkeypatch.setattr(qa, "e2e_port", lambda: 9998)
+    monkeypatch.setattr(qa, "e2e_port", lambda *_: 9998)
     monkeypatch.setattr(qa, "_find_system_python", lambda ws: "python")
     monkeypatch.setattr(qa, "_run_demo_setup", AsyncMock())
     monkeypatch.setattr(qa, "_demo_launch", lambda ws, py, port: (["true"], {}))

@@ -55,7 +55,7 @@ async def test_the_e2e_server_is_seeded_like_the_demo_servers(tmp_path, monkeypa
         return []
 
     monkeypatch.setattr(qa, "run_seed", seed)
-    monkeypatch.setattr(qa, "e2e_port", lambda: 9100)
+    monkeypatch.setattr(qa, "e2e_port", lambda *_: 9100)
     monkeypatch.setattr(qa, "_run_demo_setup", AsyncMock())
     with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=_Proc())), \
          patch("theswarm.infrastructure.resilience.wait_for_http_ready", AsyncMock()):
@@ -113,7 +113,7 @@ async def test_the_screenshot_walk_draws_a_download_as_text(tmp_path, monkeypatc
 
     monkeypatch.setattr(qa, "_probe_page", probe)
     monkeypatch.setattr(qa, "run_seed", AsyncMock(return_value=[]))
-    monkeypatch.setattr(qa, "e2e_port", lambda: 9998)
+    monkeypatch.setattr(qa, "e2e_port", lambda *_: 9998)
     monkeypatch.setattr(qa, "_find_system_python", lambda ws: "python")
     monkeypatch.setattr(qa, "_run_demo_setup", AsyncMock())
     monkeypatch.setattr(qa, "_demo_launch", lambda ws, py, port: (["true"], {}))
