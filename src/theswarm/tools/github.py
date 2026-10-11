@@ -424,13 +424,17 @@ class GitHubClient:
         """``{"parents", "committer", "message"}`` of one commit: who made a
         head, and from what."""
         await self._fresh()
-        commit = await self._run(self._repo.get_commit, sha)
-        committer = commit.committer
-        return {
-            "parents": [p.sha for p in commit.parents],
-            "committer": getattr(committer, "login", "") if committer else "",
-            "message": commit.commit.message or "",
-        }
+
+        def read() -> dict:
+            commit = self._repo.get_commit(sha)  # lazy: read in the worker thread
+            committer = commit.committer
+            return {
+                "parents": [p.sha for p in commit.parents],
+                "committer": getattr(committer, "login", "") if committer else "",
+                "message": commit.commit.message or "",
+            }
+
+        return await self._run(read)
 
     async def delete_branch(self, branch_name: str) -> None:
         """Delete a remote branch after merge."""
