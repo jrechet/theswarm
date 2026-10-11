@@ -569,16 +569,44 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   end of the cycle, any other approved PR is `foreign_prs`, "left for its
   author". Never park a target PR for the owner; what they judge is the
   demo.
+- **Nothing stays in review** (owner, 2026-10-11: "les cartes restent
+  bloquées in review indéfiniment"). Three cards sat there on prod, three
+  ways. *A loop with nothing to build still reviews*: a cycle whose dev
+  loop ends before any review pass runs one first
+  (`cycle_graph._after_dev_iter`), so what was approved and left open
+  merges — the owner's Play on espace-client#496 and theswarm#317
+  (2026-10-10) ended their loops at once and never reached a merge. *The
+  merge watch* (`application/services/merge_watch.py`, every
+  `SWARM_MERGE_WATCH_SECONDS`, 300, 0 in the suite) sweeps every registered
+  repository no cycle runs on, reading only the verdicts the review left on
+  the heads — no Claude call: an approved PR merges once its CI is green
+  (espace-client#499 was approved five minutes before its CI went green and
+  was never looked at again), a red CI goes back to the Dev, a task the cap
+  parked is given up; on the swarm's own repository only its own branches,
+  and only while no cycle runs anywhere (`cycle.any_cycle_running`: a merge
+  there redeploys). *An approval from an earlier cycle holds main before it
+  merges* (`techlead.bring_up_to_date`): theswarm#321, approved on
+  2026-10-08, was 13 commits behind three days later, one of them a
+  migration of its own number — its green CI said nothing about main.
+  Behind, GitHub's "Update branch" merges main in (`update_pr_branch`), CI
+  runs again, and the approval carries over to the new head
+  (`_carried_verdict`: only a merge of main GitHub made, committer
+  `web-flow` — a Dev's own merge may hold resolutions nobody reviewed); a
+  conflict goes back to the Dev. An approval of this cycle merges as
+  before. On the swarm's own repository a held PR whose CI is red goes back
+  to the Dev too (it waited for a person).
 - **A REQUEST_CHANGES review closes the loop**: the review is copied onto
   the *issue* behind `CHANGES_MARKER`, the label flips back to
   `status:ready`, and the next attempt resumes the branch the review is
   about (`git.resume_branch`, not `create_branch`, which would reset from
   main and discard the commits) and pushes onto the PR that already
   exists. Two rounds on one task is a conversation; at
-  `CHANGES_REQUESTED_CAP` it is *put* in review (`status:review`, ready and
-  in-progress taken off) with a comment for a person — concert-tour-app#306
-  read "Leaving it in review" six times while a failed attempt had left it
-  `status:ready`, where any untargeted Dev would take it again. **A
+  `CHANGES_REQUESTED_CAP` the swarm **gives the task up**
+  (`techlead.abandon_task`, 2026-10-11): the PR closed unmerged, the task
+  closed *not planned*, the TechLead's last review on both, the story
+  closed once nothing under it is open. It used to be *put* in review "for
+  a person" — the owner reviews demos, never code, and concert-tour-app#307
+  sat in review from 2026-09-29 for nobody. **A
   conversation has two sides**: a sent-back task that ends with no new
   commit is the Dev's *answer* (`dev._answer_the_review`) — posted on the
   PR behind `DEV_REPLY_MARKER`, the head's `theswarm/review` status reset

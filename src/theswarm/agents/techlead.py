@@ -396,6 +396,8 @@ async def _earlier_verdict(github, pr: dict) -> dict | None:
         return None
     try:
         verdict = _verdict_of_status(await github.get_review_status(sha))
+        if verdict is None:
+            verdict = await _carried_verdict(github, pr)
     except Exception as exc:  # noqa: BLE001 — a review is the safe answer
         log.info("PR #%d: earlier verdict unreadable (%s) — reviewing it", pr["number"], exc)
         return None
@@ -407,6 +409,76 @@ async def _earlier_verdict(github, pr: dict) -> dict | None:
     return {"pr_number": pr["number"], "decision": decision, "summary": summary,
             "issues": [], "sent_back": False, "tokens_used": 0, "cost_usd": 0.0,
             "earlier": True}
+
+
+# GitHub's "Update branch" (`bring_up_to_date`) merges main into a PR on
+# GitHub's side: the head changes, the PR's own diff does not, and CI runs
+# again on the result. An approval of the head it was made from carries
+# over and is written on the new head. Only a merge GitHub made (committer
+# web-flow) carries: a Dev's own merge may hold conflict resolutions nobody
+# reviewed.
+_UPDATE_COMMITTER = "web-flow"
+_CARRY_DEPTH = 3
+
+
+async def _carried_verdict(github, pr: dict) -> tuple[str, str] | None:
+    """An approval carried over GitHub's merges of main into the PR, None
+    for anything else."""
+    read = getattr(github, "get_commit_brief", None)
+    sha = pr.get("head_sha") or ""
+    base = pr.get("base") or "main"
+    if read is None or not sha:
+        return None
+    for _ in range(_CARRY_DEPTH):
+        brief = await read(sha)
+        if not isinstance(brief, dict):
+            return None
+        parents = brief.get("parents") or []
+        if (brief.get("committer") != _UPDATE_COMMITTER or len(parents) != 2
+                or not (brief.get("message") or "").startswith(f"Merge branch '{base}'")):
+            return None
+        sha = parents[0]
+        verdict = _verdict_of_status(await github.get_review_status(sha))
+        if verdict is None:
+            continue
+        if verdict[0] != "APPROVE":
+            return None
+        await _publish_review_status(github, pr, "APPROVE", verdict[1])
+        log.info("PR #%d: approval carried over main merged in (%s → %s)",
+                 pr["number"], sha[:7], (pr.get("head_sha") or "")[:7])
+        return verdict
+    return None
+
+
+async def bring_up_to_date(github, pr: dict) -> str:
+    """fresh | updating | conflict | unknown — whether an approved PR holds
+    main before it merges.
+
+    An approval from an earlier cycle can be days old: theswarm#321 was
+    approved on 2026-10-08 and was 13 commits behind three days later, one
+    of them a migration of the same number as its own. Merged as it was,
+    its green CI said nothing about main. Behind, it is updated (main merged
+    in on GitHub's side, CI runs again, the approval carries over) and
+    merges on a later pass; a conflict goes back to the Dev. Unreadable is
+    `unknown`, and the merge goes ahead as it did before.
+    """
+    behind = getattr(github, "behind_by", None)
+    head = pr.get("head") or ""
+    if behind is None or not head:
+        return "unknown"
+    try:
+        missing = await behind(head, pr.get("base") or "main")
+        if missing == 0:
+            return "fresh"
+        updated = await github.update_pr_branch(pr["number"], pr.get("head_sha") or "")
+    except Exception as exc:  # noqa: BLE001 — never blocks a merge on its own
+        log.warning("PR #%s: could not read or update its branch (%s)", pr.get("number"), exc)
+        return "unknown"
+    if updated:
+        log.info("PR #%s: %d commit(s) behind main — branch updated, merging once CI passes",
+                 pr["number"], missing)
+        return "updating"
+    return "conflict"
 
 
 # A review's CLI budget follows its prompt. 180s is the CLI default,
@@ -432,8 +504,13 @@ def _review_timeout(prompt_chars: int) -> int:
 # flips back — that is what makes it a loop.
 CHANGES_MARKER = "<!-- swarm:changes-requested -->"
 # Two rounds on the same task is a conversation; a third is a spin. After
-# the cap the task stays in review and says so, for a person to pick up.
+# the cap the swarm gives the task up (`abandon_task`): it used to stay in
+# review "for a person to look at", and the owner reviews demos, never code
+# (2026-10-06) — concert-tour-app#307 sat in review from 2026-09-29 for
+# nobody, a card the board showed as in review forever (owner, 2026-10-11:
+# "les cartes restent bloquées in review indéfiniment").
 CHANGES_REQUESTED_CAP = 2
+ABANDON_MARKER = "<!-- swarm:abandoned -->"
 # An approved PR that main has moved past (a sibling merged first, cycle
 # 9d3174f41829's #325): the note that sends it back carries this too, and
 # the Dev merges origin/main before anything else.
@@ -523,22 +600,7 @@ async def _send_back_to_dev(
     except Exception:
         rounds = 0
     if rounds >= CHANGES_REQUESTED_CAP and not conflict:
-        await github.add_comment(
-            number,
-            f"Changes were requested {rounds + 1} times on this task "
-            f"(PR #{pr['number']}). Leaving it in review for a person to look at "
-            "rather than sending it round again.",
-        )
-        # In review, not where the last attempt left it: a failed attempt
-        # requeues to status:ready, and concert-tour-app#306 sat there — any
-        # untargeted Dev would take it again — under six "left in review".
-        await github.add_labels(number, ["status:review"])
-        for stale in ("status:ready", "status:in-progress"):
-            try:
-                await github.remove_label(number, stale)
-            except Exception:  # noqa: BLE001 — a label it did not carry
-                pass
-        log.info("Task #%d: %d rounds of changes — left for a person", number, rounds + 1)
+        await abandon_task(github, pr, number, f"Changes were requested {rounds + 1} times", summary)
         return False
     note = _changes_comment(pr, summary, issues, conflict=conflict)
     if conflict:
@@ -549,6 +611,32 @@ async def _send_back_to_dev(
     log.info("Task #%d sent back to the Dev after %s on PR #%d",
              number, "a merge conflict" if conflict else "REQUEST_CHANGES", pr["number"])
     return True
+
+
+async def abandon_task(github, pr: dict, number: int, why: str, summary: str = "") -> None:
+    """Give a task up: its PR closed unmerged, the task closed not planned,
+    a word on both. Nothing is left in review for a person who never comes;
+    the story closes once nothing else under it is open. Best effort on
+    each step: a failure is a log line, the next pass tries again."""
+    last = f" The last review: {summary.strip()}" if summary.strip() else ""
+    words = (f"{ABANDON_MARKER}\n{why} on PR #{pr['number']}: the swarm gives this task up "
+             f"rather than sending it round again.{last}")
+    for step, call in (
+        ("comment on the PR", lambda: github.create_pr_comment(pr["number"], words)),
+        ("close the PR", lambda: github.close_pr(pr["number"])),
+        ("close the task", lambda: github.close_issue(number, comment=words, not_planned=True)),
+    ):
+        try:
+            await call()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Task #%d: could not %s (%s)", number, step, exc)
+    for stale in ("status:review", "status:ready", "status:in-progress"):
+        try:
+            await github.remove_label(number, stale)
+        except Exception:  # noqa: BLE001 — a label it did not carry
+            pass
+    log.info("Task #%d given up: %s on PR #%d", number, why, pr["number"])
+    await close_finished_stories(github, [number])
 
 
 # The reviewer sees the diff; what the diff uses without showing may be on
@@ -755,7 +843,7 @@ async def _foreign_approved(github, approved: list[int]) -> tuple[list[int], lis
     return own, [n for n in approved if n not in own]
 
 
-async def merge_approved_prs(state: AgentState) -> dict:
+async def merge_approved_prs(state: AgentState, *, ci_wait_seconds: float | None = None) -> dict:
     """Merge the PRs approved in the review step.
 
     On a target the swarm's approval is final (owner, 2026-10-06: "if the
@@ -810,8 +898,9 @@ async def merge_approved_prs(state: AgentState) -> dict:
     ci_pending: list[int] = []
     from theswarm.agents.ci_gate import SharedWait
 
-    ci_wait = SharedWait()
+    ci_wait = SharedWait(seconds=ci_wait_seconds)
     merged_tasks: list[int] = []
+    updating: list[int] = []
     for review in reviews:
         pr_number = review["pr_number"]
         decision = review.get("decision", "")
@@ -834,6 +923,14 @@ async def merge_approved_prs(state: AgentState) -> dict:
                     open_pr = p
                     break
 
+            if review.get("earlier"):
+                # Approved in an earlier cycle: main may have moved since.
+                fresh = await bring_up_to_date(github, {"number": pr_number, **open_pr})
+                if fresh == "updating":
+                    updating.append(pr_number)
+                    continue
+                if fresh == "conflict":
+                    raise RuntimeError("merge conflict with main")
             gate = await _ci_gate_before_merge(
                 github, pr_number, head_branch, open_pr, wait_seconds=ci_wait.left(),
             )
@@ -885,6 +982,8 @@ async def merge_approved_prs(state: AgentState) -> dict:
         summary.append(f"CI red, sent back: {ci_red}")
     if ci_pending:
         summary.append(f"CI still running, left open: {ci_pending}")
+    if updating:
+        summary.append(f"Main merged in, merging once CI passes: {updating}")
     if foreign:
         summary.append(f"Approved, left for its author: {foreign}")
 
@@ -896,6 +995,7 @@ async def merge_approved_prs(state: AgentState) -> dict:
         "conflicted_prs": conflicted,
         "ci_red_prs": ci_red,
         "ci_pending_prs": ci_pending,
+        "updating_prs": updating,
         "closed_stories": closed_stories,
         "tokens_used": 0,
     }
@@ -963,7 +1063,7 @@ async def close_stories(github, finished: list[tuple[int, list[int]]]) -> list[i
         if story is None or story.get("state") == "closed":
             continue
         listed = ", ".join(f"#{n}" for n in children)
-        await github.close_issue(parent, comment=f"Every sub-task is done ({listed}): closing the story.")
+        await github.close_issue(parent, comment=f"Every sub-task is closed ({listed}): closing the story.")
         await github.remove_label(parent, "status:in-progress")
         log.info("Story #%d closed: its sub-tasks %s are done", parent, listed)
         closed.append(parent)

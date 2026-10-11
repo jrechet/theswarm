@@ -903,6 +903,14 @@ async def start_server(
         _api.set_preflight(ops_watch.preflight)  # D2: no cycle starts past a no-go
         log.info("DevOps: watching the declared stack every %ss", ops_watch._interval)
 
+    # ── The TechLead's merge watch: approved work lands between cycles ──
+    from theswarm.application.services.merge_watch import MergeWatch, sweep_seconds
+
+    if sweep_seconds() > 0 and getattr(app.state, "project_repo", None) is not None:
+        app.state.merge_watch = MergeWatch(app.state.project_repo)
+        asyncio.create_task(app.state.merge_watch.run_loop())
+        log.info("Merge watch: approved PRs swept every %ss", sweep_seconds())
+
     # ── Auto-seed dogfood demos (idempotent) ─────────────────────
     # Every deploy re-runs seed_self so new sprint videos under
     # ``docs/demos/sprint-*.webm`` are picked up without a manual CLI step.

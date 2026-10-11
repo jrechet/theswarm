@@ -537,7 +537,10 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
     for number in tl_state.get("ci_red_prs", []):
         await rt.progress("TechLead", f"PR #{number}: approved, CI red — back to the Dev")
     for number in tl_state.get("ci_pending_prs", []):
-        await rt.progress("TechLead", f"PR #{number}: approved, CI still running — left open")
+        await rt.progress("TechLead", f"PR #{number}: approved, CI still running — merged once it passes")
+    for number in tl_state.get("updating_prs", []):
+        await rt.progress("TechLead", f"PR #{number}: approved earlier, main moved on — main merged in, "
+                                      "merged once CI passes")
     for number in tl_state.get("foreign_prs", []):
         await rt.progress("TechLead", f"PR #{number}: approved, not the swarm's — left for its author")
     skipped = list(tl_state.get("skipped_prs", []))
@@ -572,10 +575,18 @@ def _after_dev_iter(state: CycleState) -> str:
         return "techlead_review"
     if outcome == "skip" and state.get("iteration", 0) < _cycle().MAX_DEV_ITERATIONS:
         return "dev_iter"
-    return "dev_loop_end"
+    # The loop ends. When no review pass ran this cycle, one runs first: the
+    # PRs left open — approved while their CI still ran, approved and held —
+    # merge there. A Play on a feature with nothing left to build ended its
+    # loop at once and never reached a merge: espace-client#499 and
+    # theswarm#321, both approved, were played on 2026-10-10 and stayed in
+    # review.
+    return "dev_loop_end" if state.get("reviewed_prs") else "techlead_review"
 
 
 def _after_review(state: CycleState) -> str:
+    if state.get("dev_outcome") != "review":
+        return "dev_loop_end"  # the pass the loop's end asked for
     return "dev_iter" if state.get("iteration", 0) < _cycle().MAX_DEV_ITERATIONS else "dev_loop_end"
 
 
@@ -765,7 +776,9 @@ async def merge_held(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     held = sorted(set(state.get("held_prs", [])))
     if not held:
         return {}
-    newly = await _cycle()._merge_held_prs(rt.base_state.get("github"), held, rt.progress)
+    earlier = {r.get("pr_number") for r in state.get("reviews", []) if r.get("earlier")}
+    newly = await _cycle()._merge_held_prs(rt.base_state.get("github"), held, rt.progress,
+                                           earlier=earlier)
     return {
         "merged_prs": [*state.get("merged_prs", []), *newly],
         "held_prs": [n for n in state.get("held_prs", []) if n not in newly],

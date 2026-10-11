@@ -62,6 +62,12 @@ def cycle_slot() -> asyncio.Semaphore:
     return entry[2]
 
 
+def any_cycle_running() -> bool:
+    """True while a cycle holds its repository's lock on this loop."""
+    loop = asyncio.get_running_loop()
+    return any(lock.locked() for owner, lock in _repo_locks.values() if owner is loop)
+
+
 def repo_lock(repo: str) -> asyncio.Lock:
     """The lock every cycle on `repo` must hold while it runs.
 
@@ -81,7 +87,9 @@ def repo_lock(repo: str) -> asyncio.Lock:
 #
 
 
-async def _merge_held_prs(github, held: list[int], on_progress) -> list[int]:
+async def _merge_held_prs(
+    github, held: list[int], on_progress, *, earlier=frozenset(), ci_wait_seconds: float | None = None,
+) -> list[int]:
     """Merge the approved PRs the review phase held back. Returns those merged.
 
     A merge that fails leaves its PR open and its branch alone. Cycle 6 is
@@ -103,15 +111,44 @@ async def _merge_held_prs(github, held: list[int], on_progress) -> list[int]:
     by_number = {p["number"]: p for p in open_prs}
     merged_tasks: list[int] = []
     from theswarm.agents import ci_gate
-    from theswarm.agents.techlead import _task_of_pr, close_finished_stories
+    from theswarm.agents.techlead import (
+        CONFLICT_SUMMARY,
+        _send_back_to_dev,
+        _task_of_pr,
+        bring_up_to_date,
+        close_finished_stories,
+    )
 
-    ci_wait = ci_gate.SharedWait()
+    ci_wait = ci_gate.SharedWait(seconds=ci_wait_seconds)
     for pr_number in held:
+        if pr_number in earlier and pr_number in by_number:
+            # Approved in an earlier cycle: main may have moved since (#321).
+            fresh = await bring_up_to_date(github, by_number[pr_number])
+            if fresh == "updating":
+                continue
+            if fresh == "conflict":
+                try:
+                    await _send_back_to_dev(github, by_number[pr_number], CONFLICT_SUMMARY, [], conflict=True)
+                except Exception:  # noqa: BLE001
+                    log.exception("Could not send PR #%d back for its conflict", pr_number)
+                continue
         # Main's protection exempts the admin token the swarm merges with:
         # nothing but this stops a red PR landing on main.
         verdict = await ci_gate.wait_for_ci(
             github, shas.get(pr_number, ""), wait_seconds=ci_wait.left(),
         )
+        if verdict.state == "red" and pr_number in by_number and ci_gate.triage(verdict) == "code":
+            # Red on the code's side: back to the Dev, as on a target. Left
+            # open, it waited for a person on the swarm's own repository.
+            log.warning("PR #%d was approved but its CI is red — back to the Dev", pr_number)
+            try:
+                await _send_back_to_dev(
+                    github, by_number[pr_number], ci_gate.CI_RED_MARKER + "\n" + ci_gate.CI_RED_SUMMARY,
+                    ci_gate.failing_issues(verdict),
+                )
+            except Exception:  # noqa: BLE001
+                log.exception("Could not send PR #%d back for its red CI", pr_number)
+            continue
         if verdict.state in ("red", "pending"):
             log.warning("PR #%d was approved but its CI is %s — left open", pr_number, verdict.state)
             continue

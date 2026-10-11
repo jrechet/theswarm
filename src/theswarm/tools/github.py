@@ -235,13 +235,19 @@ class GitHubClient:
         except GithubException:
             pass  # label not present
 
-    async def close_issue(self, issue_number: int, comment: str | None = None) -> None:
-        """Close an issue, optionally leaving a comment explaining why."""
+    async def close_issue(
+        self, issue_number: int, comment: str | None = None, *, not_planned: bool = False,
+    ) -> None:
+        """Close an issue, optionally leaving a comment explaining why.
+        ``not_planned``: closed without being done (GitHub's grey mark)."""
         await self._fresh()
         issue = await self._run(self._repo.get_issue, issue_number)
         if comment:
             await self._run(issue.create_comment, comment)
-        await self._run(issue.edit, state="closed")
+        if not_planned:
+            await self._run(issue.edit, state="closed", state_reason="not_planned")
+        else:
+            await self._run(issue.edit, state="closed")
 
     # ── Branches ────────────────────────────────────────────────────────
 
@@ -398,6 +404,37 @@ class GitHubClient:
         await self._fresh()
         pr = await self._run(self._repo.get_pull, pr_number)
         await self._run(pr.edit, state="closed")
+
+    async def behind_by(self, head: str, base: str = "main") -> int:
+        """How many commits of `base` the branch `head` does not have."""
+        await self._fresh()
+        comparison = await self._run(self._repo.compare, base, head)
+        return int(comparison.behind_by)
+
+    async def update_pr_branch(self, pr_number: int, expected_head_sha: str) -> bool:
+        """GitHub's "Update branch": the base merged into the PR's branch, on
+        GitHub's side. False when they conflict (GitHub refuses, 422); the
+        new head shows up a few seconds later."""
+        await self._fresh()
+        pr = await self._run(self._repo.get_pull, pr_number)
+        try:
+            return bool(await self._run(pr.update_branch, expected_head_sha))
+        except GithubException as exc:
+            if exc.status == 422:
+                return False
+            raise
+
+    async def get_commit_brief(self, sha: str) -> dict:
+        """``{"parents", "committer", "message"}`` of one commit: who made a
+        head, and from what."""
+        await self._fresh()
+        commit = await self._run(self._repo.get_commit, sha)
+        committer = commit.committer
+        return {
+            "parents": [p.sha for p in commit.parents],
+            "committer": getattr(committer, "login", "") if committer else "",
+            "message": commit.commit.message or "",
+        }
 
     async def delete_branch(self, branch_name: str) -> None:
         """Delete a remote branch after merge."""

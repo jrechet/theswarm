@@ -54,6 +54,8 @@ def _no_dotenv_for_tests(monkeypatch):
     # DevOps D1: the suite declares no stack — a test that wants the watch
     # sets ``app.state.ops_watch`` to one with fake readers.
     monkeypatch.setenv("SWARM_STACK_FILE", "/nonexistent/theswarm.yaml")
+    # The merge watch reads GitHub every few minutes: never in the suite.
+    monkeypatch.setenv("SWARM_MERGE_WATCH_SECONDS", "0")
 
 
 @pytest.fixture(autouse=True)
