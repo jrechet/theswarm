@@ -28,9 +28,12 @@ class _Reads:
         return answer
 
 
-async def _settle():
+async def _settle(cache=None):
+    """Every read in flight has landed (or failed)."""
     for _ in range(5):
         await asyncio.sleep(0)
+    if cache is not None:
+        await asyncio.gather(*cache._inflight.values(), return_exceptions=True)
 
 
 async def test_fresh_costs_nothing():
@@ -45,7 +48,7 @@ async def test_stale_is_served_at_once_and_read_again_behind():
     await cache.get("k", reads, now=0)
 
     assert await cache.get("k", reads, now=30) == "a"  # nobody waits
-    await _settle()
+    await _settle(cache)
     assert await cache.get("k", reads, now=31) == "b"
     assert reads.count == 2
 
@@ -55,7 +58,7 @@ async def test_one_read_behind_however_many_ask():
     await cache.get("k", reads, now=0)
 
     await asyncio.gather(*(cache.get("k", reads, now=30) for _ in range(5)))
-    await _settle()
+    await _settle(cache)
 
     assert reads.count == 2
 
@@ -77,7 +80,7 @@ async def test_a_failed_refresh_keeps_serving_the_last_answer():
     cache, reads = _swr(), _Reads("a", RuntimeError("502"), "c")
     await cache.get("k", reads, now=0)
     assert await cache.get("k", reads, now=30) == "a"
-    await _settle()
+    await _settle(cache)
     assert await cache.get("k", reads, now=31) == "a"
 
 
@@ -92,7 +95,7 @@ async def test_a_hanging_read_is_bounded_and_lands_later():
     with pytest.raises(asyncio.TimeoutError):
         await cache.get("k", slow, now=0)
     gate.set()
-    await _settle()
+    await _settle(cache)
     assert await cache.get("k", slow, now=1) == "late"
 
 

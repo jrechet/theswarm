@@ -57,8 +57,7 @@ async def test_after_the_window_the_kept_answer_is_served_while_it_is_read_again
         first = await mod.load_pinned_issue(REPO, 85, now=100.0)
         client.get_issues = AsyncMock(return_value=[])
         stale = await mod.load_pinned_issue(REPO, 85, now=121.0)
-        for _ in range(5):
-            await asyncio.sleep(0)  # the background read lands
+        await asyncio.gather(*mod._KEPT._inflight.values())  # the background read lands
         fresh = await mod.load_pinned_issue(REPO, 85, now=122.0)
     finally:
         ctx.stop()
