@@ -7,6 +7,7 @@ seconds on concert-tour-app, on the rate limit's account.
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -48,14 +49,31 @@ async def test_a_second_read_within_the_window_costs_nothing():
     assert client.get_issues.await_count == 1
 
 
-async def test_after_the_window_the_issue_is_read_again():
+async def test_after_the_window_the_kept_answer_is_served_while_it_is_read_again():
+    """Stale-while-revalidate (2026-10-11): a page opened after the twenty
+    seconds waited for GitHub again, 1.5–2.4 s on prod."""
+    ctx, client = _github()
+    try:
+        first = await mod.load_pinned_issue(REPO, 85, now=100.0)
+        client.get_issues = AsyncMock(return_value=[])
+        stale = await mod.load_pinned_issue(REPO, 85, now=121.0)
+        await asyncio.gather(*mod._KEPT._inflight.values())  # the background read lands
+        fresh = await mod.load_pinned_issue(REPO, 85, now=122.0)
+    finally:
+        ctx.stop()
+    assert stale is first
+    assert client.get_issues.await_count == 1 and fresh.children == ()
+
+
+async def test_long_after_the_window_the_page_waits_for_a_fresh_read():
     ctx, client = _github()
     try:
         await mod.load_pinned_issue(REPO, 85, now=100.0)
-        await mod.load_pinned_issue(REPO, 85, now=121.0)
+        client.get_issues = AsyncMock(return_value=[])
+        late = await mod.load_pinned_issue(REPO, 85, now=100.0 + mod.keep_seconds() + 1)
     finally:
         ctx.stop()
-    assert client.get_issues.await_count == 2
+    assert late.children == ()
 
 
 async def test_another_issue_or_repository_is_its_own_entry():

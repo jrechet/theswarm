@@ -1498,8 +1498,15 @@ async def record_demo_video(state: AgentState) -> dict:
 
     except Exception as e:
         log.warning("QA: video recording failed: %s", e)
-        await recorder.close()
     finally:
+        # Closed on success too: only the failure path closed it, and every
+        # cycle's video lane left a Playwright driver and its Chromium alive
+        # in the container — 1.1 GB of its 2 GB on prod after three cycles
+        # (2026-10-11).
+        try:
+            await recorder.close()
+        except Exception as e:  # noqa: BLE001
+            log.warning("QA: closing the video's browser failed: %s", e)
         try:
             server_proc.send_signal(signal.SIGTERM)
             await asyncio.wait_for(server_proc.wait(), timeout=5)

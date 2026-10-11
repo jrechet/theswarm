@@ -111,3 +111,12 @@ class TestTheModels:
         app, store, record = rig
         await store.append(record.id, "AgentActivity", T, _act("TechLead", "progress", "Breaking down stories into tasks…"))
         assert 'data-testid="station-model"' not in await _theater(app, record.id)
+
+
+def test_a_finished_cycles_last_phase_stops_at_its_end():
+    """e73bf089784a finished at 07:54; at 17:00 its report phase read 546:58."""
+    from theswarm.presentation.web.routes.theater import steps_from_history
+
+    history = [{"phase": "qa", "ts": 1000.0}, {"phase": "po_evening", "ts": 1500.0}]
+    steps = steps_from_history(history, "completed", now=1560.0)
+    assert steps[-1]["time"] == "1:00"

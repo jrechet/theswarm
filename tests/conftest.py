@@ -48,6 +48,8 @@ def _no_dotenv_for_tests(monkeypatch):
         monkeypatch.setenv("SWARM_SKIP_DOTENV", "1")
     # The theater's pinned issue is kept 20 s in prod; a test wants every read.
     monkeypatch.setenv("SWARM_PINNED_CACHE_SECONDS", "0")
+    # …and the board's and the home's GitHub reads (routes/common.py).
+    monkeypatch.setenv("SWARM_BOARD_CACHE_SECONDS", "0")
     # No Claude call on a DemoReady a test publishes: a test that wants the
     # PO's summary builds the writer with a fake (tests/test_demo_summary.py).
     monkeypatch.setenv("SWARM_DEMO_SUMMARY", "0")

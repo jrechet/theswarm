@@ -98,7 +98,10 @@ class GitHubClient:
         token = os.environ.get("GITHUB_TOKEN", "")
         self._token = token
         self._gh = Github(token)
-        self._repo = self._gh.get_repo(self.repo_name)
+        # Lazy: no request until a method asks for something. Built eagerly,
+        # every client made a round trip to GitHub on the event loop — each
+        # page that made one stalled every request in flight (2026-10-11).
+        self._repo = self._gh.get_repo(self.repo_name, lazy=True)
         self._breaker = CircuitBreaker(
             name=f"github:{self.repo_name}",
             failure_threshold=5,
@@ -127,10 +130,7 @@ class GitHubClient:
         if token and token != self._token:
             self._token = token
             self._gh = Github(token)
-            loop = asyncio.get_running_loop()
-            self._repo = await loop.run_in_executor(
-                None, self._gh.get_repo, self.repo_name,
-            )
+            self._repo = self._gh.get_repo(self.repo_name, lazy=True)
 
     async def _run(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
         loop = asyncio.get_running_loop()
@@ -166,24 +166,22 @@ class GitHubClient:
                     out.append(issue)
                 return out
 
-            newest: list[Issue] = await self._run(newer)
-            return [_issue_to_dict(i) for i in newest if not _is_pull_request(i)]
-        issues: list[Issue] = await self._run(
-            lambda: list(self._repo.get_issues(**kwargs))
-        )
-        return [_issue_to_dict(i) for i in issues if not _is_pull_request(i)]
+            return await self._run(lambda: _issue_dicts(newer()))
+        return await self._run(lambda: _issue_dicts(self._repo.get_issues(**kwargs)))
 
     async def get_issue(self, number: int) -> dict | None:
         """Return one issue as a dict, or None if it does not exist."""
         await self._fresh()
+
+        def read() -> dict | None:
+            issue = self._repo.get_issue(number)  # lazy: the first attribute read fetches it
+            return None if _is_pull_request(issue) else _issue_to_dict(issue)
+
         try:
-            issue: Issue = await self._run(self._repo.get_issue, number)
+            return await self._run(read)
         except Exception:
             log.warning("get_issue(#%d) failed", number, exc_info=True)
             return None
-        if _is_pull_request(issue):
-            return None
-        return _issue_to_dict(issue)
 
     async def create_issue(
         self,
@@ -281,10 +279,9 @@ class GitHubClient:
 
     async def get_open_prs(self) -> list[dict]:
         await self._fresh()
-        prs: list[PullRequest] = await self._run(
-            lambda: list(self._repo.get_pulls(state="open"))
-        )
-        return [_pr_to_dict(p) for p in prs]
+        # `mergeable` is not in the listing: reading it fetches each PR, so the
+        # dicts are made in the worker thread, never on the event loop.
+        return await self._run(lambda: [_pr_to_dict(p) for p in self._repo.get_pulls(state="open")])
 
     async def get_open_pr_briefs(self) -> list[dict]:
         """Open PRs as number/title/body only: one listing call. The board
@@ -300,12 +297,11 @@ class GitHubClient:
         """One pull request as the dict `get_open_prs` returns, None if absent."""
         await self._fresh()
         try:
-            pr = await self._run(self._repo.get_pull, pr_number)
+            return await self._run(lambda: _pr_to_dict(self._repo.get_pull(pr_number)))
         except GithubException as exc:
             if _is_client_error(exc):
                 return None
             raise
-        return _pr_to_dict(pr)
 
     async def create_commit_status(
         self, sha: str, state: str, description: str,
@@ -428,13 +424,17 @@ class GitHubClient:
         """``{"parents", "committer", "message"}`` of one commit: who made a
         head, and from what."""
         await self._fresh()
-        commit = await self._run(self._repo.get_commit, sha)
-        committer = commit.committer
-        return {
-            "parents": [p.sha for p in commit.parents],
-            "committer": getattr(committer, "login", "") if committer else "",
-            "message": commit.commit.message or "",
-        }
+
+        def read() -> dict:
+            commit = self._repo.get_commit(sha)  # lazy: read in the worker thread
+            committer = commit.committer
+            return {
+                "parents": [p.sha for p in commit.parents],
+                "committer": getattr(committer, "login", "") if committer else "",
+                "message": commit.commit.message or "",
+            }
+
+        return await self._run(read)
 
     async def delete_branch(self, branch_name: str) -> None:
         """Delete a remote branch after merge."""
@@ -531,6 +531,17 @@ def _is_pull_request(issue: Issue) -> bool:
     (…/pull/N vs …/issues/N): the same listing then costs 1.2s.
     """
     return "/pull/" in (issue.html_url or "")
+
+
+# PyGithub 2 hands back lazy objects (`get_issue`, `get_pull`, `get_commit`)
+# and fetches them on the first attribute read; a PR's `mergeable` is never in
+# a listing. Read on the event loop, that is a blocking round trip to GitHub
+# that stalls every request the server is answering — 0.35–0.55 s per issue
+# on a theater or a feature page (asyncio's debug mode named
+# `GitHubClient.get_issue`, 2026-10-11). Every dict is made in the worker
+# thread `_run` uses.
+def _issue_dicts(issues) -> list[dict]:
+    return [_issue_to_dict(i) for i in issues if not _is_pull_request(i)]
 
 
 def _issue_to_dict(issue: Issue) -> dict:
