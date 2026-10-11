@@ -89,6 +89,18 @@ def _running(tracker, repo: str = REPO, cycle_id: str = "abc123abc123", issue: i
     return record
 
 
+def _queued(tracker, repo: str = REPO, cycle_id: str = "q1q1q1q1q1q1", issue: int | None = 215, minute: int = 1):
+    from theswarm.api import CycleRecord, CycleStatus
+
+    record = CycleRecord(
+        id=cycle_id, repo=repo, description=f"Play on issue #{issue}",
+        callback_url="", issue_number=issue, status=CycleStatus.QUEUED,
+        created_at=f"2026-10-06T11:2{minute}:00+00:00",
+    )
+    tracker._cycles[cycle_id] = record
+    return record
+
+
 def _report(rid: str = "rep-1", *, when: datetime | None = None, failed: int = 0) -> DemoReport:
     gates = [QualityGate(name="unit_tests", status=QualityStatus.PASS, detail="312 passed")]
     gates += [QualityGate(name=f"gate{i}", status=QualityStatus.FAIL) for i in range(failed)]
@@ -205,6 +217,42 @@ class TestTheHome:
         assert 'href="/swarm/cycles/abc123abc123"' in r.text
         assert "#85" in r.text and "Harden input validation" in r.text
         assert "since 11:19 UTC" in r.text
+
+    async def test_now_shows_the_running_cycle_and_the_line_behind_it(self, web, _isolate_tracker):
+        """The owner's six Plays of 2026-10-11: #265 ran on concert-tour-app with
+        #218, #217 and #215 behind it, and the home showed only "#215 queued"."""
+        client, app = web
+        _running(_isolate_tracker, cycle_id="run265run265", issue=265)
+        for i, issue in enumerate((218, 217, 215)):
+            _queued(_isolate_tracker, cycle_id=f"q{issue}q{issue}q{issue}"[:12], issue=issue, minute=i + 1)
+        r = await _home(client)
+        assert r.text.count('data-testid="now-cycle"') == 4
+        assert r.text.index("run265run265") < r.text.index("q218q218q218")
+        assert "starts after #265, running on this repository" in r.text
+        assert "2nd in line on this repository" in r.text and "3rd in line" in r.text
+
+    async def test_a_queued_cycle_with_nothing_on_its_repository_waits_for_a_slot(self, web, _isolate_tracker):
+        client, app = web
+        _queued(_isolate_tracker, repo="jrechet/espace-client", cycle_id="q497q497q497", issue=497)
+        r = await _home(client)
+        assert "waits for a free slot" in r.text
+
+    async def test_a_queued_cycles_theater_says_what_it_waits_for(self, web, _isolate_tracker):
+        client, app = web
+        _running(_isolate_tracker, cycle_id="run265run265", issue=265)
+        _queued(_isolate_tracker, cycle_id="q218q218q218", issue=218)
+        from theswarm.application.services.pinned_issue import PinnedIssue
+
+        with patch("theswarm.application.services.pinned_issue.load_pinned_issue",
+                   AsyncMock(return_value=PinnedIssue())):
+            r = await client.get("/cycles/q218q218q218", headers=HTML)
+        assert r.status_code == 200
+        assert 'data-testid="cycle-waits"' in r.text and "starts after #265" in r.text
+
+    async def test_the_running_cycle_holds_its_repository_not_the_newest_queued(self, _isolate_tracker):
+        _running(_isolate_tracker, cycle_id="run265run265", issue=265)
+        _queued(_isolate_tracker, cycle_id="q215q215q215", issue=215, minute=5)
+        assert shell_mod.running_repos()[REPO].id == "run265run265"
 
     async def test_now_is_honest_when_nothing_runs(self, web):
         client, app = web

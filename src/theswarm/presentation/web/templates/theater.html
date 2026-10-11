@@ -31,6 +31,7 @@
       {% else %}{{ record.description or "The daily cycle" }}{% endif %}
     </h1>
     <div class="text-[13px] text-muted flex flex-wrap gap-x-3.5 gap-y-1.5">
+      {% if waits %}<span data-testid="cycle-waits" class="text-ink">Queued — {{ waits }}</span>{% endif %}
       {% if started %}<span>Started {{ started }}</span>{% endif %}
       {% if dev_iterations %}<span>Dev iteration <span class="font-mono text-ink">{{ dev_iterations }}</span></span>{% endif %}
       {% if spent %}<span>Spent <span class="font-mono text-ink">{{ spent }}</span></span>{% endif %}

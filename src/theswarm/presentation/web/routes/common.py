@@ -86,14 +86,8 @@ async def _ensure_project(state, owner: str, name: str) -> str:
 
 
 def _running_for_repo(full_name: str) -> object | None:
-    from theswarm.api import CycleStatus, get_cycle_tracker
-
-    for record in get_cycle_tracker().list_recent(limit=50):
-        if record.repo == full_name and record.status in (
-            CycleStatus.QUEUED, CycleStatus.RUNNING,
-        ):
-            return record
-    return None
+    """The cycle that holds this repository: the one running, else the next queued."""
+    return _running_repos_safe().get(full_name)
 
 
 async def _latest_demo(state, full_name: str) -> dict | None:
@@ -266,11 +260,14 @@ async def _evals_trend(state, repo: str) -> dict:
         return evals.trend([])
 
 
-async def start_targeted_cycle(state, owner: str, name: str, issue_number: int, description: str):
+async def start_targeted_cycle(state, owner: str, name: str, issue_number: int | None, description: str,
+                               *, cycle_id: str | None = None, queued_at: str | None = None):
     """What ▶ Play does: a tracker record and a cycle pinned to the issue.
 
     The webhook doors (V2 M8) start cycles through here too, so a label and
-    a click are the same thing to the tracker, the theater and the lock.
+    a click are the same thing to the tracker, the theater and the lock. A
+    restart starts the cycles that were waiting through here as well, under
+    their own id and queue time (`server._relaunch_queue`).
     """
     from theswarm.api import CycleRequest, get_cycle_tracker, run_api_cycle
 
@@ -281,6 +278,7 @@ async def start_targeted_cycle(state, owner: str, name: str, issue_number: int, 
     tracker = get_cycle_tracker()
     record = tracker.create(
         CycleRequest(repo=full_name, issue_number=issue_number, description=description),
+        cycle_id=cycle_id, created_at=queued_at,
     )
     task = asyncio.create_task(
         run_api_cycle(
@@ -298,5 +296,5 @@ async def start_targeted_cycle(state, owner: str, name: str, issue_number: int, 
         ),
     )
     tracker.set_task(record.id, task)
-    log.info("V2: %s #%d on %s → cycle %s", description, issue_number, full_name, record.id)
+    log.info("V2: %s #%s on %s → cycle %s", description, issue_number, full_name, record.id)
     return record

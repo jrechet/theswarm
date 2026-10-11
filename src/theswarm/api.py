@@ -68,8 +68,11 @@ class CycleTracker:
         # are written down as cancelled (see _run_api_cycle).
         self._cancel_requested: set[str] = set()
 
-    def create(self, req: CycleRequest) -> CycleRecord:
-        cycle_id = uuid.uuid4().hex[:12]
+    def create(self, req: CycleRequest, *, cycle_id: str | None = None,
+               created_at: str | None = None) -> CycleRecord:
+        """A new record; `cycle_id`/`created_at` keep a queued cycle's own when
+        a restart starts it again (its theater link still works)."""
+        cycle_id = cycle_id or uuid.uuid4().hex[:12]
         record = CycleRecord(
             id=cycle_id,
             repo=req.repo,
@@ -77,7 +80,7 @@ class CycleTracker:
             callback_url=req.callback_url,
             issue_number=req.issue_number,
             status=CycleStatus.QUEUED,
-            created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            created_at=created_at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
         self._cycles[cycle_id] = record
         # Cap at 100 records
@@ -133,6 +136,24 @@ def get_cycle_tracker() -> CycleTracker:
 
 _PREFLIGHT = None
 _AGENT_SETTINGS = None
+_QUEUE = None
+
+
+def set_cycle_queue(store) -> None:
+    """Where a cycle waiting its turn is written down, so a restart keeps it
+    (`SQLiteCycleQueue`, the server sets it; None keeps the queue in memory)."""
+    global _QUEUE
+    _QUEUE = store
+
+
+async def _queue_note(action: str, *args) -> None:
+    """Write the queue; a failure is a log line, never the cycle's end."""
+    if _QUEUE is None:
+        return
+    try:
+        await getattr(_QUEUE, action)(*args)
+    except Exception:  # noqa: BLE001
+        log.warning("The cycle queue could not %s %s", action, args[:1], exc_info=True)
 
 
 def set_agent_settings(service) -> None:
@@ -744,6 +765,7 @@ async def run_api_cycle(cycle_id: str, repo: str, *args, **kwargs) -> None:
     tracker = get_cycle_tracker()
     lock = repo_lock(repo)
     slot = cycle_slot()
+    waits = lock.locked() or slot.locked()
     if lock.locked():
         log.info("Cycle %s queued: another cycle is running on %s", cycle_id, repo)
     elif slot.locked():
@@ -751,13 +773,27 @@ async def run_api_cycle(cycle_id: str, repo: str, *args, **kwargs) -> None:
             "Cycle %s queued: %d cycle(s) already running (SWARM_MAX_CONCURRENT_CYCLES)",
             cycle_id, max_concurrent_cycles(),
         )
+    # Written down while it waits, so a restart starts it again
+    # (`server._relaunch_queue`); a continuation is the resumer's, not the queue's.
+    kept = waits and not kwargs.get("resume_cycle_id")
+    if kept:
+        record = tracker.get(cycle_id)
+        await _queue_note(
+            "add", cycle_id, repo, kwargs.get("issue_number"),
+            (record.description if record else "") or (args[0] if args else ""),
+            (record.created_at if record else "") or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        )
     try:
         async with lock:
             async with slot:
+                # Always, not only when this call wrote it: a cycle a restart
+                # started again may start at once, and its row is the old one.
+                await _queue_note("remove", cycle_id)
                 await _run_api_cycle(cycle_id, repo, *args, **kwargs)
     except asyncio.CancelledError:
         if not tracker.cancel_requested(cycle_id):
-            raise
+            raise  # a shutdown: a waiting cycle stays written down
+        await _queue_note("remove", cycle_id)
         tracker.update_status(
             cycle_id, CycleStatus.CANCELLED,
             completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),

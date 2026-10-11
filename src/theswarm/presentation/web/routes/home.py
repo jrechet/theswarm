@@ -100,23 +100,32 @@ async def home(request: Request) -> HTMLResponse:
 
 
 def _now_cards(state, running: dict[str, object]) -> list[dict]:
-    """The queued and running cycles for the home's Now section."""
+    """Every queued and running cycle for the home's Now section: the running
+    ones first, then each queued one with what it waits for — one cycle per
+    repository at a time, `SWARM_MAX_CONCURRENT_CYCLES` in all. It showed one
+    card per repository, the newest: the owner's four Plays on
+    concert-tour-app read "queued" with #265 running unseen (2026-10-11)."""
+    from theswarm.presentation.web.shell import live_cycles, waiting_words
+
     base = state.base_path
+    try:
+        live = live_cycles()
+    except Exception:  # noqa: BLE001 — the home stays
+        log.exception("home: reading the cycle tracker failed")
+        live = list(running.values())
     cards = []
-    for repo, record in running.items():
+    for record in live:
         title = (record.description or "").strip()
         if not title:
             title = f"issue #{record.issue_number}" if record.issue_number else "the daily cycle"
         if len(title) > 90:
             title = title[:89].rstrip() + "…"
         cards.append({
-            "id": record.id, "repo": repo, "issue_number": record.issue_number,
-            "title": title, "status": record.status.value,
+            "id": record.id, "repo": record.repo, "issue_number": record.issue_number,
+            "title": title, "status": record.status.value, "waits": waiting_words(record, live),
             "since": _clock(record.started_at or record.created_at),
-            "sort": record.created_at,
             "href": f"{base}/cycles/{record.id}",
         })
-    cards.sort(key=lambda c: c["sort"], reverse=True)
     return cards
 
 

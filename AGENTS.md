@@ -440,6 +440,20 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   API wrapper, the Mattermost gateway and the autonomous loop; a second
   cycle shows `queued`. Two cycles on one repo share one workspace and erase
   each other's branches (`16f3b8af2cca` vs `2878898cc504`: two commits, no PR).
+  **The home shows the line** (2026-10-11): the owner played six features at
+  once — #498 and #265 ran, four waited — and *Now* showed one card per
+  repository, the newest, "#215 queued", as if nothing ran.
+  `shell.running_repos` holds a repository by its *running* cycle (the
+  board too), `shell.live_cycles` lists every live one and
+  `shell.waiting_words` says what a queued one waits for ("starts after
+  #265, running on this repository", "2nd in line", a free slot) on the
+  home and in its theater. **And the line survives a restart**: a waiting
+  cycle lived in the tracker's memory only, and a deploy dropped it without
+  a word. It is written down while it waits (`cycle_queue`, v040,
+  `cycle_queue_repo.SQLiteCycleQueue`, `api.set_cycle_queue`), taken off
+  when it starts or a person cancels it, kept when a shutdown cancels it,
+  and started again at boot (`server._relaunch_queue`, last, after the
+  continuations) under its own id and queue time.
 - **Cancel is persisted** (`CycleCancelled` → cycles table). The resumer
   reads `list_running()` at boot; before #96 a cancelled cycle came back
   after every deploy, on top of whatever had replaced it. **Only a cancel a
