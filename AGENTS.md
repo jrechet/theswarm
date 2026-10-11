@@ -236,10 +236,14 @@ and aliases were deleted on 2026-10-07):
   0 in the suite, forgotten after the composer and a Play) and the home's
   repository list (`common.user_repositories`, a minute fresh) go through
   it: the board 2.9 s → 3 ms after its first read, a feature page 25 s
-  later 2.6 s → 0.34 s (local, against GitHub). **A `GitHubClient` costs
-  nothing to build** (`get_repo(…, lazy=True)`): it made a round trip on
-  the event loop every time a page made one, stalling every request in
-  flight. Reports have an index by cycle (v039): each lookup read every
+  later 2.6 s → 0.34 s (local, against GitHub). **GitHub is never read on
+  the event loop**: PyGithub 2 hands back lazy objects (`get_issue`,
+  `get_pull`, `get_commit`) and fetches them on the first attribute read,
+  and a PR's `mergeable` is never in a listing — `GitHubClient` read them
+  on the loop and stalled every request in flight for a round trip, 0.35–0.55 s
+  per issue (asyncio's debug mode named `get_issue`); every dict is now
+  made in `_run`'s worker thread (`tests/tools/test_github_off_the_loop.py`),
+  and a client costs nothing to build (`get_repo(…, lazy=True)`). Reports have an index by cycle (v039): each lookup read every
   report's JSON, 116–275 ms under a cycle, six per project page. A
   finished cycle's last phase stops counting at its end (its report phase
   read 546 minutes nine hours later).
