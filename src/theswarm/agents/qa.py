@@ -101,6 +101,12 @@ def _pick_base_port(preferred: int = E2E_PORT, avoid: frozenset[int] = frozenset
     return base
 
 
+def release_port(workspace: str | None) -> None:
+    """A finished cycle's clone gives its block back (a clone per cycle, when
+    several run on one repository: the blocks would pile up)."""
+    _BASE_PORTS.pop(os.path.realpath(workspace) if workspace else "", None)
+
+
 def e2e_port(workspace: str | None = None) -> int:
     """The base port of a workspace's demo servers: E2E, +1 screenshots, +2 video."""
     key = os.path.realpath(workspace) if workspace else ""

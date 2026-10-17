@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from theswarm import api as api_mod
 from theswarm.api import CycleRequest, CycleStatus, get_cycle_tracker, run_api_cycle
-from theswarm.cycle import repo_lock
+from theswarm.cycle import cycle_gate
 
 
 class _Harness:
@@ -131,22 +131,20 @@ class TestDifferentRepositories:
             await asyncio.gather(ta, tb)
 
 
-class TestTheLockItself:
-    async def test_one_lock_per_repository(self):
-        assert repo_lock("o/r") is repo_lock("o/r")
+class TestTheGateItself:
+    async def test_one_gate_per_loop(self):
+        assert cycle_gate() is cycle_gate()
 
-    async def test_repositories_do_not_share_a_lock(self):
-        assert repo_lock("o/one") is not repo_lock("o/two")
-
-    async def test_a_lock_from_a_dead_loop_is_replaced(self):
+    async def test_a_gate_from_a_dead_loop_is_replaced(self):
         """pytest gives every test its own loop; a server restart could too."""
-        stale = asyncio.Lock()
-        from theswarm import cycle as cycle_mod
-        cycle_mod._repo_locks["o/stale"] = (asyncio.new_event_loop(), stale)
+        from theswarm import cycle_gate as gate_mod
 
-        assert repo_lock("o/stale") is not stale
+        stale = gate_mod.CycleGate()
+        gate_mod._GATES.clear()
+        gate_mod._GATES[-1] = stale
+        assert cycle_gate() is not stale
 
-    async def test_the_lock_is_released_when_the_body_raises(self):
+    async def test_the_place_is_released_when_the_body_raises(self):
         async def boom(*_a, **_kw):
             raise RuntimeError("cycle blew up")
 
@@ -157,4 +155,4 @@ class TestTheLockItself:
             except RuntimeError:
                 pass
 
-        assert not repo_lock("o/r").locked()
+        assert not cycle_gate().busy("o/r")

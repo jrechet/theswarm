@@ -830,6 +830,18 @@ async def start_server(
     else:
         log.info("GitHub webhooks: off — set SWARM_WEBHOOK_SECRET and a repository webhook to enable")
 
+    # Settings → Cycles: the owner's numbers, before any cycle — a
+    # continuation's clone depends on its repository's number too.
+    cycle_limits = getattr(app.state, "cycle_limits", None)
+    if cycle_limits is not None:
+        try:
+            await cycle_limits.refresh()
+            from theswarm.cycle_gate import set_cycle_limits
+
+            set_cycle_limits(cycle_limits)
+        except Exception:  # noqa: BLE001 — the environment's numbers, as before
+            log.exception("Startup: reading the cycle limits failed")
+
     # A deploy used to throw away whatever a running cycle had achieved.
     # Continue it from the last phase that completed, under the guards in
     # cycle_resumer (one automatic resume per cycle, a few per boot).

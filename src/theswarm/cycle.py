@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import logging
 from datetime import datetime
@@ -28,59 +27,21 @@ log = logging.getLogger(__name__)
 MAX_AUTONOMOUS_CYCLES = 10  # safety cap for autonomous mode
 MAX_DAILY_STORIES = 3  # imported by PO but defined here for reference
 
-# One cycle per repository at a time, whatever started it — the API, the
-# Mattermost gateway, the autonomous loop or the resumer after a deploy.
-# The workspace is one directory per repo, and a cycle treats it as its own:
-# `git reset --hard`, `clean -fd`, `checkout -B`, and rm -rf at the end.
-_repo_locks: dict[str, tuple[asyncio.AbstractEventLoop, asyncio.Lock]] = {}
-
-
-# How many cycles may run at once, all repositories together (V2, M5).
-# One per repo is a correctness rule (the workspace); this one is about
-# the box and the one shared subscription window: 1 by default, 2 in prod
-# since 2026-10-11 (docker-compose.yml, a 4 GB container).
-DEFAULT_MAX_CONCURRENT_CYCLES = 1
-_cycle_slots: dict[str, tuple[asyncio.AbstractEventLoop, int, asyncio.Semaphore]] = {}
-
-
-def max_concurrent_cycles() -> int:
-    raw = os.environ.get("SWARM_MAX_CONCURRENT_CYCLES", "").strip()
-    try:
-        return max(1, int(raw)) if raw else DEFAULT_MAX_CONCURRENT_CYCLES
-    except ValueError:
-        return DEFAULT_MAX_CONCURRENT_CYCLES
-
-
-def cycle_slot() -> asyncio.Semaphore:
-    """The semaphore every cycle holds while it runs, sized by
-    SWARM_MAX_CONCURRENT_CYCLES. Per loop, like `repo_lock`; rebuilt when
-    the configured size changes."""
-    loop = asyncio.get_running_loop()
-    size = max_concurrent_cycles()
-    entry = _cycle_slots.get("global")
-    if entry is None or entry[0] is not loop or entry[1] != size:
-        entry = _cycle_slots["global"] = (loop, size, asyncio.Semaphore(size))
-    return entry[2]
+# Who may start — the cycles in all, per repository, one per feature, a
+# cycle without a feature alone — is one gate (`cycle_gate.py`), held by the
+# API wrapper, the Mattermost gateway and the resumer's continuations alike;
+# the owner sets the numbers in Settings → Cycles.
+from theswarm.cycle_gate import (  # noqa: E402 — re-exported: callers import them from here
+    DEFAULT_MAX_CONCURRENT_CYCLES,
+    cycle_gate,
+    max_concurrent_cycles,
+    repo_max_cycles,
+)
 
 
 def any_cycle_running() -> bool:
-    """True while a cycle holds its repository's lock on this loop."""
-    loop = asyncio.get_running_loop()
-    return any(lock.locked() for owner, lock in _repo_locks.values() if owner is loop)
-
-
-def repo_lock(repo: str) -> asyncio.Lock:
-    """The lock every cycle on `repo` must hold while it runs.
-
-    Call it from a coroutine. An asyncio.Lock binds to the loop that first
-    waits on it, so a lock left over from a loop that no longer runs is
-    replaced rather than reused — nothing on a dead loop can be holding it.
-    """
-    loop = asyncio.get_running_loop()
-    entry = _repo_locks.get(repo)
-    if entry is None or entry[0] is not loop:
-        entry = _repo_locks[repo] = (loop, asyncio.Lock())
-    return entry[1]
+    """True while some cycle runs on this loop."""
+    return cycle_gate().busy()
 
 
 # Per-phase hard timeouts (seconds). Beyond this we abort the phase rather
@@ -464,8 +425,10 @@ async def run_daily_cycle(
             await _requeue_unfinished(config)
         # Cleanup workspace even on failure
         if config.is_real_mode:
+            from theswarm.agents.qa import release_port
             from theswarm.tools.git import cleanup_workspace
             await cleanup_workspace(config.workspace_dir)
+            release_port(config.workspace_dir)
 
 
 async def run_dev_only(config: CycleConfig) -> dict:
@@ -614,7 +577,8 @@ async def run_autonomous(
             print(f"Remaining work: {status}")
 
         try:
-            async with repo_lock(config.github_repo):
+            # The autonomous loop's cycles have no feature: each runs alone on its repository.
+            async with cycle_gate().hold(f"auto-{cycle_num}", config.github_repo, None):
                 result = await run_daily_cycle(config, on_progress=on_progress)
             cycle_results.append(result)
             total_cost += result.get("cost_usd", 0.0)

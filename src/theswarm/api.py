@@ -529,6 +529,14 @@ async def _run_api_cycle(
             github_repo=repo, project_id=project_id or repo,
             target_issue=issue_number,
         )
+        # A clone of its own when the owner lets several cycles run on this
+        # repository (Settings → Cycles); keyed by the graph thread, so a
+        # continuation finds its origin's tree.
+        from theswarm.cycle_gate import cycle_workspace
+
+        cycle_config.workspace_dir = cycle_workspace(
+            cycle_config.workspace_dir, repo, resume_cycle_id or cycle_id,
+        )
 
         # Populate codenames for persona rendering. Cheap DB read; skipped
         # cleanly if the service is unavailable.
@@ -760,18 +768,16 @@ async def run_api_cycle(cycle_id: str, repo: str, *args, **kwargs) -> None:
     Cancelling a waiting cycle is honoured immediately: nothing has started,
     so there is nothing to persist beyond the status.
     """
-    from theswarm.cycle import cycle_slot, max_concurrent_cycles, repo_lock
+    from theswarm.cycle import cycle_gate, max_concurrent_cycles, repo_max_cycles
 
     tracker = get_cycle_tracker()
-    lock = repo_lock(repo)
-    slot = cycle_slot()
-    waits = lock.locked() or slot.locked()
-    if lock.locked():
-        log.info("Cycle %s queued: another cycle is running on %s", cycle_id, repo)
-    elif slot.locked():
+    gate = cycle_gate()
+    issue = kwargs.get("issue_number")
+    waits = not gate.fits_now(repo, issue)
+    if waits:
         log.info(
-            "Cycle %s queued: %d cycle(s) already running (SWARM_MAX_CONCURRENT_CYCLES)",
-            cycle_id, max_concurrent_cycles(),
+            "Cycle %s queued on %s (%d running there, %d at most; %d cycles at once in all)",
+            cycle_id, repo, len(gate.running_on(repo)), repo_max_cycles(repo), max_concurrent_cycles(),
         )
     # Written down while it waits, so a restart starts it again
     # (`server._relaunch_queue`); a continuation is the resumer's, not the queue's.
@@ -779,17 +785,16 @@ async def run_api_cycle(cycle_id: str, repo: str, *args, **kwargs) -> None:
     if kept:
         record = tracker.get(cycle_id)
         await _queue_note(
-            "add", cycle_id, repo, kwargs.get("issue_number"),
+            "add", cycle_id, repo, issue,
             (record.description if record else "") or (args[0] if args else ""),
             (record.created_at if record else "") or datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
     try:
-        async with lock:
-            async with slot:
-                # Always, not only when this call wrote it: a cycle a restart
-                # started again may start at once, and its row is the old one.
-                await _queue_note("remove", cycle_id)
-                await _run_api_cycle(cycle_id, repo, *args, **kwargs)
+        async with gate.hold(cycle_id, repo, issue):
+            # Always, not only when this call wrote it: a cycle a restart
+            # started again may start at once, and its row is the old one.
+            await _queue_note("remove", cycle_id)
+            await _run_api_cycle(cycle_id, repo, *args, **kwargs)
     except asyncio.CancelledError:
         if not tracker.cancel_requested(cycle_id):
             raise  # a shutdown: a waiting cycle stays written down

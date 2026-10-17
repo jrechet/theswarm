@@ -19,7 +19,8 @@ services:
       # faire tourner 2 flux en même temps ?" — a Play on theswarm#317 waited
       # behind espace-client#496 the day before. Each QA has its own ports
       # (`qa.e2e_port(workspace)`); both cycles draw on the one subscription
-      # window. 1 is the way back.
+      # window. 1 is the way back. The owner's number in Settings → Cycles
+      # (and each project's) overrides this default.
       - SWARM_MAX_CONCURRENT_CYCLES=2
       # V2 runtime: Claude calls go through the Agent SDK (its bundled
       # Claude Code binary, the subscription identity of the mounted

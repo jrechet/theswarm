@@ -286,9 +286,8 @@ class TestTheWatch:
 
     async def test_a_repository_a_cycle_runs_on_is_left_alone(self):
         github = _GitHub([_pr()], statuses={"h1": APPROVED})
-        lock = cycle.repo_lock("jrechet/espace-client")
 
-        async with lock:
+        async with cycle.cycle_gate().hold("c1", "jrechet/espace-client", 496):
             [sweep] = await _watch(github, "jrechet/espace-client").sweep()
 
         assert sweep.skipped and github.merged == []
@@ -313,7 +312,7 @@ class TestTheWatch:
     async def test_its_own_repository_waits_while_any_cycle_runs(self):
         github = _GitHub([_pr(321, 317, head_sha="s1")], statuses={"s1": APPROVED})
 
-        async with cycle.repo_lock("jrechet/concert-tour-app"):
+        async with cycle.cycle_gate().hold("c2", "jrechet/concert-tour-app", 601):
             [sweep] = await _watch(github, "jrechet/theswarm").sweep()
 
         assert sweep.skipped and github.merged == []

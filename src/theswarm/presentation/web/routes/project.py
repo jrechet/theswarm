@@ -229,13 +229,14 @@ async def _delivered(state, full_name: str, base: str, limit: int = 6) -> list[d
 
 def _issue_row(issue: dict, status: str, running, urls: dict) -> dict:
     number = issue.get("number")
-    building = bool(running is not None and getattr(running, "issue_number", None) == number)
+    cycle = next((r for r in common._as_list(running) if getattr(r, "issue_number", None) == number), None)
+    building = cycle is not None
     return {
         "number": number, "title": issue.get("title", ""),
         "href": f"{urls['feature']}{number}",
         "play_url": f"{urls['play']}{number}/play",
         "building": building,
-        "cycle_id": getattr(running, "id", "") if building else "",
+        "cycle_id": getattr(cycle, "id", "") if building else "",
         "stalled": status == "stalled",
         "fresh": False,
     }
@@ -268,12 +269,13 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
         log.exception("project: listing issues for %s failed", full_name)
         issues_error = str(exc)[:160]
 
-    running = common._running_for_repo(full_name)
+    running_all = common._running_records(full_name)
+    running = running_all[0] if running_all else None
     by_key: dict[str, list[dict]] = {key: [] for key, _, _ in COLUMNS}
     stalled: list[dict] = []
     for issue in issues:
-        status = common._board_status(issue, running, prs)
-        row = _issue_row(issue, status, running, urls)
+        status = common._board_status(issue, running_all, prs)
+        row = _issue_row(issue, status, running_all, urls)
         row["fresh"] = bool(new) and issue.get("number") == new
         if status == "stalled":
             stalled.append(row)
@@ -415,8 +417,8 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
     if pinned.issue is None:
         raise HTTPException(status_code=404, detail=f"No such feature: #{number}")
     issue = pinned.issue
-    running = common._running_for_repo(full_name)
-    building = bool(running is not None and getattr(running, "issue_number", None) == number)
+    running = next((r for r in common._running_records(full_name) if getattr(r, "issue_number", None) == number), None)
+    building = running is not None
     if member_view:
         return state.templates.TemplateResponse("feature_member.html", await _member_feature(
             state, customer, project, urls, number, issue, pinned, running if building else None, actor, as_member,
