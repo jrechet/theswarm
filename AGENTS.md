@@ -436,10 +436,31 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
 - `static/v2/app.css` is generated: never commit it. It slipped in twice —
   the `.gitignore` pattern had no leading `**/`, so a mid-path `/` anchored it
   to the repo root and `git add -A` kept re-adding the file.
-- **One cycle per repository at a time** — `cycle.repo_lock`, held by the
-  API wrapper, the Mattermost gateway and the autonomous loop; a second
-  cycle shows `queued`. Two cycles on one repo share one workspace and erase
-  each other's branches (`16f3b8af2cca` vs `2878898cc504`: two commits, no PR).
+- **Who may start is one gate** (`cycle_gate.py`, 2026-10-13 — the owner:
+  "le nombre de cycles max et par projet doivent être configurables via
+  l'interface"), held by the API wrapper, the Mattermost gateway, the
+  autonomous loop and the resumer's continuations alike. Four rules, the
+  oldest arrival first: at most `max_concurrent_cycles()` in all, at most
+  `repo_max_cycles(repo)` per repository (1 by default), **never two cycles
+  on one feature** (the same pinned issue), and **a cycle without a feature
+  runs alone** on its repository (it picks from the whole backlog); a cycle
+  never passes an older one its repository holds back. The owner sets the
+  numbers in **Settings → Cycles** (`/settings/cycles`, owner only;
+  `cycle_limits`, v041, `CycleLimitsService` — no row is the default: the
+  environment's `SWARM_MAX_CONCURRENT_CYCLES`, one per repository); a save
+  lets in at once whoever fits now. **Above one on a repository each cycle
+  works in a clone of its own** (`cycle_workspace`: `<repo>@<thread id>`,
+  the thread so a continuation finds its origin's tree) — one directory per
+  repository was why a repository ran one cycle at a time: a cycle resets,
+  cleans and deletes it as if it were alone, and two erased each other's
+  branches (`16f3b8af2cca` vs `2878898cc504`: two commits, no PR). A clone,
+  not a worktree: every cycle already cloned and deleted its workspace, and
+  a branch lives in one worktree only, while everything assumes the
+  workspace is on `main`. What a clone learns (the CLI timeout floor) is its
+  repository's (`floor_key`); its QA ports go back when it ends
+  (`qa.release_port`). The board marks every running cycle's feature as
+  building; the merge watch sweeps a repository only when nothing runs
+  there (`CycleGate.try_hold_alone`).
   **The home shows the line** (2026-10-11): the owner played six features at
   once — #498 and #265 ran, four waited — and *Now* showed one card per
   repository, the newest, "#215 queued", as if nothing ran.

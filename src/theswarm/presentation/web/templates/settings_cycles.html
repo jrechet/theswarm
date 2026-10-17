@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block title %}Settings — Cycles{% endblock %}
+{% block crumbs %}
+  <a href="{{ base }}/settings/customers" class="text-muted hover:text-ink">Settings</a>
+  <span class="text-line-strong">/</span>
+  <span class="text-ink font-medium">Cycles</span>
+{% endblock %}
+{% block content %}
+<div class="flex flex-col gap-6" data-testid="settings-cycles">
+  <nav class="flex items-center gap-1 text-[13px]" aria-label="Settings sections">
+    <a href="{{ base }}/settings/customers" class="h-8 inline-flex items-center px-3 rounded-md text-muted hover:text-ink hover:bg-raised">Customers</a>
+    <a href="{{ base }}/settings/agents" class="h-8 inline-flex items-center px-3 rounded-md text-muted hover:text-ink hover:bg-raised">Agents</a>
+    <a href="{{ base }}/settings/cycles" aria-current="page" class="h-8 inline-flex items-center px-3 rounded-md bg-raised text-ink font-medium">Cycles</a>
+    <a href="{{ base }}/settings/instance" class="h-8 inline-flex items-center px-3 rounded-md text-muted hover:text-ink hover:bg-raised">Instance</a>
+  </nav>
+  <div class="flex flex-col gap-0.5">
+    <h1 class="m-0 text-[20px] font-semibold tracking-tight">Cycles</h1>
+    <span class="text-[13px] text-muted max-w-[72ch]">How many cycles run at once. Every cycle draws on the one Claude subscription: two at once spend it twice as fast. Above one on a project, each cycle works in a clone of its own; two cycles never build the same feature, and a cycle without a feature (the daily backlog) runs alone on its project. A change applies at once — a cycle waiting that now fits starts.</span>
+  </div>
+
+  {% if saved %}<p class="m-0 text-[13px] text-ok border border-ok/40 bg-ok-wash rounded-[10px] px-4 py-3" data-testid="cycles-saved" role="status">Saved.</p>{% endif %}
+  {% if error %}<p class="m-0 text-[13px] text-bad border border-bad/40 bg-bad-wash rounded-[10px] px-4 py-3" data-testid="cycles-error" role="alert">{{ error }}</p>{% endif %}
+  {% if not available %}<p class="m-0 text-[13px] text-muted border border-dashed border-line-strong rounded-[10px] px-4 py-3">Cycle limits need the database: {{ in_all }} at once, one per project.</p>{% endif %}
+
+  <form method="post" action="{{ base }}/settings/cycles" class="flex flex-col gap-3" data-testid="cycles-form">
+    <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5" data-testid="cycles-in-all">
+        <div class="flex flex-col gap-0.5 flex-[1_1_300px] min-w-0">
+          <span class="font-medium text-[14px]">In all</span>
+          <span class="text-[12px] text-muted">Cycles at once, every project together. The container is sized for about two (4 GB); {{ in_all_default }} is the instance's default.</span>
+          <span class="text-[12px] text-faint">{{ running_total }} running now</span>
+        </div>
+        <label class="flex flex-col gap-1 text-[12px] text-muted">At once
+          <input type="number" name="in-all" min="1" max="{{ max_in_all }}" value="{{ in_all }}" required
+                 class="h-8 w-20 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink font-mono" data-testid="in-all">
+        </label>
+      </div>
+      {% for r in rows %}
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 border-t border-line" data-testid="cycles-project" data-repo="{{ r.repo }}">
+        <div class="flex flex-col gap-0.5 flex-[1_1_300px] min-w-0">
+          <span class="font-medium text-[14px] font-mono">{{ r.repo }}</span>
+          <span class="text-[12px] text-faint">{{ r.running }} running now</span>
+        </div>
+        <label class="flex flex-col gap-1 text-[12px] text-muted">At once on this project
+          <input type="number" name="repo:{{ r.repo }}" min="1" max="{{ max_per_repo }}" value="{{ r.max }}" required
+                 class="h-8 w-20 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink font-mono" data-testid="repo-max">
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="flex justify-end">{{ ui.btn('Save', kind='primary', type='submit', testid='cycles-save') }}</div>
+  </form>
+</div>
+{% endblock %}

@@ -251,8 +251,17 @@ async def prime_repo_floors(store: object) -> None:
         log.info("Loaded %d learned CLI timeout floor(s)", len(floors))
 
 
+def _floor_key(workdir: str | None) -> str:
+    from theswarm.cycle_gate import floor_key
+
+    return floor_key(workdir or "")
+
+
 def _remember_floor(workdir: str, floor: int) -> None:
     """Raise the in-process floor and, best effort, the stored one."""
+    from theswarm.cycle_gate import floor_key
+
+    workdir = floor_key(workdir)  # one cycle's clone learns for its repository
     _REPO_FLOORS[workdir] = max(_REPO_FLOORS.get(workdir, 0), floor)
     store = _FLOOR_STORE
     if store is None:
@@ -781,7 +790,7 @@ class ClaudeCLI:
         return max(
             timeout or self.timeout,
             self._timeout_floor,
-            _REPO_FLOORS.get(workdir or "", 0),
+            _REPO_FLOORS.get(_floor_key(workdir), 0),
         )
 
     def _resolve_model(self) -> str:

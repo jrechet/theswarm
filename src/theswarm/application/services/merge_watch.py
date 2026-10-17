@@ -91,14 +91,18 @@ class MergeWatch:
         from theswarm import cycle
         from theswarm.agents.techlead import SELF_REPO
 
-        lock = cycle.repo_lock(repo)
-        if lock.locked():
+        gate = cycle.cycle_gate()
+        if gate.busy(repo):
             return Sweep(repo, skipped="a cycle is running on it")
-        if repo == SELF_REPO and cycle.any_cycle_running():
+        if repo == SELF_REPO and gate.busy():
             return Sweep(repo, skipped="a cycle is running, and a merge here redeploys")
-        async with lock:  # a cycle that starts meanwhile waits a few seconds
+        if not gate.try_hold_alone(repo):  # a cycle that starts meanwhile waits a few seconds
+            return Sweep(repo, skipped="a cycle is about to start on it")
+        try:
             github = await asyncio.to_thread(self._client_for, repo)
             outcome = await _sweep(github, repo, self_repo=repo == SELF_REPO)
+        finally:
+            gate.release_alone(repo)
         if outcome.acted:
             log.info("Merge watch on %s: merged %s, main merged in %s, sent back %s, given up %s",
                      repo, list(outcome.merged), list(outcome.updating),

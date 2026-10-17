@@ -90,6 +90,25 @@ def _running_for_repo(full_name: str) -> object | None:
     return _running_repos_safe().get(full_name)
 
 
+def _running_records(full_name: str) -> list:
+    """Every live cycle on this repository — running (several when Settings →
+    Cycles lets them, 2026-10-13), then queued: a feature already played
+    offers Follow, never a second Play."""
+    from theswarm.presentation.web.shell import live_cycles
+
+    try:
+        return [r for r in live_cycles() if r.repo == full_name]
+    except Exception:  # noqa: BLE001 — the page stays
+        log.exception("reading the cycle tracker failed")
+        return []
+
+
+def _as_list(running) -> list:
+    if running is None:
+        return []
+    return list(running) if isinstance(running, (list, tuple)) else [running]
+
+
 async def _latest_demo(state, full_name: str) -> dict | None:
     """The last demo the swarm recorded for this repository, if any.
 
@@ -232,8 +251,8 @@ def _board_status(issue: dict, running, prs: list[dict] | None) -> str:
     status = issue_status(issue)
     number = issue.get("number")
     if status == "in-progress":
-        pinned = getattr(running, "issue_number", None) if running is not None else None
-        if pinned is None or not (number == pinned or is_child_of(issue.get("body"), pinned)):
+        pinned = [getattr(r, "issue_number", None) for r in _as_list(running)]
+        if not any(p is not None and (number == p or is_child_of(issue.get("body"), p)) for p in pinned):
             return "stalled"
     if status == "review" and prs is not None:
         claimed = {int(n) for pr in prs

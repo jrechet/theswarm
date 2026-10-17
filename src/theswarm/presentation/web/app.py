@@ -62,7 +62,7 @@ from theswarm.presentation.web.routes import api, artifacts, health, metrics, we
 from theswarm.presentation.web.auth import AuthWallMiddleware
 from theswarm.presentation.web.shell import ShellMiddleware, current_shell
 from theswarm.presentation.web.timing import TimingMiddleware
-from theswarm.presentation.web.routes import agents_settings, auth_routes, customers, github_setup, home, instance_settings, ops, player, project, requests_routes, spend, theater
+from theswarm.presentation.web.routes import agents_settings, auth_routes, customers, cycles_settings, github_setup, home, instance_settings, ops, player, project, requests_routes, spend, theater
 from theswarm.presentation.web.sse import SSEHub
 
 _HERE = Path(__file__).parent
@@ -162,6 +162,11 @@ def create_web_app(
         from theswarm.infrastructure.persistence.agent_settings_repo import SQLiteAgentSettingsRepository
 
         app.state.agent_settings = AgentSettingsService(SQLiteAgentSettingsRepository(db))
+        # Settings → Cycles: how many run at once, in all and per project
+        from theswarm.application.services.cycle_limits import CycleLimitsService
+        from theswarm.infrastructure.persistence.cycle_limits_repo import SQLiteCycleLimits
+
+        app.state.cycle_limits = CycleLimitsService(SQLiteCycleLimits(db))
 
         # The PO tells the customer what was built, when a demo lands (V3, folded into the PO)
         import os as _os
@@ -1106,6 +1111,7 @@ def create_web_app(
     app.include_router(spend.router)  # the owner's spend view: /api/spend
     app.include_router(instance_settings.router)  # V3 M6: /settings/instance — the vault-backed keys and URLs
     app.include_router(agents_settings.router)  # /settings/agents — each persona's Claude model and effort
+    app.include_router(cycles_settings.router)  # /settings/cycles — how many cycles at once, in all and per project
     app.include_router(home.router)  # owns `/`: the owner's home, a member's customer
     app.include_router(health.router)
     app.include_router(webhooks.router)

@@ -81,24 +81,38 @@ def live_cycles() -> list:
 
 
 def waiting_words(record, live: list | None = None) -> str:
-    """What a queued cycle waits for, in words; "" for any other. One cycle
-    per repository at a time (they share a workspace), and
-    `SWARM_MAX_CONCURRENT_CYCLES` in all."""
+    """What a queued cycle waits for, in words; "" for any other. The gate
+    (`cycle_gate`) says why it waits: its repository is full or must be
+    alone, its feature is being built, or the box is full."""
     from theswarm.cycle import max_concurrent_cycles
 
     if getattr(getattr(record, "status", None), "value", "") != "queued":
         return ""
     live = live_cycles() if live is None else live
     mine = [r for r in live if r.repo == record.repo]
-    ahead = next((r for r in mine if r.status.value == "running"), None)
-    if ahead is None:
+    running = [r for r in mine if r.status.value == "running"]
+    why = _gate_reason(record.id)
+    if why == "slot" or (not why and not running):
         return f"waits for a free slot ({max_concurrent_cycles()} cycles at once)"
+    if why == "feature":
+        return f"starts once the cycle building #{record.issue_number} ends"
     queued = [r.id for r in mine if r.status.value == "queued"]
     place = queued.index(record.id) + 1 if record.id in queued else 1
-    if place == 1:
-        what = f"#{ahead.issue_number}" if ahead.issue_number else "the cycle"
+    if place > 1:
+        return f"{_ordinal(place)} in line on this repository"
+    if len(running) == 1:
+        what = f"#{running[0].issue_number}" if running[0].issue_number else "the cycle"
         return f"starts after {what}, running on this repository"
-    return f"{_ordinal(place)} in line on this repository"
+    return f"starts when one of the {len(running)} cycles on this repository ends"
+
+
+def _gate_reason(cycle_id: str) -> str:
+    try:
+        from theswarm.cycle_gate import cycle_gate
+
+        return cycle_gate().why_waiting(cycle_id)
+    except Exception:  # noqa: BLE001 — no loop, no gate: the tracker's words
+        return ""
 
 
 def _ordinal(n: int) -> str:

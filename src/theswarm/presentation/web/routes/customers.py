@@ -309,8 +309,7 @@ async def member_overview(state, customer, projects) -> dict:
     report_repo = getattr(state, "report_repo", None)
     for project in projects:
         full_name = str(project.repo)
-        record = common._running_for_repo(full_name)
-        if record is not None:
+        for record in common._running_records(full_name):  # several when Settings → Cycles lets them
             history = get_phase_history(record.id)
             phase = history[-1].get("phase", "") if history else ""
             number = getattr(record, "issue_number", None)
