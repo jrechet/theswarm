@@ -207,6 +207,57 @@ class TestGather:
         assert report.stack == "jrec.fr · github-actions · ghcr.io · docker-swarm"
         assert report.as_dict()["findings"][3]["key"] == "ci_slot" and by["load_jrec.fr"].status == "unknown"
 
+    async def test_a_deploy_older_than_the_window_of_runs_is_still_the_last_deploy(self):
+        # prod, 2026-11-11: 25 quiet days of harness and mirror runs pushed the deploy of 3dfbc3b out of the
+        # last 30 runs — "no deploy run seen", then "the deploy did not land" and a redeploy proposed for an
+        # image nothing had built. The reader hands the deploy workflow's own last run over beside the window.
+        async def quiet_weeks(repo):
+            harness_run = {"path": ".github/workflows/harness.yml", "status": "completed", "conclusion": "success",
+                           "updated_at": "2026-11-10T15:40:00Z", "name": "E2E harness", "head_branch": "main"}
+            return {"main_sha": "f2e7710000", "runners": [{"name": "r", "status": "online", "busy": False}],
+                    "runs": [harness_run] * d.RUN_LIMIT,
+                    "deploy_run": {"path": ".github/workflows/ci.yml", "status": "completed", "conclusion": "success",
+                                   "head_sha": "3dfbc3b000", "head_branch": "main", "updated_at": "2026-10-17T09:07:00Z"}}
+
+        async def gather():
+            return await d.gather(STACK, github=quiet_weeks, host_reader=_host, claude=lambda: {"status": "ok"},
+                                  build=lambda: "3dfbc3b000", here=HERE, load=QUIET, now=NOW)
+
+        deploy = next(f for f in (await gather()).findings if f.key == "deploy")
+        assert deploy.status == "ok" and "main is at f2e7710 on paths the deploy ignores" in deploy.detail
+        clock = {"now": NOW}
+        watch = w.OpsWatch(gather, clock=lambda: clock["now"])
+        await watch.refresh()
+        clock["now"] = NOW + timedelta(days=2)
+        await watch.refresh()
+        assert not any(f.key == "deploy_watch" for f in watch.last().findings)
+
+    def test_the_deploy_workflow_s_last_run_is_read_by_itself(self):
+        class Run:
+            id, name, status, conclusion, head_sha, head_branch = 7, "CI", "completed", "success", "3dfbc3b000", "main"
+            event, updated_at, created_at, html_url, path = "push", None, None, "https://run/7", ".github/workflows/ci.yml"
+
+        class Repo:
+            default_branch = "main"
+            asked: list = []
+
+            def get_workflow(self, name):
+                self.asked.append(name)
+                return self
+
+            def get_runs(self, branch):
+                self.asked.append(branch)
+                return iter([Run(), Run()])
+
+        repo = Repo()
+        assert d.last_deploy_run(repo, "ci.yml")["head_sha"] == "3dfbc3b000" and repo.asked == ["ci.yml", "main"]
+
+        class NoRuns(Repo):
+            def get_runs(self, branch):
+                return iter([])
+
+        assert d.last_deploy_run(NoRuns(), "ci.yml") is None
+
     async def test_a_reader_that_fails_is_a_finding_not_an_exception(self):
         async def broken(_):
             raise RuntimeError("ssh: connect to host jrec.fr port 5422: Operation timed out")

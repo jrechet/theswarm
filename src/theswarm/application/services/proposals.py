@@ -15,12 +15,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
 
-from theswarm.agents.devops import BAD, Finding
-from theswarm.domain.ops.proposals import KINDS, Proposal
+from theswarm.agents.devops import BAD, UNKNOWN, Finding
+from theswarm.domain.ops.proposals import KINDS, PROPOSED, Proposal
 
 log = logging.getLogger(__name__)
 
 _SLOT_RE = re.compile(r"\b(slot\d+)\b")
+# The finding a proposal's own is read with: no deploy read, no word on the deploy watch.
+_READ_WITH = {"deploy_watch": "deploy"}
 
 
 def _now() -> datetime:
@@ -77,11 +79,38 @@ class ProposalService:
         self._stack = stack
         self._runner = runner
 
+    async def _withdraw_stale(self, findings, wanted: list[Proposal]) -> None:
+        """Take back what no longer holds: the finding cleared, or its command is not the one to run any more.
+
+        A report that could not read a proposal's subject says nothing about
+        it, and an approved proposal is the owner's: both stay.
+        """
+        unread = {f.key for f in findings if f.status == UNKNOWN}
+        current = {(p.kind, p.host): p for p in wanted}
+        for proposal in await self._proposals.list_open():
+            if proposal.status != PROPOSED or {proposal.finding_key, _READ_WITH.get(proposal.finding_key)} & unread:
+                continue
+            now_wanted = current.get((proposal.kind, proposal.host))
+            if now_wanted is None:
+                reason = "the finding cleared"
+            elif now_wanted.command != proposal.command:
+                reason = f"replaced — the command to run is now `{now_wanted.command}`"
+            else:
+                continue
+            await self._proposals.save(proposal.withdrawn(reason))
+            log.info("DevOps withdraws: %s — %s", proposal.title, reason)
+
     async def raise_from(self, findings, facts: dict | None = None) -> list[Proposal]:
-        """New proposals for the findings; one open proposal per kind and host."""
+        """New proposals for the findings; one open proposal per kind and host.
+
+        What an earlier report proposed and this one no longer calls for is
+        withdrawn first: a proposal is one click from running its command.
+        """
+        wanted = proposals_for(findings, self._stack, facts)
+        await self._withdraw_stale(findings, wanted)
         open_keys = {(p.kind, p.host) for p in await self._proposals.list_open()}
         raised = []
-        for proposal in proposals_for(findings, self._stack, facts):
+        for proposal in wanted:
             if (proposal.kind, proposal.host) in open_keys:
                 continue
             await self._proposals.save(proposal)

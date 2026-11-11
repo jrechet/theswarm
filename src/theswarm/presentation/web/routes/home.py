@@ -4,6 +4,7 @@ projects — the owner's front door; a member's `/` is their customer."""
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request
@@ -105,6 +106,7 @@ def _now_cards(state, running: dict[str, object]) -> list[dict]:
     repository at a time, `SWARM_MAX_CONCURRENT_CYCLES` in all. It showed one
     card per repository, the newest: the owner's four Plays on
     concert-tour-app read "queued" with #265 running unseen (2026-10-11)."""
+    from theswarm.presentation.web.live_line import live_line
     from theswarm.presentation.web.shell import live_cycles, waiting_words
 
     base = state.base_path
@@ -115,18 +117,48 @@ def _now_cards(state, running: dict[str, object]) -> list[dict]:
         live = list(running.values())
     cards = []
     for record in live:
-        title = (record.description or "").strip()
-        if not title:
-            title = f"issue #{record.issue_number}" if record.issue_number else "the daily cycle"
-        if len(title) > 90:
-            title = title[:89].rstrip() + "…"
+        title = feature_title(record)
         cards.append({
             "id": record.id, "repo": record.repo, "issue_number": record.issue_number,
-            "title": title, "status": record.status.value, "waits": waiting_words(record, live),
+            "title": title or (f"the feature #{record.issue_number}" if record.issue_number else "the daily cycle"),
+            "named": bool(title),
+            "status": record.status.value, "waits": waiting_words(record, live),
             "since": _clock(record.started_at or record.created_at),
             "href": f"{base}/cycles/{record.id}",
+            "line": live_line(record),
         })
     return cards
+
+
+_STARTERS_OWN_WORDS = re.compile(r"^(Play on issue #\d+|Resume of [0-9a-f]{12} from .*)$")
+TITLE_MAX = 90
+
+
+def feature_title(record) -> str:
+    """What a live cycle builds, by name: the pinned issue's title once this
+    process has read it (never a wait), else the words the cycle was started
+    with — unless they are the starter's own ("Play on issue #841", a
+    continuation's "Resume of …"), which name nothing. "" when unknown: the
+    home said "issue #841" for three cycles at once (prod, 2026-11-11)."""
+    from theswarm.application.services import pinned_issue
+
+    title = ""
+    try:
+        title = pinned_issue.known_title(record.repo, record.issue_number)
+    except Exception:  # noqa: BLE001 — a card without its title is still a card
+        log.exception("home: reading the title of %s#%s failed", record.repo, record.issue_number)
+    if not title:
+        said = (record.description or "").strip()
+        title = "" if _STARTERS_OWN_WORDS.match(said) else said
+    return title if len(title) <= TITLE_MAX else title[:TITLE_MAX - 1].rstrip() + "…"
+
+
+@router.get("/now", response_class=HTMLResponse)
+async def now_fragment(request: Request) -> HTMLResponse:
+    """The Now list alone: what the home swaps in every few seconds. In
+    memory only — the tracker, the phases announced, the last words."""
+    state = request.app.state
+    return state.templates.TemplateResponse("_now.html", {"now": _now_cards(state, _running_repos_safe())})
 
 
 async def _spend_card(state) -> dict | None:

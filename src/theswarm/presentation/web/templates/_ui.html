@@ -75,6 +75,23 @@
 <span class="inline-block rounded-full bg-live shrink-0{% if pulse %} live-dot{% endif %}" style="width:{{ size }}px;height:{{ size }}px" aria-hidden="true"></span>
 {%- endmacro %}
 
+{# Where a live cycle is (`live_line.py`): the steps as a strip, the one it is on,
+   who works, their last words and how long ago — "quiet for" past five minutes. #}
+{% macro cycle_line(line) -%}
+{% if line and line.steps %}
+<span class="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0 text-[12px]" data-testid="now-line" data-step="{{ line.step }}" data-quiet="{{ 'true' if line.quiet else 'false' }}" data-stalled="{{ 'true' if line.stalled else 'false' }}">
+  <span class="inline-flex items-center gap-[3px] shrink-0" role="img" aria-label="Step {{ line.step }}">
+    {% for s in line.steps %}<span data-step-state="{{ s.state }}" title="{{ s.label }}" class="h-1 w-5 rounded-full {% if s.state == 'done' %}bg-ok{% elif s.state == 'live' %}bg-live{% elif s.state == 'failed' %}bg-bad{% else %}bg-line-strong{% endif %}"></span>{% endfor %}
+  </span>
+  <span class="font-medium text-live-deep whitespace-nowrap">{{ line.step }}{% if line.step_time %} <span class="font-mono font-normal text-faint">{{ line.step_time }}</span>{% endif %}</span>
+  {% if line.agent %}<span class="text-ink whitespace-nowrap">{{ line.agent }}</span>{% endif %}
+  {% if line.says %}<span class="font-mono text-[11px] text-muted truncate max-w-[56ch] min-w-0">{{ line.says }}</span>{% endif %}
+  {% if line.quiet %}<span class="whitespace-nowrap font-medium {% if line.stalled %}text-bad{% else %}text-ink{% endif %}">quiet for {{ line.ago }}</span>
+  {% elif line.ago %}<span class="text-faint whitespace-nowrap">{{ line.ago }} ago</span>{% endif %}
+</span>
+{% endif %}
+{%- endmacro %}
+
 {# A card: surface, one line, radius 10. #}
 {% macro card(extra='', testid='') -%}
 <div class="bg-surface border border-line rounded-[10px] {{ extra }}"{% if testid %} data-testid="{{ testid }}"{% endif %}>{{ caller() }}</div>

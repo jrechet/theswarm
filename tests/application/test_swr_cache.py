@@ -145,3 +145,28 @@ async def test_the_board_reads_issues_and_prs_side_by_side(monkeypatch):
     common._BOARD.clear()
     assert board == ([{"number": 1}], [{"number": 2, "title": "[#1] x", "body": ""}])
     assert again is board and klass.return_value.get_issues.await_count == 1
+
+
+# ── peek: what is already known, never a wait (the home lists every live cycle) ──
+
+
+async def test_peek_never_waits_and_the_read_it_starts_serves_the_next_one():
+    cache, reads = _swr(), _Reads("a")
+    assert cache.peek("k", reads, now=0) is None  # never read: nothing known, a read starts behind
+    await _settle(cache)
+    assert cache.peek("k", reads, now=1) == "a" and reads.count == 1
+
+
+async def test_peek_serves_a_stale_answer_and_refreshes_it_behind():
+    cache, reads = _swr(), _Reads("a", "b")
+    await cache.get("k", reads, now=0)
+    assert cache.peek("k", reads, now=30) == "a"
+    await _settle(cache)
+    assert cache.peek("k", reads, now=31) == "b" and reads.count == 2
+
+
+async def test_peek_with_nothing_kept_reads_nothing():
+    cache, reads = _swr(fresh=0), _Reads("a")  # the suite's switch: no answer would be kept
+    assert cache.peek("k", reads, now=0) is None
+    await _settle(cache)
+    assert reads.count == 0

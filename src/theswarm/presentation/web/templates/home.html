@@ -12,23 +12,9 @@
   {# ── Now: the cycles running at this moment ─────────────────────── #}
   <section aria-labelledby="now" class="flex flex-col gap-3" data-testid="now">
     {{ ui.section_label('Now', today, id='now') }}
-    {% if now %}
-      {% for c in now %}
-      <a href="{{ c.href }}" data-testid="now-cycle"
-         class="flex flex-wrap items-center gap-5 px-5 py-4 bg-surface border border-line rounded-[10px] hover:border-line-strong">
-        {{ ui.live_dot(10, pulse=(c.status == 'running')) }}
-        <span class="flex flex-col gap-1 min-w-[240px] flex-[1_1_260px]">
-          <span class="text-[16px] font-semibold tracking-tight">{% if c.issue_number %}<span class="font-mono text-faint font-medium">#{{ c.issue_number }}</span> {% endif %}{{ c.title }}</span>
-          <span class="text-[13px] text-muted">{{ c.repo }}{% if c.since %} · {{ c.status }} since {{ c.since }}{% else %} · {{ c.status }}{% endif %}{% if c.waits %} — <span data-testid="now-waits">{{ c.waits }}</span>{% endif %}</span>
-        </span>
-        <span class="text-[13px] font-medium text-live-deep whitespace-nowrap">Open the theater →</span>
-      </a>
-      {% endfor %}
-    {% else %}
-      <div class="px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px] text-[13px] text-muted" data-testid="now-empty">
-        Nothing is running. Open a project and press Play.
-      </div>
-    {% endif %}
+    <div id="now-list" class="flex flex-col gap-3" data-now-url="{{ base }}/now" data-live="{{ now | length }}">
+      {% include "_now.html" %}
+    </div>
   </section>
 
   {# ── Ops: the pipeline as DevOps reads it (D1) ────────────────── #}
@@ -243,4 +229,30 @@
   </section>
 
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  // The Now list keeps itself current: where each cycle is changes every few
+  // seconds, and a page nobody reloads said "running since 08:43" for an hour.
+  var list = document.getElementById("now-list");
+  if (!list || !window.fetch) return;
+  var last = null;
+  function tick() {
+    if (document.hidden) { setTimeout(tick, 5000); return; }
+    fetch(list.dataset.nowUrl, {headers: {"Accept": "text/html"}, credentials: "same-origin"})
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) {
+        if (html !== null && html !== last) {
+          list.innerHTML = html;
+          last = html;
+        }
+        var live = list.querySelector("[data-cycle]");
+        setTimeout(tick, live ? 5000 : 20000);
+      })
+      .catch(function () { setTimeout(tick, 20000); });
+  }
+  setTimeout(tick, 5000);
+})();
+</script>
 {% endblock %}

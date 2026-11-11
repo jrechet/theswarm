@@ -89,6 +89,20 @@ def clear_cache() -> None:
     _KEPT.clear()
 
 
+def known_title(repo: str, issue_number: int | None) -> str:
+    """The feature's title when it is already known here — never waits for
+    GitHub. "" the first time, while the read it starts goes on: the home
+    lists every live cycle and said "issue #841" for each (2026-11-11)."""
+    if not repo or issue_number is None:
+        return ""
+    number = int(issue_number)
+    try:
+        pinned = _KEPT.peek((repo, number), lambda: _read(repo, number))
+    except RuntimeError:  # no running loop to read behind: nothing known
+        return ""
+    return str(((pinned.issue if pinned is not None else None) or {}).get("title") or "")
+
+
 async def load_pinned_issue(repo: str, issue_number: int | None, *, now: float | None = None) -> PinnedIssue:
     if not repo or issue_number is None:
         return PinnedIssue()

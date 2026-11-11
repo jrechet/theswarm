@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import re
+import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -258,6 +259,62 @@ class TestTheHome:
         client, app = web
         r = await _home(client)
         assert 'data-testid="now-empty"' in r.text and 'data-testid="now-cycle"' not in r.text
+
+    async def test_now_says_where_each_cycle_is(self, web, _isolate_tracker):
+        """Three cycles ran on prod (2026-11-11) and the home said "issue #841 ·
+        running since 08:43 UTC" for each: no step, nobody named, no sign of life."""
+        from theswarm.application.services import progress_bridge as bridge
+
+        client, app = web
+        _running(_isolate_tracker, cycle_id="now0line0001", issue=840)
+        bridge._PHASE_HISTORY.pop("now0line0001", None)
+        for phase in ("po_morning", "techlead_breakdown", "dev_iter"):
+            bridge.record_phase("now0line0001", phase)
+        bridge.record_live_progress("now0line0001", "Dev", "Edit src/routers/venues.py")
+        _queued(_isolate_tracker, cycle_id="q841q841q841", issue=841)
+        r = await _home(client)
+        card = r.text.split('data-cycle="now0line0001"')[1].split("</a>")[0]
+        assert 'data-testid="now-line"' in card and 'data-step="Dev · 1"' in card
+        assert "Developer" in card and "Edit src/routers/venues.py" in card and 'data-quiet="false"' in card
+        assert card.count('data-step-state="done"') == 2 and card.count('data-step-state="live"') == 1
+        waiting = r.text.split('data-cycle="q841q841q841"')[1].split("</a>")[0]
+        assert 'data-testid="now-line"' not in waiting and "starts after #840" in waiting
+
+    async def test_a_cycle_that_went_quiet_says_for_how_long(self, web, _isolate_tracker):
+        from theswarm.application.services import progress_bridge as bridge
+
+        client, app = web
+        _running(_isolate_tracker, cycle_id="quiet0000001", issue=12)
+        bridge._PHASE_HISTORY["quiet0000001"] = [{"phase": "qa", "ts": time.time() - 1500}]
+        bridge._LIVE_PROGRESS[("quiet0000001", "QA")] = {"message": "Running the E2E tests", "ts": time.time() - 1260}
+        r = await _home(client)
+        card = r.text.split('data-cycle="quiet0000001"')[1].split("</a>")[0]
+        assert 'data-quiet="true"' in card and 'data-stalled="true"' in card and "quiet for 21 min" in card
+
+    async def test_now_names_the_feature_once_its_title_is_known(self, web, _isolate_tracker, monkeypatch):
+        """A Play's record says "Play on issue #N", the API's says nothing: the
+        feature's name is the pinned issue's, when this process already read it."""
+        client, app = web
+        record = _queued(_isolate_tracker, cycle_id="q841q841q841", issue=841)
+        monkeypatch.setattr("theswarm.application.services.pinned_issue.known_title",
+                            lambda repo, n: "Count the concerts per artist" if n == 841 else "")
+        r = await _home(client)
+        assert "Count the concerts per artist" in r.text and "Play on issue" not in r.text
+        monkeypatch.setattr("theswarm.application.services.pinned_issue.known_title", lambda repo, n: "")
+        r = await _home(client)
+        assert "the feature #841" in r.text.split('data-cycle="q841q841q841"')[1].split("</a>")[0]
+        assert record.description == "Play on issue #841"
+
+    async def test_now_refreshes_itself(self, web, _isolate_tracker):
+        client, app = web
+        _running(_isolate_tracker)
+        r = await _home(client)
+        assert 'id="now-list"' in r.text and 'data-now-url="/swarm/now"' in r.text
+        fragment = await client.get("/now", headers=HTML)
+        assert fragment.status_code == 200 and 'data-testid="now-cycle"' in fragment.text
+        assert "<html" not in fragment.text and 'data-testid="rail"' not in fragment.text
+        _isolate_tracker._cycles.clear()
+        assert 'data-testid="now-empty"' in (await client.get("/now", headers=HTML)).text
 
     async def test_to_review_lists_the_latest_demos_with_their_gates(self, web):
         client, app = web
