@@ -79,7 +79,8 @@ class TestMembers:
         tl = await service.create("TLphone")
         member, token = await service.invite(tl, " Nadia@TLphone.fr ", "Nadia", now=NOW)
         assert member.email == "nadia@tlphone.fr" and member.name == "Nadia"
-        assert member.state == "invited" and member.invite_token_hash == hash_token(token)
+        # `state` reads today's clock: fourteen days after NOW this line said "expired" (the suite, 2026-11-11)
+        assert member.invitation_open(NOW) and member.invite_token_hash == hash_token(token)
         assert member.invite_expires_at == NOW + timedelta(days=14)
         assert len(token) >= 40
 

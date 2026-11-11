@@ -47,6 +47,7 @@ class CycleDTO:
     phases: list[PhaseDTO]
     resumed_as: str = ""
     error: str = ""
+    issue_number: int | None = None  # the feature the cycle is pinned to (the row has it since v032)
 
     @property
     def duration_seconds(self) -> int | None:

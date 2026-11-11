@@ -76,6 +76,7 @@ class GetDashboardQuery:
                 total_cost_usd=c.total_cost_usd,
                 prs_opened=list(c.prs_opened),
                 prs_merged=list(c.prs_merged),
+                issue_number=getattr(c, "issue_number", None),
                 phases=[
                     PhaseDTO(
                         phase=p.phase,

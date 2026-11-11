@@ -44,9 +44,11 @@ class TestMember:
         assert fresh.state == "expired" and not fresh.is_active  # no token yet
 
         invited = fresh.invited("hash", NOW + timedelta(days=14), NOW)
-        assert invited.state == "invited" and invited.invitation_open(NOW)
-        assert not invited.invitation_open(NOW + timedelta(days=15))
-        assert invited.state == "invited" if datetime.now(timezone.utc) < invited.invite_expires_at else "expired"
+        assert invited.invitation_open(NOW) and not invited.invitation_open(NOW + timedelta(days=15))
+        # `state` reads today's clock: an invitation of today's is invited, this one of NOW's has expired since
+        today = datetime.now(timezone.utc)
+        assert fresh.invited("hash", today + timedelta(days=14), today).state == "invited"
+        assert fresh.invited("hash", today - timedelta(days=1), today - timedelta(days=15)).state == "expired"
 
         active = invited.accepted(NOW + timedelta(hours=1))
         assert active.is_active and active.state == "active"
