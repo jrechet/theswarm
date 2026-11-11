@@ -10,6 +10,9 @@ one — without one cycle stepping on another:
         --ask "jrechet/concert-tour-app: Count the concerts per artist …" \
         --ask "jrechet/swarm-todo-app: Delete a todo …"
 
+An ask whose text is `#N` plays the existing issue N again instead of
+creating one (a batch a closed subscription window cut short).
+
 Every ask becomes an issue and a cycle pinned to it, all started within
 seconds. While they run the script samples each cycle (queued, running,
 which phase) and afterwards reads GitHub. Beyond what the single harness
@@ -41,6 +44,7 @@ import cycle_e2e as harness  # noqa: E402 — the single-run harness's helpers
 POLL_SECONDS = 15
 _TASK_IN_TITLE = re.compile(r"^\s*\[#(\d+)\]")
 _TASK_IN_BRANCH = re.compile(r"issue-(\d+)(?!\d)")
+_EXISTING = re.compile(r"^#(\d+)$")
 
 
 def parse_ask(arg: str) -> tuple[str, str]:
@@ -199,7 +203,8 @@ def main() -> int:
     runs: list[dict] = []
     before = {repo: harness.prs_before(repo) for repo in {repo for repo, _ in asks}}
     for repo, text in asks:
-        runs.append({"repo": repo, "text": text, "story": harness.create_issue(repo, text)})
+        again = _EXISTING.match(text)  # "#840": Play again on a feature already asked for
+        runs.append({"repo": repo, "text": text, "story": int(again.group(1)) if again else harness.create_issue(repo, text)})
     for r in runs:
         r["cycle"] = r["first_cycle"] = harness.start_cycle(r["repo"], r["story"])
 
