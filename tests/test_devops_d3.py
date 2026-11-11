@@ -100,6 +100,32 @@ class TestTheService:
         assert refused.status == "refused" and await service.open() == []
         assert await service.approve(again[0].id) is not None and (await repo.get(again[0].id)).status == "refused"  # a refusal stands
 
+    async def test_a_proposal_whose_finding_cleared_is_withdrawn(self, repo):
+        # prod, 2026-11-11: "Restart the runner" still open 27 days after the runner came back, "Redeploy
+        # main" naming an image of a sha main had left ten days before — one click from running either.
+        offline = Finding("runners", "Runners", "bad", "1 of 1 offline: runner-theswarm")
+        online = Finding("runners", "Runners", "ok", "1 online, 0 busy")
+        late = Finding("deploy_watch", "Deploy watch", "bad", "main moved to abc1234 50 min ago and this box still runs def5678 — the deploy did not land")
+        service = svc.ProposalService(repo, STACK, None)
+        [restart, redeploy] = await service.raise_from((offline, late), {"main_sha": "a" * 40})
+        # a report that could not read the runners or the deploy says nothing about them: both wait
+        unread = (Finding("runners", "Runners", "unknown", "not read: 502"), Finding("deploy", "Last deploy", "unknown", "not read: 502"))
+        assert await service.raise_from(unread) == [] and len(await service.open()) == 2
+        # the runner is back; main moved again and still has not landed: the old image is not the one to run
+        [newer] = await service.raise_from((online, late), {"main_sha": "b" * 40})
+        assert [p.id for p in await service.open()] == [newer.id] and newer.command.endswith(f":{'b' * 40} theswarm_theswarm")
+        gone = await repo.get(restart.id)
+        assert gone.status == "withdrawn" and "cleared" in gone.result and gone.decided_by == "devops"
+        assert (await repo.get(redeploy.id)).status == "withdrawn" and "replaced" in (await repo.get(redeploy.id)).result
+        assert (await service.approve(restart.id)).status == "withdrawn"  # nothing runs from a withdrawn proposal
+        # the deploy landed: nothing is left open
+        assert await service.raise_from((online,)) == [] and await service.open() == []
+        # an approved proposal is the owner's: never withdrawn under them
+        [again] = await service.raise_from((offline,))
+        await repo.save(again.approved("jrechet"))
+        await service.raise_from((online,))
+        assert (await repo.get(again.id)).status == "approved"
+
     async def test_a_command_that_fails_or_a_host_out_of_reach_is_the_record(self, repo):
         async def broken(host, command):
             raise RuntimeError("permission denied (publickey)")

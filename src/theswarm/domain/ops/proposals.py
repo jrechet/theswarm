@@ -17,6 +17,7 @@ APPROVED = "approved"
 REFUSED = "refused"
 RUN = "run"
 FAILED = "failed"
+WITHDRAWN = "withdrawn"  # DevOps's own: the finding cleared, or a newer proposal replaced it
 OPEN = (PROPOSED, APPROVED)
 
 # What DevOps may propose, and the exact read-write command each means on
@@ -73,6 +74,12 @@ class Proposal:
         if self.status != PROPOSED:
             return self
         return replace(self, status=REFUSED, decided_by=by, decided_at=now or _now())
+
+    def withdrawn(self, reason: str, now: datetime | None = None) -> Proposal:
+        """DevOps takes back what it asked: only while the owner has not answered."""
+        if self.status != PROPOSED:
+            return self
+        return replace(self, status=WITHDRAWN, result=(reason or "").strip()[:2000], decided_by="devops", decided_at=now or _now())
 
     def ran(self, result: str, ok: bool, now: datetime | None = None) -> Proposal:
         """The command's outcome; only an approved proposal can have run."""

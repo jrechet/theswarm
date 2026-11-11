@@ -61,6 +61,25 @@ class Swr(Generic[T]):
         task = self._start(key, load, moment)
         return await asyncio.wait_for(asyncio.shield(task), self._timeout())
 
+    def peek(self, key: Hashable, load: Callable[[], Awaitable[T]], *, now: float | None = None) -> T | None:
+        """The kept answer when there is one, at once — never a wait.
+
+        A key never read (or kept too long) answers None and starts its
+        read behind: the next peek has it. For a page that lists many
+        keys and can draw a line without one (the home's live cycles).
+        """
+        moment = self._clock() if now is None else now
+        fresh, keep = self._fresh(), self._keep()
+        if fresh <= 0:
+            return None  # nothing is kept: a read here would be for nobody
+        hit = self._kept.get(key)
+        if hit is not None and moment - hit[0] < max(keep, fresh):
+            if moment - hit[0] >= fresh:
+                self._start(key, load, moment)
+            return hit[1]
+        self._start(key, load, moment)
+        return None
+
     def _start(self, key: Hashable, load: Callable[[], Awaitable[T]], moment: float) -> asyncio.Task:
         task = self._inflight.get(key)
         if task is not None and not task.done():

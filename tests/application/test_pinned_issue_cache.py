@@ -109,3 +109,19 @@ async def test_the_suite_s_switch_turns_it_off(monkeypatch):
     finally:
         ctx.stop()
     assert client.get_issues.await_count == 2
+
+
+async def test_the_title_already_known_is_given_without_waiting():
+    # the home lists every live cycle: "issue #841" where the feature's name belongs (prod, 2026-11-11),
+    # and a page that lists ten cycles must not wait for GitHub ten times
+    ctx, client = _github()
+    try:
+        assert mod.known_title(REPO, 85) == ""  # never read: nothing to say yet, the read starts behind
+        for _ in range(5):
+            await asyncio.sleep(0)
+        await asyncio.gather(*mod._KEPT._inflight.values(), return_exceptions=True)
+        assert mod.known_title(REPO, 85) == "Harden input validation"
+        assert client.get_issue.await_count == 1
+    finally:
+        ctx.stop()
+    assert mod.known_title(REPO, None) == "" and mod.known_title("", 85) == ""

@@ -1,0 +1,21 @@
+{# The home's Now list — every live cycle and where it is. Rendered in the home and,
+   alone, by GET /now: the home replaces this list every few seconds. #}
+{% import "_ui.html" as ui %}
+{% if now %}
+  {% for c in now %}
+  <a href="{{ c.href }}" data-testid="now-cycle" data-cycle="{{ c.id }}" data-status="{{ c.status }}"
+     class="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-4 bg-surface border border-line rounded-[10px] hover:border-line-strong">
+    {{ ui.live_dot(10, pulse=(c.status == 'running')) }}
+    <span class="flex flex-col gap-1.5 min-w-0 flex-[1_1_260px]">
+      <span class="text-[16px] font-semibold tracking-tight">{% if c.named and c.issue_number %}<span class="font-mono text-faint font-medium">#{{ c.issue_number }}</span> {% endif %}{{ c.title }}</span>
+      <span class="text-[13px] text-muted">{{ c.repo }}{% if c.since %} · {{ c.status }} since {{ c.since }}{% else %} · {{ c.status }}{% endif %}{% if c.waits %} — <span data-testid="now-waits">{{ c.waits }}</span>{% endif %}</span>
+      {{ ui.cycle_line(c.line) }}
+    </span>
+    <span class="text-[13px] font-medium text-live-deep whitespace-nowrap">Open the theater →</span>
+  </a>
+  {% endfor %}
+{% else %}
+  <div class="px-5 py-4 bg-surface border border-dashed border-line-strong rounded-[10px] text-[13px] text-muted" data-testid="now-empty">
+    Nothing is running. Open a project and press Play.
+  </div>
+{% endif %}

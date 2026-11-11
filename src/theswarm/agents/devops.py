@@ -449,6 +449,11 @@ def _read_github_sync(repo_name: str, token: str, deploy_workflow: str = "ci.yml
         if len(runs) >= RUN_LIMIT:
             break
     out["runs"] = runs
+    if deploy_run_of(runs, deploy_workflow, repo.default_branch) is None:
+        try:
+            out["deploy_run"] = last_deploy_run(repo, deploy_workflow)
+        except Exception as exc:  # noqa: BLE001 — the deploy finding then says "no deploy run seen"
+            out["deploy_run_error"] = str(exc)[:200]
     if not with_jobs:  # the preflight: what stops a cycle, nothing it measures
         return out
     try:
@@ -461,6 +466,19 @@ def _read_github_sync(repo_name: str, token: str, deploy_workflow: str = "ci.yml
     except Exception as exc:  # noqa: BLE001
         out["devops_prs_error"] = str(exc)[:200]
     return out
+
+
+def last_deploy_run(repo: Any, workflow: str = "ci.yml") -> dict | None:
+    """The deploy workflow's own last run on the default branch.
+
+    The window of the last `RUN_LIMIT` runs holds every workflow: after two
+    quiet weeks the harness's and the mirror's daily runs fill it and the
+    deploy's run is no longer in it (prod, 2026-11-11: "the deploy did not
+    land" for 25 days, a redeploy proposed for an image nothing had built).
+    """
+    for run in repo.get_workflow(workflow).get_runs(branch=repo.default_branch):
+        return _run_dict(run)
+    return None
 
 
 def _jobs_of(objects: list, runs: list[dict], default_branch: str, workflow: str) -> list[dict]:
@@ -637,7 +655,8 @@ async def gather(stack: dict, *, github: Callable[[str], Awaitable[dict]] | None
             this_build = (build or build_sha)()
         except Exception:  # noqa: BLE001
             this_build = ""
-        findings.append(deploy_finding(gh.get("main_sha", ""), this_build, deploy_run_of(runs, workflow), repo))
+        deploy_run = deploy_run_of(runs, workflow) or gh.get("deploy_run")  # in the window, else read by itself
+        findings.append(deploy_finding(gh.get("main_sha", ""), this_build, deploy_run, repo))
         facts.update(main_sha=gh.get("main_sha", "") or "", build_sha=this_build or "")
         if "runners" in gh:
             findings.append(runners_finding(gh["runners"]))
