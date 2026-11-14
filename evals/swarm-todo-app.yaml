@@ -1,0 +1,58 @@
+# The second test bed (2026-11-14): a small FastAPI todo app with sign-up
+# and JWT, a different shape from concert-tour-app. The weekly parallel run
+# (`scripts/parallel_e2e.py --next`, `.github/workflows/harness.yml`) builds
+# one of these beside concert-tour-app's, so two repositories are measured
+# side by side. Same rules as evals/concert-tour-app.yaml: `built_by` marks
+# what the target already has that prod's history may not know.
+repo: jrechet/swarm-todo-app
+features:
+  - id: todo-delete
+    built_by: "the first parallel batch, cycle 8405aa9eef3c (2026-11-11), PRs #29 #30"
+    text: |-
+      Delete a todo
+      DELETE /api/v1/todos/{id} removes the signed-in user's todo and answers 204; 404 for an unknown todo or one that belongs to someone else; 401 without a token.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: todo-get-one
+    text: |-
+      Read one todo
+      GET /api/v1/todos/{id} returns the signed-in user's todo; 404 for an unknown todo or one that belongs to someone else; 401 without a token.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: me
+    text: |-
+      Who am I
+      GET /api/v1/me returns the signed-in user's id, email and the date they signed up, never the password hash; 401 without a token or with an expired one.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: todo-stats
+    text: |-
+      Count my todos
+      GET /api/v1/todos/stats returns, for the signed-in user only, the number of todos, the number done and the number still open; all zeros for a user with none; 401 without a token.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: todo-complete-many
+    text: |-
+      Complete several todos at once
+      POST /api/v1/todos/complete with {"ids": [...]} marks those todos of the signed-in user done and answers 204; 404 naming the ids that are unknown or someone else's, and then nothing is changed; 422 for an empty list; 401 without a token.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: todo-due-date
+    text: |-
+      Give a todo a due date
+      A todo takes an optional due_date (YYYY-MM-DD) on create and on PATCH, and returns it; GET /api/v1/todos/overdue lists the signed-in user's todos not done whose due date is before today, soonest due first; 422 for a malformed date.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: password-change
+    text: |-
+      Change my password
+      POST /api/v1/me/password with the current and the new password changes it and answers 204; the old password no longer signs in and the new one does; 403 when the current password is wrong; 422 for a new password shorter than 8 characters; 401 without a token.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600

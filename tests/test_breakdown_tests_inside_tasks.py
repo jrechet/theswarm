@@ -31,3 +31,24 @@ def test_the_prompt_still_formats():
     prompt = BREAKDOWN_PROMPT.format(context="ctx", issue_number=1, issue_title="t", issue_body="b")
 
     assert "Tests:" in prompt and "{" in prompt  # the JSON example keeps its braces
+
+
+# ── Every sub-task is a Dev's: nobody else picks one ──────────────────
+#
+# swarm-todo-app#28 (2026-11-11, cycle 8405aa9eef3c): the breakdown made a
+# "Cover the delete flow with E2E tests and demo screenshots" task labelled
+# `role:qa`. QA is a phase of the cycle, not a picker: nothing ever takes a
+# task, and the story stayed open with its feature built.
+
+
+def test_the_breakdown_asks_for_no_qa_task():
+    assert "No QA, E2E or demo task" in BREAKDOWN_PROMPT
+
+
+def test_a_sub_task_always_carries_the_dev_s_labels_and_no_other_role():
+    from theswarm.agents.techlead import task_labels
+
+    assert task_labels(["role:qa", "status:ready"]) == ["role:dev", "status:ready"]
+    assert task_labels(["status:backlog", "role:techlead", "area:api"]) == ["role:dev", "status:ready", "area:api"]
+    assert task_labels(None) == ["role:dev", "status:ready"]
+    assert task_labels(["role:dev", "status:ready", "role:dev"]) == ["role:dev", "status:ready"]

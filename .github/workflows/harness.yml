@@ -4,6 +4,10 @@ on:
   schedule:
     # Daily regression probe against the swarm's default demo target.
     - cron: '0 7 * * *'
+    # Weekly: three features at once on two repositories (scripts/parallel_e2e.py).
+    # Never exercised in prod before 2026-11-11, when it found what one run
+    # alone cannot (docs/plans/2026-11-teams-and-control.md).
+    - cron: '0 9 * * 0'
   workflow_dispatch:
     inputs:
       repo:
@@ -16,6 +20,10 @@ on:
         default: ''
       all:
         description: 'Run every feature of the eval manifest, in order (the full series)'
+        type: boolean
+        default: false
+      parallel:
+        description: 'Run the weekly batch instead: three features at once on two repositories'
         type: boolean
         default: false
       # jrechet/theswarm is deliberately NOT a default here: per AGENTS.md,
@@ -37,6 +45,7 @@ concurrency:
 
 jobs:
   run:
+    if: github.event.schedule != '0 9 * * 0' && github.event.inputs.parallel != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -99,6 +108,76 @@ jobs:
         if: always()
         env:
           REPO: ${{ github.event.inputs.repo || 'jrechet/concert-tour-app' }}
+        run: |
+          if [ -z "$(git status --porcelain -- docs/harness-runs.jsonl)" ]; then
+            echo "no change to docs/harness-runs.jsonl"
+            exit 0
+          fi
+          git config user.name "TheSwarm Dev Agent"
+          git config user.email "swarm-dev@jrec.fr"
+          git add docs/harness-runs.jsonl
+          git commit -m "chore: harness run $(date -u +%Y-%m-%d) — $REPO"
+          # The checkout is main as it was at *dispatch*: a run queued behind
+          # another (the concurrency group above) starts without that run's
+          # history line, and both appended at the end of the file. The
+          # rebase keeps both lines because .gitattributes merges this file
+          # with `union` (run 35908375032 died on that conflict); the loop
+          # covers a push that lost a race with another commit to main. A
+          # rebase that still stops is not a race: say so, never retry it
+          # (and `bash -e` would end the step on it with no word anyway).
+          for attempt in 1 2 3; do
+            git fetch origin main
+            if ! git rebase origin/main; then
+              git rebase --abort || true
+              echo "::error::docs/harness-runs.jsonl does not rebase onto main — the run is recorded on the API, not in the file"
+              exit 1
+            fi
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "::error::docs/harness-runs.jsonl not published after 3 attempts"
+          exit 1
+
+  parallel:
+    if: github.event.schedule == '0 9 * * 0' || github.event.inputs.parallel == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.BOT_GITHUB_TOKEN }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: 'latest'
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: uv sync --dev
+      - name: Run three features at once
+        env:
+          SWARM_ACCESS_KEY: ${{ secrets.SWARM_ACCESS_KEY }}
+          GH_TOKEN: ${{ secrets.BOT_GITHUB_TOKEN }}
+          PYTHONUNBUFFERED: '1'
+        # Two on concert-tour-app (one per repository in prod: the second
+        # waits its turn, and the batch checks it does), one on
+        # swarm-todo-app beside them. Each is the next feature its eval
+        # manifest lacks, scored and recorded like the daily run's.
+        run: |
+          uv run python scripts/parallel_e2e.py --limit 2 --budget 9600 \
+            --next jrechet/concert-tour-app --next jrechet/concert-tour-app --next jrechet/swarm-todo-app
+
+      # Same trap as docs/cycle-history.jsonl (see ci.yml paths-ignore): a
+      # bare run-history commit must not look like a behaviour change, so it
+      # is pushed straight to main with the same bot identity the Dev agent
+      # already commits under, instead of a PR.
+      - name: Publish run history
+        if: always()
+        env:
+          REPO: parallel batch
         run: |
           if [ -z "$(git status --porcelain -- docs/harness-runs.jsonl)" ]; then
             echo "no change to docs/harness-runs.jsonl"

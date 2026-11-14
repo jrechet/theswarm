@@ -36,6 +36,16 @@ minutes — puis **la fenêtre d'abonnement Claude s'est fermée** et les trois 
 propriétaire : cette session de travail l'a vidée. Un cycle qui rencontre le
 mur meurt ; il devrait attendre.
 
+**Le second essai (fenêtre rouverte) : les trois features livrées.** #840 et
+#841 côte à côte sur concert-tour-app (41 et 34 min, 4,16 $ et 3,86 $, trois PR
+chacune, toutes fusionnées), puis « Delete a todo » sur swarm-todo-app après 34
+min d'attente (26 min, 2,25 $). Chaque cycle n'a ouvert que les PR de ses
+propres sous-tâches. Deux choses à retenir : le cycle de #841 a fusionné une
+PR de #840 et les deux ont fusionné la PR Renovate #839 — c'est le risque C1
+ci-dessous, sans dégât cette fois ; et sur swarm-todo-app le découpage a créé
+une sous-tâche `role:qa` (#28) que personne ne prend jamais : la story reste
+ouverte (défaut 14).
+
 **Défauts trouvés** (✔ = corrigé dans cette branche) :
 
 | # | Défaut | Preuve |
@@ -43,15 +53,16 @@ mur meurt ; il devrait attendre.
 | 1 ✔ | DevOps dit « le déploiement n'a pas abouti » depuis 25 jours et propose de redéployer une image que rien n'a construite | le run de déploiement sort de la fenêtre des 30 derniers runs (`devops.py`, `RUN_LIMIT`) |
 | 2 ✔ | Une proposition DevOps reste ouverte pour toujours (« redémarrer le runner » depuis le 15 octobre, runner revenu) — un clic l'exécute | `proposals.raise_from` ne retirait rien |
 | 3 ✔ | L'accueil dit « issue #841 · running since 08:43 » : ni titre, ni étape, ni agent, ni signe de vie, pas de rafraîchissement | `home._now_cards` |
-| 4 | La page projet ne nomme qu'un des cycles en cours et range les features en cours dans « Backlog », « Building 0 » | `project.py:272-290`, `common._board_status` |
-| 5 | Le bouton « Resume » d'un cycle échoué ne peut pas marcher | `theater.py:346` ne passe pas `resume_cycle_id` → `CycleNotResumable` ; le test mocke `run_api_cycle` |
-| 6 | L'API ne renvoie jamais la feature d'un cycle (`issue_number: null`) alors que la table la stocke | `CycleDTO` sans le champ, trois requêtes à compléter |
+| 4 ✔ | La page projet ne nomme qu'un des cycles en cours et range les features en cours dans « Backlog », « Building 0 » | `project.py:272-290`, `common._board_status` |
+| 5 ✔ | Le bouton « Resume » d'un cycle échoué ne peut pas marcher | `theater.py:346` ne passe pas `resume_cycle_id` → `CycleNotResumable` ; le test mocke `run_api_cycle` |
+| 6 ✔ | L'API ne renvoie jamais la feature d'un cycle (`issue_number: null`) alors que la table la stocke | `CycleDTO` sans le champ, trois requêtes à compléter |
 | 7 | Un mur de quota tue le cycle au lieu de le suspendre | `ClaudeFatalError` → `failed` |
 | 8 | Le watchdog ne fait qu'écrire dans les logs | construit sans callback (`cycle.py:353`) |
 | 9 | Deux Dev en parallèle partagent une seule station « Dev » : on ne sait pas qui fait quelle tâche | un seul `current_role`, pas d'identifiant de tâche sur les événements |
 | 10 | Les prompts du Dev et du relecteur n'ont pas le paragraphe anti-injection | `DEV_SYSTEM`, `REVIEW_SYSTEM` : constantes mortes |
-| 11 | Le manifeste d'évaluation est épuisé : le harness ne mesure plus rien de neuf | 45 features, toutes livrées |
+| 11 ✔ | Le manifeste d'évaluation est épuisé : le harness ne mesure plus rien de neuf | 45 features, toutes livrées |
 | 12 | `/api/live/state` est un singleton : deux cycles s'y écrasent | `dashboard.py:18-93` |
+| 14 ✔ | Le découpage peut créer une sous-tâche `role:qa` que seul un Dev (`role:dev`) saurait prendre : elle reste ouverte, la story aussi | swarm-todo-app#28 |
 | 13 | 69 des 120 services construits au démarrage ne sont lus nulle part (restes de la V1) | `app.py` |
 
 **Deux cycles à la fois : ce que l'audit du code dit** (lecture, pas encore
@@ -80,7 +91,7 @@ deuxième feature d'un projet attend, et l'interface le disait mal.
 Règle : chaque jalon se termine par `scripts/parallel_e2e.py` vert en prod, pas
 par des tests unitaires seuls.
 
-**A0 — finir ce qui est en cours (1 jour).** Défauts 4, 5, 6, 11 ; suite
+**A0 — finir ce qui est en cours (1 jour). Livré le 2026-11-14** : Resume sur le fil du cycle, page projet (chaque cycle vivant, la feature en cours dans Building), sous-tâches toujours au Dev, 10 features de plus pour concert-tour-app et un manifeste pour swarm-todo-app, la course hebdomadaire « trois à la fois » (dimanche 09:00 UTC). Défauts 4, 5, 6, 11 ; suite
 complète ; déploiement ; l'essai parallèle rejoué jusqu'au vert. Le harness
 quotidien gagne une variante hebdomadaire « trois à la fois ».
 
