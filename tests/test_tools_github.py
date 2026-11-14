@@ -203,11 +203,16 @@ async def test_get_pr_files(github_client):
 
 
 async def test_merge_pr(github_client):
-    mock_pr = MagicMock()
+    """A squash carries the swarm's own title and body (tests/tools/test_merge_closes_only_its_task.py)."""
+    mock_pr = MagicMock(number=10, title="[#9] Add the thing", body="Closes #9")
+    mock_pr.get_commits.return_value = [MagicMock(commit=MagicMock(message="feat: thing"))]
     github_client._repo.get_pull.return_value = mock_pr
 
     await github_client.merge_pr(10)
-    mock_pr.merge.assert_called_once_with(merge_method="squash")
+    mock_pr.merge.assert_called_once_with(
+        merge_method="squash", commit_title="[#9] Add the thing (#10)",
+        commit_message="* feat: thing\n\nCloses #9",
+    )
 
 
 async def test_delete_branch(github_client):
