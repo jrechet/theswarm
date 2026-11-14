@@ -13,6 +13,13 @@ one — without one cycle stepping on another:
 An ask whose text is `#N` plays the existing issue N again instead of
 creating one (a batch a closed subscription window cut short).
 
+`--next owner/name` takes the next feature that repository's eval manifest
+(`evals/*.yaml`) lacks on the target, as the daily harness does, never the
+same one twice in a batch; each such run is scored like the daily
+harness's and recorded (`docs/harness-runs.jsonl`, `/api/evals/runs`), so
+the rotation knows what was built. The weekly run in
+`.github/workflows/harness.yml` is made of them.
+
 Every ask becomes an issue and a cycle pinned to it, all started within
 seconds. While they run the script samples each cycle (queued, running,
 which phase) and afterwards reads GitHub. Beyond what the single harness
@@ -37,9 +44,11 @@ import pathlib
 import re
 import sys
 import time
+from datetime import datetime, timezone
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import cycle_e2e as harness  # noqa: E402 — the single-run harness's helpers
+from theswarm import evals  # noqa: E402
 
 POLL_SECONDS = 15
 _TASK_IN_TITLE = re.compile(r"^\s*\[#(\d+)\]")
@@ -115,6 +124,43 @@ def judge(runs: list[dict], samples: list[dict[str, str]] | None = None, limit: 
     return problems
 
 
+# ── Features from the eval manifests, scored like the daily harness ──
+
+
+def next_feature_of(manifest: "evals.Manifest", history: list[dict], taken: set[str]) -> "evals.Feature | None":
+    """The next feature of the rotation the target lacks and this batch has
+    not taken yet; None when there is none left."""
+    as_if_built = [*history, *({"feature": fid, "outcome": evals.OUTCOME_BUILT} for fid in taken)]
+    if evals.exhausted(manifest, as_if_built):
+        return None
+    feature = evals.next_feature(manifest, as_if_built)
+    taken.add(feature.id)
+    return feature
+
+
+def scored(run: dict, feature: "evals.Feature | None", batch_id: str) -> dict:
+    """The run's record, in the daily harness's shape (`evals.score`)."""
+    record = run.get("record") or {}
+    result = record.get("result") or {}
+    observed = evals.Observed(
+        state=str(run.get("state") or ""),
+        prs=tuple(run.get("opened") or ()),
+        unfinished=tuple(run.get("open_children") or ()),
+        review_decisions=tuple(harness.review_decisions(result)),
+        reviews_skipped=harness.reviews_skipped(result),
+        cost_usd=harness.cycle_cost(record),
+        duration_s=harness.duration_seconds(str(record.get("started_at") or ""), str(record.get("completed_at") or "")),
+        backend=str(result.get("backend") or ""),
+        already_satisfied=tuple(run.get("already_satisfied") or ()),
+        merged=tuple(run.get("merged") or ()),
+        qa=evals.qa_of(result.get("demo_report")),
+        error=str(run.get("error") or ""),
+    )
+    return {"repo": run["repo"], **evals.score(feature, observed), "cycle_id": run.get("cycle"),
+            "issue": run.get("story"), "batch": batch_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+
+
 # ── Reading GitHub and the service ───────────────────────────────────
 
 
@@ -183,12 +229,27 @@ def spans(timeline: list[tuple[int, str, str]]) -> tuple[int, int]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--ask", action="append", required=True, help="'owner/name: feature text' — repeat for each feature")
+    ap.add_argument("--ask", action="append", default=[], help="'owner/name: feature text' (or '#N') — repeat for each feature")
+    ap.add_argument("--next", action="append", default=[], dest="next_of",
+                    help="owner/name — the next feature its eval manifest lacks on the target; repeat for more")
+    ap.add_argument("--history", type=pathlib.Path, default=pathlib.Path("docs/harness-runs.jsonl"))
     ap.add_argument("--limit", type=int, default=0, help="the instance's 'in all' bound; 0 = not judged")
     ap.add_argument("--budget", type=int, default=7200, help="seconds for the whole batch")
     ap.add_argument("--out", type=pathlib.Path, default=None, help="write the batch as JSON here")
     args = ap.parse_args()
-    asks = [parse_ask(a) for a in args.ask]
+    asks: list[tuple[str, str, "evals.Feature | None"]] = [(*parse_ask(a), None) for a in args.ask]
+    taken: dict[str, set[str]] = {}
+    for repo in args.next_of:
+        manifest = evals.manifest_for(repo)
+        if manifest is None:
+            sys.exit(f"FAIL start: no eval manifest for {repo} in evals/")
+        feature = next_feature_of(manifest, harness.past_runs(repo, args.history), taken.setdefault(repo, set()))
+        if feature is None:
+            harness.annotate("warning", f"every feature of the eval manifest of {repo} is already on it — add features")
+            continue
+        asks.append((repo, feature.text, feature))
+    if not asks:
+        sys.exit("FAIL start: nothing to ask for (no --ask, and every --next manifest is built)")
 
     if not harness.wait_for_health():
         sys.exit(f"FAIL start: {harness.BASE}/health never answered 200")
@@ -201,10 +262,11 @@ def main() -> int:
 
     print(f"Starting {len(asks)} features at once on {harness.BASE}")
     runs: list[dict] = []
-    before = {repo: harness.prs_before(repo) for repo in {repo for repo, _ in asks}}
-    for repo, text in asks:
+    before = {repo: harness.prs_before(repo) for repo in {repo for repo, _, _ in asks}}
+    for repo, text, feature in asks:
         again = _EXISTING.match(text)  # "#840": Play again on a feature already asked for
-        runs.append({"repo": repo, "text": text, "story": int(again.group(1)) if again else harness.create_issue(repo, text)})
+        runs.append({"repo": repo, "text": text, "feature": feature,
+                     "story": int(again.group(1)) if again else harness.create_issue(repo, text)})
     for r in runs:
         r["cycle"] = r["first_cycle"] = harness.start_cycle(r["repo"], r["story"])
 
@@ -223,6 +285,12 @@ def main() -> int:
     unowned = {repo: sorted(harness.prs_before(repo) - seen - {pr for r in runs if r["repo"] == repo for pr in r["opened"]})
                for repo, seen in before.items()}
 
+    batch_id = datetime.now(timezone.utc).strftime("parallel-%Y%m%dT%H%M")
+    for r in runs:
+        if r.get("feature") is not None:  # a manifest feature: the rotation must know it was asked
+            record = scored(r, r["feature"], batch_id)
+            harness.append_result(args.history, record)
+            harness.post_run(record)
     problems = judge(runs, samples, args.limit)
     problems += [f"{repo}: pull request(s) {', '.join(f'#{n}' for n in prs)} appeared during the batch and no cycle reports them"
                  for repo, prs in sorted(unowned.items()) if prs]
@@ -235,7 +303,8 @@ def main() -> int:
     print(f"most cycles running at once: {most_at_once(samples)}" + (f" (limit {args.limit})" if args.limit else ""))
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps({"runs": [{k: v for k, v in r.items() if k != "record"} for r in runs],
+        args.out.write_text(json.dumps({"runs": [{k: v for k, v in r.items() if k not in ("record", "feature")}
+                                                 | {"feature": getattr(r.get("feature"), "id", "")} for r in runs],
                                         "most_at_once": most_at_once(samples), "problems": problems}, indent=2, default=str))
     if problems:
         print("\nFAIL — the batch has problems:")

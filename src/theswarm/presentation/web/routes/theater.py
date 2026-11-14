@@ -265,6 +265,16 @@ async def _project_of(state, repo: str) -> dict:
     }
 
 
+async def _continued(state, cycle_id: str) -> bool:
+    """A cycle another one already continues (a deploy's resume, or a person's): no second resume."""
+    try:
+        row = await state.get_cycle_status_query.execute(cycle_id)
+    except Exception:  # noqa: BLE001 — the page stays
+        log.exception("theater: reading the row of %s failed", cycle_id)
+        return False
+    return bool(getattr(row, "resumed_as", "")) if row is not None else False
+
+
 async def theater_context(request: Request, record, orphan: bool = False) -> dict:
     """V2's stage context, plus what the V3 theater draws on top."""
     from theswarm.application.services.progress_bridge import get_phase_history
@@ -294,7 +304,8 @@ async def theater_context(request: Request, record, orphan: bool = False) -> dic
     label, kind = STATUS_CHIPS.get(status, (status.capitalize(), "waiting"))
     resumable_from = None
     checkpoints = getattr(state, "checkpoint_repo", None)
-    if status == "failed" and checkpoints is not None:
+    continued = await _continued(state, record.id) if status == "failed" else False
+    if status == "failed" and checkpoints is not None and not continued:
         try:
             last_ok = await checkpoints.last_ok(record.id)
             resumable_from = last_ok.next_phase if last_ok else None
@@ -341,21 +352,43 @@ async def resume(request: Request, cycle_id: str) -> RedirectResponse:
         return RedirectResponse(f"{base}/cycles/{cycle_id}", status_code=303)
 
     original = await state.get_cycle_status_query.execute(cycle_id)
+    if original is not None and original.resumed_as:  # already continued: a second click opens it
+        return RedirectResponse(f"{base}/cycles/{original.resumed_as}", status_code=303)
     repo = original.project_id if original is not None else ""
+    issue_number = original.issue_number if original is not None else None
+    cycle_repo = getattr(state, "cycle_repo", None)
+    # The durable graph runs on the thread of its resume chain's first cycle:
+    # the button passed none, the continuation looked for a checkpoint under its
+    # own new id and died on CycleNotResumable (the review of 2026-11-11).
+    from theswarm.application.services.cycle_resumer import _thread_id_of
+
+    thread = await _thread_id_of(cycle_repo, cycle_id) if cycle_repo is not None else cycle_id
     tracker = get_cycle_tracker()
-    req = CycleRequest(repo=repo, description=f"Resume of {cycle_id} from {resume_from}")
+    req = CycleRequest(repo=repo, description=f"Resume of {cycle_id} from {resume_from}", issue_number=issue_number)
     record = tracker.create(req)
     task = asyncio.create_task(run_api_cycle(
         record.id, repo, req.description, "", getattr(state, "allowed_repos", []),
         event_bus=getattr(state, "event_bus", None), report_repo=getattr(state, "report_repo", None),
         base_path=base, project_repo=getattr(state, "project_repo", None),
-        cycle_repo=getattr(state, "cycle_repo", None), project_id=repo,
+        cycle_repo=cycle_repo, project_id=repo,
         checkpoint_repo=checkpoint_repo, resume_from=resume_from,
+        resume_cycle_id=thread, issue_number=issue_number,
+        # A person's resume, not the boot's: it does not count toward the one
+        # automatic resume a deploy may make (`cycle_resumer.MAX_RESUME_DEPTH`).
+        triggered_by=MANUAL_RESUME_TRIGGER,
         role_assignment_service=getattr(state, "role_assignment_service", None),
     ))
     tracker.set_task(record.id, task)
-    log.info("Cycle %s resumed as %s from phase %s", cycle_id, record.id, resume_from)
+    if cycle_repo is not None:
+        try:
+            await cycle_repo.mark_resumed(cycle_id, record.id)
+        except Exception:  # noqa: BLE001 — the continuation runs; only the link is missing
+            log.exception("Linking cycle %s to its resume %s failed", cycle_id, record.id)
+    log.info("Cycle %s resumed as %s from phase %s (thread %s)", cycle_id, record.id, resume_from, thread)
     return RedirectResponse(f"{base}/cycles/{record.id}", status_code=303)
+
+
+MANUAL_RESUME_TRIGGER = "resume"
 
 
 @router.get("/cycles/{cycle_id}", response_class=HTMLResponse)

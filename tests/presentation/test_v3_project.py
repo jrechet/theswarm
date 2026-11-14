@@ -147,6 +147,33 @@ class TestThePage:
         assert 'data-testid="play-10"' in r.text and 'data-testid="play-13"' in r.text
         assert f'href="/swarm{PAGE}/f/10"' in r.text
 
+    async def test_every_live_cycle_is_named_and_what_it_builds_is_building(self, web, _isolate_tracker):
+        """Two features played on concert-tour-app (2026-11-11): the banner named
+        one, both cards sat in Backlog with a Running chip, and Building read 0."""
+        from theswarm.api import CycleRecord, CycleStatus as TrackerStatus
+
+        client, app = web
+        issues = [*ISSUES, _issue(20, "backlog", "List a venue's concerts"), _issue(21, "backlog", "Count the concerts per artist"),
+                  _issue(22, "backlog", "Delete a todo")]
+        _running(_isolate_tracker, issue=20, cycle_id="run20run20run")
+        _running(_isolate_tracker, issue=21, cycle_id="run21run21run")
+        _isolate_tracker._cycles["q22q22q22q22"] = CycleRecord(
+            id="q22q22q22q22", repo=REPO, description="Play on issue #22", callback_url="", issue_number=22,
+            status=TrackerStatus.QUEUED, created_at="2026-10-07T08:05:00+00:00")
+        ctx = _github(issues=issues)
+        try:
+            r = await client.get(PAGE, headers=HTML)
+        finally:
+            ctx.stop()
+        assert r.text.count('data-testid="running-banner"') == 3
+        assert "/swarm/cycles/run20run20run" in r.text and "/swarm/cycles/run21run21run" in r.text
+        building = r.text.split('data-column="in-progress"')[1].split("</section>")[0]
+        assert "List a venue" in building and "Count the concerts" in building and "Delete a todo" not in building
+        backlog = r.text.split('data-column="backlog"')[1].split("</section>")[0]
+        queued_card = backlog.split('data-testid="issue-22"')[1].split("</a>")[0]
+        assert 'data-kind="waiting"' in queued_card and "Queued" in queued_card and "Running" not in queued_card
+        assert 'data-testid="play-22"' not in r.text  # played already: Follow, never a second Play
+
     async def test_the_rail_marks_the_project_inside_its_customer(self, web):
         client, app = web
         ctx = _github()

@@ -131,3 +131,41 @@ class TestTheWatch:
         batch.watch(runs, 60, api=lambda path, payload=None: (200, {"status": "queued"}),
                     sleep=lambda s: now.__setitem__("t", now["t"] + s), clock=lambda: now["t"])
         assert runs[0]["state"] == "timeout" and not runs[0]["ran"]
+
+
+class TestTheWeeklyBatch:
+    """The weekly run takes its features from the eval manifests, as the daily
+    harness does, and records each run so the rotation knows what was built
+    (2026-11-14: the daily harness had begun asking for built features again)."""
+
+    def _manifest(self):
+        from theswarm import evals
+
+        feature = lambda fid, built_by="": evals.Feature(id=fid, text=f"Do {fid}\nspec", built_by=built_by, max_cost_usd=8)  # noqa: E731
+        return evals.Manifest(repo="o/app", features=(feature("a", "before"), feature("b"), feature("c"), feature("d")))
+
+    def test_each_next_takes_a_feature_the_target_lacks_and_none_twice(self, batch):
+        manifest = self._manifest()
+        history = [{"feature": "b", "outcome": "built"}]
+        taken: set[str] = set()
+        first = batch.next_feature_of(manifest, history, taken)
+        second = batch.next_feature_of(manifest, history, taken)
+        assert {first.id, second.id} == {"c", "d"} and taken == {"c", "d"}
+        assert batch.next_feature_of(manifest, history, taken) is None  # nothing left: the batch says so
+
+    def test_a_run_is_scored_like_the_daily_harness_s(self, batch):
+        from theswarm import evals
+
+        feature = self._manifest().features[1]
+        run = {"repo": "o/app", "story": 10, "cycle": "aaa", "first_cycle": "aa0", "state": "completed", "error": "",
+               "opened": [21, 22], "merged": [21, 22], "open_children": [], "already_satisfied": [],
+               "record": {"total_cost_usd": 3.5, "started_at": "2026-11-15T09:00:00+00:00",
+                          "completed_at": "2026-11-15T09:30:00+00:00",
+                          "result": {"cost_usd": 3.5, "backend": "sdk", "reviews": [{"decision": "APPROVE"}]}}}
+        record = batch.scored(run, feature, batch_id="b-1")
+        assert record["outcome"] == evals.OUTCOME_BUILT and record["passed"] and record["feature"] == "b"
+        assert record["duration_s"] == 1800 and record["cost_usd"] == 3.5 and record["within_cost"] is True
+        assert record["batch"] == "b-1" and record["cycle_id"] == "aaa" and record["issue"] == 10 and record["repo"] == "o/app"
+        quota = {**run, "state": "failed", "opened": [], "merged": [],
+                 "error": "ClaudeFatalError: Claude subscription exhausted"}
+        assert batch.scored(quota, feature, batch_id="b-1")["outcome"] == evals.OUTCOME_INTERRUPTED

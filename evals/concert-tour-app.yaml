@@ -357,3 +357,77 @@ features:
     expected_paths: ["**/*.py"]
     max_cost_usd: 8
     max_duration_s: 3600
+  # Topped up 2026-11-14: every feature above was on the target, and the
+  # harness had begun asking for them again from the top (remaining-tickets
+  # on 2026-11-11, city-search, chronological-order, sold-out-badge) —
+  # duplicates built and merged, nothing new measured.
+  - id: tours-cancelled
+    text: |-
+      List the cancelled tours
+      GET /api/v1/tours/cancelled returns the cancelled tours, most recently started first, each with its name and the number of its concerts; an empty list when none is cancelled; GET /api/v1/tours/{id} keeps working.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: artist-concerts
+    text: |-
+      List an artist's concerts
+      GET /api/v1/artists/{id}/concerts returns the concerts whose lineup has that artist, soonest first, each with its date, its venue and its city, cancelled ones left out; an empty list when the artist plays nowhere; 404 for an unknown artist.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: venue-update
+    text: |-
+      Change a venue
+      PATCH /api/v1/venues/{id} with any of name, city, country and capacity changes those fields and returns the venue; 422 for a capacity of zero or less or an empty name; 409 when that city already has another venue of that name; 404 for an unknown venue.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: venue-delete
+    text: |-
+      Remove a venue
+      DELETE /api/v1/venues/{id} removes a venue that hosts no concert and answers 204; 409 with the number of its concerts when it hosts any; 404 for an unknown venue.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: revenue-by-month
+    text: |-
+      Revenue per month
+      GET /api/v1/stats/revenue/months returns, for each month that has concerts not cancelled, the month as YYYY-MM, the tickets sold and the revenue (tickets sold times the ticket price, a concert without a price counted as zero), in month order; an empty list when there is none.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: stats-cancellations
+    text: |-
+      Count the cancellations
+      GET /api/v1/stats/cancellations returns the number of concerts, the number cancelled, the share cancelled as a percentage rounded to one decimal, and the number cancelled together with their tour; all zeros when there is no concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: concert-tiers
+    text: |-
+      List a concert's ticket tiers
+      GET /api/v1/concerts/{id}/tiers returns the concert's ticket tiers, cheapest first, each with its name and price; an empty list when the concert has none; 404 for an unknown concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: concert-duplicate
+    text: |-
+      Duplicate a concert on another date
+      POST /api/v1/concerts/{id}/duplicate with {"date_time": "..."} creates a concert on the same tour, at the same venue, with the same price and the same lineup, no tickets sold and not cancelled, and answers 201 with it; 422 for a date in the past; 409 when the venue already has a concert at that date and time; 404 for an unknown concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: lineup-headliner
+    text: |-
+      Name a concert's headliner
+      GET /api/v1/concerts/{id}/headliner returns the last act of the concert's lineup in set order, with its name and set position; 404 for an unknown concert or a concert whose lineup is empty, the detail saying which.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: concerts-by-year
+    text: |-
+      Concerts per year
+      GET /api/v1/stats/years returns, for each year that has concerts, the year, the number of concerts, the number cancelled and the tickets sold, oldest year first; an empty list when there is no concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600

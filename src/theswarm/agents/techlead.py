@@ -28,6 +28,21 @@ BREAKDOWN_TIMEOUT_SECONDS = 240
 
 # ── Prompts ─────────────────────────────────────────────────────────────
 
+def task_labels(asked) -> list[str]:
+    """The labels a sub-task is created with: the Dev's, whatever the breakdown said.
+
+    Only the Dev picks a task (`role:dev` + `status:ready`); any other role or
+    status label makes a task nobody takes — swarm-todo-app#28, `role:qa`,
+    left its story open with the feature built (2026-11-11). Other labels
+    (an area, a size) pass through.
+    """
+    from theswarm.agents.schemas import DEFAULT_TASK_LABELS
+
+    kept = [label for label in (asked or []) if isinstance(label, str)
+            and not label.startswith(("role:", "status:"))]
+    return list(dict.fromkeys([*DEFAULT_TASK_LABELS, *kept]))
+
+
 BREAKDOWN_PROMPT = """\
 You are the Tech Lead of an autonomous dev team. Break down a user story into \
 concrete technical tasks.
@@ -76,6 +91,8 @@ Two developers may build tasks without a dependency between them at the same \
 time, so leave it empty only when a task truly stands alone
 - No task only writes tests: the task that writes the code writes its tests \
 first. A tests-only task after the code finds them already written
+- No QA, E2E or demo task: QA runs its own phase once the tasks are merged, \
+writes the end-to-end tests and films the demo. Every task is a developer's
 - Keep task titles in imperative form
 - Return ONLY the JSON array, no markdown fences.
 """
@@ -245,7 +262,7 @@ async def breakdown_stories(state: AgentState) -> dict:
         for position, task in enumerate(tasks, start=1):
             title = task.get("title", "")
             body = task.get("body", "")
-            labels = task.get("labels", ["role:dev", "status:ready"])
+            labels = task_labels(task.get("labels"))
 
             # What it waits for, as issue numbers: earlier positions only,
             # so a dependency is always created (and picked) first.

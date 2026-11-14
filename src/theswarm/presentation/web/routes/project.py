@@ -227,6 +227,26 @@ async def _delivered(state, full_name: str, base: str, limit: int = 6) -> list[d
     return cards
 
 
+def live_cards(base: str, records: list) -> list[dict]:
+    """Every live cycle of the project — running, then queued — and where each is.
+    The banner named the first and the others were not there (2026-11-11)."""
+    from theswarm.presentation.web.live_line import live_line
+    from theswarm.presentation.web.routes.home import feature_title
+    from theswarm.presentation.web.shell import waiting_words
+
+    cards = []
+    for record in records:
+        title = feature_title(record)
+        cards.append({
+            "id": record.id, "issue_number": record.issue_number, "status": record.status.value,
+            "title": title or (f"the feature #{record.issue_number}" if record.issue_number else "the daily cycle"),
+            "named": bool(title), "href": f"{base}/cycles/{record.id}",
+            "since": _clock(record.started_at or record.created_at), "waits": waiting_words(record),
+            "line": live_line(record),
+        })
+    return cards
+
+
 def _issue_row(issue: dict, status: str, running, urls: dict) -> dict:
     number = issue.get("number")
     cycle = next((r for r in common._as_list(running) if getattr(r, "issue_number", None) == number), None)
@@ -236,6 +256,7 @@ def _issue_row(issue: dict, status: str, running, urls: dict) -> dict:
         "href": f"{urls['feature']}{number}",
         "play_url": f"{urls['play']}{number}/play",
         "building": building,
+        "queued": building and not common._is_running(cycle),
         "cycle_id": getattr(cycle, "id", "") if building else "",
         "stalled": status == "stalled",
         "fresh": False,
@@ -270,7 +291,6 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
         issues_error = str(exc)[:160]
 
     running_all = common._running_records(full_name)
-    running = running_all[0] if running_all else None
     by_key: dict[str, list[dict]] = {key: [] for key, _, _ in COLUMNS}
     stalled: list[dict] = []
     for issue in issues:
@@ -284,10 +304,7 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
     columns = [{"key": key, "label": label, "dot": dot, "issues": by_key[key],
                 "stalled": stalled if key == "ready" else []} for key, label, dot in COLUMNS]
 
-    running_cycle = None
-    if running is not None:
-        running_cycle = {"id": running.id, "issue_number": running.issue_number,
-                         "href": f"{base}/cycles/{running.id}", "since": _clock(running.started_at or running.created_at)}
+    live = live_cards(base, running_all)
 
     return state.templates.TemplateResponse("project.html", {
         "customer": customer,
@@ -297,7 +314,7 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
         "stalled": stalled,
         "has_issues": bool(issues),
         "issues_error": issues_error,
-        "running_cycle": running_cycle,
+        "live": live,
         "latest_demo": await common._latest_demo(state, full_name),
         "delivered": await _delivered(state, full_name, base),
         "evals": await common._evals_trend(state, full_name),

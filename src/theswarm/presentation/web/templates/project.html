@@ -31,13 +31,23 @@
     </div>
   </div>
 
-  {% if running_cycle %}
-  <a href="{{ running_cycle.href }}" data-testid="running-banner"
-     class="flex flex-wrap items-center gap-4 px-5 py-3.5 bg-surface border border-live/40 rounded-[10px] hover:border-live">
-    {{ ui.live_dot(10) }}
-    <span class="text-[14px] font-medium">The swarm is building{% if running_cycle.issue_number %} <span class="font-mono">#{{ running_cycle.issue_number }}</span>{% endif %}{% if running_cycle.since %} <span class="text-muted font-normal">since {{ running_cycle.since }}</span>{% endif %}</span>
-    <span class="ml-auto text-[13px] font-medium text-live-deep">Open the theater →</span>
-  </a>
+  {% if live %}
+  <div class="flex flex-col gap-2" data-testid="live-cycles">
+    {% for c in live %}
+    <a href="{{ c.href }}" data-testid="running-banner" data-cycle="{{ c.id }}" data-status="{{ c.status }}"
+       class="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-5 py-3.5 bg-surface border {% if c.status == 'running' %}border-live/40 hover:border-live{% else %}border-line hover:border-line-strong{% endif %} rounded-[10px]">
+      {{ ui.live_dot(10, pulse=(c.status == 'running')) }}
+      <span class="flex flex-col gap-1.5 min-w-0 flex-[1_1_320px]">
+        <span class="text-[14px] font-medium">{% if c.status == 'running' %}The swarm is building{% else %}Queued:{% endif %}
+          {% if c.issue_number %}<span class="font-mono">#{{ c.issue_number }}</span>{% endif %}{% if c.named %} {{ c.title }}{% endif %}
+          {% if c.since %}<span class="text-muted font-normal">· since {{ c.since }}</span>{% endif %}
+          {% if c.waits %}<span class="text-muted font-normal">— {{ c.waits }}</span>{% endif %}</span>
+        {{ ui.cycle_line(c.line) }}
+      </span>
+      <span class="ml-auto text-[13px] font-medium text-live-deep whitespace-nowrap">Open the theater →</span>
+    </a>
+    {% endfor %}
+  </div>
   {% endif %}
 
   {# ── The composer ───────────────────────────────────────────────── #}
@@ -73,6 +83,7 @@
         <span class="flex items-center gap-2 text-[12px] text-faint">
           <span class="font-mono">#{{ issue.number }}</span>
           {% if issue.fresh %}<span class="ml-auto" data-testid="fresh-issue">{{ ui.chip('New', 'running') }}</span>
+          {% elif issue.queued %}<span class="ml-auto">{{ ui.chip('Queued', 'waiting') }}</span>
           {% elif issue.building %}<span class="ml-auto">{{ ui.chip('Running', 'running', pulse=True) }}</span>{% endif %}
         </span>
         <span class="text-[13px] font-medium leading-[1.35]">{{ issue.title }}</span>

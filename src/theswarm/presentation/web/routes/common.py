@@ -103,6 +103,10 @@ def _running_records(full_name: str) -> list:
         return []
 
 
+def _is_running(record) -> bool:
+    return getattr(getattr(record, "status", None), "value", "") == "running"
+
+
 def _as_list(running) -> list:
     if running is None:
         return []
@@ -250,6 +254,11 @@ def _board_status(issue: dict, running, prs: list[dict] | None) -> str:
 
     status = issue_status(issue)
     number = issue.get("number")
+    # What a running cycle is pinned to is being built, whatever its label: a
+    # feature written in the composer stays `status:backlog`, and two played on
+    # concert-tour-app sat in Backlog while Building read 0 (2026-11-11).
+    if any(getattr(r, "issue_number", None) == number and _is_running(r) for r in _as_list(running)):
+        return "in-progress"
     if status == "in-progress":
         pinned = [getattr(r, "issue_number", None) for r in _as_list(running)]
         if not any(p is not None and (number == p or is_child_of(issue.get("body"), p)) for p in pinned):
