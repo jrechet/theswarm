@@ -27,13 +27,18 @@ RESULT = {"cost_usd": 1.0, "prs": [], "reviews": [], "date": "2026-11-14"}
 
 @pytest.fixture(autouse=True)
 def _clean():
+    from theswarm.dashboard import get_dashboard_state
+
     quota_wall.clear()
     tracker = get_cycle_tracker()
     before = dict(tracker._cycles)
+    dash = get_dashboard_state()
+    cost = dash.cost_so_far
     yield
     quota_wall.clear()
     tracker._cycles.clear()
     tracker._cycles.update(before)
+    dash.cost_so_far = cost  # the runner writes the process-wide dashboard; leave it as found
 
 
 class _Clock:
