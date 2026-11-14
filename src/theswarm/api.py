@@ -12,7 +12,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 
@@ -55,6 +55,10 @@ class CycleRecord(BaseModel):
     result: dict[str, Any] | None = None
     error: str | None = None
     trace_id: str = ""  # the cycle's root span in Seq (V2 runtime, M2)
+    # What a live cycle is waiting for, in words ("" while it works): the
+    # Claude window it waits out (A1, `claude_window`). The home and the
+    # theater say it instead of "quiet for 40 min".
+    waiting: str = ""
 
 
 class CycleTracker:
@@ -103,6 +107,11 @@ class CycleTracker:
             for k, v in kwargs.items():
                 if hasattr(record, k):
                     setattr(record, k, v)
+
+    def set_waiting(self, cycle_id: str, words: str) -> None:
+        record = self._cycles.get(cycle_id)
+        if record is not None:
+            record.waiting = words
 
     def set_task(self, cycle_id: str, task: asyncio.Task) -> None:
         self._tasks[cycle_id] = task
@@ -204,6 +213,40 @@ async def _ask_preflight():
     except Exception:  # noqa: BLE001
         log.exception("Preflight could not be read — the cycle goes on")
         return None
+
+
+async def _wait_out_claude(cycle_id: str, say, waited: timedelta) -> timedelta | None:
+    """Wait for the Claude window to reopen when that is worth it (A1);
+    the total waited so far, or None when the cycle should end instead —
+    no wall (dead credentials), or one too far away (a weekly limit)."""
+    from theswarm import claude_window
+
+    until = claude_window.closed_until()
+    if not claude_window.worth_waiting(until, waited):
+        return None
+    words = claude_window.words(until)
+    tracker = get_cycle_tracker()
+    tracker.set_waiting(cycle_id, words)
+    log.warning("Cycle %s: %s", cycle_id, words)
+    if say is not None:
+        try:
+            await say("System", words)
+        except Exception:  # noqa: BLE001 — the wait goes on unsaid
+            log.exception("Telling the theater about the wait of %s failed", cycle_id)
+    try:
+        return waited + await claude_window.wait_out(until)
+    finally:
+        tracker.set_waiting(cycle_id, "")
+
+
+def _only_the_window(answer) -> bool:
+    """A preflight no-go whose only reason is the closed Claude window: waited out, not refused."""
+    from theswarm import claude_window
+    from theswarm.agents.devops import BAD, NO_GO_KEYS
+
+    findings = getattr(getattr(answer, "report", None), "findings", ()) or ()
+    blocking = [f for f in findings if f.key in NO_GO_KEYS and f.status == BAD]
+    return bool(blocking) and all(f.key == "claude" for f in blocking) and claude_window.closed_until() is not None
 
 
 def set_cycle_checkpointer(checkpointer: object | None) -> None:
@@ -415,6 +458,13 @@ async def _run_api_cycle(
 
     # DevOps D2 — the preflight: a cycle that would die or lie is not started.
     answer = await _ask_preflight()
+    preflight_waited = timedelta(0)
+    while answer is not None and not answer.go and _only_the_window(answer):
+        more = await _wait_out_claude(cycle_id, None, preflight_waited)
+        if more is None:
+            break
+        preflight_waited = more
+        answer = await _ask_preflight()
     if answer is not None and event_bus is not None:
         # DevOps's first act in the cycle, for its station in the theater
         from theswarm.application.services.devops_cycles import preflight_activity, tell
@@ -617,23 +667,38 @@ async def _run_api_cycle(
                     except Exception:
                         log.exception("checkpoint save failed for cycle %s phase %s", cycle_id, phase)
 
-            try:
-                result = await asyncio.wait_for(
-                    run_daily_cycle(
-                        cycle_config,
-                        on_progress=on_progress,
-                        on_checkpoint=on_checkpoint,
-                        resume_from=resume_from,
-                        cycle_id=resume_cycle_id or cycle_id,
-                        checkpointer=get_cycle_checkpointer(),
-                        resume=bool(resume_from or resume_cycle_id),
-                    ),
-                    timeout=CYCLE_HARD_TIMEOUT_SECONDS,
-                )
-            except asyncio.TimeoutError:
-                raise RuntimeError(
-                    f"cycle exceeded hard timeout ({CYCLE_HARD_TIMEOUT_SECONDS}s) — aborted"
-                ) from None
+            # A closed Claude window is waited out (A1): the cycle goes on from
+            # its last finished node on the same thread, the wait not counted
+            # against the hard timeout. Dead credentials and a wall too far
+            # away still end it (`_wait_out_claude`).
+            from theswarm.tools.claude import ClaudeFatalError
+
+            resume = bool(resume_from or resume_cycle_id)
+            waited = preflight_waited
+            while True:
+                try:
+                    result = await asyncio.wait_for(
+                        run_daily_cycle(
+                            cycle_config,
+                            on_progress=on_progress,
+                            on_checkpoint=on_checkpoint,
+                            resume_from=resume_from,
+                            cycle_id=resume_cycle_id or cycle_id,
+                            checkpointer=get_cycle_checkpointer(),
+                            resume=resume,
+                        ),
+                        timeout=CYCLE_HARD_TIMEOUT_SECONDS,
+                    )
+                    break
+                except asyncio.TimeoutError:
+                    raise RuntimeError(
+                        f"cycle exceeded hard timeout ({CYCLE_HARD_TIMEOUT_SECONDS}s) — aborted"
+                    ) from None
+                except ClaudeFatalError:
+                    more = await _wait_out_claude(cycle_id, on_progress, waited)
+                    if more is None:
+                        raise
+                    waited, resume = more, True
 
             tracing.set_attributes(
                 cycle_span,

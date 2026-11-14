@@ -210,6 +210,8 @@ def watch(runs: list[dict], budget_s: int, *, api=None, sleep=time.sleep, clock=
             sample[r["cycle"]] = state
         if sample:
             samples.append(sample)
+        if any((r.get("record") or {}).get("waiting") for r in runs if r["state"] not in harness.TERMINAL):
+            started += POLL_SECONDS  # a wait for the Claude window is the subscription's time, not the batch's
         if all(r["state"] in harness.TERMINAL for r in runs):
             return samples
         sleep(POLL_SECONDS)

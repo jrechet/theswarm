@@ -273,6 +273,9 @@ async def api_cycle(request: Request, cycle_id: str) -> JSONResponse:
             # Only the result: which store answers the rest stays the rule
             # test_known_to_both_stores_matches_sqlite_version pins.
             body["result"] = dict(record.result or {})
+            # What a live cycle waits for (the Claude window, A1): the harness
+            # does not count a wait against its budget.
+            body["waiting"] = getattr(record, "waiting", "") or ""
         return JSONResponse(body)
     if record:
         return JSONResponse(_tracker_record_to_unified_json(record))
@@ -528,6 +531,7 @@ def _cycle_dto_to_unified_json(c) -> dict:
         "prs_merged": list(c.prs_merged),
         "phases": phases_out,
         "issue_number": getattr(c, "issue_number", None),
+        "waiting": "",  # the tracker's, overlaid below while the process runs it
         "error": getattr(c, "error", "") or None,
         "result": {},
         # Set when a restart interrupted this cycle and the boot resumer
@@ -553,6 +557,7 @@ def _tracker_record_to_unified_json(record) -> dict:
         "prs_merged": result.get("prs_merged", []),
         "phases": [],
         "issue_number": record.issue_number,
+        "waiting": getattr(record, "waiting", "") or "",
         "error": record.error,
         "result": dict(record.result or {}),
         "resumed_as": None,
