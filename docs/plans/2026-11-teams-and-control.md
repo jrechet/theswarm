@@ -95,7 +95,7 @@ par des tests unitaires seuls.
 complète ; déploiement ; l'essai parallèle rejoué jusqu'au vert. Le harness
 quotidien gagne une variante hebdomadaire « trois à la fois ».
 
-**A1 — un cycle ne meurt plus pour une raison qui passe (3 jours).**
+**A1 — un cycle ne meurt plus pour une raison qui passe (3 jours).** Livré en partie le 2026-11-14 : le mur de quota est attendu (cycle et preflight), l'attente est dite partout et ne compte pas dans les budgets des harness ; les étapes muettes du Dev, de l'attente de CI et de QA parlent. Reste : l'événement `AgentStalled` du watchdog et l'interruption d'un appel figé, la part de fenêtre (`RateLimitEvent`).
 - Statut `waiting` avec sa raison : mur de quota (reprise à l'heure que le
   message donne), CI en cours, file d'attente. Un mur suspend le cycle à la
   frontière du nœud — le graphe est déjà durable — et le relance tout seul.
