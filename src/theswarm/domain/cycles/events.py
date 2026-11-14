@@ -36,6 +36,22 @@ class AgentActivity(DomainEvent):
 
 
 @dataclass(frozen=True)
+class AgentStalled(DomainEvent):
+    """An agent said nothing for the watchdog's bound (A1).
+
+    The watchdog only wrote it in the logs (`cycle.py`, built without a
+    callback); the theater and the home could not tell a stuck agent from a
+    busy one. Published once per silence: the agent speaking again ends it.
+    """
+
+    cycle_id: CycleId = field(default_factory=CycleId.generate)
+    project_id: str = ""
+    agent: str = ""
+    idle_seconds: float = 0.0
+    last_said: str = ""
+
+
+@dataclass(frozen=True)
 class AgentThought(DomainEvent):
     """Sprint D V3 — an agent's reasoning step (narrative/thinking text)."""
 

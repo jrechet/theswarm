@@ -64,8 +64,9 @@ seul ne l'aurait signalé.
 | 4 ✔ | La page projet ne nomme qu'un des cycles en cours et range les features en cours dans « Backlog », « Building 0 » | `project.py:272-290`, `common._board_status` |
 | 5 ✔ | Le bouton « Resume » d'un cycle échoué ne peut pas marcher | `theater.py:346` ne passe pas `resume_cycle_id` → `CycleNotResumable` ; le test mocke `run_api_cycle` |
 | 6 ✔ | L'API ne renvoie jamais la feature d'un cycle (`issue_number: null`) alors que la table la stocke | `CycleDTO` sans le champ, trois requêtes à compléter |
-| 7 | Un mur de quota tue le cycle au lieu de le suspendre | `ClaudeFatalError` → `failed` |
-| 8 | Le watchdog ne fait qu'écrire dans les logs | construit sans callback (`cycle.py:353`) |
+| 7 ✔ | Un mur de quota tue le cycle au lieu de le suspendre | `ClaudeFatalError` → `failed` |
+| 8 ✔ | Le watchdog ne fait qu'écrire dans les logs | construit sans callback (`cycle.py:353`) |
+| 16 ✔ | Une reprise après timeout répond « Understood — I'll stop and wait » et rend la tâche : l'invite de reprise finissait par « Finish the task and stop. » | `SDK_CONTINUE_PROMPT`, cycle 8ed99b88f26a (2026-11-11) |
 | 9 | Deux Dev en parallèle partagent une seule station « Dev » : on ne sait pas qui fait quelle tâche | un seul `current_role`, pas d'identifiant de tâche sur les événements |
 | 10 | Les prompts du Dev et du relecteur n'ont pas le paragraphe anti-injection | `DEV_SYSTEM`, `REVIEW_SYSTEM` : constantes mortes |
 | 11 ✔ | Le manifeste d'évaluation est épuisé : le harness ne mesure plus rien de neuf | 45 features, toutes livrées |
@@ -104,7 +105,7 @@ par des tests unitaires seuls.
 complète ; déploiement ; l'essai parallèle rejoué jusqu'au vert. Le harness
 quotidien gagne une variante hebdomadaire « trois à la fois ».
 
-**A1 — un cycle ne meurt plus pour une raison qui passe (3 jours).** Livré en partie le 2026-11-14 : le mur de quota est attendu (cycle et preflight), l'attente est dite partout et ne compte pas dans les budgets des harness ; les étapes muettes du Dev, de l'attente de CI et de QA parlent. Reste : l'événement `AgentStalled` du watchdog et l'interruption d'un appel figé, la part de fenêtre (`RateLimitEvent`).
+**A1 — un cycle ne meurt plus pour une raison qui passe (3 jours). Livré le 2026-11-14** : le mur de quota est attendu (cycle et preflight), l'attente est dite partout et ne compte pas dans les budgets des harness ; les étapes muettes du Dev, de l'attente de CI et de QA parlent ; le watchdog publie `AgentStalled` (fil du théâtre, station active, accueil) ; un appel muet (pas de premier mot en 2 min, ou 11 min de silence) est coupé et sa session reprise sur le même budget ; la reprise ne dit plus « … and stop » (deux reprises sur trois en prod avaient répondu « je m'arrête et j'attends ») ; la part de fenêtre se règle dans Réglages → Cycles, lue sur `RateLimitEvent` (`raw.unifiedWindows` : l'`utilization` du SDK vaut `None`). Mesure d'abord : aucun des trois timeouts de prod en sept semaines n'était un appel muet — les bornes sont un filet.
 - Statut `waiting` avec sa raison : mur de quota (reprise à l'heure que le
   message donne), CI en cours, file d'attente. Un mur suspend le cycle à la
   frontière du nœud — le graphe est déjà durable — et le relance tout seul.

@@ -311,6 +311,26 @@ async def _pull_latest(config: CycleConfig) -> None:
     )
 
 
+# The roles a phase belongs to (`cycle_graph._run_phase`): only their silence is a stall.
+STALL_ROLES = frozenset({"PO", "TechLead", "Dev", "QA"})
+
+
+def stall_reporter(on_stalled):
+    """The watchdog's `on_idle`: hands `on_stalled` one event per silence (its
+    first warning), only for an agent that owns a phase — "System" and
+    "Memory" speak once and are never retired — and never raises."""
+
+    async def _stalled(event) -> None:
+        if on_stalled is None or event.warning_count != 1 or event.role not in STALL_ROLES:
+            return
+        try:
+            await on_stalled(event)
+        except Exception:  # noqa: BLE001 — a deaf listener never stops a cycle
+            log.exception("on_stalled raised (continuing)")
+
+    return _stalled
+
+
 async def run_daily_cycle(
     config: CycleConfig,
     on_progress=None,
@@ -320,6 +340,7 @@ async def run_daily_cycle(
     cycle_id: str | None = None,
     checkpointer=None,
     resume: bool = False,
+    on_stalled=None,
 ) -> dict:
     """Run one complete daily cycle and return the summary.
 
@@ -340,6 +361,8 @@ async def run_daily_cycle(
         cycle_id: The thread the graph checkpoints under (a fresh id by default).
         checkpointer: A LangGraph checkpointer; in memory when None (no durability).
         resume: Continue the thread instead of starting a cycle.
+        on_stalled: Optional async callback ``(WatchdogEvent) -> None``, once per
+            silence of an agent that owns a phase (A1: the theater says so).
     """
     import uuid
 
@@ -353,6 +376,7 @@ async def run_daily_cycle(
     watchdog = AgentWatchdog(
         idle_threshold=config.watchdog_idle_threshold,
         max_warnings=config.watchdog_max_warnings,
+        on_idle=stall_reporter(on_stalled),
     )
     await watchdog.start()
 

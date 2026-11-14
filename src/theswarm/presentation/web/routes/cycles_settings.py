@@ -70,7 +70,11 @@ async def _render(request: Request, *, error: str = "", status_code: int = 200) 
     running = _running_counts()
     rows = [{"repo": repo, "max": repo_max_cycles(repo), "running": running.get(repo, 0)}
             for repo in await _projects(state)]
+    from theswarm import claude_window
+
     return state.templates.TemplateResponse("settings_cycles.html", {
+        "claude_share": claude_window.share(), "min_share": claude_window.MIN_SHARE,
+        "claude_windows": claude_window.windows(), "over_share": claude_window.over_share(),
         "available": service is not None, "in_all": max_concurrent_cycles(),
         "in_all_default": env_max_concurrent_cycles(), "in_all_set": bool(service and service.global_max()),
         "rows": rows, "max_in_all": MAX_IN_ALL, "max_per_repo": MAX_PER_REPO,
@@ -110,7 +114,8 @@ async def save_cycles(request: Request):
             in_all = None  # the instance's default: no row
         per_repo = {repo: _number(form.get(f"repo:{repo}"), DEFAULT_REPO_MAX_CYCLES)
                     for repo in await _projects(state)}
-        await service.save(in_all, per_repo, by=getattr(actor, "login", "") or "owner")
+        share = _number(form.get("claude-share"), None) if "claude-share" in form else ...
+        await service.save(in_all, per_repo, by=getattr(actor, "login", "") or "owner", claude_share=share)
     except (CycleLimitsError, ValueError) as exc:
         return await _render(request, error=str(exc) or "A number, please.", status_code=400)
     log.info("Settings → Cycles: %s in all, %s per project", in_all or "default",

@@ -256,8 +256,16 @@ async def _stage_context(request: Request, record) -> dict:
 
     pinned = await load_pinned_issue(record.repo, record.issue_number)
     graph = _graph(record, phases, progress, pinned)
+    # How long the working agent has said nothing (A1) — the home's live line,
+    # on the active station: a stuck agent is told from a busy one.
+    from theswarm.presentation.web.live_line import live_line
+
+    line = live_line(record, phases=phases, progress=progress)
     for node in graph["nodes"]:
         node["model"] = models.get(node["key"], "")
+        node["quiet"] = node["state"] == "active" and line["quiet"] and not line["waiting"]
+        node["stalled"] = node["quiet"] and line["stalled"]
+        node["ago"] = line["ago"] if node["quiet"] else ""
     if devops is not None:
         graph["nodes"] = [devops, *graph["nodes"]]  # the preflight comes first
     demo = await _cycle_demo(request.app.state, record.id)

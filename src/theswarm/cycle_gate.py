@@ -50,6 +50,11 @@ def set_cycle_limits(limits) -> None:
         gate.limits_changed()
 
 
+def cycle_limits():
+    """The owner's limits (`CycleLimitsService`), None for the environment alone."""
+    return _LIMITS
+
+
 def env_max_concurrent_cycles() -> int:
     raw = os.environ.get("SWARM_MAX_CONCURRENT_CYCLES", "").strip()
     try:

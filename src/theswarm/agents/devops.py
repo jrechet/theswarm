@@ -316,6 +316,8 @@ def claude_finding(status: dict | None) -> Finding:
         return Finding("claude", "Claude", BAD, f"subscription window closed{(' ' + detail) if detail else ''} — every cycle refuses until then")
     if word == "auth_expired":
         return Finding("claude", "Claude", BAD, "credentials expired — a person must renew them (claude setup-token, then redeploy)")
+    if word == "over_share":
+        return Finding("claude", "Claude", BAD, f"the swarm's share of the window is used{(' ' + detail) if detail else ''} — cycles wait until then")
     return Finding("claude", "Claude", UNKNOWN, word)
 
 

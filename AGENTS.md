@@ -429,10 +429,34 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   so — the API (`waiting`), the home, the project page, the theater — and
   neither harness counts it against its budget. Three cycles at once had
   died together on 2026-11-11, the third refused before it started.
+  **The swarm keeps to its share of the window** (`claude_window.note`,
+  `over_share`): every call streams a `RateLimitEvent` whose numbers are in
+  `raw["unifiedWindows"]` (its own `utilization` is None — 5-hour 5 %,
+  weekly 66 % on 2026-11-14); past the percent the owner sets in
+  **Settings → Cycles** (`claude:share` among the cycle limits,
+  `SWARM_CLAUDE_WINDOW_SHARE` without a database, 100 = all of it) no call
+  is made before that window resets: the cycle waits as for a wall,
+  `/health` says `claude: over_share` with the reset, the preflight waits,
+  the harness starts nothing. The rest is the owner's own Claude Code.
 - **The steps that are not a Claude call say what they do**
   (`agents.base.say`, through the role's `ClaudeCLI.on_event`): the Dev's
   install, tests and push, the merge pass's CI wait, every QA step
   (`qa.QA_STEP_WORDS`). Silence read as stuck.
+- **A silence is said, and a silent call is cut** (A1, 2026-11-14). The
+  watchdog's first warning for an agent of a phase (`cycle.stall_reporter`,
+  `STALL_ROLES`) is an `AgentStalled` on the bus (`api._stall_publisher`),
+  kept with the cycle's events, a line in the theater's feed ("Silent for
+  13 min — last said: …"); the active station and the home's live line say
+  "no word for …", red past 12 min. Inside a call, every SDK message is a
+  sign of life (`_within`): no first word in 120 s
+  (`SWARM_CLAUDE_FIRST_WORD_SECONDS`) or silence for 660 s
+  (`SWARM_CLAUDE_STALL_SECONDS`) cancels the stream and resumes the session
+  on the same budget (`_SDKStalled`, never "timed out after": the floor does
+  not grow). None of prod's three timeouts in seven weeks was silent (Seq);
+  two of the three resumes answered the old continue prompt's "Finish the
+  task and stop." with "Understood — I'll stop and wait" and no structured
+  answer — `SDK_CONTINUE_PROMPT` now says the turn was cut, to work in the
+  foreground and to end with the final answer.
 - `GitHubClient._fresh()` rebinds only when App credentials exist. A static
   `GITHUB_TOKEN` never rotates, and rebuilding on a mere difference replaces
   clients built deliberately with a mock — that is how a token in the

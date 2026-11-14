@@ -95,18 +95,23 @@ async def test_a_stalled_role_is_reported_once_not_every_interval():
     assert seen[0].role == "System"
 
 
-async def test_a_fresh_heartbeat_does_not_resurrect_the_alarm():
-    """Recovery is real progress, not a re-alarm."""
-    watchdog, seen = _watchdog()
+async def test_a_fresh_heartbeat_ends_the_alarm_and_a_new_silence_is_a_new_one():
+    """Recovery is real progress, not a re-alarm — and a later silence is
+    reported again (A1: the theater says each one; a role that had timed out
+    used to stay silenced for the rest of its phase)."""
+    watchdog, seen = _watchdog(idle_threshold=0.1)
     watchdog.heartbeat("QA", "running tests")
 
     await watchdog.start()
-    await _let_it_check()
+    await asyncio.sleep(0.25)  # silent past the bound
+    assert len(seen) == 1
     watchdog.heartbeat("QA", "tests passed")
-    await _let_it_check()
+    await asyncio.sleep(0.03)  # it just spoke
+    assert len(seen) == 1
+    await asyncio.sleep(0.25)  # silent again
     await watchdog.stop()
 
-    assert len(seen) == 1
+    assert len(seen) == 2 and seen[1].last_message == "tests passed"
 
 
 # ── The cycle wires it ─────────────────────────────────────────────────
