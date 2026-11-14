@@ -239,6 +239,25 @@ async def _wait_out_claude(cycle_id: str, say, waited: timedelta) -> timedelta |
         tracker.set_waiting(cycle_id, "")
 
 
+def _stall_publisher(event_bus, cycle_id: str, project_id: str):
+    """The watchdog's word that an agent went silent, as an `AgentStalled` on
+    the bus (A1): the cycle event store keeps it and the theater's feed says
+    it. None without a bus (the CLI): the watchdog then only logs, as before."""
+    if event_bus is None:
+        return None
+
+    async def on_stalled(event) -> None:
+        from theswarm.domain.cycles.events import AgentStalled
+        from theswarm.domain.cycles.value_objects import CycleId
+
+        await event_bus.publish(AgentStalled(
+            cycle_id=CycleId(cycle_id), project_id=project_id, agent=event.role,
+            idle_seconds=float(event.idle_seconds), last_said=str(event.last_message or "")[:200],
+        ))
+
+    return on_stalled
+
+
 def _only_the_window(answer) -> bool:
     """A preflight no-go whose only reason is the closed Claude window: waited out, not refused."""
     from theswarm import claude_window
@@ -574,6 +593,8 @@ async def _run_api_cycle(
             dash.current_phase = f"{role}: {message[:50]}"
             dash.push_event(role, message)
 
+    on_stalled = _stall_publisher(event_bus, cycle_id, repo)
+
     try:
         cycle_config = CycleConfig(
             github_repo=repo, project_id=project_id or repo,
@@ -686,6 +707,7 @@ async def _run_api_cycle(
                             cycle_id=resume_cycle_id or cycle_id,
                             checkpointer=get_cycle_checkpointer(),
                             resume=resume,
+                            on_stalled=on_stalled,
                         ),
                         timeout=CYCLE_HARD_TIMEOUT_SECONDS,
                     )

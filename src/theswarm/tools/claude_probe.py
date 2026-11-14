@@ -57,6 +57,13 @@ def standing_wall() -> dict | None:
     if auth_wall.wall_until() is not None:
         return {"claude": "auth_expired", "claude_auth": auth_wall.reason() or "expired",
                 "detail": auth_wall.reason()}
+    from theswarm import claude_window
+
+    over = claude_window.over_share()
+    if over is not None:
+        # The swarm's share is used (Settings → Cycles): no run spends the owner's rest.
+        return {"claude": "over_share", "claude_quota_resets_at": over["resets_at"].isoformat(),
+                "detail": claude_window.share_words(over)}
     return None
 
 

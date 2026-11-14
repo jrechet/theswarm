@@ -17,6 +17,13 @@ class ThoughtEntry:
     metadata: dict = field(default_factory=dict)  # an AgentActivity's, for the stations
 
 
+def stalled_words(idle_seconds: float, last_said: str = "") -> str:
+    """The feed's line for an `AgentStalled`: how long, and the last thing said."""
+    minutes = max(1, round(float(idle_seconds or 0) / 60))
+    said = " ".join(str(last_said or "").split())[:80]
+    return f"Silent for {minutes} min" + (f" — last said: {said}" if said else "")
+
+
 class GetAgentThoughtsQuery:
     """Return agent thoughts/steps from the cycle event store, in order."""
 
@@ -47,6 +54,19 @@ class GetAgentThoughtsQuery:
                         phase="",
                         occurred_at=r.occurred_at,
                         metadata=dict(r.payload.get("metadata") or {}),
+                    ),
+                )
+                continue
+            if include_activity and r.event_type == "AgentStalled":
+                entries.append(
+                    ThoughtEntry(
+                        kind="stalled",
+                        agent=str(r.payload.get("agent", "")),
+                        text=stalled_words(r.payload.get("idle_seconds", 0), r.payload.get("last_said", "")),
+                        detail="",
+                        phase="",
+                        occurred_at=r.occurred_at,
+                        metadata={"idle_seconds": r.payload.get("idle_seconds", 0)},
                     ),
                 )
                 continue

@@ -67,6 +67,13 @@ def claude_status() -> dict:
         return {"status": "quota_wall", "label": "Claude: quota wall", "detail": f"until {until}"}
     if auth_wall.wall_until() is not None:
         return {"status": "auth_expired", "label": "Claude: credentials expired", "detail": ""}
+    from theswarm import claude_window
+
+    over = claude_window.over_share()
+    if over is not None:
+        # The owner's share of the window is spent (Settings → Cycles): the rest is theirs.
+        return {"status": "over_share", "label": "Claude: the swarm's share used",
+                "detail": f"until {over['resets_at'].astimezone(timezone.utc):%H:%M UTC}"}
     return {"status": "ok", "label": "Claude ok", "detail": ""}
 
 

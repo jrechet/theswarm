@@ -49,6 +49,7 @@ from theswarm.application.events.persistence_handlers import (
 )
 from theswarm.domain.cycles.events import (
     AgentActivity,
+    AgentStalled,
     AgentStep,
     AgentThought,
     BudgetExceeded,
@@ -288,6 +289,7 @@ def create_web_app(
             CycleStarted,
             PhaseChanged,
             AgentActivity,
+            AgentStalled,
             AgentThought,
             AgentStep,
             CycleCompleted,

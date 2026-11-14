@@ -86,6 +86,7 @@
             <span class="text-[13px] text-muted leading-[1.4] line-clamp-2 min-h-[2.8em]">
               {%- if s.message %}{{ s.message }}{% elif s.state == 'waiting' %}Waiting…{% elif s.state == 'done' %}Done.{% endif -%}
             </span>
+            {% if s.quiet %}<span class="text-[12px] font-medium {% if s.stalled %}text-bad{% else %}text-ink{% endif %}" data-testid="station-quiet" data-stalled="{{ 'true' if s.stalled else 'false' }}">No word for {{ s.ago }}</span>{% endif %}
             {% endif %}
           </button>
         </li>
@@ -111,7 +112,7 @@
         <li class="feed-entry flex gap-3 py-2 border-t border-raised first:border-t-0 text-[13px] leading-[1.4]" data-agent="{{ e.agent }}">
           <span class="font-mono text-[11px] text-faint shrink-0 pt-0.5 w-14">{{ e.time }}</span>
           <span class="shrink-0 w-14 font-medium {% if e.agent == 'dev' %}text-live-deep{% elif e.agent == 'techlead' %}text-info{% elif e.agent == 'po' %}text-ok{% elif e.agent == 'qa' %}text-wait{% elif e.agent == 'devops' %}text-ink{% else %}text-faint{% endif %}">{{ e.glyph }}</span>
-          <span class="min-w-0 {% if e.kind == 'step' %}text-muted{% elif e.kind in ('pr_opened', 'review') %}font-medium{% endif %}">{{ e.text }}</span>
+          <span class="min-w-0 {% if e.kind == 'step' %}text-muted{% elif e.kind == 'stalled' %}font-medium text-bad{% elif e.kind in ('pr_opened', 'review') %}font-medium{% endif %}"{% if e.kind == 'stalled' %} data-testid="feed-stalled"{% endif %}>{{ e.text }}</span>
         </li>
         {% endfor %}
       </ol>

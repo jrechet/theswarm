@@ -36,6 +36,20 @@
                  class="h-8 w-20 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink font-mono" data-testid="in-all">
         </label>
       </div>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 border-t border-line" data-testid="cycles-claude-share">
+        <div class="flex flex-col gap-0.5 flex-[1_1_300px] min-w-0">
+          <span class="font-medium text-[14px]">Claude's window</span>
+          <span class="text-[12px] text-muted">The share of each subscription window the swarm may use; the rest is yours. Past it, the swarm calls Claude no more until the window resets, and a running cycle waits. 100 is all of it.</span>
+          <span class="text-[12px] {% if over_share %}text-bad font-medium{% else %}text-faint{% endif %}" data-testid="claude-windows">
+            {%- if claude_windows %}{% for w in claude_windows %}{{ w.label }} {{ '%.0f' | format(w.utilization * 100) }}%{% if w.resets_at %} until {{ w.resets_at.strftime('%a %H:%M') }} UTC{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}{% if over_share %} — over the share, the swarm waits{% endif %}
+            {%- else %}Not read yet: every Claude call reads where the windows stand.{% endif -%}
+          </span>
+        </div>
+        <label class="flex flex-col gap-1 text-[12px] text-muted">Share, %
+          <input type="number" name="claude-share" min="{{ min_share }}" max="100" value="{{ claude_share }}" required
+                 class="h-8 w-20 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink font-mono" data-testid="claude-share">
+        </label>
+      </div>
       {% for r in rows %}
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 border-t border-line" data-testid="cycles-project" data-repo="{{ r.repo }}">
         <div class="flex flex-col gap-0.5 flex-[1_1_300px] min-w-0">

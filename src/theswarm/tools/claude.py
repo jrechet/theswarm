@@ -528,9 +528,19 @@ async def probe_sdk(
 # What each profile may touch is decided here, in code, and tested —
 # never by a settings.json mounted from the host (invariant I2).
 
+# What a resumed session is told. The first wording ("… Finish the task and
+# stop.") was read as an order to halt: prod's Dev answered "Understood — I'll
+# stop and wait" and "I've stopped and am waiting for your direction", ended
+# with no structured answer, and the task was handed back (cycle 8ed99b88f26a,
+# 2026-11-11; the same "failed twice: no structured output" on 2026-10-18) —
+# two of the three resumes prod ever made.
 SDK_CONTINUE_PROMPT = (
-    "Continue where you left off. The working tree already contains your "
-    "edits; do not start over. Finish the task and stop."
+    "Your previous turn was cut off by a time limit; any command it was running "
+    "was stopped. Carry on with the same task from where it stands: the working "
+    "tree keeps your edits, so do not start over, and run commands in the "
+    "foreground — nothing will notify you of a background one. Nobody is going "
+    "to answer a question: when the task is done, end with your final answer in "
+    "the form the task asked for."
 )
 
 # Tools auto-approved per profile. Bash is deliberately absent from every
@@ -597,6 +607,82 @@ class _SDKTimeout(_CLIUnavailable):
     def __init__(self, message: str, session_id: str = "") -> None:
         super().__init__(message)
         self.session_id = session_id
+
+
+class _SDKStalled(_SDKTimeout):
+    """An SDK call said nothing for its silence bound: interrupted, then
+    resumed like a timeout — without growing the budget, which was not the
+    problem (the message never says "timed out after", `_is_timeout`)."""
+
+    def __init__(self, message: str, session_id: str = "", silent_for: float = 0.0) -> None:
+        super().__init__(message, session_id)
+        self.silent_for = silent_for
+
+
+# A call that says nothing is interrupted (A1). The stream is never quiet for
+# long while Claude works: an init within seconds, `thinking_tokens` while it
+# thinks, a message per tool call and result. What is silent is a command
+# running (Bash: two minutes by default, ten at most) or a long tool input
+# being written (a 16k-token file, four or five minutes). None of the three
+# timeouts prod met in seven weeks was a silent call (Seq, 2026-11-14); the
+# bounds are a net for the one that is, the hang before a session starts first.
+# The silence bound clears Bash's own ten-minute maximum, whose result is a message.
+FIRST_WORD_SECONDS = 120.0
+STALL_SECONDS = 660.0
+
+
+def _bound(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, "") or default)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def stall_bounds() -> tuple[float, float]:
+    """(no first word, silence once it spoke), in seconds."""
+    return (_bound("SWARM_CLAUDE_FIRST_WORD_SECONDS", FIRST_WORD_SECONDS),
+            _bound("SWARM_CLAUDE_STALL_SECONDS", STALL_SECONDS))
+
+
+class _Silent(Exception):
+    def __init__(self, seconds: float) -> None:
+        super().__init__(f"silent for {seconds:.0f}s")
+        self.seconds = seconds
+
+
+async def _within(coro, *, timeout: float, heard: dict, first_word: float, stall: float):
+    """Await ``coro`` under a deadline *and* a silence bound.
+
+    ``heard["at"]`` (the loop's clock) is moved by the consumer on every
+    message, ``heard["any"]`` once one came. Raises ``asyncio.TimeoutError``
+    at the deadline and ``_Silent`` when the stream said nothing for its
+    bound; either way the consumer is cancelled, which closes the SDK's
+    generator and ends the subprocess, as ``asyncio.wait_for`` did.
+    """
+    loop = asyncio.get_running_loop()
+    task = asyncio.ensure_future(coro)
+    deadline = loop.time() + timeout
+    try:
+        while True:
+            now = loop.time()
+            bound = stall if heard.get("any") else first_word
+            silent = now - heard["at"]
+            if silent >= bound:
+                raise _Silent(silent)
+            remaining = deadline - now
+            if remaining <= 0:
+                raise asyncio.TimeoutError
+            done, _ = await asyncio.wait({task}, timeout=min(remaining, bound - silent))
+            if task in done:
+                return task.result()
+    finally:
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001 — it was told to stop
+                pass
 
 
 def _profile_for(workdir: str | None, permission_mode: str | None) -> str:
@@ -1030,11 +1116,20 @@ class ClaudeCLI:
         )
 
         seen: dict = {"session_id": resume or "", "result": None}
+        loop = asyncio.get_running_loop()
+        heard: dict = {"at": loop.time(), "any": False}
+        first_word, stall = stall_bounds()
 
         async def _consume() -> None:
             async with aclosing(_sdk_query(prompt, options)) as stream:
                 async for message in stream:
-                    if isinstance(message, SystemMessage):
+                    heard["at"], heard["any"] = loop.time(), True
+                    if type(message).__name__ == "RateLimitEvent":
+                        # Where the subscription's windows stand (the swarm's share, A1)
+                        from theswarm import claude_window
+
+                        claude_window.note(getattr(message, "rate_limit_info", None))
+                    elif isinstance(message, SystemMessage):
                         if message.subtype == "init":
                             data = message.data or {}
                             seen["session_id"] = str(data.get("session_id") or seen["session_id"])
@@ -1056,7 +1151,14 @@ class ClaudeCLI:
                         seen["result"] = message
 
         try:
-            await asyncio.wait_for(_consume(), timeout=effective_timeout)
+            await _within(_consume(), timeout=effective_timeout, heard=heard,
+                          first_word=first_word, stall=stall)
+        except _Silent as exc:
+            raise _SDKStalled(
+                f"SDK stalled — no word from Claude for {exc.seconds:.0f}s"
+                f"{'' if heard['any'] else ' (not even its first)'}",
+                session_id=seen["session_id"], silent_for=exc.seconds,
+            ) from exc
         except asyncio.TimeoutError as exc:
             # Cancelling the consumer closes the SDK's generator, whose
             # `finally` terminates the subprocess (claude_agent_sdk/_internal/client.py).
@@ -1123,6 +1225,7 @@ class ClaudeCLI:
         call: the caller skips the step (invariant I6), never the CLI or
         the API — forced means forced.
         """
+        from theswarm import claude_window
         from theswarm.tools import auth_wall, quota_wall
 
         rejected_until = auth_wall.wall_until()
@@ -1139,6 +1242,11 @@ class ClaudeCLI:
                 f"Claude subscription exhausted until {until.isoformat(timespec='minutes')}"
                 f" — no call made: {quota_wall.reason()}"
             )
+        over = claude_window.over_share()
+        if over is not None:
+            # The owner's share (Settings → Cycles): the rest of the window is
+            # theirs. Fatal for the call; the cycle waits it out (`closed_until`).
+            raise ClaudeFatalError(f"{claude_window.share_words(over)} — no call made")
         try:
             return await self._run_sdk(
                 prompt, workdir=workdir, timeout=timeout, permission_mode=permission_mode,
@@ -1155,12 +1263,19 @@ class ClaudeCLI:
         if isinstance(first, _SDKTimeout):
             grown = self._retry_timeout(timeout, first, workdir=workdir)
             resume = first.session_id or None
+            if isinstance(first, _SDKStalled):
+                minutes = max(1, round(first.silent_for / 60))
+                await self._emit(
+                    f"No word from Claude for {minutes} min — the call is interrupted and "
+                    + ("its session resumed" if resume else "asked again")
+                )
             # No session at all, with the env token set: the hang #76 saw a
             # stale token cause (the CLI then, 2026-09-13). The mounted
             # session answers the retry.
             drop_token = resume is None and bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
             log.warning(
-                "Claude SDK timed out — %s with %ds%s",
+                "Claude SDK %s — %s with %ds%s",
+                "stalled" if isinstance(first, _SDKStalled) else "timed out",
                 f"resuming session {resume}" if resume else "re-prompting", grown,
                 " and without the CLAUDE_CODE_OAUTH_TOKEN override" if drop_token else "",
             )

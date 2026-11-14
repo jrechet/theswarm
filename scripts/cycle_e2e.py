@@ -483,8 +483,9 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
               + (f" — {answer['detail']}" if answer.get("detail") else ""))
     wall = str(answer.get("claude_quota_resets_at") or "") if answer else quota_wall_until()
     if wall:
-        message = (f"the Claude subscription window is closed until {wall}; "
-                   "no issue created, no cycle started, nothing measured")
+        closed = ("the swarm's share of Claude's window is used" if answer.get("claude") == "over_share"
+                  else "the Claude subscription window is closed")
+        message = f"{closed} until {wall}; no issue created, no cycle started, nothing measured"
         print(f"\nNOT MEASURED — {message}")
         annotate("warning", f"{repo}" + (f" [{feature.id}]" if feature else "") + f": {message}")
         return True, {}

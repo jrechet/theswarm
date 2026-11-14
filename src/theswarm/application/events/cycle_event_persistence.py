@@ -8,6 +8,7 @@ from typing import Any
 
 from theswarm.domain.cycles.events import (
     AgentActivity,
+    AgentStalled,
     AgentStep,
     AgentThought,
     BudgetExceeded,
@@ -25,6 +26,7 @@ _CYCLE_SCOPED_EVENTS: tuple[type[DomainEvent], ...] = (
     CycleStarted,
     PhaseChanged,
     AgentActivity,
+    AgentStalled,
     AgentThought,
     AgentStep,
     CycleCompleted,

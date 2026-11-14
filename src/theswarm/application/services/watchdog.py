@@ -31,6 +31,7 @@ class WatchdogEvent:
     idle_seconds: float
     warning_count: int
     message: str
+    last_message: str = ""  # what the role said last, before it went quiet
 
 
 IdleCallback = Callable[[WatchdogEvent], Coroutine[None, None, None]]
@@ -74,6 +75,8 @@ class AgentWatchdog:
             hb.last_activity = time.monotonic()
             hb.last_message = message
             hb.idle_warnings = 0
+            # It spoke: a later silence is a new stall, reported again.
+            hb.timed_out = False
 
     def retire(self, role: str) -> None:
         """Stop monitoring a role whose phase is over.
@@ -143,6 +146,7 @@ class AgentWatchdog:
                     idle_seconds=round(idle_seconds, 1),
                     warning_count=hb.idle_warnings,
                     message=f"Agent '{hb.role}' idle for {idle_seconds:.0f}s",
+                    last_message=hb.last_message,
                 )
 
                 if hb.idle_warnings >= self._max_warnings:

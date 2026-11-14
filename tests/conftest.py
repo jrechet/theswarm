@@ -58,6 +58,8 @@ def _no_dotenv_for_tests(monkeypatch):
     monkeypatch.setenv("SWARM_STACK_FILE", "/nonexistent/theswarm.yaml")
     # The merge watch reads GitHub every few minutes: never in the suite.
     monkeypatch.setenv("SWARM_MERGE_WATCH_SECONDS", "0")
+    # All of Claude's window, whatever the laptop's environment says (A1).
+    monkeypatch.delenv("SWARM_CLAUDE_WINDOW_SHARE", raising=False)
 
 
 @pytest.fixture(autouse=True)
@@ -79,15 +81,18 @@ def _no_real_claude_binary(monkeypatch):
 def _no_quota_wall():
     """A closed subscription window is remembered per process; a test that
     closes it must not close it for the next. Nor the probe's kept answer."""
+    from theswarm import claude_window
     from theswarm.tools import auth_wall, claude_probe, quota_wall
 
     quota_wall.clear()
     auth_wall.clear()
     claude_probe.forget()
+    claude_window.forget()  # the windows the last call read (the swarm's share)
     yield
     quota_wall.clear()
     auth_wall.clear()
     claude_probe.forget()
+    claude_window.forget()
 
 
 @pytest.fixture(autouse=True)
