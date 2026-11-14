@@ -17,6 +17,7 @@ from langgraph.graph import END, StateGraph
 
 from theswarm.agents.schemas import DevOutcome
 from theswarm.agents.base import (
+    say,
     ensure_target_venv,
     traced_node,
     DEP_INSTALL_TIMEOUT_SECONDS,
@@ -735,6 +736,7 @@ async def run_quality_gates(state: AgentState) -> dict:
     # TheSwarm's venv, so dependencies landed in the system user site while
     # pytest ran in a venv that ignores it — the target's tests never saw
     # them (prod cycle 882694d44248).
+    await say(state, "Checking the project's dependencies")
     await ensure_target_venv(workspace)
     python = find_system_python(workspace)
 
@@ -782,6 +784,8 @@ async def run_quality_gates(state: AgentState) -> dict:
         log.info("Running %d test file(s) touched by this diff: %s",
                  len(targets), ", ".join(targets[:5]))
 
+    await say(state, "Running the whole test suite" if targets == ["tests/"]
+              else f"Running {len(targets)} test file{'s' if len(targets) != 1 else ''} the diff touches")
     test_result = await claude.run_tests(
         workspace, [python, "-m", "pytest", *targets, "-v", "--tb=short"],
         timeout=TEST_RUN_TIMEOUT_SECONDS,
@@ -808,6 +812,8 @@ async def run_quality_gates(state: AgentState) -> dict:
         log.info("Tests PASSED")
     else:
         log.warning("Tests FAILED:\n%s", test_result["output"][-2000:])
+    await say(state, f"Tests could not run: {unavailable[:120]}" if unavailable
+              else "Tests passed" if passed else "Tests failed — the Dev tries again")
 
     return {
         "tests_passed": passed,
@@ -832,6 +838,7 @@ async def open_pull_request(state: AgentState) -> dict:
     from theswarm.tools import git as git_ops
 
     # Push
+    await say(state, f"Pushing {branch}")
     await git_ops.push_branch(workspace, branch)
 
     # Build PR body
@@ -886,6 +893,7 @@ async def open_pull_request(state: AgentState) -> dict:
     await github.add_labels(task["number"], ["status:review"])
 
     log.info("Opened PR #%d: %s", pr["number"], pr["url"])
+    await say(state, f"Opened PR #{pr['number']} for #{task['number']}")
     await git_ops.remove_worktree(workspace)
     return {
         "pr": pr,

@@ -23,6 +23,7 @@ from langgraph.graph import END, StateGraph
 from theswarm.agents.base import (
     TARGET_VENV_DIR,
     ensure_target_venv,
+    speaking,
     traced_node,
     _test_runner_missing,
     install_target,
@@ -2059,17 +2060,34 @@ async def _feature_pages_of(state: AgentState) -> list[tuple[str, str]]:
 # ── Graph ───────────────────────────────────────────────────────────────
 
 
+# What each QA step says as it starts (A1): QA ran for up to fifteen minutes
+# with long stretches of no Claude call — installs, pytest, scanners, two
+# demo servers filmed — and the theater read silence.
+QA_STEP_WORDS = {
+    "write_e2e": "Writing the end-to-end tests of the feature",
+    "run_unit": "Running the unit tests",
+    "run_e2e": "Running the end-to-end tests against the running app",
+    "run_security": "Scanning for security issues (semgrep, bandit)",
+    "collect_issues": "Reading where the sub-tasks stand",
+    "captures": "Filming the demo and taking the screenshots",
+    "generate_report": "Writing the demo report",
+}
+
+
 def build_qa_graph() -> StateGraph:
     graph = StateGraph(AgentState)
 
+    def step(name: str, fn):
+        return traced_node(name, speaking(QA_STEP_WORDS[name], fn))
+
     graph.add_node("load_context", traced_node("load_context", load_context))
-    graph.add_node("write_e2e", traced_node("write_e2e", write_e2e_tests))
-    graph.add_node("run_unit", traced_node("run_unit", run_unit_tests))
-    graph.add_node("run_e2e", traced_node("run_e2e", run_e2e_tests))
-    graph.add_node("run_security", traced_node("run_security", run_security_scan))
-    graph.add_node("collect_issues", traced_node("collect_issues", collect_issue_status))
-    graph.add_node("captures", traced_node("captures", run_captures))
-    graph.add_node("generate_report", traced_node("generate_report", generate_demo_report))
+    graph.add_node("write_e2e", step("write_e2e", write_e2e_tests))
+    graph.add_node("run_unit", step("run_unit", run_unit_tests))
+    graph.add_node("run_e2e", step("run_e2e", run_e2e_tests))
+    graph.add_node("run_security", step("run_security", run_security_scan))
+    graph.add_node("collect_issues", step("collect_issues", collect_issue_status))
+    graph.add_node("captures", step("captures", run_captures))
+    graph.add_node("generate_report", step("generate_report", generate_demo_report))
 
     graph.set_entry_point("load_context")
     graph.add_edge("load_context", "write_e2e")
