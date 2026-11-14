@@ -52,3 +52,9 @@ def test_a_sub_task_always_carries_the_dev_s_labels_and_no_other_role():
     assert task_labels(["status:backlog", "role:techlead", "area:api"]) == ["role:dev", "status:ready", "area:api"]
     assert task_labels(None) == ["role:dev", "status:ready"]
     assert task_labels(["role:dev", "status:ready", "role:dev"]) == ["role:dev", "status:ready"]
+
+
+def test_a_task_never_asks_to_close_the_story():
+    """swarm-todo-app#31 (2026-11-14): "PR references `Closes #31`" in every
+    sub-task's criteria; the story closed with its endpoint unbuilt."""
+    assert "never closes the story" in BREAKDOWN_PROMPT

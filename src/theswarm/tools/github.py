@@ -40,6 +40,29 @@ class GitHubAccessError(RuntimeError):
 _PARENT_LINE = re.compile(r"Parent:\s*#(\d+)(?!\d)")
 
 
+# The keywords GitHub reads to close an issue when a commit or a PR body
+# reaches the default branch (close/closes/closed, fix/fixes/fixed,
+# resolve/resolves/resolved, any case, an optional colon).
+_CLOSING = re.compile(r"\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b(:?)(\s*)#(\d+)(?!\d)", re.IGNORECASE)
+
+
+def closing_refs(text: str | None) -> set[int]:
+    """The issue numbers `text` closes when it reaches the default branch."""
+    return {int(m.group(4)) for m in _CLOSING.finditer(text or "")}
+
+
+def squash_message(messages: list[str], keep: set[int]) -> str:
+    """The squash merge's body: the PR's commit messages, as GitHub lists
+    them, with a closing keyword aimed at any issue outside `keep` turned
+    into a plain reference. A sub-task's commit said `Closes #31` — its
+    story — and the squash of swarm-todo-app#36 closed the story with its
+    last sub-task unbuilt (2026-11-14)."""
+    def neutral(match: re.Match) -> str:
+        return match.group(0) if int(match.group(4)) in keep else f"Refs #{match.group(4)}"
+
+    return "\n\n".join(f"* {_CLOSING.sub(neutral, m.strip())}" for m in messages if m and m.strip())
+
+
 def parent_of(body: str | None) -> int | None:
     """The story a sub-task belongs to, None when its body names none."""
     match = _PARENT_LINE.search(body or "")
@@ -391,9 +414,25 @@ class GitHubClient:
         await self._run(issue.create_comment, body)
 
     async def merge_pr(self, pr_number: int, merge_method: str = "squash") -> None:
+        """Merge; a squash closes the PR's own task and nothing above it
+        (`squash_message`): GitHub's default squash body carries every
+        commit's closing keywords along."""
         await self._fresh()
-        pr = await self._run(self._repo.get_pull, pr_number)
-        await self._run(pr.merge, merge_method=merge_method)
+        await self._run(self._merge_sync, pr_number, merge_method)
+
+    def _merge_sync(self, pr_number: int, merge_method: str) -> None:
+        pr = self._repo.get_pull(pr_number)
+        if merge_method != "squash":
+            pr.merge(merge_method=merge_method)
+            return
+        keep = closing_refs(pr.body)
+        body = squash_message([c.commit.message for c in pr.get_commits()], keep)
+        closes = "\n".join(f"Closes #{n}" for n in sorted(keep))
+        pr.merge(
+            merge_method="squash",
+            commit_title=f"{pr.title} (#{pr.number})",
+            commit_message="\n\n".join(part for part in (body, closes) if part),
+        )
 
     async def close_pr(self, pr_number: int) -> None:
         """Close a PR without merging."""

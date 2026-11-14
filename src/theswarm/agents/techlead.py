@@ -93,6 +93,9 @@ time, so leave it empty only when a task truly stands alone
 first. A tests-only task after the code finds them already written
 - No QA, E2E or demo task: QA runs its own phase once the tasks are merged, \
 writes the end-to-end tests and films the demo. Every task is a developer's
+- A task never closes the story: its pull request closes that task alone \
+(never "Closes #{issue_number}" in its criteria); the story closes once its \
+last task is merged
 - Keep task titles in imperative form
 - Return ONLY the JSON array, no markdown fences.
 """
