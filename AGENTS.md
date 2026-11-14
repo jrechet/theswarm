@@ -419,7 +419,20 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   both `_QUOTA_MARKERS`, plus a "hit your … limit" pattern for the next
   one — harness cycle 62f353165e62 (2026-09-27) died on the weekly window
   unrecognised, as a plain `RuntimeError`, and the eval scored a failed
-  regression where `interrupted` was the truth.
+  regression where `interrupted` was the truth. **The call is fatal, the
+  cycle is not** (2026-11-14, `claude_window`): `_run_api_cycle` waits the
+  wall out (its reset time plus 90 s) and goes on from the last finished
+  node on the same thread, the wait not counted against the hard timeout; a
+  preflight refused only on the window waits too. A wall past
+  `SWARM_CLAUDE_WAIT_MAX_HOURS` (6, every wait of one cycle together) and
+  dead credentials still end it. While it waits, `CycleRecord.waiting` says
+  so — the API (`waiting`), the home, the project page, the theater — and
+  neither harness counts it against its budget. Three cycles at once had
+  died together on 2026-11-11, the third refused before it started.
+- **The steps that are not a Claude call say what they do**
+  (`agents.base.say`, through the role's `ClaudeCLI.on_event`): the Dev's
+  install, tests and push, the merge pass's CI wait, every QA step
+  (`qa.QA_STEP_WORDS`). Silence read as stuck.
 - `GitHubClient._fresh()` rebinds only when App credentials exist. A static
   `GITHUB_TOKEN` never rotates, and rebuilding on a mere difference replaces
   clients built deliberately with a mock — that is how a token in the

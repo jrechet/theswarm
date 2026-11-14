@@ -86,7 +86,8 @@
   <span class="font-medium text-live-deep whitespace-nowrap">{{ line.step }}{% if line.step_time %} <span class="font-mono font-normal text-faint">{{ line.step_time }}</span>{% endif %}</span>
   {% if line.agent %}<span class="text-ink whitespace-nowrap">{{ line.agent }}</span>{% endif %}
   {% if line.says %}<span class="font-mono text-[11px] text-muted truncate max-w-[56ch] min-w-0">{{ line.says }}</span>{% endif %}
-  {% if line.quiet %}<span class="whitespace-nowrap font-medium {% if line.stalled %}text-bad{% else %}text-ink{% endif %}">quiet for {{ line.ago }}</span>
+  {% if line.waiting %}<span class="font-medium text-ink" data-testid="now-waiting">{{ line.waiting }}</span>
+  {% elif line.quiet %}<span class="whitespace-nowrap font-medium {% if line.stalled %}text-bad{% else %}text-ink{% endif %}">quiet for {{ line.ago }}</span>
   {% elif line.ago %}<span class="text-faint whitespace-nowrap">{{ line.ago }} ago</span>{% endif %}
 </span>
 {% endif %}

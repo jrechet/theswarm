@@ -14,9 +14,35 @@ from theswarm.config import AgentState, Role
 
 log = logging.getLogger(__name__)
 
+
+async def say(state, text: str) -> None:
+    """A step that is not a Claude call, told through the role's own channel
+    (`ClaudeCLI.on_event`): the theater's feed, the home's live line and the
+    watchdog's heartbeat hear it. An install, a test run, a push, a CI wait
+    were silence, and silence read as stuck (A1, 2026-11-14). Never raises."""
+    emit = getattr((state or {}).get("claude"), "on_event", None)
+    if emit is None or not text:
+        return
+    try:
+        await emit(text)
+    except Exception:  # noqa: BLE001 — a step never fails on its words
+        log.debug("say(%r) was not heard", text[:60], exc_info=True)
+
 # Cold install of a typical FastAPI stack measured 145s in the deploy
 # container, so a 120s cap always expired.
 DEP_INSTALL_TIMEOUT_SECONDS = 300
+
+
+def speaking(words: str, fn):
+    """A graph node that says what it starts before it runs (A1): a QA step
+    can run for minutes with no Claude call in it."""
+    import functools
+
+    @functools.wraps(fn)
+    async def spoken(state):
+        await say(state, words)
+        return await fn(state)
+    return spoken
 
 
 def traced_node(name: str, fn):

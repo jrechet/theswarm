@@ -37,9 +37,9 @@ def ago(seconds: float) -> str:
     return f"{minutes} min" if minutes < 60 else f"{minutes // 60} h {minutes % 60:02d}"
 
 
-def _empty(status: str) -> dict:
+def _empty(status: str, waiting: str = "") -> dict:
     return {"status": status, "step": "", "step_time": "", "steps": [], "agent": "", "says": "", "ago": "", "quiet": False,
-            "stalled": False}
+            "stalled": False, "waiting": waiting}
 
 
 def live_line(record, *, phases: list[dict] | None = None, progress: list[dict] | None = None,
@@ -51,13 +51,18 @@ def live_line(record, *, phases: list[dict] | None = None, progress: list[dict] 
     raises: a card without its line is still a card.
     """
     status = getattr(getattr(record, "status", None), "value", "") or ""
+    # What it waits for (the Claude window, A1): said, and never "quiet".
+    waiting = str(getattr(record, "waiting", "") or "")
     if status != "running":
-        return _empty(status)
+        return _empty(status, waiting)
     try:
-        return _line(record, phases, progress, time.time() if now is None else now)
+        line = _line(record, phases, progress, time.time() if now is None else now)
     except Exception:  # noqa: BLE001 — the page stays
         log.exception("live line: reading cycle %s failed", getattr(record, "id", "?"))
-        return _empty(status)
+        return _empty(status, waiting)
+    if waiting:
+        line.update(waiting=waiting, quiet=False, stalled=False)
+    return line
 
 
 def _line(record, phases: list[dict] | None, progress: list[dict] | None, now: float) -> dict:
@@ -90,4 +95,5 @@ def _line(record, phases: list[dict] | None, progress: list[dict] | None, now: f
         "ago": ago(silent) if heard else "",
         "quiet": bool(heard) and silent >= QUIET_AFTER_SECONDS,
         "stalled": bool(heard) and silent >= STALLED_AFTER_SECONDS,
+        "waiting": "",
     }

@@ -321,3 +321,23 @@ def test_the_hops_are_bounded():
 
     assert state == "failed"
     assert final == f"hop{h.MAX_RESUME_HOPS - 1}"
+
+
+def test_a_cycle_waiting_for_the_claude_window_is_not_timed_out():
+    """A1: a cycle waits out a closed Claude window (two hours, say); the
+    harness's budget counts the swarm's work, not the window's."""
+    h = _harness()
+    waiting = (200, {"status": "running", "waiting": "Claude's subscription window is closed until 13:10 UTC"})
+    api, _ = _scripted([*([waiting] * 30), (200, {"status": "running"}), (200, {"status": "completed"})])
+    now = {"t": 0.0}
+
+    def sleep(seconds):
+        now["t"] += seconds
+
+    state, _, _ = h.wait_for("waitwaitwait", 120, api=api, sleep=sleep, health=lambda: True, clock=lambda: now["t"])
+    assert state == "completed"
+
+    api, _ = _scripted([(200, {"status": "running"})] * 30)
+    now["t"] = 0.0
+    state, _, _ = h.wait_for("busybusybusy", 120, api=api, sleep=sleep, health=lambda: True, clock=lambda: now["t"])
+    assert state == "timeout"  # working all along: the budget holds

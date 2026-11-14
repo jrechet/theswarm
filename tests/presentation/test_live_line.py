@@ -68,3 +68,24 @@ class TestTheLine:
         bridge.record_live_progress("live0line0cyc", "QA", "Recording the demo video")
         line = ll.live_line(_record(cycle_id="live0line0cyc"))
         assert line["step"] == "QA" and line["agent"] == "QA" and line["says"] == "Recording the demo video"
+
+
+class TestWaitingForClaude:
+    """A cycle waiting out the Claude window says so, never "quiet for 40 min" (A1)."""
+
+    WORDS = "Claude's subscription window is closed until 13:10 UTC — the cycle waits and goes on then"
+
+    def test_the_line_says_what_it_waits_for_and_is_not_quiet(self):
+        record = _record()
+        record.waiting = self.WORDS
+        progress = [{"role": "Dev", "message": "Edit src/x.py", "ts": T0 + 70}]
+        line = ll.live_line(record, phases=PHASES, progress=progress, now=T0 + 70 + 3000)
+        assert line["waiting"] == self.WORDS and not line["quiet"] and not line["stalled"]
+
+    def test_the_words_of_a_waiting_cycle_are_its_wait_whatever_its_status(self):
+        from theswarm.presentation.web.shell import waiting_words
+
+        record = _record()
+        record.waiting = self.WORDS
+        assert waiting_words(record, live=[]) == self.WORDS
+        assert waiting_words(_record(), live=[]) == ""  # running and working: nothing to say

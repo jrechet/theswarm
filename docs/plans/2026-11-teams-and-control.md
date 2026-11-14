@@ -46,6 +46,14 @@ ci-dessous, sans dégât cette fois ; et sur swarm-todo-app le découpage a cré
 une sous-tâche `role:qa` (#28) que personne ne prend jamais : la story reste
 ouverte (défaut 14).
 
+**La première course hebdomadaire (2026-11-14, `parallel=true`)** : trois
+features en prod, deux côte à côte (tours-cancelled sur concert-tour-app,
+todo-stats sur swarm-todo-app), la troisième (artist-concerts) en file
+derrière la première puis construite — 9 PR, toutes fusionnées, 8,12 $. Le lot
+a échoué, à raison : la story de todo-stats a été fermée avec sa dernière
+sous-tâche non construite (défaut 15). Le juge du lot l'a vu ; aucun cycle
+seul ne l'aurait signalé.
+
 **Défauts trouvés** (✔ = corrigé dans cette branche) :
 
 | # | Défaut | Preuve |
@@ -63,6 +71,7 @@ ouverte (défaut 14).
 | 11 ✔ | Le manifeste d'évaluation est épuisé : le harness ne mesure plus rien de neuf | 45 features, toutes livrées |
 | 12 | `/api/live/state` est un singleton : deux cycles s'y écrasent | `dashboard.py:18-93` |
 | 14 ✔ | Le découpage peut créer une sous-tâche `role:qa` que seul un Dev (`role:dev`) saurait prendre : elle reste ouverte, la story aussi | swarm-todo-app#28 |
+| 15 ✔ | La fusion en squash d'une sous-tâche ferme la story : le commit du Dev disait `Closes #31` (la story, recopié des critères du découpage), et l'endpoint (#34) n'a jamais été construit | swarm-todo-app#31, course hebdomadaire du 2026-11-14 |
 | 13 | 69 des 120 services construits au démarrage ne sont lus nulle part (restes de la V1) | `app.py` |
 
 **Deux cycles à la fois : ce que l'audit du code dit** (lecture, pas encore
@@ -95,7 +104,7 @@ par des tests unitaires seuls.
 complète ; déploiement ; l'essai parallèle rejoué jusqu'au vert. Le harness
 quotidien gagne une variante hebdomadaire « trois à la fois ».
 
-**A1 — un cycle ne meurt plus pour une raison qui passe (3 jours).**
+**A1 — un cycle ne meurt plus pour une raison qui passe (3 jours).** Livré en partie le 2026-11-14 : le mur de quota est attendu (cycle et preflight), l'attente est dite partout et ne compte pas dans les budgets des harness ; les étapes muettes du Dev, de l'attente de CI et de QA parlent. Reste : l'événement `AgentStalled` du watchdog et l'interruption d'un appel figé, la part de fenêtre (`RateLimitEvent`).
 - Statut `waiting` avec sa raison : mur de quota (reprise à l'heure que le
   message donne), CI en cours, file d'attente. Un mur suspend le cycle à la
   frontière du nœud — le graphe est déjà durable — et le relance tout seul.

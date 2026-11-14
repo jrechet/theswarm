@@ -86,6 +86,8 @@ def waiting_words(record, live: list | None = None) -> str:
     alone, its feature is being built, or the box is full."""
     from theswarm.cycle import max_concurrent_cycles
 
+    if getattr(record, "waiting", ""):  # the Claude window it waits out (A1), queued or running
+        return str(record.waiting)
     if getattr(getattr(record, "status", None), "value", "") != "queued":
         return ""
     live = live_cycles() if live is None else live

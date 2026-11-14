@@ -221,13 +221,15 @@ def start_cycle(repo: str, issue: int) -> str:
     return cycle_id
 
 
+POLL_SECONDS = 20
+
 # A restart interrupts a cycle and the boot resumer continues it under a new
 # id, once (cycle_resumer.MAX_RESUME_DEPTH); one spare hop costs nothing.
 MAX_RESUME_HOPS = 2
 
 
 def wait_for(cycle_id: str, budget_s: int, *, api=None, sleep=time.sleep,
-             health=None) -> tuple[str, str, str]:
+             health=None, clock=time.time) -> tuple[str, str, str]:
     """Poll until terminal. Returns (status, last_phase_seen, final_cycle_id).
 
     A deploy during the cycle is the normal case since V2 M4: the service
@@ -238,11 +240,15 @@ def wait_for(cycle_id: str, budget_s: int, *, api=None, sleep=time.sleep,
     """
     api = api or _api
     health = health or (lambda: wait_for_health(api=api, sleep=sleep))
-    deadline = time.time() + budget_s
+    deadline = clock() + budget_s
     last_seen, last_phase, hops = "", "", 0
-    while time.time() < deadline:
+    while clock() < deadline:
         status, body = api(f"/api/cycles/{cycle_id}")
         state = str(body.get("status", "")) if status == 200 else ""
+        if status == 200 and body.get("waiting"):
+            # The cycle waits out the closed Claude window (A1): that time is
+            # the subscription's, not the swarm's, and is not counted.
+            deadline += POLL_SECONDS
         phase = str(body.get("current_phase") or body.get("phase") or "")
         if state and state != last_seen:
             print(f"  [{time.strftime('%H:%M:%S')}] {state}"
@@ -266,7 +272,7 @@ def wait_for(cycle_id: str, budget_s: int, *, api=None, sleep=time.sleep,
                     continue
             # The service answers and does not know the cycle.
             return "lost", last_phase, cycle_id
-        sleep(20)
+        sleep(POLL_SECONDS)
     return "timeout", last_phase, cycle_id
 
 

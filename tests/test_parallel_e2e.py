@@ -169,3 +169,16 @@ class TestTheWeeklyBatch:
         quota = {**run, "state": "failed", "opened": [], "merged": [],
                  "error": "ClaudeFatalError: Claude subscription exhausted"}
         assert batch.scored(quota, feature, batch_id="b-1")["outcome"] == evals.OUTCOME_INTERRUPTED
+
+
+def test_a_batch_does_not_count_a_wait_for_the_claude_window(batch):
+    now = {"t": 0.0}
+    waiting = {"status": "running", "waiting": "Claude's subscription window is closed until 13:10 UTC"}
+    answers = [waiting] * 20 + [{"status": "completed"}]
+
+    def api(path, payload=None):
+        return 200, (answers.pop(0) if len(answers) > 1 else answers[0])
+
+    runs = [{"repo": "o/app", "story": 10, "cycle": "aaa"}]
+    batch.watch(runs, 120, api=api, sleep=lambda s: now.__setitem__("t", now["t"] + s), clock=lambda: now["t"])
+    assert runs[0]["state"] == "completed"

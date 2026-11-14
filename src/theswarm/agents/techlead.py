@@ -93,6 +93,9 @@ time, so leave it empty only when a task truly stands alone
 first. A tests-only task after the code finds them already written
 - No QA, E2E or demo task: QA runs its own phase once the tasks are merged, \
 writes the end-to-end tests and films the demo. Every task is a developer's
+- A task never closes the story: its pull request closes that task alone \
+(never "Closes #{issue_number}" in its criteria); the story closes once its \
+last task is merged
 - Keep task titles in imperative form
 - Return ONLY the JSON array, no markdown fences.
 """
@@ -959,6 +962,7 @@ async def merge_approved_prs(state: AgentState, *, ci_wait_seconds: float | None
                     raise RuntimeError("merge conflict with main")
             gate = await _ci_gate_before_merge(
                 github, pr_number, head_branch, open_pr, wait_seconds=ci_wait.left(),
+                tell=getattr(state.get("claude"), "on_event", None),
             )
             if gate == "red":
                 ci_red.append(pr_number)
@@ -1098,14 +1102,29 @@ async def close_stories(github, finished: list[tuple[int, list[int]]]) -> list[i
 
 
 async def _ci_gate_before_merge(
-    github, pr_number: int, head_branch, open_pr: dict, *, wait_seconds: float,
+    github, pr_number: int, head_branch, open_pr: dict, *, wait_seconds: float, tell=None,
 ) -> str:
-    """green / none: merge. red: sent back to the Dev. pending: left open."""
+    """green / none: merge. red: sent back to the Dev. pending: left open.
+
+    `tell` says the wait and how it ended (A1): up to five minutes of
+    waiting for CI were silence on the theater."""
     from theswarm.agents import ci_gate
 
+    async def said(text: str) -> None:
+        if tell is not None:
+            try:
+                await tell(text)
+            except Exception:  # noqa: BLE001
+                log.debug("the CI wait was not heard", exc_info=True)
+
+    await said(f"Waiting for CI on PR #{pr_number} (up to {int(wait_seconds) // 60 or 1} min)")
     verdict = await ci_gate.wait_for_ci(
         github, open_pr.get("head_sha", ""), wait_seconds=wait_seconds,
     )
+    await said({"green": f"CI is green on PR #{pr_number}", "none": f"PR #{pr_number} has no CI to wait for",
+                "red": f"CI is red on PR #{pr_number}",
+                "pending": f"CI still running on PR #{pr_number} — left open, not merged"}.get(
+        verdict.state, f"CI on PR #{pr_number}: {verdict.state}"))
     if verdict.state == "pending":
         log.info("PR #%d: CI still running after %ds — left open, not merged",
                  pr_number, ci_gate.CI_WAIT_SECONDS)
