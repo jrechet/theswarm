@@ -55,14 +55,36 @@ async def test_retiring_an_unknown_role_is_harmless():
     watchdog.retire("NeverStarted")  # must not raise
 
 
-async def test_a_retired_role_can_come_back():
-    """Dev is retired after each iteration and re-registers on the next."""
+async def test_a_retired_role_comes_back_when_its_next_phase_begins():
+    """Dev is retired after each iteration and watched again on the next."""
     watchdog, _ = _watchdog()
-    watchdog.heartbeat("Dev", "iteration 1")
+    watchdog.begin("Dev", "iteration 1")
     watchdog.retire("Dev")
-    watchdog.heartbeat("Dev", "iteration 2")
+    watchdog.begin("Dev", "iteration 2")
 
     assert "Dev" in watchdog.get_status()
+
+
+async def test_what_a_role_says_after_its_phase_never_arms_the_alarm():
+    """Prod cycle 0aa45149f33f (2026-11-15): the review node said "Merged:
+    [896]" after its phase, the Dev "No more ready tasks — ending dev loop",
+    and the theater called both silent for 12 min while QA ran."""
+    watchdog, seen = _watchdog()
+    watchdog.begin("TechLead", "phase techlead_review")
+    watchdog.retire("TechLead")
+    watchdog.heartbeat("TechLead", "Merged: [896]")
+
+    await watchdog.start()
+    await _let_it_check()
+    await watchdog.stop()
+
+    assert seen == [] and "TechLead" not in watchdog.get_status()
+
+
+async def test_a_role_that_owns_no_phase_is_still_watched():
+    watchdog, _ = _watchdog()
+    watchdog.heartbeat("Memory", "Running retrospective…")
+    assert "Memory" in watchdog.get_status()
 
 
 async def test_retirement_leaves_other_agents_watched():

@@ -447,7 +447,15 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   `STALL_ROLES`) is an `AgentStalled` on the bus (`api._stall_publisher`),
   kept with the cycle's events, a line in the theater's feed ("Silent for
   13 min — last said: …"); the active station and the home's live line say
-  "no word for …", red past 12 min. Inside a call, every SDK message is a
+  "no word for …", red past 12 min. **Only a role whose phase runs is
+  watched**: `_run_phase` calls `watchdog.begin(role)` and retires it at
+  the end, and what a retired role says afterwards no longer arms the alarm
+  — the first prod lines (0aa45149f33f, 2026-11-15) called the TechLead
+  "silent for 12 min" after its "Merged: [896]" while QA ran. Roles that own
+  no phase (System, Memory) are watched from their first word, as before.
+  **An empty breakdown is asked again** (`techlead._ask_breakdown`,
+  `Breakdown.tasks` at least one): concert-tour-app#897's came back `[]`
+  and its cycle ended "completed" with nothing built. Inside a call, every SDK message is a
   sign of life (`_within`): no first word in 120 s
   (`SWARM_CLAUDE_FIRST_WORD_SECONDS`) or silence for 660 s
   (`SWARM_CLAUDE_STALL_SECONDS`) cancels the stream and resumes the session

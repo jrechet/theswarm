@@ -59,6 +59,9 @@ class AgentWatchdog:
         self._on_timeout = on_timeout
 
         self._agents: dict[str, AgentHeartbeat] = {}
+        # Roles whose phase ended: what they say afterwards is not a phase
+        # being worked on, and must not arm the alarm again (see `retire`).
+        self._retired: set[str] = set()
         self._task: asyncio.Task[None] | None = None
         self._running = False
 
@@ -66,8 +69,21 @@ class AgentWatchdog:
     # Public API
     # ------------------------------------------------------------------
 
+    def begin(self, role: str, message: str = "") -> None:
+        """A phase of `role` starts: it is watched from now, retired or not."""
+        self._retired.discard(role)
+        self._agents[role] = AgentHeartbeat(role=role, last_message=message)
+
     def heartbeat(self, role: str, message: str = "") -> None:
-        """Record activity from an agent.  Thread-safe for asyncio tasks."""
+        """Record activity from an agent.  Thread-safe for asyncio tasks.
+
+        A role retired since its last phase is not re-registered: the review
+        node says "Merged: [896]" after its phase, the Dev's "No more ready
+        tasks — ending dev loop" after its own, and twelve minutes later the
+        theater called both silent while QA ran (prod cycle 0aa45149f33f,
+        2026-11-15, the first `AgentStalled` lines)."""
+        if role in self._retired:
+            return
         hb = self._agents.get(role)
         if hb is None:
             self._agents[role] = AgentHeartbeat(role=role, last_message=message)
@@ -87,8 +103,10 @@ class AgentWatchdog:
         bc1b1e6abb82 logged "Agent 'PO' timed out after 77 warnings
         (idle 3028s)" every 30s for the whole run — long after the PO had
         finished successfully. That noise buries the failures worth reading.
+        It comes back when its next phase begins (`begin`).
         """
         self._agents.pop(role, None)
+        self._retired.add(role)
 
     async def start(self) -> None:
         """Start the watchdog monitor loop."""
