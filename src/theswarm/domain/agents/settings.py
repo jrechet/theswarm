@@ -12,15 +12,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from theswarm.domain.agents.roles import ROLES
+
 # The personas, in the order the theater draws them, and what each one's
 # Claude calls are for (the page says so).
-PERSONAS: tuple[tuple[str, str, str], ...] = (
-    ("po", "Product Owner", "plans the day, reports in the evening, writes the customer's summary of a demo"),
-    ("techlead", "Tech Lead", "breaks a feature into tasks, reviews every pull request"),
-    ("dev", "Developer", "implements, retries on red tests, answers a review"),
-    ("qa", "QA", "writes and repairs the end-to-end tests, triages failures, scripts the demo's calls"),
-    ("devops", "DevOps", "proposes the improvement pull requests on the pipeline"),
-)
+_WHAT_FOR = {
+    "po": "plans the day, reports in the evening, writes the customer's summary of a demo",
+    "techlead": "breaks a feature into tasks, reviews every pull request",
+    "dev": "implements, retries on red tests, answers a review",
+    "qa": "writes and repairs the end-to-end tests, triages failures, scripts the demo's calls",
+    "devops": "proposes the improvement pull requests on the pipeline",
+}
+# Keys and names from the one table of roles (`domain.agents.roles`, A4).
+PERSONAS: tuple[tuple[str, str, str], ...] = tuple((r.key, r.name, _WHAT_FOR[r.key]) for r in ROLES)
 PERSONA_KEYS = tuple(key for key, _, _ in PERSONAS)
 MODELS: tuple[tuple[str, str], ...] = (("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku"))
 MODEL_KEYS = tuple(key for key, _ in MODELS)

@@ -320,7 +320,7 @@ async def _pull_latest(config: CycleConfig) -> None:
 
 
 # The roles a phase belongs to (`cycle_graph._run_phase`): only their silence is a stall.
-STALL_ROLES = frozenset({"PO", "TechLead", "Dev", "QA"})
+from theswarm.domain.agents.roles import CYCLE_VOICES as STALL_ROLES  # noqa: E402 — the roles that own phases
 
 
 def stall_reporter(on_stalled):

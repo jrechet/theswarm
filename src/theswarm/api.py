@@ -229,7 +229,9 @@ def set_preflight(preflight) -> None:
     _PREFLIGHT = preflight
 
 
-_PERSONA_NAMES = (("po", "Product Owner"), ("techlead", "Tech Lead"), ("dev", "Developer"), ("qa", "QA"))
+from theswarm.domain.agents.roles import CYCLE_ROLES as _CYCLE_ROLES  # noqa: E402
+
+_PERSONA_NAMES = tuple((r.key, r.name) for r in _CYCLE_ROLES)
 
 
 async def _tell_agent_models(event_bus, cycle_id: str, project_id: str, cycle_config) -> None:
