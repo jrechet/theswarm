@@ -244,19 +244,9 @@ async def breakdown_stories(state: AgentState) -> dict:
             issue_body=issue.get("body", "(no description)"),
         )
 
-        result = await claude.run(
-            prompt, timeout=BREAKDOWN_TIMEOUT_SECONDS,
-            output_schema=Breakdown.model_json_schema(),
-        )
-        total_tokens += result.total_tokens
-        total_cost += result.cost_usd
-
-        # The structure first (SDK backend, validated); the text parser is
-        # the CLI backend's fallback only (M3).
-        tasks = _tasks_from_structure(result)
-        if tasks is None:
-            tasks = _parse_tasks_json(result.text)
-            note_text_fallback("breakdown", result, produced=bool(tasks))
+        tasks, tokens, cost = await _ask_breakdown(claude, prompt, issue["number"])
+        total_tokens += tokens
+        total_cost += cost
         if not tasks:
             log.warning("TechLead: could not parse breakdown for #%d", issue["number"])
             continue
@@ -302,6 +292,37 @@ async def breakdown_stories(state: AgentState) -> dict:
         "tokens_used": total_tokens,
         "cost_usd": total_cost,
     }
+
+
+EMPTY_BREAKDOWN_NOTE = (
+    "\n\nYour previous answer had no task. Every story needs at least one: "
+    "answer with the tasks that build this one."
+)
+
+
+async def _ask_breakdown(claude, prompt: str, number: int) -> tuple[list[dict], int, float]:
+    """(the tasks, tokens, cost) — asked once more when the answer holds no
+    task: concert-tour-app#897's came back empty on 2026-11-15 and its cycle
+    ended "completed" with nothing built, a feature lost without a word."""
+    tokens, cost = 0, 0.0
+    for attempt in (1, 2):
+        result = await claude.run(
+            prompt if attempt == 1 else prompt + EMPTY_BREAKDOWN_NOTE,
+            timeout=BREAKDOWN_TIMEOUT_SECONDS, output_schema=Breakdown.model_json_schema(),
+        )
+        tokens += result.total_tokens
+        cost += result.cost_usd
+        # The structure first (SDK backend, validated); the text parser is
+        # the CLI backend's fallback only (M3).
+        tasks = _tasks_from_structure(result)
+        if tasks is None:
+            tasks = _parse_tasks_json(result.text)
+            note_text_fallback("breakdown", result, produced=bool(tasks))
+        if tasks:
+            return tasks, tokens, cost
+        if attempt == 1:
+            log.warning("TechLead: the breakdown of #%d came back with no task — asking once more", number)
+    return [], tokens, cost
 
 
 async def poll_and_review_prs(state: AgentState) -> dict:

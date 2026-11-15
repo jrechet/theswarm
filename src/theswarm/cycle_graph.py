@@ -184,6 +184,8 @@ async def _run_phase(rt: CycleRuntime, phase_key: str, role: str, coro):
     # PHASE_TIMEOUTS for a short one.
     timeout = _cycle().PHASE_TIMEOUTS.get(phase_key, 10 * 60)
     rt.current_role["name"] = role
+    if rt.watchdog is not None:
+        rt.watchdog.begin(role, f"phase {phase_key}")
     with tracing.span(
         f"phase.{phase_key}",
         **{"swarm.phase": phase_key, "swarm.role": role, "swarm.budget_s": timeout},

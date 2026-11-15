@@ -29,9 +29,12 @@ class BreakdownTask(BaseModel):
 
 
 class Breakdown(BaseModel):
-    """The TechLead's split of one story into dev tasks."""
+    """The TechLead's split of one story into dev tasks — at least one: an
+    empty list validated, and concert-tour-app#897 ("Change a venue", a
+    route main did not have) ended its cycle "completed" with nothing built
+    (2026-11-15)."""
 
-    tasks: list[BreakdownTask] = Field(default_factory=list)
+    tasks: list[BreakdownTask] = Field(min_length=1)
 
 
 class ReviewIssue(BaseModel):
