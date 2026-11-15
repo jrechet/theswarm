@@ -13,30 +13,20 @@ from fastapi import Request
 from theswarm.application.services.progress_bridge import PHASE_OWNER
 from theswarm.presentation.web.routes.common import _demo_card
 
+from theswarm.domain.agents import roles
+
 log = logging.getLogger(__name__)
 
 
-_STATIONS = (
-    ("po", "PO", "Product Owner"),
-    ("techlead", "TL", "Tech Lead"),
-    ("dev", "DEV", "Developer"),
-    ("qa", "QA", "QA"),
-)
-
-
-_ROLE_ALIASES = {
-    "po": "po", "product_owner": "po", "productowner": "po",
-    "techlead": "techlead", "tech_lead": "techlead", "tl": "techlead",
-    "dev": "dev", "developer": "dev",
-    "qa": "qa", "tester": "qa",
-}
+# The stations, from the one table of roles (`domain.agents.roles`, A4).
+_STATIONS = tuple((r.key, r.glyph, r.name) for r in roles.CYCLE_ROLES)
 
 
 _FEED_LIMIT = 250
 
 # DevOps, the fifth station (the plan: only in the cycles where it acts — the
 # preflight, and the deploy watch after a merge to the swarm's own main).
-_DEVOPS = ("devops", "OPS", "DevOps")
+_DEVOPS = next((r.key, r.glyph, r.name) for r in roles.ROLES if r.key == "devops")
 _DEVOPS_LABELS = {"preflight": "Preflight", "preflight_nogo": "Preflight", "deploy_watch": "Deploy",
                   "deploy_landed": "Deploy", "deploy_late": "Deploy"}
 
@@ -77,7 +67,7 @@ def _devops_station(entries) -> dict | None:
 
 
 def _normalize_role(raw: str) -> str | None:
-    return _ROLE_ALIASES.get(raw.strip().lower().replace("-", "_"))
+    return roles.key_of(raw, cycle_only=True)
 
 
 def _stations(record, progress: list[dict]) -> list[dict]:

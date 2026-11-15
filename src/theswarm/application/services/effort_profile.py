@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from theswarm.domain.projects.entities import ProjectConfig
 
-_PHASES = ("po", "techlead", "dev", "qa")
+from theswarm.domain.agents.roles import CYCLE_ROLE_KEYS as _PHASES  # noqa: E402
 
 
 @dataclass(frozen=True)

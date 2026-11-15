@@ -163,7 +163,7 @@ Les horloges (appel, phase, cycle) ne comptent pas le temps de pause.
 
 **A3 vu en prod le 2026-11-15** (swarm-todo-app#71, cycles 4cda4d36a74f puis 4fc2ff909b78) : un message lu par le Dev 2 s après l'envoi, à son appel d'outil suivant ; « Stop and say » a coupé l'appel 1 s après et le Dev a repris avec le message ; la pause a été prise à la fin de l'itération (PR ouverte, arrêt avant la revue, 0,61 $) ; Resume a terminé la feature (deux PR fusionnées, story fermée, 2,13 $). Le code livré suit les deux messages (`total` au lieu de `count`, et le champ `done`).
 
-**A4 — ménage (2 jours).** Défauts 10, 12 et 13 corrigés le 2026-11-15 (les services morts sont retirés, leurs tables gardées : les supprimer est une décision du propriétaire) ; restent les vocabulaires de rôles. Retirer les 69 services morts et leurs tables,
+**A4 — ménage (2 jours).** Défauts 10, 12 et 13 corrigés le 2026-11-15 (les services morts sont retirés, leurs tables gardées : les supprimer est une décision du propriétaire). Les vocabulaires de rôles sont une seule table depuis le même jour (`domain/agents/roles.py`). **A4 est terminé.** Retirer les 69 services morts et leurs tables,
 unifier les quatre vocabulaires de rôles en un seul, défaut 10, défaut 12.
 C'est le préalable de la phase B : on ne rend pas configurable ce qui existe
 en quatre exemplaires.

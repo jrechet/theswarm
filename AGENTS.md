@@ -458,6 +458,15 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   replace it or the form of its answer. Nothing is interrupted — stopping a
   call is A3.3, pausing a cycle A3.2. An inbox that cannot be read is an
   empty one; a cycle that is over takes no message.
+- **One table of roles** (A4, 2026-11-15): `domain/agents/roles.py` —
+  each role's key ("techlead", what is stored and compared), voice
+  ("TechLead", what an agent speaks under in the feed and the watchdog —
+  part of the event history, it does not change), name ("Tech Lead") and
+  station glyph ("TL"); the four that own phases, and DevOps. The theater's
+  stations and aliases, the watchdog's roles, the API's persona names,
+  Settings → Agents and the effort profile each had their own copy; they are
+  derived from it now (`key_of` reads any spelling). A new role is one line
+  there — the table phase B makes configurable.
 - **The V1 services nothing read are gone** (defect 13, 2026-11-15).
   `create_web_app` set 121 attributes on `app.state` and 79 were read
   nowhere — built at every boot, with their repositories, for pages deleted
