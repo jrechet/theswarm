@@ -243,7 +243,7 @@ un YAML n'exprime pas ce protocole.
   Play (feature ou correctif).
 - **B4 — l'éditeur graphique (5 jours).** Le flux dessiné, glisser-déposer des
   personas sur les emplacements, validation en direct, aperçu du YAML.
-- **B5 — le MCP (4 jours).** Serveur MCP HTTP monté dans l'application,
+- **B5 — le MCP (4 jours). Lecture et pilotage livrés le 2026-11-15** (`/mcp`, huit outils, protocole écrit sur place et vérifié avec le client officiel) ; restent les propositions d'équipe. Serveur MCP HTTP monté dans l'application,
   derrière le mur (clé d'accès en Bearer), outils : lister projets et équipes,
   lire et proposer une équipe, valider un YAML, créer un persona, lancer une
   feature, lire l'état d'un cycle, lui écrire, le mettre en pause. Les

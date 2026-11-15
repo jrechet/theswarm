@@ -498,6 +498,28 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   lives in the database; reading it from the target repository is not
   offered (who can push there would write instructions run with the
   swarm's credentials).
+- **The swarm is an MCP server** (phase B, B5 — read and pilot, 2026-11-15).
+  `POST /mcp` (`routes/mcp_routes.py`, `presentation/web/mcp/`): MCP over
+  Streamable HTTP, behind the wall — the access key as `Authorization:
+  Bearer`, owner only. Add it to a client with `claude mcp add --transport
+  http theswarm https://bots.jrec.fr/swarm/mcp --header "Authorization:
+  Bearer <key>"`. **The protocol is written here, not on the `mcp` package**
+  (`protocol.py`: `initialize`, `ping`, `tools/list`, `tools/call`,
+  notifications answered 202; stateless, JSON answers, no server-sent
+  stream): that package comes in transitively with the Agent SDK and its
+  client API changed between minor versions — nothing of the swarm breaks
+  when it moves, and `docs/DEPENDENCIES.md` gains no row. Checked against
+  the official client (`mcp` 2.2). **Tools** (`tools.py`): `list_projects`,
+  `list_cycles`, `get_cycle` (status, phase, what it waits for, spend, pull
+  requests, the last lines its agents said), `get_team`,
+  `validate_team_yaml` — reading; `start_feature` (the composer's "Create
+  and play", or Play on an existing issue; registered projects only),
+  `say_to_cycle` (the theater's field, `stop` for "Stop and say"),
+  `pause_cycle` — piloting, by the same doors as the pages. A tool that
+  cannot do what was asked answers `isError` in words; one that breaks says
+  its name and the exception's type, never its insides. **Changing a team
+  is not a tool**: an agent's change to a team will be a proposal the owner
+  accepts (B5's second half).
 - **One table of roles** (A4, 2026-11-15): `domain/agents/roles.py` —
   each role's key ("techlead", what is stored and compared), voice
   ("TechLead", what an agent speaks under in the feed and the watchdog —
