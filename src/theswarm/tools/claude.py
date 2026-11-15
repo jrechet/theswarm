@@ -931,6 +931,8 @@ class ClaudeCLI:
     # while a call runs; an answer cuts the call and resumes its session
     # with the message.
     interrupts: Callable[[], Awaitable[list[str]]] | None = field(default=None, repr=False)
+    # A2: what each call cost, as it ends — the cycle's spend so far, live.
+    on_spend: Callable[[float], None] | None = field(default=None, repr=False)
     # Injected so tests can stub. Not repr-ed.
     _sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep, repr=False)
     _rng: random.Random = field(default_factory=random.Random, repr=False)
@@ -968,7 +970,7 @@ class ClaudeCLI:
                 max_retries=self.max_retries, retry_base_ms=self.retry_base_ms,
                 timeout_growth=self.timeout_growth,
                 timeout_ceiling=self.timeout_ceiling,
-                on_event=self.on_event, inbox=self.inbox, interrupts=self.interrupts,
+                on_event=self.on_event, inbox=self.inbox, interrupts=self.interrupts, on_spend=self.on_spend,
                 _timeout_floor=self._timeout_floor,
             )
         model = routing.get(task_category, self.model)
@@ -977,7 +979,7 @@ class ClaudeCLI:
             max_retries=self.max_retries, retry_base_ms=self.retry_base_ms,
             timeout_growth=self.timeout_growth,
             timeout_ceiling=self.timeout_ceiling,
-            on_event=self.on_event, inbox=self.inbox, interrupts=self.interrupts,
+            on_event=self.on_event, inbox=self.inbox, interrupts=self.interrupts, on_spend=self.on_spend,
             _timeout_floor=self._timeout_floor,
         )
 
@@ -1044,6 +1046,11 @@ class ClaudeCLI:
                     "swarm.session_id": result.session_id,
                 },
             )
+            if self.on_spend is not None and result.cost_usd:
+                try:
+                    self.on_spend(float(result.cost_usd))
+                except Exception:  # noqa: BLE001 — a count never fails a call
+                    log.debug("on_spend failed", exc_info=True)
             return result
 
     async def _dispatch(

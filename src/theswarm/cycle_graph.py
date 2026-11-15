@@ -151,6 +151,32 @@ def _claude_for(rt: "CycleRuntime", role: str):
     return rt.claude_by_role[role]
 
 
+LANE_TAG = "task {number} — "
+
+
+def _lane_claude(claude, lane: dict):
+    """A parallel Dev's own Claude: the same one, its lines tagged with the
+    task this lane picked ("task 901 — Bash: pytest -q"). Two Devs side by
+    side shared one station and one voice: nobody could tell who did what
+    (defect 9). No `#` in the tag: the theater reads PR numbers off `#N`."""
+    import dataclasses
+
+    emit = getattr(claude, "on_event", None)
+    if claude is None or emit is None or not dataclasses.is_dataclass(claude):
+        return claude
+
+    async def tagged(text: str) -> None:
+        number = lane.get("task")
+        await emit(LANE_TAG.format(number=number) + text if number else text)
+
+    return dataclasses.replace(claude, on_event=tagged)
+
+
+def _in_lane(state: dict, lane: dict) -> dict:
+    """A parallel Dev's state: its own holder, and its Claude speaking for it."""
+    return {**state, "claude": _lane_claude(state.get("claude"), lane), "lane": lane}
+
+
 def _invoke_agent(graph, state: dict) -> "asyncio.Task":
     """Run an agent graph *detached* from the cycle graph's runnable context.
 
@@ -285,16 +311,17 @@ async def _dev_iter_parallel(
     """
     lock = asyncio.Lock()
     claimed: list[int] = []
+    lanes: list[dict] = [{"task": None} for _ in range(width)]
     graphs = [
-        _invoke_agent(_cycle().build_dev_graph(), {
+        _invoke_agent(_cycle().build_dev_graph(), _in_lane({
             **rt.base_state,
             "claude": _claude_for(rt, "dev"),
             "phase": Phase.DEVELOPMENT.value,
             "attempted_tasks": attempted,
             "pick_lock": lock,
             "claimed_tasks": claimed,
-        })
-        for _ in range(width)
+        }, lane))
+        for lane in lanes
     ]
     await rt.progress("Dev", f"Up to {width} tasks side by side")
     try:

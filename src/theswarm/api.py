@@ -60,6 +60,10 @@ class CycleRecord(BaseModel):
     # Claude window it waits out (A1, `claude_window`). The home and the
     # theater say it instead of "quiet for 40 min".
     waiting: str = ""
+    # A2: what the cycle's Claude calls have cost so far, call by call (the
+    # row's total is written when it ends). A continuation starts from what
+    # its thread had spent.
+    spent_usd: float = 0.0
 
 
 class CycleTracker:
@@ -109,6 +113,11 @@ class CycleTracker:
             for k, v in kwargs.items():
                 if hasattr(record, k):
                     setattr(record, k, v)
+
+    def add_spend(self, cycle_id: str, usd: float) -> None:
+        record = self._cycles.get(cycle_id)
+        if record is not None and usd > 0:
+            record.spent_usd = round(record.spent_usd + float(usd), 6)
 
     def set_waiting(self, cycle_id: str, words: str) -> None:
         record = self._cycles.get(cycle_id)
@@ -765,6 +774,13 @@ async def _run_api_cycle(
             from theswarm.tools.claude import ClaudeFatalError
 
             resume = bool(resume_from or resume_cycle_id)
+            if resume_cycle_id:  # a continuation: its thread's spend so far is where it starts
+                from theswarm.application.services.cycle_resumer import spent_so_far as _spent
+
+                try:
+                    tracker.add_spend(cycle_id, await _spent(get_cycle_checkpointer(), resume_cycle_id))
+                except Exception:  # noqa: BLE001
+                    log.debug("the thread's spend could not be read", exc_info=True)
             waited = preflight_waited
             while True:
                 try:
@@ -780,6 +796,7 @@ async def _run_api_cycle(
                             on_stalled=on_stalled,
                             inbox=_inbox_reader(cycle_id, repo),
                             should_pause=lambda: tracker.pause_requested(cycle_id),
+                            on_spend=lambda usd: tracker.add_spend(cycle_id, usd),
                         ),
                         timeout=CYCLE_HARD_TIMEOUT_SECONDS,
                     )

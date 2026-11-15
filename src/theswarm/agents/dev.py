@@ -443,6 +443,14 @@ async def _pick_targeted(
     return None
 
 
+def _name_lane(state: AgentState, task: dict) -> None:
+    """Side by side, each Dev's lines carry its task (`cycle_graph._lane_claude`):
+    two Devs shared one station and nobody knew who did what (defect 9)."""
+    lane = state.get("lane")
+    if isinstance(lane, dict):
+        lane["task"] = task.get("number")
+
+
 async def pick_task(state: AgentState) -> dict:
     """Pick the next task: the targeted issue if one is pinned, else backlog."""
     github = state.get("github")
@@ -475,6 +483,7 @@ async def _pick_and_claim(state: AgentState, github) -> dict:
         if attempted is not None:
             attempted.append(task["number"])
         log.info("Picked targeted task: #%d %s", task["number"], task["title"])
+        _name_lane(state, task)
         await _mark_in_progress(github, task)
         return {"task": task, "tokens_used": 0}
 
@@ -492,6 +501,7 @@ async def _pick_and_claim(state: AgentState, github) -> dict:
             if claimed is not None:
                 claimed.append(task["number"])
             log.info("Picked task: #%d %s", task["number"], task["title"])
+            _name_lane(state, task)
             await _mark_in_progress(github, task)
             return {"task": task, "tokens_used": 0}
 

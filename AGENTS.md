@@ -458,6 +458,18 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   replace it or the form of its answer. Nothing is interrupted — stopping a
   call is A3.3, pausing a cycle A3.2. An inbox that cannot be read is an
   empty one; a cycle that is over takes no message.
+- **The control room knows a live cycle's spend and who does which task**
+  (A2, 2026-11-15). *Spend*: every Claude call hands its cost to the cycle
+  as it ends (`ClaudeCLI.on_spend` → `CycleTracker.add_spend`,
+  `CycleRecord.spent_usd`; a continuation starts from its thread's total) —
+  the home's card and the theater say "$1.24 so far" instead of nothing
+  until the row is written at the end. *Two Devs side by side* (defect 9):
+  each lane of `_dev_iter_parallel` has its own copy of the Dev's Claude
+  whose lines carry the task it picked — "task 901 — Bash: pytest -q"
+  (`cycle_graph._lane_claude`, `LANE_TAG`, `dev._name_lane`, `lane` in
+  `AgentState`); no `#` in the tag, the theater reads PR numbers off `#N`.
+  The Dev station shows each lane's task and last line
+  (`progress_bridge.get_live_lanes`, since the iteration began).
 - **"Stop and say" cuts the call that is running** (A3.3, 2026-11-15). The
   theater's second button posts an *urgent* message (`cycle_inbox.urgent`).
   A running SDK call asks for those every 3 s (`_within(interrupts=…)`,

@@ -308,6 +308,8 @@ async def theater_context(request: Request, record, orphan: bool = False) -> dic
     result = getattr(record, "result", None) or {}
     if not spent and isinstance(result, dict) and result.get("cost_usd"):
         spent = f"${float(result['cost_usd']):.2f}"
+    if status in ("running", "queued") and getattr(record, "spent_usd", 0):
+        spent = f"${record.spent_usd:.2f} so far"  # A2: live, call by call
     label, kind = STATUS_CHIPS.get(status, (status.capitalize(), "waiting"))
     resumable_from = None
     checkpoints = getattr(state, "checkpoint_repo", None)

@@ -61,9 +61,29 @@ def is_telling(message: str) -> bool:
     return not (_CODE_START.match(text) or _ASSIGNMENT.match(text))
 
 
+# Two Devs side by side: the last line of each, by the task it carries
+# ("task 901 — …", `cycle_graph.LANE_TAG`) — the Dev station shows both.
+_LANE = re.compile(r"^task (\d+) — (.+)$", re.S)
+_LIVE_LANES: "OrderedDict[tuple[str, int], dict]" = OrderedDict()
+
+
+def get_live_lanes(cycle_id: str, since: float = 0.0) -> list[dict]:
+    """The parallel Devs' last lines since `since`, by task number."""
+    rows = [{"task": task, "message": payload["message"], "ts": payload["ts"]}
+            for (cid, task), payload in _LIVE_LANES.items() if cid == cycle_id and payload["ts"] >= since]
+    return sorted(rows, key=lambda row: row["task"])
+
+
 def record_live_progress(cycle_id: str, role: str, message: str) -> None:
     """Stash the latest telling progress message for (cycle_id, role); a
     fragment leaves the one before it in place."""
+    lane = _LANE.match(message or "")
+    if lane is not None and is_telling(lane.group(2)):
+        key = (cycle_id, int(lane.group(1)))
+        _LIVE_LANES.pop(key, None)
+        _LIVE_LANES[key] = {"message": lane.group(2), "ts": time.time()}
+        while len(_LIVE_LANES) > _LIVE_PROGRESS_MAX:
+            _LIVE_LANES.popitem(last=False)
     if not is_telling(message):
         return
     key = (cycle_id, role)

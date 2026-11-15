@@ -265,7 +265,13 @@ async def _stage_context(request: Request, record) -> dict:
     from theswarm.presentation.web.live_line import live_line
 
     line = live_line(record, phases=phases, progress=progress)
+    # Two Devs side by side: each one's task and last line (defect 9).
+    from theswarm.application.services.progress_bridge import get_live_lanes
+
+    last = phases[-1] if phases else {}
+    lanes = get_live_lanes(record.id, since=float(last.get("ts") or 0)) if last.get("phase") == "dev_iter" else []
     for node in graph["nodes"]:
+        node["lanes"] = lanes if node["key"] == "dev" and node["state"] == "active" and len(lanes) > 1 else []
         node["model"] = models.get(node["key"], "")
         node["quiet"] = node["state"] == "active" and line["quiet"] and not line["waiting"]
         node["stalled"] = node["quiet"] and line["stalled"]
