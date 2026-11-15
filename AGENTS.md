@@ -481,6 +481,23 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   only; all empty is no row), and the theater names its stations as the
   team does. Still to come in B1: `agent_settings` and the role
   assignments folded into this table.
+  **A team is a file, versioned, and a cycle keeps the one it started
+  with** (B2, 2026-11-15). `application/services/team_yaml.py`: `format: 1`,
+  `team`, `template: feature` and the scope's `personas` — only what the
+  owner wrote there, an absent role or field inherits; multi-line
+  instructions are a block. **Export** (`GET /settings/agents/team.yaml`)
+  and **import** (`POST /settings/agents/team/import`) on Settings → Agents:
+  an import replaces the scope's personas, validated whole first — a wrong
+  file says what is wrong and changes nothing; the instance's file carries
+  no model (that is Settings → Agents'). Every change of a scope is a
+  numbered version (`team_versions`, v044; the same file twice is not a new
+  one). **A cycle pins its team** (`cycle_teams`, keyed by the graph
+  thread; `PersonaService.for_thread`): a continuation after a deploy or a
+  pause runs the team its thread started with, whatever was edited since —
+  without it a resume would replay another team on an old state. The team
+  lives in the database; reading it from the target repository is not
+  offered (who can push there would write instructions run with the
+  swarm's credentials).
 - **One table of roles** (A4, 2026-11-15): `domain/agents/roles.py` —
   each role's key ("techlead", what is stored and compared), voice
   ("TechLead", what an agent speaks under in the feed and the watchdog —

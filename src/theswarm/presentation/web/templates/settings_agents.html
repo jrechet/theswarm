@@ -85,7 +85,30 @@
       <a href="{{ base }}/settings/agents?team={{ p | urlencode }}#team" {% if team_scope == p %}aria-current="page"{% endif %} class="h-8 inline-flex items-center px-3 rounded-md font-mono text-[12px] {% if team_scope == p %}bg-raised text-ink font-medium{% else %}text-muted hover:text-ink hover:bg-raised{% endif %}">{{ p }}</a>
       {% endfor %}
     </nav>
-    {% if team_saved %}<p class="m-0 text-[13px] text-ok border border-ok/40 bg-ok-wash rounded-[10px] px-4 py-3" data-testid="team-saved" role="status">Saved. The next cycle{% if team_scope %} on {{ team_scope }}{% endif %} meets this role as written.</p>{% endif %}
+    {% if team_saved == 'import' %}<p class="m-0 text-[13px] text-ok border border-ok/40 bg-ok-wash rounded-[10px] px-4 py-3" data-testid="team-saved" role="status">Imported. The next cycle{% if team_scope %} on {{ team_scope }}{% endif %} runs with this team.</p>
+    {% elif team_saved %}<p class="m-0 text-[13px] text-ok border border-ok/40 bg-ok-wash rounded-[10px] px-4 py-3" data-testid="team-saved" role="status">Saved. The next cycle{% if team_scope %} on {{ team_scope }}{% endif %} meets this role as written.</p>{% endif %}
+    <details class="bg-surface border border-line rounded-[10px]" data-testid="team-file">
+      <summary class="px-4 py-3 cursor-pointer text-[13px] font-medium">This team as a file
+        <span class="text-faint font-normal">· {% if team_versions %}version {{ team_versions[0].version }}, {{ team_versions[0].at }} UTC by {{ team_versions[0].by }}{% else %}nothing written yet{% endif %}</span>
+      </summary>
+      <div class="flex flex-col gap-3 px-4 pb-4">
+        <p class="m-0 text-[12px] text-muted max-w-[72ch]">Only what you wrote for {% if team_scope %}{{ team_scope }}{% else %}every project{% endif %} is in the file; a role or a field left out inherits. A cycle keeps the team it started with: a change here applies to the next one, and a cycle resumed after a pause or a deploy runs the team it had.</p>
+        <label class="flex flex-col gap-1 text-[12px] text-muted" for="team-yaml-out">The file today
+          <textarea id="team-yaml-out" readonly rows="8" class="px-2 py-1.5 border border-line rounded-md bg-raised text-[12px] text-ink font-mono leading-[1.5]" data-testid="team-yaml">{{ team_yaml }}</textarea>
+        </label>
+        <a href="{{ base }}/settings/agents/team.yaml{% if team_scope %}?team={{ team_scope | urlencode }}{% endif %}" class="text-[13px] underline underline-offset-2 self-start" data-testid="team-export">Open team.yaml</a>
+        <form method="post" action="{{ base }}/settings/agents/team/import" class="flex flex-col gap-2 pt-2 border-t border-line">
+          <input type="hidden" name="team" value="{{ team_scope }}">
+          <label class="flex flex-col gap-1 text-[12px] text-muted" for="team-yaml-in">Import a file — it replaces what is written for {% if team_scope %}{{ team_scope }}{% else %}every project{% endif %}
+            <textarea id="team-yaml-in" name="yaml" rows="6" required placeholder="format: 1&#10;personas:&#10;  dev:&#10;    instructions: Type every function." class="px-2 py-1.5 border border-line-strong rounded-md bg-surface text-[12px] text-ink font-mono leading-[1.5] placeholder:text-faint" data-testid="team-import-yaml"></textarea>
+          </label>
+          <div class="flex justify-end">{{ ui.btn('Import', type='submit', testid='team-import') }}</div>
+        </form>
+        {% if team_versions | length > 1 %}
+        <p class="m-0 text-[12px] text-faint" data-testid="team-history">Earlier: {% for v in team_versions[1:] %}v{{ v.version }} ({{ v.at }}){% if not loop.last %}, {% endif %}{% endfor %}</p>
+        {% endif %}
+      </div>
+    </details>
     <div class="flex flex-col gap-3">
       {% for m in team_members %}
       <form method="post" action="{{ base }}/settings/agents/persona" class="flex flex-col gap-3 px-4 py-3.5 bg-surface border border-line rounded-[10px]" data-testid="persona" data-key="{{ m.key }}" data-set="{{ 'true' if m.set else 'false' }}">
