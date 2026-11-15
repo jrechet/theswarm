@@ -518,7 +518,16 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   is registered at launch, `qa.stop_demo_servers` in the `finally` of the
   E2E run and of the captures: a timeout used to cancel the readiness wait
   outside the `finally`). The batch judge (`scripts/parallel_e2e.py`) also
-  fails a cycle that merged another feature's PR. The owner sets the
+  fails a cycle that merged another feature's PR. **A merge that main moved
+  under goes round again** (`techlead._merge_once_ready`, three attempts):
+  two cycles merged at the same second, GitHub refused the second with
+  "Base branch was modified" (405), and concert-tour-app#917's PR stayed
+  open, its dependent sub-task never built; the refusal now brings the PR
+  up to date, reads CI and merges again. `GitHubClient.merge_pr` answers
+  False for a PR merged already, and that merge is not counted (Renovate's
+  #925 was reported merged by both cycles). A red CI the triage puts on the
+  pipeline (`infra`) is left open in the merge pass, as its log said — it
+  used to fall through to the merge. The owner sets the
   numbers in **Settings → Cycles** (`/settings/cycles`, owner only;
   `cycle_limits`, v041, `CycleLimitsService` — no row is the default: the
   environment's `SWARM_MAX_CONCURRENT_CYCLES`, one per repository); a save

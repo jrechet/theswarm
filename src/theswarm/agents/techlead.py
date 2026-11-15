@@ -1025,26 +1025,24 @@ async def merge_approved_prs(state: AgentState, *, ci_wait_seconds: float | None
                     open_pr = p
                     break
 
-            # Main may have moved since the approval — an earlier cycle's, or
-            # this one's while a sibling or another cycle merged (C3).
-            fresh, open_pr = await _up_to_date_for_merge(github, pr_number, open_pr)
-            if fresh == "updating":
+            outcome, open_pr = await _merge_once_ready(
+                github, pr_number, open_pr, head_branch, ci_wait=ci_wait,
+                tell=getattr(state.get("claude"), "on_event", None),
+            )
+            if outcome == "updating":
                 updating.append(pr_number)
                 continue
-            if fresh == "conflict":
+            if outcome == "conflict":
                 raise RuntimeError("merge conflict with main")
-            gate = await _ci_gate_before_merge(
-                github, pr_number, head_branch, open_pr, wait_seconds=ci_wait.left(),
-                tell=getattr(state.get("claude"), "on_event", None), new_head=fresh == "updated",
-            )
-            if gate == "red":
+            if outcome == "red":
                 ci_red.append(pr_number)
                 continue
-            if gate == "pending":
+            if outcome in ("pending", "infra"):
                 ci_pending.append(pr_number)
                 continue
-
-            await github.merge_pr(pr_number, merge_method="squash")
+            if outcome == "already":
+                log.info("PR #%d: merged already, by another cycle — not counted here", pr_number)
+                continue
             merged.append(pr_number)
             log.info("Merged PR #%d", pr_number)
             task = _task_of_pr({"number": pr_number, **open_pr})
@@ -1224,6 +1222,47 @@ async def _up_to_date_for_merge(github, pr_number: int, open_pr: dict) -> tuple[
     if carried is None:
         return "updating", open_pr
     return "updated", {**open_pr, **moved}
+
+
+BASE_MOVED = "base branch was modified"
+MERGE_ATTEMPTS = 3
+MERGE_RETRY_SECONDS = 3.0
+
+
+async def _merge_once_ready(
+    github, pr_number: int, open_pr: dict, head_branch, *, ci_wait, tell=None,
+) -> tuple[str, dict]:
+    """("merged" | "already" | "updating" | "conflict" | "red" | "pending" |
+    "infra", the PR as it now stands): main merged in when it moved (C3),
+    CI read, then the merge — and again when main moves under the merge.
+
+    Two cycles on one repository merge at the same second: GitHub refused
+    #927 ("Base branch was modified. Review and try the merge again", 405)
+    because the other cycle had just merged #925, the PR stayed open, its
+    dependent #923 was never built and the feature ended half done
+    (concert-tour-app#917, 2026-11-15). The refusal says what to do: bring
+    the PR up to date with the main that moved, read CI, merge again."""
+    for attempt in range(1, MERGE_ATTEMPTS + 1):
+        fresh, open_pr = await _up_to_date_for_merge(github, pr_number, open_pr)
+        if fresh in ("updating", "conflict"):
+            return fresh, open_pr
+        gate = await _ci_gate_before_merge(
+            github, pr_number, head_branch, open_pr, wait_seconds=ci_wait.left(), tell=tell,
+            new_head=fresh == "updated",
+        )
+        if gate in ("red", "pending", "infra"):
+            return gate, open_pr
+        try:
+            done = await github.merge_pr(pr_number, merge_method="squash")
+        except Exception as exc:
+            if BASE_MOVED not in str(exc).lower() or attempt == MERGE_ATTEMPTS:
+                raise
+            log.info("PR #%d: main moved while it merged (another merge landed) — bringing it up to date "
+                     "again", pr_number)
+            await asyncio.sleep(MERGE_RETRY_SECONDS)
+            continue
+        return ("already" if done is False else "merged"), open_pr
+    return "updating", open_pr
 
 
 async def _ci_gate_before_merge(

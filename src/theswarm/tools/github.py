@@ -413,18 +413,22 @@ class GitHubClient:
         issue = await self._run(self._repo.get_issue, pr_number)
         await self._run(issue.create_comment, body)
 
-    async def merge_pr(self, pr_number: int, merge_method: str = "squash") -> None:
+    async def merge_pr(self, pr_number: int, merge_method: str = "squash") -> bool:
         """Merge; a squash closes the PR's own task and nothing above it
         (`squash_message`): GitHub's default squash body carries every
-        commit's closing keywords along."""
+        commit's closing keywords along. False when the PR was merged
+        already — by another cycle a second earlier (Renovate's
+        concert-tour-app#925, 2026-11-15, reported merged by both)."""
         await self._fresh()
-        await self._run(self._merge_sync, pr_number, merge_method)
+        return await self._run(self._merge_sync, pr_number, merge_method)
 
-    def _merge_sync(self, pr_number: int, merge_method: str) -> None:
+    def _merge_sync(self, pr_number: int, merge_method: str) -> bool:
         pr = self._repo.get_pull(pr_number)
+        if getattr(pr, "merged", False) is True:
+            return False
         if merge_method != "squash":
             pr.merge(merge_method=merge_method)
-            return
+            return True
         keep = closing_refs(pr.body)
         body = squash_message([c.commit.message for c in pr.get_commits()], keep)
         closes = "\n".join(f"Closes #{n}" for n in sorted(keep))
@@ -433,6 +437,7 @@ class GitHubClient:
             commit_title=f"{pr.title} (#{pr.number})",
             commit_message="\n\n".join(part for part in (body, closes) if part),
         )
+        return True
 
     async def close_pr(self, pr_number: int) -> None:
         """Close a PR without merging."""

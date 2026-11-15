@@ -124,12 +124,15 @@ async def _merge_held_prs(
             log.warning("PR #%d was approved but its CI is %s — left open", pr_number, verdict.state)
             continue
         try:
-            await github.merge_pr(pr_number, merge_method="squash")
+            done = await github.merge_pr(pr_number, merge_method="squash")
         except Exception as exc:
             log.warning(
                 "PR #%d was approved but did not merge (%s) — left open",
                 pr_number, exc,
             )
+            continue
+        if done is False:
+            log.info("PR #%d: merged already, by someone else — not counted here", pr_number)
             continue
         merged.append(pr_number)
         log.info("Merged approved PR #%d at end of cycle", pr_number)

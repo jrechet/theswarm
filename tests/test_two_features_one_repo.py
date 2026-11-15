@@ -256,6 +256,51 @@ class TestUpdatedBeforeTheMerge:
         assert github.updated == [7] and merged == [7]
 
 
+class TestTwoMergesAtTheSameSecond:
+    """concert-tour-app#917 (2026-11-15): the other cycle merged #925 while
+    this one merged #927 — GitHub refused it, the PR stayed open and its
+    dependent sub-task was never built."""
+
+    async def test_main_moved_under_the_merge_it_goes_round_again(self, monkeypatch):
+        monkeypatch.setattr(techlead, "MERGE_RETRY_SECONDS", 0)
+
+        class _Raced(_GitHub):
+            attempts = 0
+
+            async def merge_pr(self, number, merge_method="squash"):
+                self.attempts += 1
+                if self.attempts == 1:
+                    raise RuntimeError('Base branch was modified. Review and try the merge again.: 405')
+                self.merged.append(number)
+                return True
+
+        github = _Raced([_pr(927, 922)])
+        result = await techlead.merge_approved_prs(
+            {"github": github, "github_repo": "o/r", "reviews": [{"pr_number": 927, "decision": "APPROVE"}]},
+            ci_wait_seconds=0)
+
+        assert github.attempts == 2 and result["merged_prs"] == [927]
+
+    async def test_a_pr_another_cycle_merged_a_second_earlier_is_not_counted(self):
+        class _Already(_GitHub):
+            async def merge_pr(self, number, merge_method="squash"):
+                return False
+
+        result = await techlead.merge_approved_prs(
+            {"github": _Already([_pr(925, None, branch="renovate/all-minor-patch", title="chore(deps): x")]),
+             "github_repo": "o/r", "reviews": [{"pr_number": 925, "decision": "APPROVE"}]}, ci_wait_seconds=0)
+
+        assert result["merged_prs"] == []
+
+    async def test_a_red_on_the_pipelines_side_is_left_open_not_merged(self):
+        github = _GitHub([_pr(7, 11)], checks={"h1": [{"name": "Set up runner", "state": "startup_failure"}]})
+        result = await techlead.merge_approved_prs(
+            {"github": github, "github_repo": "o/r", "reviews": [{"pr_number": 7, "decision": "APPROVE"}]},
+            ci_wait_seconds=0)
+
+        assert github.merged == [] and result["ci_pending_prs"] == [7]
+
+
 class TestCiOnANewHead:
     async def test_no_check_yet_is_waited_for(self):
         reads = iter([[], [], [{"name": "tests", "state": "success"}]])
