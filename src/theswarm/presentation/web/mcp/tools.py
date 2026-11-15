@@ -176,6 +176,14 @@ async def start_feature(state, arguments: dict) -> dict:
             title=title, body=str(arguments.get("description") or "").strip(), labels=["status:backlog"],
         )
         number = int(created["number"])
+    flow = str(arguments.get("flow") or "")
+    if flow:
+        from theswarm.domain.teams.templates import TEMPLATE_KEYS
+        from theswarm.presentation.web.routes.common import set_flow
+
+        if flow not in TEMPLATE_KEYS:
+            raise ToolError(f"flow is one of {', '.join(TEMPLATE_KEYS)}")
+        await set_flow(project, int(number), flow)
     owner, name = project.split("/", 1)
     record = await start_targeted_cycle(state, owner, name, int(number), f"Play on issue #{number}")
     log.info("MCP: feature #%s started on %s → cycle %s", number, project, record.id)
@@ -238,7 +246,10 @@ TOOLS: dict[str, Tool] = {tool.name: tool for tool in (
                           "window and opens pull requests on the project.", start_feature,
          {"project": _REPO, "title": {"type": "string", "description": "The feature in a few words (a new issue)"},
           "description": {"type": "string", "description": "What it must do, precisely: routes, answers, errors"},
-          "issue_number": {"type": "integer", "description": "An existing issue to build instead of a new one"}},
+          "issue_number": {"type": "integer", "description": "An existing issue to build instead of a new one"},
+          "flow": {"type": "string", "description": "feature (break down, build, review, film — the default), fix "
+                                                     "(one task, no breakdown) or review (only review and merge "
+                                                     "this feature's open pull requests)"}},
          ("project",), writes=True),
     Tool("say_to_cycle", "Tell a running cycle something: a correction, a detail. The working agent reads it at "
                          "its next step; with stop=true the running call is cut and goes on with the message.",

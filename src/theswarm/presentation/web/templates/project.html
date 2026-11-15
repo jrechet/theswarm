@@ -57,6 +57,12 @@
     <textarea id="composer-body" name="body" rows="1" required
       placeholder="Write a feature for {{ project.name }} — one line is enough, the first line is the title"
       class="flex-[1_1_360px] min-w-0 resize-y bg-transparent text-[14px] leading-[36px] placeholder:text-faint focus:outline-none"></textarea>
+<label class="sr-only" for="composer-flow">Flow</label>
+    <select id="composer-flow" name="flow" title="Feature: break down, build, review, film. Fix: one task, no breakdown. Review only: review and merge the open pull requests." class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink" data-testid="composer-flow">
+      <option value="feature">Feature</option>
+      <option value="fix">Fix</option>
+      <option value="review">Review only</option>
+    </select>
     <button type="submit" name="play" value="" data-testid="create-only"
       class="h-8 px-3 border border-line-strong rounded-md bg-surface text-ink text-[13px] font-medium cursor-pointer hover:bg-raised">Create only</button>
     <button type="submit" name="play" value="1" data-testid="create-and-play"

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 STEPS = (("plan", "Planning"), ("build", "Building"), ("check", "Checking"), ("deliver", "Delivered"))
 PHASE_STEP = {
-    "prepare": 0, "po_morning": 0, "techlead_breakdown": 0,
+    "prepare": 0, "po_morning": 0, "techlead_breakdown": 0, "fix_intake": 0,
     "dev_loop": 1, "dev_iter": 1, "techlead_review": 1, "dev_loop_end": 1,
     "qa": 2,
     "po_evening": 3, "merge_held": 3, "finish": 3, "cycle_log": 3,

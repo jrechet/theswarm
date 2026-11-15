@@ -13,7 +13,15 @@
   {% if building %}
   {{ ui.btn('Open the theater', href=cycle_href, kind='secondary', icon='eye', testid='follow') }}
   {% elif not issue.closed %}
-  <form method="post" action="{{ play_url }}">{{ ui.btn('Play', kind='primary', icon='play', type='submit', testid='play') }}</form>
+  <form method="post" action="{{ play_url }}" class="flex items-center gap-2">
+    <label class="sr-only" for="play-flow">Flow</label>
+    <select id="play-flow" name="flow" title="Feature: break down, build, review, film. Fix: one task, no breakdown. Review only: review and merge the open pull requests." class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink" data-testid="play-flow">
+      <option value="feature" {% if flow == "feature" %}selected{% endif %}>Feature</option>
+      <option value="fix" {% if flow == "fix" %}selected{% endif %}>Fix</option>
+      <option value="review" {% if flow == "review" %}selected{% endif %}>Review only</option>
+    </select>
+    {{ ui.btn('Play', kind='primary', icon='play', type='submit', testid='play') }}
+  </form>
   {% endif %}
 {% endblock %}
 {% block content %}

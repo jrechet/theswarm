@@ -288,6 +288,28 @@ async def _evals_trend(state, repo: str) -> dict:
         return evals.trend([])
 
 
+async def set_flow(repo: str, number: int, flow: str) -> str:
+    """Write the flow a Play asks for on the issue (phase B, B3): its
+    `flow:*` label, the others taken off — the feature flow is no label.
+    The cycle reads it there (`cycle_graph._flow_of`), and so does a resume,
+    a queued cycle started again, and the `swarm:go` door. Returns the flow
+    that stands; an issue that cannot be labelled keeps the one it had."""
+    from theswarm.domain.teams.templates import flow_labels, template
+    from theswarm.tools.github import GitHubClient
+
+    chosen = template(flow)
+    client = GitHubClient(repo)
+    try:
+        for label in flow_labels():
+            if label != chosen.label:
+                await client.remove_label(number, label)
+        if chosen.label:
+            await client.add_labels(number, [chosen.label])
+    except Exception as exc:  # noqa: BLE001 — the cycle then runs the flow the issue already says
+        log.warning("The flow of %s#%s could not be written (%s)", repo, number, exc)
+    return chosen.key
+
+
 async def start_targeted_cycle(state, owner: str, name: str, issue_number: int | None, description: str,
                                *, cycle_id: str | None = None, queued_at: str | None = None):
     """What ▶ Play does: a tracker record and a cycle pinned to the issue.

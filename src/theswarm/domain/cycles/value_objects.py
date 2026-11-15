@@ -19,6 +19,7 @@ PHASE_ROLE = "phase"
 CYCLE_NODE_ROLES: dict[str, str] = {
     "po_morning": "po",
     "techlead_breakdown": "techlead",
+    "fix_intake": "techlead",
     "dev_loop": "dev",
     "dev_iter": "dev",
     "techlead_review": "techlead",

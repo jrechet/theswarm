@@ -128,6 +128,7 @@ def _stations(record, progress: list[dict]) -> list[dict]:
 _PHASE_LABEL = {
     "po_morning": "planning",
     "techlead_breakdown": "breaking down",
+    "fix_intake": "taking the task",
     "dev_loop": "building",
     "dev_iter": "building",
     "techlead_review": "reviewing",

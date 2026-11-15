@@ -29,6 +29,7 @@ STEP_LABELS = {
     "prepare": "Prepare",
     "po_morning": "Plan",
     "techlead_breakdown": "Breakdown",
+    "fix_intake": "Intake",  # the fix flow: the issue is the task
     "dev_loop": "",  # the loop itself, not a step
     "dev_iter": "Dev",
     "techlead_review": "Review",

@@ -498,6 +498,24 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   lives in the database; reading it from the target repository is not
   offered (who can push there would write instructions run with the
   swarm's credentials).
+- **A cycle follows a flow template** (phase B, B3 — first half,
+  2026-11-15; `domain/teams/templates.py`). Three paths through the one
+  durable graph: **feature** (the whole of it, as before), **fix** (the
+  issue *is* the task — `fix_intake` marks it `role:dev` + `status:ready`
+  without a Claude call, then Dev ⇄ review, QA on what merged; no plan, no
+  breakdown, no evening report) and **review** (nothing is built: the
+  feature's open PRs are reviewed and merged, no QA). No flow drops the
+  review or the CI gate — a free canvas would let a team stop shipping.
+  **The flow is a label on the issue** (`flow:fix`, `flow:review`; none is
+  feature): `prepare` reads it into the cycle's state (`template`, absent
+  in an older checkpoint = feature) and the graph's conditional edges
+  follow it (`_after_prepare`, `_after_dev_loop_end`, `_after_qa`). A
+  resume, a queued cycle started again and the `swarm:go` door read the
+  same place; no table follows the cycle around. Play writes it
+  (`common.set_flow`: the composer's and the feature page's "Flow" choice,
+  the MCP's `start_feature(flow=…)`). Each template names its insertion
+  points (`before_dev`, `before_merge`, `after_qa`) — where free personas
+  go in the second half.
 - **The swarm is an MCP server** (phase B, B5 — read and pilot, 2026-11-15).
   `POST /mcp` (`routes/mcp_routes.py`, `presentation/web/mcp/`): MCP over
   Streamable HTTP, behind the wall — the access key as `Authorization:
