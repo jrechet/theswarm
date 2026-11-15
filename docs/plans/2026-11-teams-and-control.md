@@ -85,12 +85,12 @@ propres à la feature :
 
 | # | Risque | Où |
 |---|---|---|
-| C1 | La revue et la fusion parcourent **toutes** les PR ouvertes du dépôt : le cycle B peut relire, renvoyer ou fusionner la PR du cycle A ; deux renvois comptent deux tours et la tâche est abandonnée ; la démo de B raconte la feature de A | `techlead.py:295`, `:913-953` |
-| C2 | « Jamais deux cycles sur une feature » ne compare que l'issue épinglée : Play sur une story puis sur une de ses sous-tâches donne deux Dev sur la même branche | `cycle_gate.py:108`, `dev.py:380-409` |
-| C3 | Une PR approuvée dans le cycle fusionne sans être remise à jour sur `main`, que l'autre cycle vient de bouger | `techlead.py:935-953` |
-| C4 | Plan et rapport du PO, mémoire, journal : écritures sur `main` non protégées, la dernière gagne | `po.py:199-269`, `memory_store.py:204` |
-| C5 | Aucune borne commune sur les captures QA ; un serveur de démo orphelin si la phase est annulée | `qa.py:913-947`, `:1928` |
-| C6 | Le PO du matin passe en « ready » jusqu'à trois stories du backlog même dans un cycle ciblé | `po.py:93-143` |
+| C1 ✔ | La revue et la fusion parcourent **toutes** les PR ouvertes du dépôt : le cycle B peut relire, renvoyer ou fusionner la PR du cycle A ; deux renvois comptent deux tours et la tâche est abandonnée ; la démo de B raconte la feature de A | `techlead.py:295`, `:913-953` |
+| C2 ✔ | « Jamais deux cycles sur une feature » ne compare que l'issue épinglée : Play sur une story puis sur une de ses sous-tâches donne deux Dev sur la même branche | `cycle_gate.py:108`, `dev.py:380-409` |
+| C3 ✔ | Une PR approuvée dans le cycle fusionne sans être remise à jour sur `main`, que l'autre cycle vient de bouger | `techlead.py:935-953` |
+| C4 ✔ | Plan et rapport du PO, mémoire, journal : écritures sur `main` non protégées, la dernière gagne | `po.py:199-269`, `memory_store.py:204` |
+| C5 ✔ | Aucune borne commune sur les captures QA ; un serveur de démo orphelin si la phase est annulée | `qa.py:913-947`, `:1928` |
+| C6 ✔ | Le PO du matin passe en « ready » jusqu'à trois stories du backlog même dans un cycle ciblé | `po.py:93-143` |
 
 Conséquence : **la limite reste à 1 par dépôt** tant que C1–C3 ne sont pas
 corrigés. C'est aussi une partie du ressenti « ça ne marche pas » : à 1, la
@@ -117,7 +117,7 @@ quotidien gagne une variante hebdomadaire « trois à la fois ».
 - Part de la fenêtre : un réglage « ne pas dépasser X % de la fenêtre » lu sur
   `RateLimitEvent.utilization`, que le SDK fournit et que le code jette.
 
-**A1 bis — deux features sur un même projet (4 jours).** C1 : la revue, la
+**A1 bis — deux features sur un même projet (4 jours). Code livré le 2026-11-15** (C1–C6 ✔ ; la part de fenêtre du swarm réglée à 80 % en prod le même jour) ; reste la preuve en prod, l'essai à 2 sur concert-tour-app. Le juge du lot refuse aussi un cycle qui fusionne la PR d'une autre feature. C1 : la revue, la
 fusion, QA et le rapport d'un cycle ciblé ne voient que les PR des sous-tâches
 de sa feature ; la veille de fusion garde le reste. C2 : la porte compare la
 feature *et ses sous-tâches*. C3 : toute PR approuvée est remise à jour sur

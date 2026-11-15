@@ -76,6 +76,14 @@ class TestTheJudgement:
         assert any("opened PR #23 for #14, a sub-task of #13" in p for p in problems)
         assert any("o/app#14 was built by 2 cycles: aaa, bbb" in p for p in problems)
 
+    def test_a_cycle_that_merges_its_siblings_pr_stepped_on_it(self, batch):
+        """A1 bis, C1: #841's cycle merged a PR of #840's (2026-11-13)."""
+        a = _run(10, "aaa", opened=[21], merged=[21, 24], pr_tasks={21: 11, 24: 14}, children=[11])
+        b = _run(13, "bbb", opened=[24], merged=[], pr_tasks={24: 14}, children=[14])
+        problems = batch.judge([a, b])
+        assert any("merged PR #24 of #14, a sub-task of #13" in p for p in problems)
+        assert not any("bbb" in p.split(" merged")[0] for p in problems if "merged PR" in p)
+
     def test_the_same_numbers_on_two_repositories_are_not_a_collision(self, batch):
         a = _run(10, "aaa", opened=[5], pr_tasks={5: 11}, children=[11])
         b = _run(10, "bbb", repo="o/other", opened=[5], pr_tasks={5: 11}, children=[11])

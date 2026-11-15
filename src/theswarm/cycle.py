@@ -79,17 +79,21 @@ async def _merge_held_prs(
         CONFLICT_SUMMARY,
         _send_back_to_dev,
         _task_of_pr,
-        bring_up_to_date,
+        _up_to_date_for_merge,
         close_finished_stories,
     )
 
     ci_wait = ci_gate.SharedWait(seconds=ci_wait_seconds)
     for pr_number in held:
-        if pr_number in earlier and pr_number in by_number:
-            # Approved in an earlier cycle: main may have moved since (#321).
-            fresh = await bring_up_to_date(github, by_number[pr_number])
+        new_head = False
+        if pr_number in by_number:
+            # Main may have moved since the approval: an earlier cycle's
+            # (#321), or this one's while another PR merged (A1 bis, C3).
+            fresh, now = await _up_to_date_for_merge(github, pr_number, by_number[pr_number])
             if fresh == "updating":
                 continue
+            if fresh == "updated":
+                by_number[pr_number], shas[pr_number], new_head = now, now.get("head_sha", ""), True
             if fresh == "conflict":
                 try:
                     if await _send_back_to_dev(github, by_number[pr_number], CONFLICT_SUMMARY, [], conflict=True,
@@ -101,7 +105,7 @@ async def _merge_held_prs(
         # Main's protection exempts the admin token the swarm merges with:
         # nothing but this stops a red PR landing on main.
         verdict = await ci_gate.wait_for_ci(
-            github, shas.get(pr_number, ""), wait_seconds=ci_wait.left(),
+            github, shas.get(pr_number, ""), wait_seconds=ci_wait.left(), new_head=new_head,
         )
         if verdict.state == "red" and pr_number in by_number and ci_gate.triage(verdict) == "code":
             # Red on the code's side: back to the Dev, as on a target. Left

@@ -479,9 +479,38 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   autonomous loop and the resumer's continuations alike. Four rules, the
   oldest arrival first: at most `max_concurrent_cycles()` in all, at most
   `repo_max_cycles(repo)` per repository (1 by default), **never two cycles
-  on one feature** (the same pinned issue), and **a cycle without a feature
+  on one feature** (a story and its sub-tasks are one: `api.feature_of`
+  reads a pinned issue's `Parent: #N` through the server's reader before
+  the gate, bounded at 15 s, unreadable is the issue itself — a Play on a
+  story then on one of its sub-tasks put two Devs on one branch, A1 bis
+  C2), and **a cycle without a feature
   runs alone** on its repository (it picks from the whole backlog); a cycle
-  never passes an older one its repository holds back. The owner sets the
+  never passes an older one its repository holds back.
+  **Two features on one project (A1 bis, 2026-11-15)** — what else two
+  cycles on one repository shared, found by reading the code after the
+  first parallel batch (#841's cycle merged a PR of #840's): a pinned
+  cycle's review and merge keep to **its feature's PRs** and to PRs that
+  belong to no task (Renovate's, a person's), never another feature's
+  (`techlead.feature_scope`, a PR's task read off its title, `Closes`, or
+  `feat/issue-N` branch, its story off the task's `Parent:`; an unreadable
+  task is reviewed as before; unpinned, everything); **every approved PR
+  holds main before it merges**, this cycle's approvals too
+  (`_up_to_date_for_merge`: GitHub's "Update branch", the new head awaited
+  30 s, the approval carried over, CI read on that head — `wait_for_ci(new_head=True)`
+  waits up to 60 s for its checks to register, and never reads an unregistered
+  head as "no CI"; the end-of-cycle merge on SELF_REPO does the same); a
+  pinned cycle's **PO leaves the backlog alone and writes no dated plan or
+  report on main** (no Claude call in the morning; the report stays with
+  the cycle); the agent memory and the cycle history are read and written
+  back **under one lock per repository and file** (`main_writes.file_lock`
+  — both cycles live in this process); QA's capture lanes share **one
+  bound for the process** (`SWARM_QA_LANES_IN_ALL`, 2; a video lane takes
+  its slot after its screenshot lane's server answered, never before — two
+  cycles would deadlock), and **no demo server outlives its phase** (each
+  is registered at launch, `qa.stop_demo_servers` in the `finally` of the
+  E2E run and of the captures: a timeout used to cancel the readiness wait
+  outside the `finally`). The batch judge (`scripts/parallel_e2e.py`) also
+  fails a cycle that merged another feature's PR. The owner sets the
   numbers in **Settings → Cycles** (`/settings/cycles`, owner only;
   `cycle_limits`, v041, `CycleLimitsService` — no row is the default: the
   environment's `SWARM_MAX_CONCURRENT_CYCLES`, one per repository); a save

@@ -104,7 +104,8 @@ def waiting_words(record, live: list | None = None) -> str:
     if why == "slot" or (not why and not running):
         return f"waits for a free slot ({max_concurrent_cycles()} cycles at once)"
     if why == "feature":
-        return f"starts once the cycle building #{record.issue_number} ends"
+        holder = _feature_holder(record.id) or record.issue_number
+        return f"starts once the cycle building #{holder} ends"
     queued = [r.id for r in mine if r.status.value == "queued"]
     place = queued.index(record.id) + 1 if record.id in queued else 1
     if place > 1:
@@ -122,6 +123,17 @@ def _gate_reason(cycle_id: str) -> str:
         return cycle_gate().why_waiting(cycle_id)
     except Exception:  # noqa: BLE001 — no loop, no gate: the tracker's words
         return ""
+
+
+def _feature_holder(cycle_id: str) -> int | None:
+    """The issue of the running cycle building this one's feature — its
+    story when this one is pinned to a sub-task (A1 bis, C2)."""
+    try:
+        from theswarm.cycle_gate import cycle_gate
+
+        return cycle_gate().building_now(cycle_id)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _ordinal(n: int) -> str:

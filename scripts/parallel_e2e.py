@@ -115,6 +115,12 @@ def judge(runs: list[dict], samples: list[dict[str, str]] | None = None, limit: 
             if owner is not None and owner is not r:
                 problems.append(f"{name} opened PR #{pr} for #{task}, a sub-task of #{owner['story']} — "
                                 f"cycle {owner.get('cycle')}'s feature")
+        for pr in r.get("merged", []):  # A1 bis, C1: a cycle merges its own feature's
+            task = (r.get("pr_tasks") or {}).get(pr)
+            owner = owner_of_task.get((r["repo"], task)) if task is not None else None
+            if owner is not None and owner is not r:
+                problems.append(f"{name} merged PR #{pr} of #{task}, a sub-task of #{owner['story']} — "
+                                f"cycle {owner.get('cycle')}'s feature")
     for (repo, task), cycles in sorted(built_by.items()):
         if len(set(cycles)) > 1:
             problems.append(f"{repo}#{task} was built by {len(set(cycles))} cycles: {', '.join(sorted(set(cycles)))}")
@@ -283,7 +289,7 @@ def main() -> int:
         r["already_satisfied"] = list(result.get("already_satisfied") or [])
         r["cost_usd"] = harness.cycle_cost(record)
         r["children"], r["open_children"] = children_of(r["repo"], r["story"])
-        r["pr_tasks"] = tasks_of_prs(r["repo"], r["opened"])
+        r["pr_tasks"] = tasks_of_prs(r["repo"], sorted({*r["opened"], *r["merged"]}))
     unowned = {repo: sorted(harness.prs_before(repo) - seen - {pr for r in runs if r["repo"] == repo for pr in r["opened"]})
                for repo, seen in before.items()}
 

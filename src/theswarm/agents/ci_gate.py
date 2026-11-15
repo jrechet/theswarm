@@ -24,6 +24,9 @@ log = logging.getLogger(__name__)
 # PR's CI is usually done before its merge; this covers the tail.
 CI_WAIT_SECONDS = 300
 CI_POLL_SECONDS = 20
+# A head GitHub just made (main merged in) has no checks for a few seconds.
+CI_REGISTER_SECONDS = 60
+CI_REGISTER_POLL_SECONDS = 5
 
 # On the task issue, next to CHANGES_MARKER: why the PR came back.
 CI_RED_MARKER = "<!-- swarm:ci-red -->"
@@ -76,22 +79,31 @@ async def wait_for_ci(
     wait_seconds: float | None = None,
     sleep=asyncio.sleep,
     clock=time.monotonic,
+    new_head: bool = False,
 ) -> CiVerdict:
-    """The verdict on `sha`, waiting while CI runs, at most `wait_seconds`."""
+    """The verdict on `sha`, waiting while CI runs, at most `wait_seconds`.
+
+    `new_head`: the commit was made a moment ago (main merged in, A1 bis
+    C3), and its checks may not be registered yet — no signal is waited for
+    `CI_REGISTER_SECONDS` before it is read as "no CI"."""
     read = getattr(github, "get_ci_checks", None)
     if read is None or not sha:
         return CiVerdict("none")
     budget = CI_WAIT_SECONDS if wait_seconds is None else wait_seconds
-    deadline = clock() + budget
+    started = clock()
+    deadline = started + budget
     while True:
         try:
             verdict = ci_verdict(await read(sha))
         except Exception as exc:  # noqa: BLE001 — unreadable CI never blocks a merge
             log.warning("Could not read CI on %s (%s) — merging as before", sha[:7], exc)
             return CiVerdict("none")
-        if verdict.state != "pending" or clock() >= deadline:
+        registering = new_head and verdict.state == "none" and clock() < started + CI_REGISTER_SECONDS
+        if clock() >= deadline:
+            return CiVerdict("pending") if registering else verdict  # never merged unread
+        if verdict.state != "pending" and not registering:
             return verdict
-        await sleep(CI_POLL_SECONDS)
+        await sleep(CI_REGISTER_POLL_SECONDS if registering else CI_POLL_SECONDS)
 
 
 class SharedWait:

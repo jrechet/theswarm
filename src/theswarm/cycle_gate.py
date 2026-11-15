@@ -11,8 +11,11 @@ The rules, all checked together, in the order the cycles arrived:
   cycle at a time — a cycle resets, cleans and deletes it as if it were
   alone, and two of them erased each other's branches (16f3b8af2cca vs
   2878898cc504).
-- **Never two cycles on one feature** (the same pinned issue): they would
-  build the same tasks on the same branches.
+- **Never two cycles on one feature**: they would build the same tasks on
+  the same branches. A feature is a story *and its sub-tasks* — a Play on
+  a story, then on one of its sub-tasks, put two Devs on one branch while
+  the gate compared the pinned issues only (A1 bis, C2). The caller names
+  the feature (`api.feature_of`: a sub-task's story, else the issue).
 - **A cycle without a feature runs alone on its repository**: it picks from
   the whole backlog, and could take the tasks another cycle is building.
 
@@ -86,7 +89,13 @@ class _Entry:
     cycle_id: str
     repo: str
     issue: int | None
+    feature: int | None = None  # the story a pinned sub-task belongs to; None: the issue itself
     admitted: asyncio.Event = field(default_factory=asyncio.Event)
+
+    @property
+    def builds(self) -> int | None:
+        """The feature this cycle builds: its story, or the issue it is pinned to."""
+        return self.feature if self.feature is not None else self.issue
 
 
 class CycleGate:
@@ -107,10 +116,20 @@ class CycleGate:
         entry = next((e for e in self._waiting if e.cycle_id == cycle_id), None)
         return self._blocker(entry) if entry is not None else ""
 
+    def building_now(self, cycle_id: str) -> int | None:
+        """The issue of the running cycle that builds this waiting cycle's
+        feature (a story, when the waiting one is pinned to its sub-task)."""
+        entry = next((e for e in self._waiting if e.cycle_id == cycle_id), None)
+        if entry is None or entry.builds is None:
+            return None
+        holder = next((e for e in self._running.values()
+                       if e.repo == entry.repo and e.builds == entry.builds), None)
+        return holder.issue if holder is not None else None
+
     # ── the rules ──
     def _blocker(self, entry: _Entry) -> str:
         mine = [e for e in self._running.values() if e.repo == entry.repo]
-        if entry.issue is not None and any(e.issue == entry.issue for e in mine):
+        if entry.builds is not None and any(e.builds == entry.builds for e in mine):
             return "feature"
         if mine and (entry.issue is None or any(e.issue is None for e in mine)):
             return "repo"
@@ -141,15 +160,16 @@ class CycleGate:
         """The owner raised (or lowered) a limit: whoever fits now starts."""
         self._admit()
 
-    def fits_now(self, repo: str, issue: int | None) -> bool:
+    def fits_now(self, repo: str, issue: int | None, feature: int | None = None) -> bool:
         """Would a cycle arriving now start at once (nobody waiting ahead of it)?"""
-        probe = _Entry("", repo, issue)
+        probe = _Entry("", repo, issue, feature)
         return not self._waiting and not self._blocker(probe)
 
     @asynccontextmanager
-    async def hold(self, cycle_id: str, repo: str, issue: int | None):
-        """Wait for this cycle's turn, then hold its place while it runs."""
-        entry = _Entry(cycle_id, repo, issue)
+    async def hold(self, cycle_id: str, repo: str, issue: int | None, feature: int | None = None):
+        """Wait for this cycle's turn, then hold its place while it runs.
+        `feature`: the story `issue` is a sub-task of, when it is one."""
+        entry = _Entry(cycle_id, repo, issue, feature)
         self._waiting.append(entry)
         self._admit()
         try:
