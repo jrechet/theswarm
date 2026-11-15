@@ -431,3 +431,74 @@ features:
     expected_paths: ["**/*.py"]
     max_cost_usd: 8
     max_duration_s: 3600
+  # Added 2026-11-15: the batches of the A1 bis proof built the ten above in a day.
+  - id: artist-detail
+    text: |-
+      Show one artist
+      GET /api/v1/artists/{id} returns the artist with its name and the number of concerts it plays in that are not cancelled; 404 for an unknown artist.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: artist-rename
+    text: |-
+      Rename an artist
+      PATCH /api/v1/artists/{id} with {"name": "..."} renames the artist and returns it; 422 for an empty name; 409 when another artist already has that name; 404 for an unknown artist.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: tour-rename
+    text: |-
+      Rename a tour
+      PATCH /api/v1/tours/{id} with {"name": "..."} renames the tour and returns it; 422 for an empty name or one longer than 120 characters; 404 for an unknown tour.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: venue-search
+    text: |-
+      Search the venues
+      GET /api/v1/venues/search?q=... returns the venues whose name or city contains the text, whatever the case, by name; an empty list when none does; 422 for a text shorter than 2 characters.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: venue-busiest
+    text: |-
+      The busiest venues
+      GET /api/v1/stats/venues/busiest returns the five venues with the most concerts not cancelled, most first then by name, each with its name, its city and that number; fewer when there are fewer venues with a concert; an empty list when there is none.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: concert-cancel
+    text: |-
+      Cancel one concert
+      POST /api/v1/concerts/{id}/cancel marks the concert cancelled and returns it; cancelling a concert already cancelled answers 200 and changes nothing; 404 for an unknown concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: concert-uncancel
+    text: |-
+      Put a cancelled concert back on
+      POST /api/v1/concerts/{id}/uncancel puts a cancelled concert back on and returns it; 409 when the concert is not cancelled or its date is in the past, the detail saying which; 404 for an unknown concert.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: concerts-this-week
+    text: |-
+      The concerts of the coming week
+      GET /api/v1/concerts/week returns the concerts not cancelled that start within the next seven days, soonest first, each with its venue's name and city; an empty list when there is none.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: stats-artists-top
+    text: |-
+      The artists that play the most
+      GET /api/v1/stats/artists/top returns the five artists with the most lineup appearances in concerts not cancelled, most first then by name, each with its name and that number; an empty list when no artist plays.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: tour-next-concert
+    text: |-
+      A tour's next concert
+      GET /api/v1/tours/{id}/next returns the tour's next concert that is not cancelled, with its date, its venue's name and city and the tickets remaining; 404 for an unknown tour or a tour with no concert to come, the detail saying which.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
