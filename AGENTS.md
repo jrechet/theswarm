@@ -458,6 +458,29 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   replace it or the form of its answer. Nothing is interrupted — stopping a
   call is A3.3, pausing a cycle A3.2. An inbox that cannot be read is an
   empty one; a cycle that is over takes no message.
+- **A persona is data** (phase B, B1 — first slice, 2026-11-15; the owner's
+  decisions of that day: flow templates rather than a free canvas, the team
+  in the database with YAML export rather than in the target repository).
+  `personas` (v043, `domain/agents/persona.py`, `PersonaService`): for the
+  instance (scope `''`) or one project, a role's **name, description and
+  instructions**, and optionally the **model and effort** it runs on there.
+  Everything empty inherits: the project from the instance, the instance
+  from the built-in role, the model from Settings → Agents' instance-wide
+  choice (`agent_settings`, kept underneath for now). **A cycle reads its
+  project's team when it starts** (`api.set_personas`,
+  `PersonaService.for_cycle` → `CycleConfig.agent_settings` and
+  `.personas`, `personas` in `AgentState`), and **the words open the role's
+  context** (`base._build_persona_preamble` through `load_context`): the
+  main prompt of the PO, the TechLead (breakdown and review), the Dev and
+  QA's E2E writer carry them, headed "Instructions from the owner of this
+  project" — they add to the task, the form of the answer stands. The
+  short repair, triage and demo-call prompts do not carry the context, and
+  DevOps works outside the cycle: the editor offers the cycle's four roles
+  only. **Settings → Agents is the editor** ("Who each role is", every
+  project or `?team=owner/name`; `POST /settings/agents/persona`, owner
+  only; all empty is no row), and the theater names its stations as the
+  team does. Still to come in B1: `agent_settings` and the role
+  assignments folded into this table.
 - **One table of roles** (A4, 2026-11-15): `domain/agents/roles.py` —
   each role's key ("techlead", what is stored and compared), voice
   ("TechLead", what an agent speaks under in the feed and the watchdog —

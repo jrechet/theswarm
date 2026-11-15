@@ -260,7 +260,12 @@ async def _stage_context(request: Request, record) -> dict:
 
     last = phases[-1] if phases else {}
     lanes = get_live_lanes(record.id, since=float(last.get("ts") or 0)) if last.get("phase") == "dev_iter" else []
+    # Phase B, B1: the stations carry the names the project's team gives its roles.
+    team = getattr(request.app.state, "personas", None)
+    names = {key: member.name for key, member in team.team(record.repo).items()} if team is not None else {}
     for node in graph["nodes"]:
+        if names.get(node["key"]):
+            node["name"] = names[node["key"]]
         node["lanes"] = lanes if node["key"] == "dev" and node["state"] == "active" and len(lanes) > 1 else []
         node["model"] = models.get(node["key"], "")
         node["quiet"] = node["state"] == "active" and line["quiet"] and not line["waiting"]

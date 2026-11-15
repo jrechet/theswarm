@@ -154,6 +154,12 @@ def create_web_app(
         from theswarm.infrastructure.persistence.agent_settings_repo import SQLiteAgentSettingsRepository
 
         app.state.agent_settings = AgentSettingsService(SQLiteAgentSettingsRepository(db))
+        # Phase B, B1: a persona is data — each role's name, description and instructions,
+        # for the instance and per project, over the models above
+        from theswarm.application.services.personas import PersonaService
+        from theswarm.infrastructure.persistence.persona_repo import SQLitePersonaRepository
+
+        app.state.personas = PersonaService(SQLitePersonaRepository(db), app.state.agent_settings)
         # Settings → Cycles: how many run at once, in all and per project
         from theswarm.application.services.cycle_limits import CycleLimitsService
         from theswarm.infrastructure.persistence.cycle_limits_repo import SQLiteCycleLimits

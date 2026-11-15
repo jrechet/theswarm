@@ -222,6 +222,16 @@ async def feature_of(repo: str, issue: int | None) -> int | None:
     return int(parent) if parent else issue
 
 
+_PERSONAS = None
+
+
+def set_personas(service) -> None:
+    """Phase B, B1: where a cycle reads its project's team (`PersonaService`;
+    None — tests, the CLI — leaves every role as the code defines it)."""
+    global _PERSONAS
+    _PERSONAS = service
+
+
 def set_preflight(preflight) -> None:
     """DevOps D2: the go/no-go asked before any cycle starts (the server sets
     it to the watch's `preflight`; None asks nobody — tests, the CLI)."""
@@ -725,8 +735,17 @@ async def _run_api_cycle(
                 cycle_config.agent_settings = await _AGENT_SETTINGS.effective()
             except Exception:  # noqa: BLE001 — the instance's model then
                 log.exception("Agent settings could not be read — every persona on the instance's model")
-            if event_bus is not None:
-                await _tell_agent_models(event_bus, cycle_id, project_id or repo, cycle_config)
+        # Phase B, B1: the project's team — each role's model and effort where the
+        # project or the instance chose one, and the owner's words for the role.
+        if _PERSONAS is not None:
+            try:
+                models, words = await _PERSONAS.for_cycle(repo)
+                cycle_config.agent_settings = models or cycle_config.agent_settings
+                cycle_config.personas = words
+            except Exception:  # noqa: BLE001 — the roles as the code defines them
+                log.exception("The team of %s could not be read — every role as built in", repo)
+        if _AGENT_SETTINGS is not None and event_bus is not None:
+            await _tell_agent_models(event_bus, cycle_id, project_id or repo, cycle_config)
 
         from theswarm.infrastructure import tracing
 

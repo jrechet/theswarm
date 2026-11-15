@@ -36,6 +36,8 @@ class AgentState(TypedDict, total=False):
     github_repo: str
     project_id: str
     codenames: dict[str, str]
+    # The team's words for this cycle (phase B, B1): {role: {name, description, instructions}}
+    personas: dict
     phase: str
     # Ports / clients
     github: Any        # GitHubClient
@@ -135,6 +137,9 @@ class CycleConfig:
     # Settings → Agents: persona → (model, effort) the owner chose; a persona
     # absent here runs on `claude_model` with Claude Code's own effort.
     agent_settings: dict = field(default_factory=dict)
+    # Phase B, B1: what the owner says each role is on this project —
+    # {role: {"name", "description", "instructions"}}, read when the cycle starts.
+    personas: dict = field(default_factory=dict)
     workspace_dir: str = ""  # auto-set if empty
 
     # Model routing: task category → model short name

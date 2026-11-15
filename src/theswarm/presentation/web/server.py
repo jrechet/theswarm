@@ -949,6 +949,12 @@ async def start_server(
         from theswarm import api as _api_settings
 
         _api_settings.set_agent_settings(agent_settings)
+    personas = getattr(app.state, "personas", None)
+    if personas is not None:
+        await personas.refresh()  # the team the theater draws
+        from theswarm import api as _api_personas
+
+        _api_personas.set_personas(personas)  # B1: each cycle reads its project's team
 
     # ── DevOps D1: the watch loop; the daily report on the PO's channel ──
     ops_watch = getattr(app.state, "ops_watch", None)
