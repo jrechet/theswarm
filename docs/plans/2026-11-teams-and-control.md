@@ -76,7 +76,7 @@ seul ne l'aurait signalé.
 | 12 ✔ | `/api/live/state` est un singleton : deux cycles s'y écrasent | `dashboard.py:18-93` |
 | 14 ✔ | Le découpage peut créer une sous-tâche `role:qa` que seul un Dev (`role:dev`) saurait prendre : elle reste ouverte, la story aussi | swarm-todo-app#28 |
 | 15 ✔ | La fusion en squash d'une sous-tâche ferme la story : le commit du Dev disait `Closes #31` (la story, recopié des critères du découpage), et l'endpoint (#34) n'a jamais été construit | swarm-todo-app#31, course hebdomadaire du 2026-11-14 |
-| 13 | 69 des 120 services construits au démarrage ne sont lus nulle part (restes de la V1) | `app.py` |
+| 13 ✔ | 69 des 120 services construits au démarrage ne sont lus nulle part (restes de la V1) | `app.py` — retirés le 2026-11-15 : 79 attributs, 179 modules, 75 fichiers de tests, 25 300 lignes ; les tables restent |
 
 **Deux cycles à la fois : ce que l'audit du code dit** (lecture, pas encore
 reproduit). Sur deux dépôts différents, la porte, les clones, les ports et le
@@ -163,7 +163,7 @@ Les horloges (appel, phase, cycle) ne comptent pas le temps de pause.
 
 **A3 vu en prod le 2026-11-15** (swarm-todo-app#71, cycles 4cda4d36a74f puis 4fc2ff909b78) : un message lu par le Dev 2 s après l'envoi, à son appel d'outil suivant ; « Stop and say » a coupé l'appel 1 s après et le Dev a repris avec le message ; la pause a été prise à la fin de l'itération (PR ouverte, arrêt avant la revue, 0,61 $) ; Resume a terminé la feature (deux PR fusionnées, story fermée, 2,13 $). Le code livré suit les deux messages (`total` au lieu de `count`, et le champ `done`).
 
-**A4 — ménage (2 jours).** Défauts 10 et 12 corrigés le 2026-11-15 ; restent les services morts et les vocabulaires de rôles. Retirer les 69 services morts et leurs tables,
+**A4 — ménage (2 jours).** Défauts 10, 12 et 13 corrigés le 2026-11-15 (les services morts sont retirés, leurs tables gardées : les supprimer est une décision du propriétaire) ; restent les vocabulaires de rôles. Retirer les 69 services morts et leurs tables,
 unifier les quatre vocabulaires de rôles en un seul, défaut 10, défaut 12.
 C'est le préalable de la phase B : on ne rend pas configurable ce qui existe
 en quatre exemplaires.
