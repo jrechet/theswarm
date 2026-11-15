@@ -11,9 +11,21 @@
 {% block actions %}
   <span id="status-pill" data-status="{{ record.status.value }}">{{ ui.chip(status_label ~ (' · ' ~ elapsed if elapsed and record.status.value in ('running', 'queued') else ''), status_kind, pulse=(status_kind == 'running'), testid='cycle-status') }}</span>
   {% if trace_url %}<a href="{{ trace_url }}" target="_blank" rel="noopener" class="h-[30px] inline-flex items-center px-2.5 border border-line-strong rounded-md bg-surface text-[13px] text-ink">trace ↗</a>{% endif %}
+  {% if record.status.value == 'running' %}
+  {% if pausing %}<span class="h-[30px] inline-flex items-center px-2.5 text-[13px] text-muted" data-testid="pausing">Pausing after this phase…</span>
+  {% else %}
+  <form method="post" action="{{ base }}/cycles/{{ record.id }}/pause" data-testid="pause">
+    <button type="submit" title="Stops at the end of the phase it is in; Resume goes on from there" class="h-[30px] px-2.5 border border-line-strong rounded-md bg-surface text-ink text-[13px] font-medium cursor-pointer hover:bg-raised">Pause</button>
+  </form>
+  {% endif %}
+  {% endif %}
   {% if record.status.value in ('running', 'queued') %}
   <form method="post" action="{{ cancel_url }}" data-cancel onsubmit="return confirm('Cancel this cycle?')">
     <button type="submit" class="h-[30px] px-2.5 border border-line-strong rounded-md bg-surface text-bad text-[13px] font-medium cursor-pointer hover:bg-bad-wash">Cancel</button>
+  </form>
+  {% elif paused_resumable %}
+  <form method="post" action="{{ base }}/cycles/{{ record.id }}/resume" data-testid="resume">
+    <button type="submit" class="h-[30px] inline-flex items-center gap-1.5 px-2.5 rounded-md bg-ink text-on-ink text-[13px] font-medium cursor-pointer hover:opacity-90">↻ Resume</button>
   </form>
   {% elif resumable_from %}
   <form method="post" action="{{ base }}/cycles/{{ record.id }}/resume" data-testid="resume">
@@ -40,6 +52,27 @@
       {% if pinned.issue and project.feature_href %}<a href="{{ project.feature_href }}{{ pinned.issue.number }}" class="hover:text-ink">the feature's page →</a>{% endif %}
     </div>
   </div>
+
+  {# A3.1 — outside the stage: the stage is redrawn every 3 s, a field in it would lose its words #}
+  {% if can_say or said %}
+  <section aria-labelledby="say-label" class="flex flex-col gap-1.5" data-testid="say">
+    {% if can_say %}
+    <form method="post" action="{{ base }}/cycles/{{ record.id }}/messages" class="flex gap-2 items-start">
+      <label id="say-label" for="say-field" class="sr-only">Say something to this cycle</label>
+      <textarea id="say-field" name="message" rows="1" maxlength="2000" required
+                placeholder="Say something to this cycle — a correction, a detail the agent should know…"
+                class="flex-1 min-w-0 min-h-[36px] px-3 py-2 bg-surface border border-line-strong rounded-md text-[13px] text-ink placeholder:text-faint focus:outline-none focus:border-ink"
+                data-testid="say-field"></textarea>
+      <button type="submit" name="how" value="send" class="h-[36px] px-3.5 rounded-md bg-ink text-on-ink text-[13px] font-medium cursor-pointer hover:opacity-90" data-testid="say-send">Send</button>
+      <button type="submit" name="how" value="stop" title="Cuts the call that is running; the agent goes on with your message" class="h-[36px] px-3.5 border border-line-strong rounded-md bg-surface text-bad text-[13px] font-medium cursor-pointer hover:bg-bad-wash whitespace-nowrap" data-testid="say-stop">Stop and say</button>
+    </form>
+    <p class="m-0 text-[12px] text-faint"><b class="font-medium text-muted">Send</b>: the working agent reads it at its next step. <b class="font-medium text-muted">Stop and say</b>: the call that is running is cut and goes on with your message.</p>
+    {% endif %}
+    {% if said == '1' %}<p class="m-0 text-[13px] text-ok" role="status" data-testid="said">Sent — it shows in the feed when an agent has read it.</p>
+    {% elif said == 'over' %}<p class="m-0 text-[13px] text-bad" role="status" data-testid="said">This cycle is over: nobody is left to read it.</p>
+    {% elif said == 'empty' %}<p class="m-0 text-[13px] text-bad" role="status" data-testid="said">Write something to say (2000 characters at most).</p>{% endif %}
+  </section>
+  {% endif %}
 
   <div id="stage">{% include "_stage.html" %}</div>
 </div>

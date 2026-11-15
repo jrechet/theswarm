@@ -101,6 +101,17 @@ class CycleFailed(DomainEvent):
 
 
 @dataclass(frozen=True)
+class CyclePaused(DomainEvent):
+    """The owner paused the cycle between two phases (A3.2). The row says
+    `paused`: the boot's resumer leaves it (it reads the running ones), and
+    Resume continues it on its thread."""
+    cycle_id: CycleId = field(default_factory=CycleId.generate)
+    project_id: str = ""
+    before: str = ""
+    total_cost_usd: float = 0.0
+
+
+@dataclass(frozen=True)
 class CycleCancelled(DomainEvent):
     """Somebody stopped the cycle on purpose.
 

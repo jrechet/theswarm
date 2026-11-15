@@ -965,6 +965,7 @@ async def start_server(
     from theswarm import api as _api_gate
 
     _api_gate.set_feature_reader(_story_of_issue)
+    _api_gate.set_cycle_inbox(getattr(app.state, "cycle_inbox", None))  # A3.1
 
     # ── The TechLead's merge watch: approved work lands between cycles ──
     from theswarm.application.services.merge_watch import MergeWatch, sweep_seconds

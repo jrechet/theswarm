@@ -109,6 +109,8 @@ class CycleRuntime:
     # Settings → Agents: each persona's Claude, made once per cycle from the base one
     # (its progress callback set by then, so the theater still hears every call).
     claude_by_role: dict = field(default_factory=dict)
+    # A3.2: has the owner asked for a pause? Read at the door of every node.
+    should_pause: Callable[[], bool] | None = None
 
     async def announce(self, phase: str) -> None:
         """Tell the theater which phase runs now — a typed channel, not a
@@ -147,6 +149,32 @@ def _claude_for(rt: "CycleRuntime", role: str):
         model, effort = choice
         rt.claude_by_role[role] = base.with_settings(model, effort)
     return rt.claude_by_role[role]
+
+
+LANE_TAG = "task {number} — "
+
+
+def _lane_claude(claude, lane: dict):
+    """A parallel Dev's own Claude: the same one, its lines tagged with the
+    task this lane picked ("task 901 — Bash: pytest -q"). Two Devs side by
+    side shared one station and one voice: nobody could tell who did what
+    (defect 9). No `#` in the tag: the theater reads PR numbers off `#N`."""
+    import dataclasses
+
+    emit = getattr(claude, "on_event", None)
+    if claude is None or emit is None or not dataclasses.is_dataclass(claude):
+        return claude
+
+    async def tagged(text: str) -> None:
+        number = lane.get("task")
+        await emit(LANE_TAG.format(number=number) + text if number else text)
+
+    return dataclasses.replace(claude, on_event=tagged)
+
+
+def _in_lane(state: dict, lane: dict) -> dict:
+    """A parallel Dev's state: its own holder, and its Claude speaking for it."""
+    return {**state, "claude": _lane_claude(state.get("claude"), lane), "lane": lane}
 
 
 def _invoke_agent(graph, state: dict) -> "asyncio.Task":
@@ -283,16 +311,17 @@ async def _dev_iter_parallel(
     """
     lock = asyncio.Lock()
     claimed: list[int] = []
+    lanes: list[dict] = [{"task": None} for _ in range(width)]
     graphs = [
-        _invoke_agent(_cycle().build_dev_graph(), {
+        _invoke_agent(_cycle().build_dev_graph(), _in_lane({
             **rt.base_state,
             "claude": _claude_for(rt, "dev"),
             "phase": Phase.DEVELOPMENT.value,
             "attempted_tasks": attempted,
             "pick_lock": lock,
             "claimed_tasks": claimed,
-        })
-        for _ in range(width)
+        }, lane))
+        for lane in lanes
     ]
     await rt.progress("Dev", f"Up to {width} tasks side by side")
     try:
@@ -846,6 +875,25 @@ async def cycle_log(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
 # ── The graph ────────────────────────────────────────────────────────
 
 
+def _pausable(name: str, node):
+    """`node`, behind the pause door (A3.2). A pause takes effect between
+    two nodes: the one running finishes and is checkpointed, the next one
+    raises here before any effect, and a resume on the thread runs it."""
+
+    async def at_the_door(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
+        rt = runtime.context
+        asked = getattr(rt, "should_pause", None)
+        if asked is not None and asked():
+            from theswarm.cycle_budgets import PauseRequested
+
+            log.info("Cycle paused before %s", name)
+            raise PauseRequested(name)
+        return await node(state, runtime)
+
+    at_the_door.__name__ = getattr(node, "__name__", name)
+    return at_the_door
+
+
 def build_cycle_graph(checkpointer=None):
     graph = StateGraph(CycleState, context_schema=CycleRuntime)
     for name, fn in (
@@ -861,7 +909,7 @@ def build_cycle_graph(checkpointer=None):
         ("finish", finish),
         ("cycle_log", cycle_log),
     ):
-        graph.add_node(name, fn)
+        graph.add_node(name, _pausable(name, fn))
     graph.set_entry_point("prepare")
     graph.add_edge("prepare", "po_morning")
     graph.add_edge("po_morning", "techlead_breakdown")

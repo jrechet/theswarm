@@ -70,7 +70,7 @@ seul ne l'aurait signalé.
 | 17 ✔ | Le théâtre dit « Silent for 12 min » d'un agent dont la phase est finie : le nœud parle encore après sa phase (« Merged: [896] », « No more ready tasks »), ce qui le ré-inscrit au watchdog | cycle 0aa45149f33f (2026-11-15), premières lignes `AgentStalled` de la prod |
 | 18 ✔ | Un découpage vide est pris pour « rien à faire » : le cycle finit « completed » sans rien construire | concert-tour-app#897 « Change a venue » (2026-11-15) : `Breakdown.tasks` acceptait `[]` |
 | 19 ✔ | Deux cycles fusionnent à la même seconde : GitHub refuse la seconde fusion (« Base branch was modified », 405), la PR reste ouverte, la sous-tâche qui en dépend n'est jamais construite ; la PR Renovate fusionnée par les deux est comptée par les deux | concert-tour-app#917/#927 et #925 (2026-11-15, troisième lot) |
-| 9 | Deux Dev en parallèle partagent une seule station « Dev » : on ne sait pas qui fait quelle tâche | un seul `current_role`, pas d'identifiant de tâche sur les événements |
+| 9 ✔ | Deux Dev en parallèle partagent une seule station « Dev » : on ne sait pas qui fait quelle tâche | un seul `current_role`, pas d'identifiant de tâche sur les événements |
 | 10 | Les prompts du Dev et du relecteur n'ont pas le paragraphe anti-injection | `DEV_SYSTEM`, `REVIEW_SYSTEM` : constantes mortes |
 | 11 ✔ | Le manifeste d'évaluation est épuisé : le harness ne mesure plus rien de neuf | 45 features, toutes livrées |
 | 12 | `/api/live/state` est un singleton : deux cycles s'y écrasent | `dashboard.py:18-93` |
@@ -129,22 +129,22 @@ daté sur `main` et ne touche pas au backlog. C5 : une borne commune sur les
 captures, un `finally` sur le serveur de démo. Preuve : l'essai parallèle à 2
 sur concert-tour-app, vert trois fois, avant de proposer 2 par défaut.
 
-**A2 — la salle de contrôle (3 jours).** L'accueil devient la vue de tous les
+**A2 — la salle de contrôle (3 jours). Dépense en cours et attribution par tâche écrites le 2026-11-15 ; reste l'état persistant des phases.** L'accueil devient la vue de tous les
 projets : par cycle, la feature, l'étape, l'agent, la tâche en cours, le dernier
 geste, le temps de silence, la dépense à l'instant (défaut 3 fait ; reste la
 dépense en cours, l'attribution par tâche du défaut 9, et l'état persistant —
 l'historique des phases vit en mémoire et se perd à un redéploiement).
 
 **A3 — parler à un cycle (5 jours).** Trois marches, chacune livrable :
-1. *Boîte de réception.* Table `cycle_inbox`, `POST /cycles/{id}/messages`, un
+1. *Boîte de réception.* **Livrée le 2026-11-15** (champ dans le théâtre, fil « YOU », livraison au prochain appel d'outil ou en tête du prochain appel ; vérifié sur un appel réel). Table `cycle_inbox`, `POST /cycles/{id}/messages`, un
    champ dans le théâtre ; le message apparaît dans le fil. Livré à l'agent au
    prochain appel d'outil par le hook `PreToolUse` qui existe déjà
    (`additionalContext`) — aucun changement de transport — et en tête du
    prompt au nœud suivant.
-2. *Pause et reprise* aux frontières de nœud : `paused` est une annulation
+2. *Pause et reprise* **(code écrit le 2026-11-15, à voir en prod)** aux frontières de nœud : `paused` est une annulation
    demandée qui garde l'espace de travail et libère la place ; la reprise est
    le chemin du redémarrage (`resume_cycle_id`), qui répare aussi le défaut 5.
-3. *« Arrête, fais plutôt ceci »* : passer de `query()` à `ClaudeSDKClient`
+3. *« Arrête, fais plutôt ceci »* **(code écrit le 2026-11-15, vérifié sur un appel réel ; par coupure du flux et reprise de session, le chemin du timeout, plutôt que `ClaudeSDKClient`)** : passer de `query()` à `ClaudeSDKClient`
    (`interrupt()` puis `query()` dans la même session). Le message est aussi
    posé sur l'issue derrière `CHANGES_MARKER` pour que le relecteur le lise.
 Les horloges (appel, phase, cycle) ne comptent pas le temps de pause.

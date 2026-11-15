@@ -14,6 +14,7 @@ from theswarm.domain.cycles.entities import Cycle, PhaseExecution
 from theswarm.domain.cycles.events import (
     AgentActivity,
     CycleCancelled,
+    CyclePaused,
     CycleCompleted,
     CycleFailed,
     CycleStarted,
@@ -40,6 +41,8 @@ class CyclePersistenceHandler:
             await self._on_completed(event)
         elif isinstance(event, CycleFailed):
             await self._on_failed(event)
+        elif isinstance(event, CyclePaused):
+            await self._on_paused(event)
         elif isinstance(event, CycleCancelled):
             await self._on_cancelled(event)
 
@@ -127,6 +130,23 @@ class CyclePersistenceHandler:
             await self._cycle_repo.save(cycle)
         except Exception:
             log.exception("Failed to persist CycleFailed %s", event.cycle_id)
+
+    async def _on_paused(self, event: CyclePaused) -> None:
+        """Write the pause down: not running (the resumer leaves it), not failed."""
+        try:
+            cycle = await self._cycle_repo.get(event.cycle_id)
+            if cycle is None:
+                return
+            phases = list(cycle.phases)
+            if phases and phases[-1].status == PhaseStatus.RUNNING:
+                phases[-1] = phases[-1].complete(summary="Paused after this phase")
+            cycle = replace(
+                cycle, status=CycleStatus.PAUSED, completed_at=event.occurred_at, phases=tuple(phases),
+                total_cost_usd=max(cycle.total_cost_usd, event.total_cost_usd),
+            )
+            await self._cycle_repo.save(cycle)
+        except Exception:
+            log.exception("Failed to persist CyclePaused %s", event.cycle_id)
 
     async def _on_cancelled(self, event: CycleCancelled) -> None:
         """Write the cancellation down, so a restart cannot resume it."""

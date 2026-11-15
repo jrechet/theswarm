@@ -15,6 +15,7 @@ from theswarm.cycle_budgets import (  # noqa: F401 — re-exported for callers a
     MAX_DEV_ITERATIONS,
     PHASE_TIMEOUTS,
     BudgetExceeded,
+    PauseRequested,
     PhaseTimeout,
 )
 from theswarm.domain.cycles.value_objects import PHASE_ROLE
@@ -348,6 +349,9 @@ async def run_daily_cycle(
     checkpointer=None,
     resume: bool = False,
     on_stalled=None,
+    inbox=None,
+    should_pause=None,
+    on_spend=None,
 ) -> dict:
     """Run one complete daily cycle and return the summary.
 
@@ -421,6 +425,7 @@ async def run_daily_cycle(
         raw_progress=on_progress,
         checkpoint=_checkpoint,
         watchdog=watchdog,
+        should_pause=should_pause,
     )
 
     # V2 runtime (M1): the SDK backend streams every tool call and text
@@ -433,11 +438,32 @@ async def run_daily_cycle(
 
         _claude.on_event = _on_claude_event
 
+    if _claude is not None and on_spend is not None and hasattr(_claude, "on_spend"):
+        _claude.on_spend = on_spend  # A2: the cycle's spend so far, call by call
+
+    # A3.1: what the owner said to this cycle reaches the agent working now
+    # — at its next tool call, or at the head of the next call's prompt.
+    if _claude is not None and inbox is not None and hasattr(_claude, "inbox"):
+        async def _read_inbox() -> list[str]:
+            return await inbox(runtime.current_role["name"])
+
+        _claude.inbox = _read_inbox
+
+        # A3.3: "stop, do this instead" — a running call asks every few
+        # seconds; an answer cuts it and its session goes on with the message.
+        async def _read_interrupts() -> list[str]:
+            return await inbox(runtime.current_role["name"], True)
+
+        if hasattr(_claude, "interrupts"):
+            _claude.interrupts = _read_interrupts
+
     try:
         return await run_cycle_graph(
             runtime, cycle_id=cycle_id, checkpointer=checkpointer,
             resume=resume, date=today,
         )
+    except PauseRequested:
+        raise  # not a failure: no failed checkpoint, the thread resumes where it stands
     except Exception as exc:
         # Sprint G1 — persist a failed checkpoint for the phase that crashed
         # so /cycles/{id}/resume can pick up from the next one.

@@ -52,6 +52,7 @@ class AgentState(TypedDict, total=False):
     # reference between the Dev graphs of one iteration, never checkpointed.
     pick_lock: Any
     claimed_tasks: list[int]
+    lane: dict  # a parallel Dev's own holder: {"task": N} once it picked (defect 9)
     branch: str | None
     context: str
     result: str | None

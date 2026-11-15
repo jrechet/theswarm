@@ -645,13 +645,45 @@ def stall_bounds() -> tuple[float, float]:
             _bound("SWARM_CLAUDE_STALL_SECONDS", STALL_SECONDS))
 
 
+class _Interrupted(Exception):
+    """The owner said "stop, do this instead" while the call ran (A3.3)."""
+
+    def __init__(self, messages: list[str]) -> None:
+        super().__init__("interrupted by the owner")
+        self.messages = messages
+
+
+class _SDKInterrupted(_CLIUnavailable):
+    """An SDK call the owner interrupted; ``session_id`` is what to resume,
+    ``messages`` what to say to it."""
+
+    def __init__(self, messages: list[str], session_id: str = "") -> None:
+        super().__init__("SDK call interrupted by the owner")
+        self.messages = messages
+        self.session_id = session_id
+
+
+# How often a running call asks whether the owner interrupted it, and how many
+# times one call may be interrupted before it is left to finish.
+INTERRUPT_POLL_SECONDS = 3.0
+MAX_INTERRUPTS = 5
+
+SDK_INTERRUPT_PROMPT = (
+    "The owner of this cycle stopped your previous turn to tell you something; any command it was "
+    "running was stopped, and the working tree keeps your edits. What they said:\n{said}\n\n"
+    "Take it into account and carry on with the same task from where it stands — do not start over. "
+    "Run commands in the foreground. Nobody is going to answer a question: when the task is done, end "
+    "with your final answer in the form the task asked for."
+)
+
+
 class _Silent(Exception):
     def __init__(self, seconds: float) -> None:
         super().__init__(f"silent for {seconds:.0f}s")
         self.seconds = seconds
 
 
-async def _within(coro, *, timeout: float, heard: dict, first_word: float, stall: float):
+async def _within(coro, *, timeout: float, heard: dict, first_word: float, stall: float, interrupts=None):
     """Await ``coro`` under a deadline *and* a silence bound.
 
     ``heard["at"]`` (the loop's clock) is moved by the consumer on every
@@ -659,6 +691,8 @@ async def _within(coro, *, timeout: float, heard: dict, first_word: float, stall
     at the deadline and ``_Silent`` when the stream said nothing for its
     bound; either way the consumer is cancelled, which closes the SDK's
     generator and ends the subprocess, as ``asyncio.wait_for`` did.
+    ``interrupts`` (A3.3), asked every few seconds: the owner's "stop, do
+    this instead" raises ``_Interrupted`` the same way.
     """
     loop = asyncio.get_running_loop()
     task = asyncio.ensure_future(coro)
@@ -673,9 +707,19 @@ async def _within(coro, *, timeout: float, heard: dict, first_word: float, stall
             remaining = deadline - now
             if remaining <= 0:
                 raise asyncio.TimeoutError
-            done, _ = await asyncio.wait({task}, timeout=min(remaining, bound - silent))
+            wait = min(remaining, bound - silent)
+            if interrupts is not None:
+                wait = min(wait, INTERRUPT_POLL_SECONDS)
+            done, _ = await asyncio.wait({task}, timeout=wait)
             if task in done:
                 return task.result()
+            if interrupts is not None:
+                try:
+                    said = await interrupts()
+                except Exception:  # noqa: BLE001 — a call never fails on the inbox
+                    said = []
+                if said:
+                    raise _Interrupted([str(m) for m in said])
     finally:
         if not task.done():
             task.cancel()
@@ -743,7 +787,24 @@ def decide_tool_use(
     return True, ""
 
 
-def _permission_hook(profile: str, workspace: str | None):
+async def _inbox_words(inbox) -> str:
+    """What the owner said to the cycle and no agent has read, as the text
+    an agent reads; "" when nothing waits. Never raises."""
+    if inbox is None:
+        return ""
+    try:
+        messages = await inbox()
+    except Exception:  # noqa: BLE001 — a call never fails on the inbox
+        log.debug("the cycle's inbox could not be read", exc_info=True)
+        return ""
+    if not messages:
+        return ""
+    from theswarm.application.services.cycle_inbox import delivery_text
+
+    return delivery_text([str(m) for m in messages])
+
+
+def _permission_hook(profile: str, workspace: str | None, inbox=None):
     """The policy as a PreToolUse hook — the only seat that sees every call.
 
     `can_use_tool` is consulted only for tools the permission system has
@@ -759,7 +820,11 @@ def _permission_hook(profile: str, workspace: str | None):
         tool_input = dict(input_data.get("tool_input") or {})
         allowed, why = decide_tool_use(profile, workspace, tool_name, tool_input)
         if allowed:
-            return {}
+            # A3.1: the owner's word, said between two steps of the agent.
+            said = await _inbox_words(inbox)
+            if not said:
+                return {}
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": said}}
         log.info("Claude SDK: refused %s — %s", tool_name, why)
         return {
             "hookSpecificOutput": {
@@ -858,6 +923,16 @@ class ClaudeCLI:
     # SDK backend: where tool calls and text blocks go while a call runs —
     # cycle.py points it at the theater, as the running role's progress.
     on_event: Callable[[str], Awaitable[None]] | None = field(default=None, repr=False)
+    # A3.1: the owner's messages to the running cycle nobody read yet —
+    # cycle.py points it at the cycle's inbox. Read at each call's start
+    # (the head of the prompt) and at each tool call (the hook).
+    inbox: Callable[[], Awaitable[list[str]]] | None = field(default=None, repr=False)
+    # A3.3: the owner's "stop, do this instead" — asked every few seconds
+    # while a call runs; an answer cuts the call and resumes its session
+    # with the message.
+    interrupts: Callable[[], Awaitable[list[str]]] | None = field(default=None, repr=False)
+    # A2: what each call cost, as it ends — the cycle's spend so far, live.
+    on_spend: Callable[[float], None] | None = field(default=None, repr=False)
     # Injected so tests can stub. Not repr-ed.
     _sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep, repr=False)
     _rng: random.Random = field(default_factory=random.Random, repr=False)
@@ -895,7 +970,7 @@ class ClaudeCLI:
                 max_retries=self.max_retries, retry_base_ms=self.retry_base_ms,
                 timeout_growth=self.timeout_growth,
                 timeout_ceiling=self.timeout_ceiling,
-                on_event=self.on_event,
+                on_event=self.on_event, inbox=self.inbox, interrupts=self.interrupts, on_spend=self.on_spend,
                 _timeout_floor=self._timeout_floor,
             )
         model = routing.get(task_category, self.model)
@@ -904,7 +979,7 @@ class ClaudeCLI:
             max_retries=self.max_retries, retry_base_ms=self.retry_base_ms,
             timeout_growth=self.timeout_growth,
             timeout_ceiling=self.timeout_ceiling,
-            on_event=self.on_event,
+            on_event=self.on_event, inbox=self.inbox, interrupts=self.interrupts, on_spend=self.on_spend,
             _timeout_floor=self._timeout_floor,
         )
 
@@ -940,6 +1015,10 @@ class ClaudeCLI:
         ignores it.
         """
         backend = _resolve_backend_mode()
+        # A3.1: what the owner said since the last call, at the head of this one.
+        said = await _inbox_words(self.inbox)
+        if said:
+            prompt = f"{said}\n\n{prompt}"
         with tracing.span(
             "claude.call",
             **{
@@ -967,6 +1046,11 @@ class ClaudeCLI:
                     "swarm.session_id": result.session_id,
                 },
             )
+            if self.on_spend is not None and result.cost_usd:
+                try:
+                    self.on_spend(float(result.cost_usd))
+                except Exception:  # noqa: BLE001 — a count never fails a call
+                    log.debug("on_spend failed", exc_info=True)
             return result
 
     async def _dispatch(
@@ -1066,7 +1150,7 @@ class ClaudeCLI:
             allowed_tools=list(_SDK_ALLOWED_TOOLS[profile]),
             disallowed_tools=list(_SDK_DISALLOWED_TOOLS),
             can_use_tool=can_use_tool,
-            hooks={"PreToolUse": [HookMatcher(hooks=[_permission_hook(profile, workdir)])]},
+            hooks={"PreToolUse": [HookMatcher(hooks=[_permission_hook(profile, workdir, self.inbox)])]},
             max_turns=_max_turns(profile),
             resume=resume,
             # Settings → Agents: the persona's effort reaches Claude Code as `--effort`
@@ -1152,7 +1236,9 @@ class ClaudeCLI:
 
         try:
             await _within(_consume(), timeout=effective_timeout, heard=heard,
-                          first_word=first_word, stall=stall)
+                          first_word=first_word, stall=stall, interrupts=self.interrupts)
+        except _Interrupted as exc:
+            raise _SDKInterrupted(exc.messages, session_id=seen["session_id"]) from exc
         except _Silent as exc:
             raise _SDKStalled(
                 f"SDK stalled — no word from Claude for {exc.seconds:.0f}s"
@@ -1211,6 +1297,32 @@ class ClaudeCLI:
             structured=structured if isinstance(structured, dict) else None,
         )
 
+    async def _run_sdk_interruptible(self, prompt: str, *, resume: str | None = None, **kwargs) -> ClaudeResult:
+        """`_run_sdk`, and again when the owner interrupts it (A3.3): the
+        stream is cut — the SDK's generator closes and the subprocess ends, as
+        for a silent call — and the same session is resumed with what the
+        owner said. Before the session exists, the prompt is asked again with
+        the message at its head. The plan named `ClaudeSDKClient.interrupt()`;
+        the cut-and-resume path is the one a timeout and a stall already
+        proved in prod, with no change of transport."""
+        from theswarm.application.services.cycle_inbox import delivery_text
+
+        for _ in range(MAX_INTERRUPTS):
+            try:
+                return await self._run_sdk(prompt, resume=resume, **kwargs)
+            except _SDKInterrupted as cut:
+                said = "\n".join(f"- {m}" for m in cut.messages)
+                log.info("Claude SDK: the owner interrupted the call — %s",
+                         f"resuming session {cut.session_id}" if cut.session_id else "asking again")
+                await self._emit("The owner interrupted this call — it goes on with what they said")
+                if cut.session_id:
+                    resume, prompt = cut.session_id, SDK_INTERRUPT_PROMPT.format(said=said)
+                else:
+                    prompt = f"{delivery_text(cut.messages)}\n\n{prompt}"
+        # Interrupted that many times: the last word stands, the call finishes.
+        quiet = dataclasses.replace(self, interrupts=None)
+        return await quiet._run_sdk(prompt, resume=resume, **kwargs)
+
     async def _sdk_with_recovery(
         self, prompt: str, *, workdir: str | None, timeout: int | None,
         permission_mode: str | None, output_schema: dict | None = None,
@@ -1248,7 +1360,7 @@ class ClaudeCLI:
             # theirs. Fatal for the call; the cycle waits it out (`closed_until`).
             raise ClaudeFatalError(f"{claude_window.share_words(over)} — no call made")
         try:
-            return await self._run_sdk(
+            return await self._run_sdk_interruptible(
                 prompt, workdir=workdir, timeout=timeout, permission_mode=permission_mode,
                 output_schema=output_schema,
             )
@@ -1280,7 +1392,7 @@ class ClaudeCLI:
                 " and without the CLAUDE_CODE_OAUTH_TOKEN override" if drop_token else "",
             )
             try:
-                return await self._run_sdk(
+                return await self._run_sdk_interruptible(
                     SDK_CONTINUE_PROMPT if resume else prompt,
                     workdir=workdir, timeout=grown, permission_mode=permission_mode,
                     resume=resume, output_schema=output_schema,
@@ -1299,7 +1411,7 @@ class ClaudeCLI:
                 "env override", first,
             )
             try:
-                return await self._run_sdk(
+                return await self._run_sdk_interruptible(
                     prompt, workdir=workdir, timeout=timeout,
                     permission_mode=permission_mode, drop_oauth_env=True,
                     output_schema=output_schema,

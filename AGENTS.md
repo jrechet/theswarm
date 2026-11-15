@@ -442,6 +442,67 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   (`agents.base.say`, through the role's `ClaudeCLI.on_event`): the Dev's
   install, tests and push, the merge pass's CI wait, every QA step
   (`qa.QA_STEP_WORDS`). Silence read as stuck.
+- **The owner talks to a running cycle** (A3.1, 2026-11-15 — "pouvoir
+  interagir avec un agent en cours : chatter une correction"). A field on
+  the theater of a live cycle (`POST /cycles/{id}/messages`, owner only,
+  outside the stage the page redraws every 3 s) writes the message in the
+  cycle's inbox (`cycle_inbox`, v042, `CycleInbox`); the feed shows it under
+  YOU, then "The message reached Dev". It is **delivered once, to whoever
+  works next**: at the agent's next tool call — the PreToolUse policy hook
+  answers `additionalContext` when it allows the call (measured on the
+  bundled Claude Code, 2026-11-15: the instruction was followed) — or at
+  the head of the next Claude call's prompt (`ClaudeCLI.inbox`, set by
+  `run_daily_cycle(inbox=…)` from `api.set_cycle_inbox`; a persona's Claude
+  keeps it). The words are framed as the owner's
+  (`cycle_inbox.DELIVERY_HEADING`): they add to the task, they do not
+  replace it or the form of its answer. Nothing is interrupted — stopping a
+  call is A3.3, pausing a cycle A3.2. An inbox that cannot be read is an
+  empty one; a cycle that is over takes no message.
+- **The control room knows a live cycle's spend and who does which task**
+  (A2, 2026-11-15). *Spend*: every Claude call hands its cost to the cycle
+  as it ends (`ClaudeCLI.on_spend` → `CycleTracker.add_spend`,
+  `CycleRecord.spent_usd`; a continuation starts from its thread's total) —
+  the home's card and the theater say "$1.24 so far" instead of nothing
+  until the row is written at the end. *Two Devs side by side* (defect 9):
+  each lane of `_dev_iter_parallel` has its own copy of the Dev's Claude
+  whose lines carry the task it picked — "task 901 — Bash: pytest -q"
+  (`cycle_graph._lane_claude`, `LANE_TAG`, `dev._name_lane`, `lane` in
+  `AgentState`); no `#` in the tag, the theater reads PR numbers off `#N`.
+  The Dev station shows each lane's task and last line
+  (`progress_bridge.get_live_lanes`, since the iteration began).
+- **"Stop and say" cuts the call that is running** (A3.3, 2026-11-15). The
+  theater's second button posts an *urgent* message (`cycle_inbox.urgent`).
+  A running SDK call asks for those every 3 s (`_within(interrupts=…)`,
+  `ClaudeCLI.interrupts`, `INTERRUPT_POLL_SECONDS`); an answer cancels the
+  stream — the SDK's generator closes, the subprocess and its command end,
+  as for a silent call — and **the same session is resumed** with what the
+  owner said (`_run_sdk_interruptible`, `SDK_INTERRUPT_PROMPT`: carry on
+  with the same task, do not start over, end with the answer asked for);
+  before a session exists the prompt is asked again with the message at its
+  head. At most `MAX_INTERRUPTS` (5) per call. The plan named
+  `ClaudeSDKClient.interrupt()`; the cut-and-resume path is the one a
+  timeout and a stall already proved in prod, with no change of transport.
+  Measured on a real call: cut 15 s into a 60 s command, the session
+  answered the owner's way 9 s later. The feed says "Stop — …", then "The
+  message interrupted Dev". An urgent message sent while no call runs is
+  read at the next step like any other.
+- **A cycle is paused and resumed between two phases** (A3.2, 2026-11-15).
+  *Pause* on the theater of a running cycle (`POST /cycles/{id}/pause`,
+  owner only → `CycleTracker.pause`) is read at the door of every node of
+  the cycle graph (`cycle_graph._pausable`, `CycleRuntime.should_pause`):
+  the phase in flight finishes and is checkpointed, the next node raises
+  `PauseRequested` before any effect, and `_run_api_cycle` ends the cycle
+  `paused` — not failed, no failed checkpoint — with its spend, a line in
+  the feed ("Paused before qa") and a `CyclePaused` that writes the row
+  (`CycleStatus.PAUSED`: the boot's resumer reads the running rows and
+  leaves it). Its place at the gate goes to whoever waits. *Resume* is the
+  restart's path: the existing `/cycles/{id}/resume` continues a paused
+  cycle on its graph thread under a new id, whatever phase it stopped
+  before (a failed one still needs a finished phase). The workspace is not
+  kept: at a phase boundary everything the cycle made is on GitHub, and a
+  continuation clones again as it does after a deploy. A pause is not taken
+  inside a phase — stopping a call is A3.3 — nor while the cycle waits for
+  Claude's window.
 - **A silence is said, and a silent call is cut** (A1, 2026-11-14). The
   watchdog's first warning for an agent of a phase (`cycle.stall_reporter`,
   `STALL_ROLES`) is an `AgentStalled` on the bus (`api._stall_publisher`),

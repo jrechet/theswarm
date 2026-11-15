@@ -116,6 +116,9 @@ def _stations(record, progress: list[dict]) -> list[dict]:
                 state = "failed"
             else:
                 state = "done"
+        elif status == "paused" and active_index >= 0:
+            # Paused after a phase (A3.2): what ran is done, nothing is at work.
+            state = "done" if index <= active_index else "waiting"
         elif status in ("running", "queued") and active_index >= 0:
             if index < active_index:
                 state = "done"
@@ -186,7 +189,7 @@ def _graph(record, phases: list[dict], progress: list[dict], pinned=None) -> dic
         owner_now = PHASE_OWNER[current]
         ran = {PHASE_OWNER[p] for p in seen}
         for key, node in by_key.items():
-            if status == "completed":
+            if status in ("completed", "paused"):
                 state = "done" if key in ran else "waiting"
             elif status in ("failed", "cancelled"):
                 if key == owner_now:
@@ -243,13 +246,14 @@ async def _stage_context(request: Request, record) -> dict:
         glyphs = {key: glyph for key, glyph, _ in (*_STATIONS, _DEVOPS)}
         devops = _devops_station(entries)
         models = _models_by_role(entries)
-        entries = [e for e in entries if e.kind == "step" or is_telling(e.text)]
+        # The owner's own words (A3.1) are shown whatever they look like.
+        entries = [e for e in entries if e.kind in ("step", "message", "message_read") or is_telling(e.text)]
         for entry in reversed(entries[-_FEED_LIMIT:]):
             role = _normalize_role(entry.agent) or ("devops" if str(entry.agent).strip().lower() == "devops" else "")
             feed.append({
                 "time": entry.occurred_at.strftime("%H:%M:%S"),
                 "agent": role or entry.agent,
-                "glyph": glyphs.get(role, entry.agent[:3].upper()),
+                "glyph": "YOU" if entry.agent == "owner" else glyphs.get(role, entry.agent[:3].upper()),
                 "kind": entry.kind,
                 "text": entry.text,
             })
@@ -261,7 +265,13 @@ async def _stage_context(request: Request, record) -> dict:
     from theswarm.presentation.web.live_line import live_line
 
     line = live_line(record, phases=phases, progress=progress)
+    # Two Devs side by side: each one's task and last line (defect 9).
+    from theswarm.application.services.progress_bridge import get_live_lanes
+
+    last = phases[-1] if phases else {}
+    lanes = get_live_lanes(record.id, since=float(last.get("ts") or 0)) if last.get("phase") == "dev_iter" else []
     for node in graph["nodes"]:
+        node["lanes"] = lanes if node["key"] == "dev" and node["state"] == "active" and len(lanes) > 1 else []
         node["model"] = models.get(node["key"], "")
         node["quiet"] = node["state"] == "active" and line["quiet"] and not line["waiting"]
         node["stalled"] = node["quiet"] and line["stalled"]
@@ -327,7 +337,7 @@ def _tracker_record(cycle_id: str):
     return get_cycle_tracker().get(cycle_id)
 
 
-_FINISHED = frozenset({"completed", "failed", "cancelled"})
+_FINISHED = frozenset({"completed", "failed", "cancelled", "paused"})
 
 
 async def _archived_record(state, cycle_id: str):

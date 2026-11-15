@@ -56,6 +56,7 @@ from theswarm.domain.cycles.events import (
     CycleCompleted,
     CycleFailed,
     CycleCancelled,
+    CyclePaused,
     CycleStarted,
     PhaseChanged,
 )
@@ -168,6 +169,11 @@ def create_web_app(
         from theswarm.infrastructure.persistence.cycle_limits_repo import SQLiteCycleLimits
 
         app.state.cycle_limits = CycleLimitsService(SQLiteCycleLimits(db))
+        # A3.1: what the owner says to a running cycle, read by its working agent
+        from theswarm.application.services.cycle_inbox import CycleInbox
+        from theswarm.infrastructure.persistence.cycle_inbox_repo import SQLiteCycleInbox
+
+        app.state.cycle_inbox = CycleInbox(SQLiteCycleInbox(db), event_bus)
 
         # The PO tells the customer what was built, when a demo lands (V3, folded into the PO)
         import os as _os
@@ -275,7 +281,7 @@ def create_web_app(
 
     # Persistence event handlers — store cycles and activities in SQLite
     cycle_persistence = CyclePersistenceHandler(cycle_repo)
-    for evt_type in (CycleStarted, PhaseChanged, CycleCompleted, CycleFailed, CycleCancelled):
+    for evt_type in (CycleStarted, PhaseChanged, CycleCompleted, CycleFailed, CycleCancelled, CyclePaused):
         event_bus.subscribe(evt_type, cycle_persistence.handle)
     if activity_repo is not None:
         activity_persistence = ActivityPersistenceHandler(activity_repo)

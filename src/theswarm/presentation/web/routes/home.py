@@ -126,6 +126,8 @@ def _now_cards(state, running: dict[str, object]) -> list[dict]:
             "since": _clock(record.started_at or record.created_at),
             "href": f"{base}/cycles/{record.id}",
             "line": live_line(record),
+            # A2: what it has cost so far, call by call
+            "spent": f"${record.spent_usd:.2f}" if getattr(record, "spent_usd", 0) else "",
         })
     return cards
 

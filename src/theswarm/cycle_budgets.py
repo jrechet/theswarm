@@ -64,6 +64,15 @@ class BudgetExceeded(Exception):
         super().__init__(f"{role} exceeded token budget: {used:,} > {budget:,}")
 
 
+class PauseRequested(Exception):
+    """The owner paused the cycle (A3.2): raised at the door of the next node,
+    before it does anything — the graph's checkpoint is the node before, and a
+    resume on the same thread goes on from this one. Not a failure."""
+    def __init__(self, before: str) -> None:
+        self.before = before
+        super().__init__(f"paused before {before!r}")
+
+
 class PhaseTimeout(Exception):
     """Raised when a phase exceeds its hard timeout."""
     def __init__(self, phase: str, timeout: int) -> None:

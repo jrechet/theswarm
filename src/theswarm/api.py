@@ -33,6 +33,7 @@ class CycleStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    PAUSED = "paused"  # A3.2: stopped between two phases on the owner's word, resumable
 
 
 class CycleRequest(BaseModel):
@@ -59,6 +60,10 @@ class CycleRecord(BaseModel):
     # Claude window it waits out (A1, `claude_window`). The home and the
     # theater say it instead of "quiet for 40 min".
     waiting: str = ""
+    # A2: what the cycle's Claude calls have cost so far, call by call (the
+    # row's total is written when it ends). A continuation starts from what
+    # its thread had spent.
+    spent_usd: float = 0.0
 
 
 class CycleTracker:
@@ -71,6 +76,7 @@ class CycleTracker:
         # shutdown delivers to every task still running; only these ones
         # are written down as cancelled (see _run_api_cycle).
         self._cancel_requested: set[str] = set()
+        self._pause_requested: set[str] = set()
 
     def create(self, req: CycleRequest, *, cycle_id: str | None = None,
                created_at: str | None = None) -> CycleRecord:
@@ -108,6 +114,11 @@ class CycleTracker:
                 if hasattr(record, k):
                     setattr(record, k, v)
 
+    def add_spend(self, cycle_id: str, usd: float) -> None:
+        record = self._cycles.get(cycle_id)
+        if record is not None and usd > 0:
+            record.spent_usd = round(record.spent_usd + float(usd), 6)
+
     def set_waiting(self, cycle_id: str, words: str) -> None:
         record = self._cycles.get(cycle_id)
         if record is not None:
@@ -124,6 +135,19 @@ class CycleTracker:
             self.update_status(cycle_id, CycleStatus.CANCELLED)
             return True
         return False
+
+    def pause(self, cycle_id: str) -> bool:
+        """Ask a running cycle to stop at the end of its current phase (A3.2).
+        True when it was running; the phase in flight finishes first."""
+        record = self._cycles.get(cycle_id)
+        task = self._tasks.get(cycle_id)
+        if record is None or task is None or task.done() or record.status != CycleStatus.RUNNING:
+            return False
+        self._pause_requested.add(cycle_id)
+        return True
+
+    def pause_requested(self, cycle_id: str) -> bool:
+        return cycle_id in self._pause_requested
 
     def cancel_requested(self, cycle_id: str) -> bool:
         """True when a person asked for this cycle to stop."""
@@ -263,6 +287,35 @@ async def _wait_out_claude(cycle_id: str, say, waited: timedelta) -> timedelta |
         return waited + await claude_window.wait_out(until)
     finally:
         tracker.set_waiting(cycle_id, "")
+
+
+def _pause_exception():
+    from theswarm.cycle_budgets import PauseRequested
+
+    return PauseRequested
+
+
+_INBOX = None
+
+
+def set_cycle_inbox(inbox) -> None:
+    """A3.1: where the owner's messages to a running cycle wait (`CycleInbox`,
+    the server sets it; None — tests, the CLI — and no cycle has an inbox)."""
+    global _INBOX
+    _INBOX = inbox
+
+
+def _inbox_reader(cycle_id: str, project_id: str):
+    """`async (role) -> the messages nobody read yet`, for this cycle's
+    agents; None without an inbox."""
+    inbox = _INBOX
+    if inbox is None:
+        return None
+
+    async def read(role: str = "", urgent_only: bool = False) -> list[str]:
+        return await inbox.take(cycle_id, to=role, project_id=project_id, urgent_only=urgent_only)
+
+    return read
 
 
 def _stall_publisher(event_bus, cycle_id: str, project_id: str):
@@ -721,6 +774,13 @@ async def _run_api_cycle(
             from theswarm.tools.claude import ClaudeFatalError
 
             resume = bool(resume_from or resume_cycle_id)
+            if resume_cycle_id:  # a continuation: its thread's spend so far is where it starts
+                from theswarm.application.services.cycle_resumer import spent_so_far as _spent
+
+                try:
+                    tracker.add_spend(cycle_id, await _spent(get_cycle_checkpointer(), resume_cycle_id))
+                except Exception:  # noqa: BLE001
+                    log.debug("the thread's spend could not be read", exc_info=True)
             waited = preflight_waited
             while True:
                 try:
@@ -734,6 +794,9 @@ async def _run_api_cycle(
                             checkpointer=get_cycle_checkpointer(),
                             resume=resume,
                             on_stalled=on_stalled,
+                            inbox=_inbox_reader(cycle_id, repo),
+                            should_pause=lambda: tracker.pause_requested(cycle_id),
+                            on_spend=lambda usd: tracker.add_spend(cycle_id, usd),
                         ),
                         timeout=CYCLE_HARD_TIMEOUT_SECONDS,
                     )
@@ -834,6 +897,28 @@ async def _run_api_cycle(
                 cycle_id=CycleId(cycle_id),
                 project_id=repo,
                 reason="cancelled by request",
+            ))
+    except _pause_exception() as pause:
+        # A3.2: the owner's pause, taken at a phase boundary. Not a failure:
+        # the graph's thread stands at the next phase, the place is given
+        # back, and Resume continues it under a new id.
+        from theswarm.application.services.cycle_resumer import spent_so_far
+
+        spent = await spent_so_far(get_cycle_checkpointer(), resume_cycle_id or cycle_id)
+        tracker.update_status(
+            cycle_id, CycleStatus.PAUSED, result={"cost_usd": spent},
+            completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        )
+        log.info("Cycle %s paused before %s ($%.2f so far)", cycle_id, pause.before, spent)
+        if event_bus is not None:
+            from theswarm.domain.cycles.events import AgentActivity, CyclePaused
+            from theswarm.domain.cycles.value_objects import CycleId
+            await event_bus.publish(AgentActivity(
+                cycle_id=CycleId(cycle_id), project_id=repo, agent="owner", action="paused",
+                detail=f"Paused before {pause.before} — Resume goes on from there",
+            ))
+            await event_bus.publish(CyclePaused(
+                cycle_id=CycleId(cycle_id), project_id=repo, before=pause.before, total_cost_usd=spent,
             ))
     except Exception as e:
         error_msg = f"{type(e).__name__}: {e}"
