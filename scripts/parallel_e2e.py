@@ -144,6 +144,30 @@ def next_feature_of(manifest: "evals.Manifest", history: list[dict], taken: set[
     return feature
 
 
+def feature_titled(manifest: "evals.Manifest | None", title: str) -> "evals.Feature | None":
+    """The manifest feature whose issue is titled `title`, None for any other."""
+    wanted = title.strip()[:80].lower()
+    return next((f for f in (manifest.features if manifest else ()) if f.title[:80].lower() == wanted), None)
+
+
+def replayed_feature(repo: str, text: str, taken: dict[str, set[str]], *, title_of=None):
+    """(repo, text, the manifest feature) for an ask; a replayed `#N` takes its
+    feature off the rotation, so a `--next` of the same batch asks for another.
+    On 2026-11-15 a replay of #917 and a `--next` asked "Count the
+    cancellations" twice in one batch: two cycles on one feature, one cancelled."""
+    if not _EXISTING.match(text):
+        return repo, text, None
+    title_of = title_of or (lambda r, n: json.loads(harness._gh("issue", "view", str(n), "--repo", r, "--json", "title")
+                                                    or "{}").get("title", ""))
+    try:
+        feature = feature_titled(evals.manifest_for(repo), title_of(repo, int(text[1:])))
+    except Exception:  # noqa: BLE001 — a replay unread is a replay unscored, as before
+        feature = None
+    if feature is not None:
+        taken.setdefault(repo, set()).add(feature.id)
+    return repo, text, feature
+
+
 def scored(run: dict, feature: "evals.Feature | None", batch_id: str) -> dict:
     """The run's record, in the daily harness's shape (`evals.score`)."""
     record = run.get("record") or {}
@@ -247,6 +271,7 @@ def main() -> int:
     args = ap.parse_args()
     asks: list[tuple[str, str, "evals.Feature | None"]] = [(*parse_ask(a), None) for a in args.ask]
     taken: dict[str, set[str]] = {}
+    asks = [replayed_feature(repo, text, taken) for repo, text, _ in asks]
     for repo in args.next_of:
         manifest = evals.manifest_for(repo)
         if manifest is None:

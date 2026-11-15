@@ -190,3 +190,35 @@ def test_a_batch_does_not_count_a_wait_for_the_claude_window(batch):
     runs = [{"repo": "o/app", "story": 10, "cycle": "aaa"}]
     batch.watch(runs, 120, api=api, sleep=lambda s: now.__setitem__("t", now["t"] + s), clock=lambda: now["t"])
     assert runs[0]["state"] == "completed"
+
+
+class TestAReplayTakesItsFeature:
+    """2026-11-15: a replay of #917 and a `--next` of the same batch both
+    asked "Count the cancellations" — two cycles on one feature."""
+
+    def _manifest(self, batch):
+        from theswarm import evals
+
+        return evals.Manifest(repo="o/app", features=(
+            evals.Feature(id="count-cancellations", text="Count the cancellations\nGET /stats/cancellations"),
+            evals.Feature(id="ticket-tiers", text="List a concert's ticket tiers\nGET /concerts/{id}/tiers"),
+        ))
+
+    def test_the_replayed_issue_s_feature_is_taken(self, batch, monkeypatch):
+        monkeypatch.setattr(batch.evals, "manifest_for", lambda repo: self._manifest(batch))
+        taken: dict[str, set[str]] = {}
+
+        repo, text, feature = batch.replayed_feature("o/app", "#917", taken,
+                                                     title_of=lambda r, n: "Count the cancellations")
+
+        assert (repo, text) == ("o/app", "#917") and feature.id == "count-cancellations"
+        assert taken == {"o/app": {"count-cancellations"}}
+        nxt = batch.next_feature_of(self._manifest(batch), [], taken["o/app"])
+        assert nxt.id == "ticket-tiers"
+
+    def test_a_new_ask_or_an_unknown_title_takes_nothing(self, batch, monkeypatch):
+        monkeypatch.setattr(batch.evals, "manifest_for", lambda repo: self._manifest(batch))
+        taken: dict[str, set[str]] = {}
+        assert batch.replayed_feature("o/app", "Something new", taken)[2] is None
+        assert batch.replayed_feature("o/app", "#5", taken, title_of=lambda r, n: "Unrelated")[2] is None
+        assert taken == {}
