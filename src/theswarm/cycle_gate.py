@@ -5,8 +5,11 @@ The rules, all checked together, in the order the cycles arrived:
 - **In all**, at most `max_concurrent_cycles()` cycles run at once — the box
   and the one subscription window (`SWARM_MAX_CONCURRENT_CYCLES`, or the
   owner's number in Settings → Cycles).
-- **Per repository**, at most `repo_max_cycles(repo)` — 1 unless the owner
-  raised it. Above 1 each cycle works in a clone of its own
+- **Per repository**, at most `repo_max_cycles(repo)` — 2 unless the owner
+  set another number (owner, 2026-11-15, after A1 bis was proven by three
+  green batches at two cycles side by side); 1 on the swarm's own
+  repository, where a cycle's final merge redeploys the service under the
+  other one. Above 1 each cycle works in a clone of its own
   (`cycle_workspace`): one directory per repository was the reason for one
   cycle at a time — a cycle resets, cleans and deletes it as if it were
   alone, and two of them erased each other's branches (16f3b8af2cca vs
@@ -34,7 +37,8 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
 DEFAULT_MAX_CONCURRENT_CYCLES = 1
-DEFAULT_REPO_MAX_CYCLES = 1
+DEFAULT_REPO_MAX_CYCLES = 2
+SELF_REPO_MAX_CYCLES = 1
 # Bounds the settings page offers: the container is sized for about two
 # cycles (4 GB, docker-compose.yml), each with its Dev pair and QA lanes.
 MAX_IN_ALL = 6
@@ -75,13 +79,22 @@ def max_concurrent_cycles() -> int:
     return env_max_concurrent_cycles()
 
 
+def default_repo_max(repo: str) -> int:
+    """What a repository runs at once when the owner chose nothing: two, and
+    one on the swarm's own (its end-of-cycle merge redeploys the service,
+    which would interrupt the cycle beside it)."""
+    from theswarm.config import SELF_REPO
+
+    return SELF_REPO_MAX_CYCLES if repo == SELF_REPO else DEFAULT_REPO_MAX_CYCLES
+
+
 def repo_max_cycles(repo: str) -> int:
-    """How many cycles may run at once on `repo` (1 unless the owner raised it)."""
+    """How many cycles may run at once on `repo`: the owner's number, else its default."""
     if _LIMITS is not None:
         chosen = _LIMITS.repo_max(repo)
         if chosen:
             return max(1, int(chosen))
-    return DEFAULT_REPO_MAX_CYCLES
+    return default_repo_max(repo)
 
 
 @dataclass

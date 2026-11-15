@@ -132,7 +132,7 @@ quotidien gagne une variante hebdomadaire « trois à la fois ».
 | 6 | 43731227776 | vert, hors preuve | manifeste épuisé : un seul cycle concert-tour-app (quinze features ajoutées depuis) |
 | 7 | 43734527995 | **vert** | 3 features, 8 PR fusionnées, 11,03 $ |
 
-La limite par défaut reste 1 par dépôt ; passer à 2 par défaut est une décision du propriétaire. Le juge du lot refuse aussi un cycle qui fusionne la PR d'une autre feature. C1 : la revue, la
+**2 cycles par dépôt par défaut depuis le 2026-11-15** (décision du propriétaire après la preuve) ; 1 sur le dépôt du swarm lui-même, dont la fusion de fin de cycle redéploie le service sous l'autre cycle. Le juge du lot refuse aussi un cycle qui fusionne la PR d'une autre feature. C1 : la revue, la
 fusion, QA et le rapport d'un cycle ciblé ne voient que les PR des sous-tâches
 de sa feature ; la veille de fusion garde le reste. C2 : la porte compare la
 feature *et ses sous-tâches*. C3 : toute PR approuvée est remise à jour sur

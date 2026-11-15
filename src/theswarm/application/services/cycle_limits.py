@@ -10,7 +10,7 @@ at once whoever fits now.
 from __future__ import annotations
 
 from theswarm.claude_window import DEFAULT_SHARE, MIN_SHARE, SHARE_SCOPE, env_share
-from theswarm.cycle_gate import MAX_IN_ALL, MAX_PER_REPO
+from theswarm.cycle_gate import MAX_IN_ALL, MAX_PER_REPO, default_repo_max
 
 IN_ALL = "*"
 
@@ -56,7 +56,8 @@ class CycleLimitsService:
             # The instance's default is no row, as for "In all"
             await self._repo.put(SHARE_SCOPE, None if claude_share in (None, env_share()) else claude_share, by)
         for repo, value in per_repo.items():
-            await self._repo.put(repo, None if value == 1 else value, by)
+            # The repository's default is no row (2; 1 on the swarm's own)
+            await self._repo.put(repo, None if value in (None, default_repo_max(repo)) else value, by)
         await self.refresh()
         from theswarm.cycle_gate import set_cycle_limits
 

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from theswarm.cycle_gate import (
-    DEFAULT_REPO_MAX_CYCLES,
+    default_repo_max,
     MAX_IN_ALL,
     MAX_PER_REPO,
     env_max_concurrent_cycles,
@@ -68,7 +68,8 @@ async def _render(request: Request, *, error: str = "", status_code: int = 200) 
     if service is not None:
         await service.refresh()
     running = _running_counts()
-    rows = [{"repo": repo, "max": repo_max_cycles(repo), "running": running.get(repo, 0)}
+    rows = [{"repo": repo, "max": repo_max_cycles(repo), "default": default_repo_max(repo),
+             "running": running.get(repo, 0)}
             for repo in await _projects(state)]
     from theswarm import claude_window
 
@@ -112,12 +113,12 @@ async def save_cycles(request: Request):
         in_all = _number(form.get("in-all"), None)
         if in_all == env_max_concurrent_cycles():
             in_all = None  # the instance's default: no row
-        per_repo = {repo: _number(form.get(f"repo:{repo}"), DEFAULT_REPO_MAX_CYCLES)
+        per_repo = {repo: _number(form.get(f"repo:{repo}"), default_repo_max(repo))
                     for repo in await _projects(state)}
         share = _number(form.get("claude-share"), None) if "claude-share" in form else ...
         await service.save(in_all, per_repo, by=getattr(actor, "login", "") or "owner", claude_share=share)
     except (CycleLimitsError, ValueError) as exc:
         return await _render(request, error=str(exc) or "A number, please.", status_code=400)
     log.info("Settings → Cycles: %s in all, %s per project", in_all or "default",
-             {r: v for r, v in per_repo.items() if v != DEFAULT_REPO_MAX_CYCLES} or "1 each")
+             {r: v for r, v in per_repo.items() if v != default_repo_max(r)} or "the default each")
     return RedirectResponse(f"{state.base_path}/settings/cycles?saved=1", status_code=303)

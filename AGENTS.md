@@ -583,7 +583,11 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   l'interface"), held by the API wrapper, the Mattermost gateway, the
   autonomous loop and the resumer's continuations alike. Four rules, the
   oldest arrival first: at most `max_concurrent_cycles()` in all, at most
-  `repo_max_cycles(repo)` per repository (1 by default), **never two cycles
+  `repo_max_cycles(repo)` per repository (**2 by default since 2026-11-15**,
+  the owner's decision once A1 bis was proven; 1 on the swarm's own
+  repository, whose end-of-cycle merge redeploys the service under the
+  other cycle — `cycle_gate.default_repo_max`; an owner's 1 elsewhere is now
+  a row, the default is none), **never two cycles
   on one feature** (a story and its sub-tasks are one: `api.feature_of`
   reads a pinned issue's `Parent: #N` through the server's reader before
   the gate, bounded at 15 s, unreadable is the issue itself — a Play on a
