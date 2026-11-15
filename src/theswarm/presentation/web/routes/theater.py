@@ -325,6 +325,9 @@ async def theater_context(request: Request, record, orphan: bool = False) -> dic
         "orphan": orphan,
         "project": await _project_of(state, record.repo),
         "cancel_url": f"{state.base_path}/api/cycle/{record.id}/cancel",
+        # A3.1: the field to say something to the cycle, and what the last post answered
+        "can_say": getattr(state, "cycle_inbox", None) is not None and record.status.value in ("running", "queued"),
+        "said": request.query_params.get("said", ""),
         "stage_url": f"{state.base_path}/cycles/{record.id}/stage",
     })
     return context
@@ -389,6 +392,35 @@ async def resume(request: Request, cycle_id: str) -> RedirectResponse:
 
 
 MANUAL_RESUME_TRIGGER = "resume"
+
+
+@router.post("/cycles/{cycle_id}/messages")
+async def say_to_cycle(request: Request, cycle_id: str):
+    """A3.1: the owner's word to a running cycle. It waits in the cycle's
+    inbox and reaches the working agent at its next tool call, or at the
+    head of the next Claude call; the feed shows it, and when it was read."""
+    from theswarm.application.services.cycle_inbox import InboxError
+    from theswarm.presentation.web.routes.customers import _refused, current_actor
+
+    state = request.app.state
+    actor = await current_actor(request)
+    if actor is None or not actor.is_owner:
+        return _refused(request, actor)
+    target = await theater_target(state, cycle_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Cycle not found")
+    record, _ = await _record_for(state, target)
+    back = f"{state.base_path}/cycles/{target}"
+    inbox = getattr(state, "cycle_inbox", None)
+    if record is None or inbox is None or record.status.value not in ("running", "queued"):
+        return RedirectResponse(f"{back}?said=over", status_code=303)
+    form = await request.form()
+    try:
+        await inbox.post(target, str(form.get("message") or ""),
+                         author=getattr(actor, "login", "") or "owner", project_id=record.repo)
+    except InboxError:
+        return RedirectResponse(f"{back}?said=empty", status_code=303)
+    return RedirectResponse(f"{back}?said=1", status_code=303)
 
 
 @router.get("/cycles/{cycle_id}", response_class=HTMLResponse)

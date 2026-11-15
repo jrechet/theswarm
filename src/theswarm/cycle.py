@@ -348,6 +348,7 @@ async def run_daily_cycle(
     checkpointer=None,
     resume: bool = False,
     on_stalled=None,
+    inbox=None,
 ) -> dict:
     """Run one complete daily cycle and return the summary.
 
@@ -432,6 +433,14 @@ async def run_daily_cycle(
             await _progress(runtime.current_role["name"], message)
 
         _claude.on_event = _on_claude_event
+
+    # A3.1: what the owner said to this cycle reaches the agent working now
+    # — at its next tool call, or at the head of the next call's prompt.
+    if _claude is not None and inbox is not None and hasattr(_claude, "inbox"):
+        async def _read_inbox() -> list[str]:
+            return await inbox(runtime.current_role["name"])
+
+        _claude.inbox = _read_inbox
 
     try:
         return await run_cycle_graph(

@@ -265,6 +265,29 @@ async def _wait_out_claude(cycle_id: str, say, waited: timedelta) -> timedelta |
         tracker.set_waiting(cycle_id, "")
 
 
+_INBOX = None
+
+
+def set_cycle_inbox(inbox) -> None:
+    """A3.1: where the owner's messages to a running cycle wait (`CycleInbox`,
+    the server sets it; None — tests, the CLI — and no cycle has an inbox)."""
+    global _INBOX
+    _INBOX = inbox
+
+
+def _inbox_reader(cycle_id: str, project_id: str):
+    """`async (role) -> the messages nobody read yet`, for this cycle's
+    agents; None without an inbox."""
+    inbox = _INBOX
+    if inbox is None:
+        return None
+
+    async def read(role: str = "") -> list[str]:
+        return await inbox.take(cycle_id, to=role, project_id=project_id)
+
+    return read
+
+
 def _stall_publisher(event_bus, cycle_id: str, project_id: str):
     """The watchdog's word that an agent went silent, as an `AgentStalled` on
     the bus (A1): the cycle event store keeps it and the theater's feed says
@@ -734,6 +757,7 @@ async def _run_api_cycle(
                             checkpointer=get_cycle_checkpointer(),
                             resume=resume,
                             on_stalled=on_stalled,
+                            inbox=_inbox_reader(cycle_id, repo),
                         ),
                         timeout=CYCLE_HARD_TIMEOUT_SECONDS,
                     )

@@ -136,7 +136,7 @@ dépense en cours, l'attribution par tâche du défaut 9, et l'état persistant 
 l'historique des phases vit en mémoire et se perd à un redéploiement).
 
 **A3 — parler à un cycle (5 jours).** Trois marches, chacune livrable :
-1. *Boîte de réception.* Table `cycle_inbox`, `POST /cycles/{id}/messages`, un
+1. *Boîte de réception.* **Livrée le 2026-11-15** (champ dans le théâtre, fil « YOU », livraison au prochain appel d'outil ou en tête du prochain appel ; vérifié sur un appel réel). Table `cycle_inbox`, `POST /cycles/{id}/messages`, un
    champ dans le théâtre ; le message apparaît dans le fil. Livré à l'agent au
    prochain appel d'outil par le hook `PreToolUse` qui existe déjà
    (`additionalContext`) — aucun changement de transport — et en tête du

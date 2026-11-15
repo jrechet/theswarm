@@ -743,7 +743,24 @@ def decide_tool_use(
     return True, ""
 
 
-def _permission_hook(profile: str, workspace: str | None):
+async def _inbox_words(inbox) -> str:
+    """What the owner said to the cycle and no agent has read, as the text
+    an agent reads; "" when nothing waits. Never raises."""
+    if inbox is None:
+        return ""
+    try:
+        messages = await inbox()
+    except Exception:  # noqa: BLE001 — a call never fails on the inbox
+        log.debug("the cycle's inbox could not be read", exc_info=True)
+        return ""
+    if not messages:
+        return ""
+    from theswarm.application.services.cycle_inbox import delivery_text
+
+    return delivery_text([str(m) for m in messages])
+
+
+def _permission_hook(profile: str, workspace: str | None, inbox=None):
     """The policy as a PreToolUse hook — the only seat that sees every call.
 
     `can_use_tool` is consulted only for tools the permission system has
@@ -759,7 +776,11 @@ def _permission_hook(profile: str, workspace: str | None):
         tool_input = dict(input_data.get("tool_input") or {})
         allowed, why = decide_tool_use(profile, workspace, tool_name, tool_input)
         if allowed:
-            return {}
+            # A3.1: the owner's word, said between two steps of the agent.
+            said = await _inbox_words(inbox)
+            if not said:
+                return {}
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": said}}
         log.info("Claude SDK: refused %s — %s", tool_name, why)
         return {
             "hookSpecificOutput": {
@@ -858,6 +879,10 @@ class ClaudeCLI:
     # SDK backend: where tool calls and text blocks go while a call runs —
     # cycle.py points it at the theater, as the running role's progress.
     on_event: Callable[[str], Awaitable[None]] | None = field(default=None, repr=False)
+    # A3.1: the owner's messages to the running cycle nobody read yet —
+    # cycle.py points it at the cycle's inbox. Read at each call's start
+    # (the head of the prompt) and at each tool call (the hook).
+    inbox: Callable[[], Awaitable[list[str]]] | None = field(default=None, repr=False)
     # Injected so tests can stub. Not repr-ed.
     _sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep, repr=False)
     _rng: random.Random = field(default_factory=random.Random, repr=False)
@@ -895,7 +920,7 @@ class ClaudeCLI:
                 max_retries=self.max_retries, retry_base_ms=self.retry_base_ms,
                 timeout_growth=self.timeout_growth,
                 timeout_ceiling=self.timeout_ceiling,
-                on_event=self.on_event,
+                on_event=self.on_event, inbox=self.inbox,
                 _timeout_floor=self._timeout_floor,
             )
         model = routing.get(task_category, self.model)
@@ -904,7 +929,7 @@ class ClaudeCLI:
             max_retries=self.max_retries, retry_base_ms=self.retry_base_ms,
             timeout_growth=self.timeout_growth,
             timeout_ceiling=self.timeout_ceiling,
-            on_event=self.on_event,
+            on_event=self.on_event, inbox=self.inbox,
             _timeout_floor=self._timeout_floor,
         )
 
@@ -940,6 +965,10 @@ class ClaudeCLI:
         ignores it.
         """
         backend = _resolve_backend_mode()
+        # A3.1: what the owner said since the last call, at the head of this one.
+        said = await _inbox_words(self.inbox)
+        if said:
+            prompt = f"{said}\n\n{prompt}"
         with tracing.span(
             "claude.call",
             **{
@@ -1066,7 +1095,7 @@ class ClaudeCLI:
             allowed_tools=list(_SDK_ALLOWED_TOOLS[profile]),
             disallowed_tools=list(_SDK_DISALLOWED_TOOLS),
             can_use_tool=can_use_tool,
-            hooks={"PreToolUse": [HookMatcher(hooks=[_permission_hook(profile, workdir)])]},
+            hooks={"PreToolUse": [HookMatcher(hooks=[_permission_hook(profile, workdir, self.inbox)])]},
             max_turns=_max_turns(profile),
             resume=resume,
             # Settings → Agents: the persona's effort reaches Claude Code as `--effort`

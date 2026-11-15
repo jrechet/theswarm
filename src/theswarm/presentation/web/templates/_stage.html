@@ -111,8 +111,8 @@
         {% for e in feed %}
         <li class="feed-entry flex gap-3 py-2 border-t border-raised first:border-t-0 text-[13px] leading-[1.4]" data-agent="{{ e.agent }}">
           <span class="font-mono text-[11px] text-faint shrink-0 pt-0.5 w-14">{{ e.time }}</span>
-          <span class="shrink-0 w-14 font-medium {% if e.agent == 'dev' %}text-live-deep{% elif e.agent == 'techlead' %}text-info{% elif e.agent == 'po' %}text-ok{% elif e.agent == 'qa' %}text-wait{% elif e.agent == 'devops' %}text-ink{% else %}text-faint{% endif %}">{{ e.glyph }}</span>
-          <span class="min-w-0 {% if e.kind == 'step' %}text-muted{% elif e.kind == 'stalled' %}font-medium text-bad{% elif e.kind in ('pr_opened', 'review') %}font-medium{% endif %}"{% if e.kind == 'stalled' %} data-testid="feed-stalled"{% endif %}>{{ e.text }}</span>
+          <span class="shrink-0 w-14 font-medium {% if e.agent == 'dev' %}text-live-deep{% elif e.agent == 'techlead' %}text-info{% elif e.agent == 'po' %}text-ok{% elif e.agent == 'qa' %}text-wait{% elif e.agent in ('devops', 'owner') %}text-ink{% else %}text-faint{% endif %}">{{ e.glyph }}</span>
+          <span class="min-w-0 {% if e.kind == 'step' %}text-muted{% elif e.kind == 'stalled' %}font-medium text-bad{% elif e.kind in ('pr_opened', 'review', 'message') %}font-medium{% elif e.kind == 'message_read' %}text-muted{% endif %}"{% if e.kind == 'stalled' %} data-testid="feed-stalled"{% elif e.kind == 'message' %} data-testid="feed-message"{% endif %}>{{ e.text }}</span>
         </li>
         {% endfor %}
       </ol>

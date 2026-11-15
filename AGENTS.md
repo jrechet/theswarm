@@ -442,6 +442,22 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   (`agents.base.say`, through the role's `ClaudeCLI.on_event`): the Dev's
   install, tests and push, the merge pass's CI wait, every QA step
   (`qa.QA_STEP_WORDS`). Silence read as stuck.
+- **The owner talks to a running cycle** (A3.1, 2026-11-15 — "pouvoir
+  interagir avec un agent en cours : chatter une correction"). A field on
+  the theater of a live cycle (`POST /cycles/{id}/messages`, owner only,
+  outside the stage the page redraws every 3 s) writes the message in the
+  cycle's inbox (`cycle_inbox`, v042, `CycleInbox`); the feed shows it under
+  YOU, then "The message reached Dev". It is **delivered once, to whoever
+  works next**: at the agent's next tool call — the PreToolUse policy hook
+  answers `additionalContext` when it allows the call (measured on the
+  bundled Claude Code, 2026-11-15: the instruction was followed) — or at
+  the head of the next Claude call's prompt (`ClaudeCLI.inbox`, set by
+  `run_daily_cycle(inbox=…)` from `api.set_cycle_inbox`; a persona's Claude
+  keeps it). The words are framed as the owner's
+  (`cycle_inbox.DELIVERY_HEADING`): they add to the task, they do not
+  replace it or the form of its answer. Nothing is interrupted — stopping a
+  call is A3.3, pausing a cycle A3.2. An inbox that cannot be read is an
+  empty one; a cycle that is over takes no message.
 - **A silence is said, and a silent call is cut** (A1, 2026-11-14). The
   watchdog's first warning for an agent of a phase (`cycle.stall_reporter`,
   `STALL_ROLES`) is an `AgentStalled` on the bus (`api._stall_publisher`),

@@ -168,6 +168,11 @@ def create_web_app(
         from theswarm.infrastructure.persistence.cycle_limits_repo import SQLiteCycleLimits
 
         app.state.cycle_limits = CycleLimitsService(SQLiteCycleLimits(db))
+        # A3.1: what the owner says to a running cycle, read by its working agent
+        from theswarm.application.services.cycle_inbox import CycleInbox
+        from theswarm.infrastructure.persistence.cycle_inbox_repo import SQLiteCycleInbox
+
+        app.state.cycle_inbox = CycleInbox(SQLiteCycleInbox(db), event_bus)
 
         # The PO tells the customer what was built, when a demo lands (V3, folded into the PO)
         import os as _os

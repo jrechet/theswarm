@@ -243,13 +243,14 @@ async def _stage_context(request: Request, record) -> dict:
         glyphs = {key: glyph for key, glyph, _ in (*_STATIONS, _DEVOPS)}
         devops = _devops_station(entries)
         models = _models_by_role(entries)
-        entries = [e for e in entries if e.kind == "step" or is_telling(e.text)]
+        # The owner's own words (A3.1) are shown whatever they look like.
+        entries = [e for e in entries if e.kind in ("step", "message", "message_read") or is_telling(e.text)]
         for entry in reversed(entries[-_FEED_LIMIT:]):
             role = _normalize_role(entry.agent) or ("devops" if str(entry.agent).strip().lower() == "devops" else "")
             feed.append({
                 "time": entry.occurred_at.strftime("%H:%M:%S"),
                 "agent": role or entry.agent,
-                "glyph": glyphs.get(role, entry.agent[:3].upper()),
+                "glyph": "YOU" if entry.agent == "owner" else glyphs.get(role, entry.agent[:3].upper()),
                 "kind": entry.kind,
                 "text": entry.text,
             })
