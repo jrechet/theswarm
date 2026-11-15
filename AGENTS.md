@@ -458,6 +458,19 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   replace it or the form of its answer. Nothing is interrupted — stopping a
   call is A3.3, pausing a cycle A3.2. An inbox that cannot be read is an
   empty one; a cycle that is over takes no message.
+- **The V1 services nothing read are gone** (defect 13, 2026-11-15).
+  `create_web_app` set 121 attributes on `app.state` and 79 were read
+  nowhere — built at every boot, with their repositories, for pages deleted
+  at M6. Removed: those attributes and everything only they used (`app.py`
+  1 155 → 474 lines), then every module no entry point reaches (179, by
+  import reachability from `__main__`, the scripts and `"theswarm.x"`
+  strings) and the 75 test files that imported them — 25 300 lines. The
+  method is the check: the unit suite and the required E2E smoke walk were
+  green after each step. **Their tables stay** (the migrations still run):
+  dropping data is the owner's call. The improver that listened for
+  `StoryRejected` went with them — nothing has published that event since
+  V1's approve/reject flows were deleted. Before adding a service to
+  `app.state`, add its reader.
 - **The Dev and the reviewer are told where instructions come from**
   (defect 10, 2026-11-15). `DEV_SYSTEM` and `REVIEW_SYSTEM` carried the
   paragraph and were never sent — the SDK calls take one prompt. It is now
