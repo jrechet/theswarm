@@ -120,7 +120,19 @@ quotidien gagne une variante hebdomadaire « trois à la fois ».
 - Part de la fenêtre : un réglage « ne pas dépasser X % de la fenêtre » lu sur
   `RateLimitEvent.utilization`, que le SDK fournit et que le code jette.
 
-**A1 bis — deux features sur un même projet (4 jours). Code livré le 2026-11-15** (C1–C6 ✔ ; la part de fenêtre du swarm réglée à 80 % en prod le même jour) ; reste la preuve en prod, l'essai à 2 sur concert-tour-app. Le juge du lot refuse aussi un cycle qui fusionne la PR d'une autre feature. C1 : la revue, la
+**A1 bis — deux features sur un même projet (4 jours). Livré et prouvé le 2026-11-15** (C1–C6 ✔ ; la part de fenêtre du swarm réglée à 80 % en prod le même jour). **La preuve : trois lots verts à 2 cycles côte à côte sur concert-tour-app** (limite du dépôt passée à 2 dans Réglages → Cycles), sur sept lots lancés dans la journée :
+
+| Lot | Run | Verdict | Ce qu'il a montré |
+|---|---|---|---|
+| 1 | 43696542174 | échec | découpage vide pris pour « rien à faire » (défaut 18) ; un agent fini dit « silencieux » (défaut 17) |
+| 2 | 43700540301 | **vert** | 3 features, 8 PR fusionnées, 10,98 $ |
+| 3 | 43705867568 | échec | deux fusions à la même seconde, la seconde refusée par GitHub (défaut 19) |
+| 4 | local | échec | une feature demandée deux fois dans le lot (le script, corrigé) ; les cycles ont attendu la part de 80 % sans échouer |
+| 5 | 43720418359 | **vert** | 3 features, 8 PR fusionnées, 9,93 $ |
+| 6 | 43731227776 | vert, hors preuve | manifeste épuisé : un seul cycle concert-tour-app (quinze features ajoutées depuis) |
+| 7 | 43734527995 | **vert** | 3 features, 8 PR fusionnées, 11,03 $ |
+
+La limite par défaut reste 1 par dépôt ; passer à 2 par défaut est une décision du propriétaire. Le juge du lot refuse aussi un cycle qui fusionne la PR d'une autre feature. C1 : la revue, la
 fusion, QA et le rapport d'un cycle ciblé ne voient que les PR des sous-tâches
 de sa feature ; la veille de fusion garde le reste. C2 : la porte compare la
 feature *et ses sous-tâches*. C3 : toute PR approuvée est remise à jour sur
