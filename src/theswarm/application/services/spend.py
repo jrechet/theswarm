@@ -141,7 +141,7 @@ def by_customer(cycles: list[Cycle], owner_of: Callable[[str], tuple[str, str]],
     names: dict[str, str] = {}
     for c in cycles:
         when = _when(c)
-        if when is None or c.status not in FINISHED + (CycleStatus.CANCELLED,):
+        if when is None or c.status not in FINISHED + (CycleStatus.CANCELLED, CycleStatus.PAUSED):
             continue
         key, name = owner_of(c.project_id)
         names[key] = name

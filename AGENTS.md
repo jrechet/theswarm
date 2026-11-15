@@ -458,6 +458,23 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   replace it or the form of its answer. Nothing is interrupted — stopping a
   call is A3.3, pausing a cycle A3.2. An inbox that cannot be read is an
   empty one; a cycle that is over takes no message.
+- **A cycle is paused and resumed between two phases** (A3.2, 2026-11-15).
+  *Pause* on the theater of a running cycle (`POST /cycles/{id}/pause`,
+  owner only → `CycleTracker.pause`) is read at the door of every node of
+  the cycle graph (`cycle_graph._pausable`, `CycleRuntime.should_pause`):
+  the phase in flight finishes and is checkpointed, the next node raises
+  `PauseRequested` before any effect, and `_run_api_cycle` ends the cycle
+  `paused` — not failed, no failed checkpoint — with its spend, a line in
+  the feed ("Paused before qa") and a `CyclePaused` that writes the row
+  (`CycleStatus.PAUSED`: the boot's resumer reads the running rows and
+  leaves it). Its place at the gate goes to whoever waits. *Resume* is the
+  restart's path: the existing `/cycles/{id}/resume` continues a paused
+  cycle on its graph thread under a new id, whatever phase it stopped
+  before (a failed one still needs a finished phase). The workspace is not
+  kept: at a phase boundary everything the cycle made is on GitHub, and a
+  continuation clones again as it does after a deploy. A pause is not taken
+  inside a phase — stopping a call is A3.3 — nor while the cycle waits for
+  Claude's window.
 - **A silence is said, and a silent call is cut** (A1, 2026-11-14). The
   watchdog's first warning for an agent of a phase (`cycle.stall_reporter`,
   `STALL_ROLES`) is an `AgentStalled` on the bus (`api._stall_publisher`),

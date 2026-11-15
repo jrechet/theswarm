@@ -49,6 +49,7 @@ CYCLE_CHIPS = {
     "completed": ("Completed", "verified"),
     "failed": ("Failed", "broken"),
     "cancelled": ("Cancelled", "waiting"),
+    "paused": ("Paused", "waiting"),
 }
 
 

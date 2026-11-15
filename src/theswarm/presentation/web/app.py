@@ -56,6 +56,7 @@ from theswarm.domain.cycles.events import (
     CycleCompleted,
     CycleFailed,
     CycleCancelled,
+    CyclePaused,
     CycleStarted,
     PhaseChanged,
 )
@@ -280,7 +281,7 @@ def create_web_app(
 
     # Persistence event handlers — store cycles and activities in SQLite
     cycle_persistence = CyclePersistenceHandler(cycle_repo)
-    for evt_type in (CycleStarted, PhaseChanged, CycleCompleted, CycleFailed, CycleCancelled):
+    for evt_type in (CycleStarted, PhaseChanged, CycleCompleted, CycleFailed, CycleCancelled, CyclePaused):
         event_bus.subscribe(evt_type, cycle_persistence.handle)
     if activity_repo is not None:
         activity_persistence = ActivityPersistenceHandler(activity_repo)

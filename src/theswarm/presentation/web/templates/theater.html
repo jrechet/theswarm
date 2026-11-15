@@ -11,9 +11,21 @@
 {% block actions %}
   <span id="status-pill" data-status="{{ record.status.value }}">{{ ui.chip(status_label ~ (' · ' ~ elapsed if elapsed and record.status.value in ('running', 'queued') else ''), status_kind, pulse=(status_kind == 'running'), testid='cycle-status') }}</span>
   {% if trace_url %}<a href="{{ trace_url }}" target="_blank" rel="noopener" class="h-[30px] inline-flex items-center px-2.5 border border-line-strong rounded-md bg-surface text-[13px] text-ink">trace ↗</a>{% endif %}
+  {% if record.status.value == 'running' %}
+  {% if pausing %}<span class="h-[30px] inline-flex items-center px-2.5 text-[13px] text-muted" data-testid="pausing">Pausing after this phase…</span>
+  {% else %}
+  <form method="post" action="{{ base }}/cycles/{{ record.id }}/pause" data-testid="pause">
+    <button type="submit" title="Stops at the end of the phase it is in; Resume goes on from there" class="h-[30px] px-2.5 border border-line-strong rounded-md bg-surface text-ink text-[13px] font-medium cursor-pointer hover:bg-raised">Pause</button>
+  </form>
+  {% endif %}
+  {% endif %}
   {% if record.status.value in ('running', 'queued') %}
   <form method="post" action="{{ cancel_url }}" data-cancel onsubmit="return confirm('Cancel this cycle?')">
     <button type="submit" class="h-[30px] px-2.5 border border-line-strong rounded-md bg-surface text-bad text-[13px] font-medium cursor-pointer hover:bg-bad-wash">Cancel</button>
+  </form>
+  {% elif paused_resumable %}
+  <form method="post" action="{{ base }}/cycles/{{ record.id }}/resume" data-testid="resume">
+    <button type="submit" class="h-[30px] inline-flex items-center gap-1.5 px-2.5 rounded-md bg-ink text-on-ink text-[13px] font-medium cursor-pointer hover:opacity-90">↻ Resume</button>
   </form>
   {% elif resumable_from %}
   <form method="post" action="{{ base }}/cycles/{{ record.id }}/resume" data-testid="resume">

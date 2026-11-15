@@ -116,6 +116,9 @@ def _stations(record, progress: list[dict]) -> list[dict]:
                 state = "failed"
             else:
                 state = "done"
+        elif status == "paused" and active_index >= 0:
+            # Paused after a phase (A3.2): what ran is done, nothing is at work.
+            state = "done" if index <= active_index else "waiting"
         elif status in ("running", "queued") and active_index >= 0:
             if index < active_index:
                 state = "done"
@@ -186,7 +189,7 @@ def _graph(record, phases: list[dict], progress: list[dict], pinned=None) -> dic
         owner_now = PHASE_OWNER[current]
         ran = {PHASE_OWNER[p] for p in seen}
         for key, node in by_key.items():
-            if status == "completed":
+            if status in ("completed", "paused"):
                 state = "done" if key in ran else "waiting"
             elif status in ("failed", "cancelled"):
                 if key == owner_now:
@@ -328,7 +331,7 @@ def _tracker_record(cycle_id: str):
     return get_cycle_tracker().get(cycle_id)
 
 
-_FINISHED = frozenset({"completed", "failed", "cancelled"})
+_FINISHED = frozenset({"completed", "failed", "cancelled", "paused"})
 
 
 async def _archived_record(state, cycle_id: str):

@@ -33,6 +33,7 @@ class CycleStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    PAUSED = "paused"
 
 
 class PhaseStatus(str, Enum):

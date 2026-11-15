@@ -114,3 +114,26 @@ async def test_nothing_to_resume_from_goes_back_to_the_theater(db, _isolate_trac
             r = await c.post(f"/cycles/{cycle.id}/resume")  # the app serves at the root; the prefix is for the links
     assert r.status_code == 303 and r.headers["location"] == f"/swarm/cycles/{cycle.id}"
     assert run.call_count == 0 and not _isolate_tracker.list_recent(limit=10)
+
+
+async def test_a_paused_cycle_resumes_on_its_thread_whatever_phase_it_stopped_before(db, _isolate_tracker):
+    """A3.2: a pause taken before the first phase finished leaves no phase
+    checkpoint to name; the graph thread is what a paused cycle resumes from."""
+    from datetime import datetime, timezone
+
+    from theswarm.domain.cycles.entities import Cycle
+    from theswarm.domain.cycles.value_objects import CycleId, CycleStatus
+
+    repo = SQLiteCycleRepository(db)
+    await repo.save(Cycle(id=CycleId("cyc-paused"), project_id="jrechet/concert-tour-app",
+                          status=CycleStatus.PAUSED, started_at=datetime.now(timezone.utc), issue_number=905))
+    app = _app(db)
+    with patch("theswarm.api.run_api_cycle", new=AsyncMock(return_value=None)) as run:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            r = await c.post("/cycles/cyc-paused/resume")
+    kwargs = run.call_args.kwargs
+    assert kwargs["resume_cycle_id"] == "cyc-paused" and kwargs["issue_number"] == 905
+    [record] = [rec for rec in _isolate_tracker.list_recent(limit=10) if rec.description.startswith("Resume of")]
+    assert record.description == "Resume of cyc-paused from its pause"
+    assert r.headers["location"] == f"/swarm/cycles/{record.id}"
+    assert (await repo.get(CycleId("cyc-paused"))).resumed_as == record.id

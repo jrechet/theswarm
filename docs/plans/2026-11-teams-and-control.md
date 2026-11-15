@@ -141,7 +141,7 @@ l'historique des phases vit en mémoire et se perd à un redéploiement).
    prochain appel d'outil par le hook `PreToolUse` qui existe déjà
    (`additionalContext`) — aucun changement de transport — et en tête du
    prompt au nœud suivant.
-2. *Pause et reprise* aux frontières de nœud : `paused` est une annulation
+2. *Pause et reprise* **(code écrit le 2026-11-15, à voir en prod)** aux frontières de nœud : `paused` est une annulation
    demandée qui garde l'espace de travail et libère la place ; la reprise est
    le chemin du redémarrage (`resume_cycle_id`), qui répare aussi le défaut 5.
 3. *« Arrête, fais plutôt ceci »* : passer de `query()` à `ClaudeSDKClient`

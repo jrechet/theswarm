@@ -15,6 +15,7 @@ from theswarm.cycle_budgets import (  # noqa: F401 — re-exported for callers a
     MAX_DEV_ITERATIONS,
     PHASE_TIMEOUTS,
     BudgetExceeded,
+    PauseRequested,
     PhaseTimeout,
 )
 from theswarm.domain.cycles.value_objects import PHASE_ROLE
@@ -349,6 +350,7 @@ async def run_daily_cycle(
     resume: bool = False,
     on_stalled=None,
     inbox=None,
+    should_pause=None,
 ) -> dict:
     """Run one complete daily cycle and return the summary.
 
@@ -422,6 +424,7 @@ async def run_daily_cycle(
         raw_progress=on_progress,
         checkpoint=_checkpoint,
         watchdog=watchdog,
+        should_pause=should_pause,
     )
 
     # V2 runtime (M1): the SDK backend streams every tool call and text
@@ -447,6 +450,8 @@ async def run_daily_cycle(
             runtime, cycle_id=cycle_id, checkpointer=checkpointer,
             resume=resume, date=today,
         )
+    except PauseRequested:
+        raise  # not a failure: no failed checkpoint, the thread resumes where it stands
     except Exception as exc:
         # Sprint G1 — persist a failed checkpoint for the phase that crashed
         # so /cycles/{id}/resume can pick up from the next one.

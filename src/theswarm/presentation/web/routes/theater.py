@@ -47,6 +47,7 @@ STATUS_CHIPS = {
     "completed": ("Completed", "verified"),
     "failed": ("Failed", "broken"),
     "cancelled": ("Cancelled", "waiting"),
+    "paused": ("Paused", "waiting"),
 }
 _PR_RE = re.compile(r"#(\d+)")
 
@@ -265,6 +266,12 @@ async def _project_of(state, repo: str) -> dict:
     }
 
 
+def _pause_asked(cycle_id: str) -> bool:
+    from theswarm.api import get_cycle_tracker
+
+    return get_cycle_tracker().pause_requested(cycle_id)
+
+
 async def _continued(state, cycle_id: str) -> bool:
     """A cycle another one already continues (a deploy's resume, or a person's): no second resume."""
     try:
@@ -304,7 +311,7 @@ async def theater_context(request: Request, record, orphan: bool = False) -> dic
     label, kind = STATUS_CHIPS.get(status, (status.capitalize(), "waiting"))
     resumable_from = None
     checkpoints = getattr(state, "checkpoint_repo", None)
-    continued = await _continued(state, record.id) if status == "failed" else False
+    continued = await _continued(state, record.id) if status in ("failed", "paused") else False
     if status == "failed" and checkpoints is not None and not continued:
         try:
             last_ok = await checkpoints.last_ok(record.id)
@@ -313,6 +320,9 @@ async def theater_context(request: Request, record, orphan: bool = False) -> dic
             log.exception("theater: reading the checkpoints of %s failed", record.id)
     context.update({
         "resumable_from": resumable_from,
+        # A3.2: a pause asked for and not taken yet; a paused cycle nobody continued
+        "pausing": status == "running" and _pause_asked(record.id),
+        "paused_resumable": status == "paused" and checkpoints is not None and not continued,
         "steps": steps,
         "prs": prs_from_feed(context.get("feed", []), record.repo),
         "status_label": label,
@@ -351,10 +361,13 @@ async def resume(request: Request, cycle_id: str) -> RedirectResponse:
         return RedirectResponse(f"{base}/cycles/{cycle_id}", status_code=303)
     last_ok = await checkpoint_repo.last_ok(cycle_id)
     resume_from = last_ok.next_phase if last_ok else None
-    if resume_from is None:  # nothing to resume from: back to the theater, nothing done
+    original = await state.get_cycle_status_query.execute(cycle_id)
+    # A paused cycle (A3.2) goes on from its graph thread, whatever phase it
+    # stopped before; a failed one needs a phase that finished.
+    paused = original is not None and getattr(original, "status", "") == "paused"
+    if resume_from is None and not paused:  # nothing to resume from: back to the theater, nothing done
         return RedirectResponse(f"{base}/cycles/{cycle_id}", status_code=303)
 
-    original = await state.get_cycle_status_query.execute(cycle_id)
     if original is not None and original.resumed_as:  # already continued: a second click opens it
         return RedirectResponse(f"{base}/cycles/{original.resumed_as}", status_code=303)
     repo = original.project_id if original is not None else ""
@@ -367,7 +380,8 @@ async def resume(request: Request, cycle_id: str) -> RedirectResponse:
 
     thread = await _thread_id_of(cycle_repo, cycle_id) if cycle_repo is not None else cycle_id
     tracker = get_cycle_tracker()
-    req = CycleRequest(repo=repo, description=f"Resume of {cycle_id} from {resume_from}", issue_number=issue_number)
+    req = CycleRequest(repo=repo, description=f"Resume of {cycle_id} from {resume_from or 'its pause'}",
+                       issue_number=issue_number)
     record = tracker.create(req)
     task = asyncio.create_task(run_api_cycle(
         record.id, repo, req.description, "", getattr(state, "allowed_repos", []),
@@ -392,6 +406,24 @@ async def resume(request: Request, cycle_id: str) -> RedirectResponse:
 
 
 MANUAL_RESUME_TRIGGER = "resume"
+
+
+@router.post("/cycles/{cycle_id}/pause")
+async def pause(request: Request, cycle_id: str):
+    """A3.2: stop this cycle at the end of the phase it is in. The phase
+    finishes and is kept; the cycle's place goes to whoever waits; Resume
+    goes on from the next phase."""
+    from theswarm.api import get_cycle_tracker
+    from theswarm.presentation.web.routes.customers import _refused, current_actor
+
+    state = request.app.state
+    actor = await current_actor(request)
+    if actor is None or not actor.is_owner:
+        return _refused(request, actor)
+    asked = get_cycle_tracker().pause(cycle_id)
+    if asked:
+        log.info("Cycle %s: pause asked by %s", cycle_id, getattr(actor, "login", "") or "owner")
+    return RedirectResponse(f"{state.base_path}/cycles/{cycle_id}", status_code=303)
 
 
 @router.post("/cycles/{cycle_id}/messages")
