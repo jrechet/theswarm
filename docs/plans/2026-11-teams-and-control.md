@@ -69,6 +69,7 @@ seul ne l'aurait signalé.
 | 16 ✔ | Une reprise après timeout répond « Understood — I'll stop and wait » et rend la tâche : l'invite de reprise finissait par « Finish the task and stop. » | `SDK_CONTINUE_PROMPT`, cycle 8ed99b88f26a (2026-11-11) |
 | 17 ✔ | Le théâtre dit « Silent for 12 min » d'un agent dont la phase est finie : le nœud parle encore après sa phase (« Merged: [896] », « No more ready tasks »), ce qui le ré-inscrit au watchdog | cycle 0aa45149f33f (2026-11-15), premières lignes `AgentStalled` de la prod |
 | 18 ✔ | Un découpage vide est pris pour « rien à faire » : le cycle finit « completed » sans rien construire | concert-tour-app#897 « Change a venue » (2026-11-15) : `Breakdown.tasks` acceptait `[]` |
+| 19 ✔ | Deux cycles fusionnent à la même seconde : GitHub refuse la seconde fusion (« Base branch was modified », 405), la PR reste ouverte, la sous-tâche qui en dépend n'est jamais construite ; la PR Renovate fusionnée par les deux est comptée par les deux | concert-tour-app#917/#927 et #925 (2026-11-15, troisième lot) |
 | 9 | Deux Dev en parallèle partagent une seule station « Dev » : on ne sait pas qui fait quelle tâche | un seul `current_role`, pas d'identifiant de tâche sur les événements |
 | 10 | Les prompts du Dev et du relecteur n'ont pas le paragraphe anti-injection | `DEV_SYSTEM`, `REVIEW_SYSTEM` : constantes mortes |
 | 11 ✔ | Le manifeste d'évaluation est épuisé : le harness ne mesure plus rien de neuf | 45 features, toutes livrées |
