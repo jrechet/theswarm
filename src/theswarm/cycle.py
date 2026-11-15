@@ -445,6 +445,14 @@ async def run_daily_cycle(
 
         _claude.inbox = _read_inbox
 
+        # A3.3: "stop, do this instead" — a running call asks every few
+        # seconds; an answer cuts it and its session goes on with the message.
+        async def _read_interrupts() -> list[str]:
+            return await inbox(runtime.current_role["name"], True)
+
+        if hasattr(_claude, "interrupts"):
+            _claude.interrupts = _read_interrupts
+
     try:
         return await run_cycle_graph(
             runtime, cycle_id=cycle_id, checkpointer=checkpointer,

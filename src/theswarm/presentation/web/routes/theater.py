@@ -448,7 +448,8 @@ async def say_to_cycle(request: Request, cycle_id: str):
         return RedirectResponse(f"{back}?said=over", status_code=303)
     form = await request.form()
     try:
-        await inbox.post(target, str(form.get("message") or ""),
+        # "Stop and say" (A3.3) cuts the call that is running; "Send" waits for its next step.
+        await inbox.post(target, str(form.get("message") or ""), urgent=form.get("how") == "stop",
                          author=getattr(actor, "login", "") or "owner", project_id=record.repo)
     except InboxError:
         return RedirectResponse(f"{back}?said=empty", status_code=303)

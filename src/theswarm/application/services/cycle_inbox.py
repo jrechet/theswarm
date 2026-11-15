@@ -55,29 +55,35 @@ class CycleInbox:
         except Exception:  # noqa: BLE001 — the message is kept; only its line is missing
             log.exception("The inbox of %s could not tell the feed", cycle_id)
 
-    async def post(self, cycle_id: str, text: str, *, author: str = "", project_id: str = "") -> int:
+    async def post(self, cycle_id: str, text: str, *, author: str = "", project_id: str = "",
+                   urgent: bool = False) -> int:
+        """`urgent` (A3.3): "stop, do this instead" — the call that is running
+        is cut and its session goes on with the message."""
         body = " ".join(str(text or "").split())
         if not body:
             raise InboxError("Write something to say.")
         if len(body) > MAX_MESSAGE_CHARS:
             raise InboxError(f"{MAX_MESSAGE_CHARS} characters at most.")
-        message_id = await self._repo.add(cycle_id, body, author)
-        await self._tell(cycle_id, project_id, "message", body)
+        message_id = await self._repo.add(cycle_id, body, author, urgent)
+        await self._tell(cycle_id, project_id, "message", ("Stop — " if urgent else "") + body)
         log.info("Cycle %s: a message from %s waits for the working agent (%d chars)",
                  cycle_id, author or "the owner", len(body))
         return message_id
 
-    async def take(self, cycle_id: str, *, to: str = "", project_id: str = "") -> list[str]:
+    async def take(self, cycle_id: str, *, to: str = "", project_id: str = "",
+                   urgent_only: bool = False) -> list[str]:
         """The messages no agent has read yet, read now by `to`. Never raises:
-        a cycle does not fail on its inbox."""
+        a cycle does not fail on its inbox. `urgent_only`: what a running
+        call asks every few seconds — an answer interrupts it."""
         try:
-            messages = await self._repo.take(cycle_id, to)
+            messages = await self._repo.take(cycle_id, to, urgent_only)
         except Exception:  # noqa: BLE001
             log.exception("The inbox of %s could not be read", cycle_id)
             return []
         if messages:
             count = "The message" if len(messages) == 1 else f"{len(messages)} messages"
-            await self._tell(cycle_id, project_id, "message_read", f"{count} reached {to or 'the agent'}")
+            how = f"interrupted {to or 'the agent'}" if urgent_only else f"reached {to or 'the agent'}"
+            await self._tell(cycle_id, project_id, "message_read", f"{count} {how}")
             log.info("Cycle %s: %d message(s) delivered to %s", cycle_id, len(messages), to or "the agent")
         return messages
 

@@ -144,7 +144,7 @@ l'historique des phases vit en mémoire et se perd à un redéploiement).
 2. *Pause et reprise* **(code écrit le 2026-11-15, à voir en prod)** aux frontières de nœud : `paused` est une annulation
    demandée qui garde l'espace de travail et libère la place ; la reprise est
    le chemin du redémarrage (`resume_cycle_id`), qui répare aussi le défaut 5.
-3. *« Arrête, fais plutôt ceci »* : passer de `query()` à `ClaudeSDKClient`
+3. *« Arrête, fais plutôt ceci »* **(code écrit le 2026-11-15, vérifié sur un appel réel ; par coupure du flux et reprise de session, le chemin du timeout, plutôt que `ClaudeSDKClient`)** : passer de `query()` à `ClaudeSDKClient`
    (`interrupt()` puis `query()` dans la même session). Le message est aussi
    posé sur l'issue derrière `CHANGES_MARKER` pour que le relecteur le lise.
 Les horloges (appel, phase, cycle) ne comptent pas le temps de pause.

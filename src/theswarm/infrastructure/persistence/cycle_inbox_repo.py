@@ -15,18 +15,20 @@ class SQLiteCycleInbox:
     def __init__(self, db: aiosqlite.Connection) -> None:
         self._db = db
 
-    async def add(self, cycle_id: str, body: str, author: str) -> int:
+    async def add(self, cycle_id: str, body: str, author: str, urgent: bool = False) -> int:
         cursor = await self._db.execute(
-            "INSERT INTO cycle_inbox (cycle_id, body, author, created_at) VALUES (?, ?, ?, ?)",
-            (cycle_id, body, author, _now()),
+            "INSERT INTO cycle_inbox (cycle_id, body, author, urgent, created_at) VALUES (?, ?, ?, ?, ?)",
+            (cycle_id, body, author, 1 if urgent else 0, _now()),
         )
         await self._db.commit()
         return int(cursor.lastrowid or 0)
 
-    async def take(self, cycle_id: str, to: str) -> list[str]:
-        """The messages not yet read, oldest first, marked read by `to`."""
+    async def take(self, cycle_id: str, to: str, urgent_only: bool = False) -> list[str]:
+        """The messages not yet read, oldest first, marked read by `to` —
+        with `urgent_only`, those that stop a call and no other."""
         cursor = await self._db.execute(
-            "SELECT id, body FROM cycle_inbox WHERE cycle_id = ? AND delivered_at IS NULL ORDER BY id",
+            "SELECT id, body FROM cycle_inbox WHERE cycle_id = ? AND delivered_at IS NULL"
+            + (" AND urgent = 1" if urgent_only else "") + " ORDER BY id",
             (cycle_id,),
         )
         rows = await cursor.fetchall()

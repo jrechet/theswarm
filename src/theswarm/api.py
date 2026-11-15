@@ -303,8 +303,8 @@ def _inbox_reader(cycle_id: str, project_id: str):
     if inbox is None:
         return None
 
-    async def read(role: str = "") -> list[str]:
-        return await inbox.take(cycle_id, to=role, project_id=project_id)
+    async def read(role: str = "", urgent_only: bool = False) -> list[str]:
+        return await inbox.take(cycle_id, to=role, project_id=project_id, urgent_only=urgent_only)
 
     return read
 

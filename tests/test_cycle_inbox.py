@@ -258,3 +258,89 @@ async def test_a_member_cannot_talk_to_a_cycle():
     from theswarm.presentation.web.auth import MEMBER_ALLOWED
 
     assert not MEMBER_ALLOWED.match("/cycles/abc123def456/messages")
+
+
+# ── A3.3: "stop, do this instead" ──────────────────────────────────────
+
+
+async def test_an_urgent_message_is_what_a_running_call_asks_for(db):
+    bus = _Bus()
+    inbox = CycleInbox(SQLiteCycleInbox(db), bus)
+    await inbox.post("c1", "A detail for later", project_id="o/r")
+    await inbox.post("c1", "Do not touch the migration", urgent=True, project_id="o/r")
+
+    assert await inbox.take("c1", to="Dev", urgent_only=True) == ["Do not touch the migration"]
+    assert await inbox.take("c1", to="Dev", urgent_only=True) == []
+    assert await inbox.take("c1", to="Dev") == ["A detail for later"]  # the other waits for the next step
+    said = [e.detail for e in bus.events]
+    assert "Stop — Do not touch the migration" in said and "The message interrupted Dev" in said
+
+
+async def test_the_call_is_cut_and_its_session_goes_on_with_the_message(monkeypatch):
+    monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "sdk")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(claude_mod, "INTERRUPT_POLL_SECONDS", 0.01)
+    import asyncio
+
+    calls: list[tuple[str, str | None]] = []
+
+    async def stream(prompt, options):
+        calls.append((prompt, options.resume))
+        yield SystemMessage(subtype="init", data={"apiKeySource": "none", "session_id": "s-1"})
+        if len(calls) == 1:
+            await asyncio.sleep(30)  # at work when the owner says stop
+        yield ResultMessage(subtype="success", duration_ms=1, duration_api_ms=1, is_error=False, num_turns=1,
+                            session_id="s-1", total_cost_usd=0.0, usage={}, result="done, the other way")
+
+    monkeypatch.setattr(claude_mod, "_sdk_query", stream)
+    waiting = [["Do not touch the migration"]]
+
+    async def interrupts():
+        return waiting.pop(0) if waiting else []
+
+    told: list[str] = []
+
+    async def on_event(text):
+        told.append(text)
+
+    result = await ClaudeCLI(model="haiku", interrupts=interrupts, on_event=on_event).run("Implement the task")
+
+    assert result.text == "done, the other way" and len(calls) == 2
+    assert calls[0] == ("Implement the task", None)
+    assert calls[1][1] == "s-1" and "Do not touch the migration" in calls[1][0]  # the same session, resumed
+    assert "stopped your previous turn" in calls[1][0]
+    assert any("interrupted" in line for line in told)
+
+
+async def test_a_call_nobody_interrupts_is_not_slowed_or_changed(monkeypatch):
+    monkeypatch.setenv("SWARM_CLAUDE_BACKEND", "sdk")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    prompts: list[str] = []
+    monkeypatch.setattr(claude_mod, "_sdk_query", _stream(prompts))
+
+    async def interrupts():
+        return []
+
+    await ClaudeCLI(model="haiku", interrupts=interrupts).run("Implement the task")
+    assert prompts == ["Implement the task"]
+
+
+async def test_stop_and_say_posts_an_urgent_message(tmp_path):
+    from httpx import ASGITransport, AsyncClient
+
+    from theswarm.api import CycleStatus
+
+    tracker, record, conn, app = await _theater(tmp_path, CycleStatus.RUNNING)
+    try:
+        with patch("theswarm.tools.github.GitHubClient") as klass:
+            klass.return_value.get_issue = AsyncMock(return_value={"number": 905, "title": "Change a venue"})
+            klass.return_value.get_issues = AsyncMock(return_value=[])
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+                assert 'data-testid="say-stop"' in (await client.get(f"/cycles/{record.id}")).text
+                await client.post(f"/cycles/{record.id}/messages",
+                                  data={"message": "Do not touch the migration", "how": "stop"})
+                assert await app.state.cycle_inbox.take(record.id, to="Dev", urgent_only=True) == [
+                    "Do not touch the migration"]
+    finally:
+        tracker._cycles.pop(record.id, None)
+        await conn.close()

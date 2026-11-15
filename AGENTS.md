@@ -458,6 +458,22 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   replace it or the form of its answer. Nothing is interrupted — stopping a
   call is A3.3, pausing a cycle A3.2. An inbox that cannot be read is an
   empty one; a cycle that is over takes no message.
+- **"Stop and say" cuts the call that is running** (A3.3, 2026-11-15). The
+  theater's second button posts an *urgent* message (`cycle_inbox.urgent`).
+  A running SDK call asks for those every 3 s (`_within(interrupts=…)`,
+  `ClaudeCLI.interrupts`, `INTERRUPT_POLL_SECONDS`); an answer cancels the
+  stream — the SDK's generator closes, the subprocess and its command end,
+  as for a silent call — and **the same session is resumed** with what the
+  owner said (`_run_sdk_interruptible`, `SDK_INTERRUPT_PROMPT`: carry on
+  with the same task, do not start over, end with the answer asked for);
+  before a session exists the prompt is asked again with the message at its
+  head. At most `MAX_INTERRUPTS` (5) per call. The plan named
+  `ClaudeSDKClient.interrupt()`; the cut-and-resume path is the one a
+  timeout and a stall already proved in prod, with no change of transport.
+  Measured on a real call: cut 15 s into a 60 s command, the session
+  answered the owner's way 9 s later. The feed says "Stop — …", then "The
+  message interrupted Dev". An urgent message sent while no call runs is
+  read at the next step like any other.
 - **A cycle is paused and resumed between two phases** (A3.2, 2026-11-15).
   *Pause* on the theater of a running cycle (`POST /cycles/{id}/pause`,
   owner only → `CycleTracker.pause`) is read at the door of every node of

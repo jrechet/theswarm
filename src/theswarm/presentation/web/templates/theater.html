@@ -63,9 +63,10 @@
                 placeholder="Say something to this cycle — a correction, a detail the agent should know…"
                 class="flex-1 min-w-0 min-h-[36px] px-3 py-2 bg-surface border border-line-strong rounded-md text-[13px] text-ink placeholder:text-faint focus:outline-none focus:border-ink"
                 data-testid="say-field"></textarea>
-      <button type="submit" class="h-[36px] px-3.5 rounded-md bg-ink text-on-ink text-[13px] font-medium cursor-pointer hover:opacity-90" data-testid="say-send">Send</button>
+      <button type="submit" name="how" value="send" class="h-[36px] px-3.5 rounded-md bg-ink text-on-ink text-[13px] font-medium cursor-pointer hover:opacity-90" data-testid="say-send">Send</button>
+      <button type="submit" name="how" value="stop" title="Cuts the call that is running; the agent goes on with your message" class="h-[36px] px-3.5 border border-line-strong rounded-md bg-surface text-bad text-[13px] font-medium cursor-pointer hover:bg-bad-wash whitespace-nowrap" data-testid="say-stop">Stop and say</button>
     </form>
-    <p class="m-0 text-[12px] text-faint">The working agent reads it at its next step. It does not stop what is running.</p>
+    <p class="m-0 text-[12px] text-faint"><b class="font-medium text-muted">Send</b>: the working agent reads it at its next step. <b class="font-medium text-muted">Stop and say</b>: the call that is running is cut and goes on with your message.</p>
     {% endif %}
     {% if said == '1' %}<p class="m-0 text-[13px] text-ok" role="status" data-testid="said">Sent — it shows in the feed when an agent has read it.</p>
     {% elif said == 'over' %}<p class="m-0 text-[13px] text-bad" role="status" data-testid="said">This cycle is over: nobody is left to read it.</p>
