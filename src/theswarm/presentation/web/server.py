@@ -465,6 +465,15 @@ class GatewayBridge:
 
 # ── Main startup ─────────────────────────────────────────────────────
 
+async def _story_of_issue(repo: str, number: int) -> int | None:
+    """The story `number` is a sub-task of ("Parent: #N"), None for a story
+    — what the gate reads before a cycle pinned to it may start."""
+    from theswarm.tools.github import GitHubClient, parent_of
+
+    issue = await GitHubClient(repo).get_issue(number)
+    return parent_of((issue or {}).get("body"))
+
+
 async def _relaunch_queue(app, queue) -> int:
     """Start again the cycles that were waiting their turn when the process
     stopped, in the order they were queued, under their own ids. A deploy
@@ -951,6 +960,11 @@ async def start_server(
 
         _api.set_preflight(ops_watch.preflight)  # D2: no cycle starts past a no-go
         log.info("DevOps: watching the declared stack every %ss", ops_watch._interval)
+
+    # ── The gate: a sub-task and its story are one feature (A1 bis, C2) ──
+    from theswarm import api as _api_gate
+
+    _api_gate.set_feature_reader(_story_of_issue)
 
     # ── The TechLead's merge watch: approved work lands between cycles ──
     from theswarm.application.services.merge_watch import MergeWatch, sweep_seconds

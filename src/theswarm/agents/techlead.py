@@ -6,6 +6,7 @@ approves or requests changes, then merges approved PRs.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -312,7 +313,9 @@ async def poll_and_review_prs(state: AgentState) -> dict:
         return stub_result(Role.TECHLEAD, "poll_and_review_prs",
                            "review open PRs, approve good ones, request changes on others")
 
-    open_prs = await github.get_open_prs()
+    open_prs, others = await feature_scope(github, await github.get_open_prs(), state.get("target_issue"))
+    for number, owner in others:
+        log.info("PR #%d: #%d's, not this cycle's feature — left to its own cycle", number, owner)
     if not open_prs:
         log.info("No open PRs to review")
         return {"result": "no open PRs", "tokens_used": 0, "cost_usd": 0.0,
@@ -488,6 +491,8 @@ async def bring_up_to_date(github, pr: dict) -> str:
         return "unknown"
     try:
         missing = await behind(head, pr.get("base") or "main")
+        if not isinstance(missing, int) or isinstance(missing, bool):
+            return "unknown"
         if missing == 0:
             return "fresh"
         updated = await github.update_pr_branch(pr["number"], pr.get("head_sha") or "")
@@ -861,6 +866,53 @@ def is_swarm_branch(branch: str | None) -> bool:
     return bool(branch) and bool(_SWARM_BRANCH_RE.match(branch))
 
 
+_BRANCH_TASK_RE = re.compile(r"^feat/issue-(\d+)(?:-|$)", re.IGNORECASE)
+
+
+async def feature_scope(github, open_prs: list[dict], target) -> tuple[list[dict], list[tuple[int, int]]]:
+    """(the PRs a cycle pinned to `target` reviews and merges, the others as
+    (PR, the issue that owns it)) — A1 bis, C1.
+
+    Two cycles on one repository each read every open PR: the cycle of
+    concert-tour-app#841 merged a PR of #840's (2026-11-13), and a PR sent
+    back by both would count two rounds and be given up. A pinned cycle
+    keeps to its feature — the PRs whose task is the target or one of its
+    sub-tasks — and to the PRs that belong to no task (Renovate's, a
+    person's), which nobody else would review. A PR whose task cannot be
+    read is kept, as before. Unpinned, a cycle runs alone and reads all.
+    """
+    if not target:
+        return list(open_prs), []
+    from theswarm.tools.github import parent_of
+
+    target = int(target)
+    stories: dict[int, int | None] = {}
+    scoped: list[dict] = []
+    others: list[tuple[int, int]] = []
+    for pr in open_prs:
+        task = _task_of_pr(pr)
+        if task is None:
+            match = _BRANCH_TASK_RE.match(pr.get("head") or "")
+            task = int(match.group(1)) if match else None
+        if task is None or task == target:
+            scoped.append(pr)
+            continue
+        if task not in stories:
+            try:
+                issue = await github.get_issue(task)
+            except Exception as exc:  # noqa: BLE001 — unreadable: reviewed, as before
+                log.info("PR #%s: task #%d unreadable (%s) — reviewed", pr.get("number"), task, exc)
+                scoped.append(pr)
+                continue
+            stories[task] = parent_of((issue or {}).get("body"))
+        story = stories[task]
+        if story == target:
+            scoped.append(pr)
+        else:
+            others.append((pr["number"], story or task))
+    return scoped, others
+
+
 async def _foreign_approved(github, approved: list[int]) -> tuple[list[int], list[int]]:
     """(the swarm's own, the others) among approved PRs, by their head
     branch — SELF_REPO only since 2026-10-06; on a target the swarm's
@@ -952,17 +1004,17 @@ async def merge_approved_prs(state: AgentState, *, ci_wait_seconds: float | None
                     open_pr = p
                     break
 
-            if review.get("earlier"):
-                # Approved in an earlier cycle: main may have moved since.
-                fresh = await bring_up_to_date(github, {"number": pr_number, **open_pr})
-                if fresh == "updating":
-                    updating.append(pr_number)
-                    continue
-                if fresh == "conflict":
-                    raise RuntimeError("merge conflict with main")
+            # Main may have moved since the approval — an earlier cycle's, or
+            # this one's while a sibling or another cycle merged (C3).
+            fresh, open_pr = await _up_to_date_for_merge(github, pr_number, open_pr)
+            if fresh == "updating":
+                updating.append(pr_number)
+                continue
+            if fresh == "conflict":
+                raise RuntimeError("merge conflict with main")
             gate = await _ci_gate_before_merge(
                 github, pr_number, head_branch, open_pr, wait_seconds=ci_wait.left(),
-                tell=getattr(state.get("claude"), "on_event", None),
+                tell=getattr(state.get("claude"), "on_event", None), new_head=fresh == "updated",
             )
             if gate == "red":
                 ci_red.append(pr_number)
@@ -1101,8 +1153,61 @@ async def close_stories(github, finished: list[tuple[int, list[int]]]) -> list[i
     return closed
 
 
+UPDATED_HEAD_SECONDS = 30.0
+UPDATED_HEAD_POLL_SECONDS = 3.0
+
+
+async def _updated_head(github, pr_number: int, old_sha: str) -> dict | None:
+    """The PR once GitHub's "Update branch" has made its new head (a few
+    seconds), None when it has not shown up in time."""
+    read = getattr(github, "get_pr", None)
+    if read is None:
+        return None
+    waited = 0.0
+    while True:
+        try:
+            pr = await read(pr_number)
+        except Exception as exc:  # noqa: BLE001
+            log.info("PR #%d: could not read its new head (%s)", pr_number, exc)
+            return None
+        if isinstance(pr, dict) and pr.get("head_sha") and pr["head_sha"] != old_sha:
+            return pr
+        if waited >= UPDATED_HEAD_SECONDS:
+            return None
+        await asyncio.sleep(UPDATED_HEAD_POLL_SECONDS)
+        waited += UPDATED_HEAD_POLL_SECONDS
+
+
+async def _up_to_date_for_merge(github, pr_number: int, open_pr: dict) -> tuple[str, dict]:
+    """("fresh" | "updated" | "updating" | "conflict" | "unknown", the PR as
+    it now stands) — A1 bis, C3: every approved PR holds main before it
+    merges, the cycle's own approvals too. Two cycles on one repository
+    each merge what they approved; the second PR's green CI said nothing
+    about the main the first had just moved. Behind, main is merged in on
+    GitHub's side and the approval carried to the new head (`updated`: CI
+    is then read on that head before the merge); a new head that has not
+    shown up, or an approval that does not carry, waits for a later pass
+    (`updating`)."""
+    pr = {"number": pr_number, **open_pr}
+    fresh = await bring_up_to_date(github, pr)
+    if fresh != "updating":
+        return fresh, open_pr
+    moved = await _updated_head(github, pr_number, open_pr.get("head_sha") or "")
+    if moved is None:
+        return "updating", open_pr
+    try:
+        carried = await _carried_verdict(github, {**pr, **moved})
+    except Exception as exc:  # noqa: BLE001
+        log.info("PR #%d: the approval could not be carried to its new head (%s)", pr_number, exc)
+        carried = None
+    if carried is None:
+        return "updating", open_pr
+    return "updated", {**open_pr, **moved}
+
+
 async def _ci_gate_before_merge(
     github, pr_number: int, head_branch, open_pr: dict, *, wait_seconds: float, tell=None,
+    new_head: bool = False,
 ) -> str:
     """green / none: merge. red: sent back to the Dev. pending: left open.
 
@@ -1119,7 +1224,7 @@ async def _ci_gate_before_merge(
 
     await said(f"Waiting for CI on PR #{pr_number} (up to {int(wait_seconds) // 60 or 1} min)")
     verdict = await ci_gate.wait_for_ci(
-        github, open_pr.get("head_sha", ""), wait_seconds=wait_seconds,
+        github, open_pr.get("head_sha", ""), wait_seconds=wait_seconds, new_head=new_head,
     )
     await said({"green": f"CI is green on PR #{pr_number}", "none": f"PR #{pr_number} has no CI to wait for",
                 "red": f"CI is red on PR #{pr_number}",

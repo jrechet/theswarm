@@ -14,6 +14,7 @@ import shlex
 import os
 import shutil
 import re
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -28,6 +29,7 @@ from theswarm.agents.base import (
     _test_runner_missing,
     install_target,
     load_context,
+    say,
     stub_result,
 )
 from theswarm.agents.qa_demo_seed import run_seed
@@ -900,9 +902,42 @@ async def _ensure_pytest_playwright(python: str) -> None:
     log.warning("QA E2E: pytest-playwright did not install (exit %s): %s", exit_code, reason)
 
 
+_LIVE_DEMO_SERVERS: dict[str, set] = {}
+
+
+async def _launch_demo_server(command: list[str], workspace: str, env: dict):
+    """A demo server for `workspace`, written down until it is stopped:
+    `stop_demo_servers` ends what a cancelled phase left between its launch
+    and its `finally` — the readiness wait and the seed run outside it (A1
+    bis, C5)."""
+    proc = await asyncio.create_subprocess_exec(
+        *command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        cwd=workspace,
+        env=env,
+    )
+    _LIVE_DEMO_SERVERS.setdefault(workspace, set()).add(proc)
+    return proc
+
+
+async def stop_demo_servers(workspace: str) -> int:
+    """Stop every demo server of `workspace` still running; how many were."""
+    stopped = 0
+    for proc in list(_LIVE_DEMO_SERVERS.pop(workspace, set())):
+        if getattr(proc, "returncode", 0) is None:
+            log.warning("QA: a demo server of %s was still running (pid %s) — stopping it",
+                        workspace, getattr(proc, "pid", "?"))
+            await _stop_server(proc)
+            stopped += 1
+    return stopped
+
+
 async def _stop_server(server_proc) -> None:
     import signal
 
+    for live in _LIVE_DEMO_SERVERS.values():
+        live.discard(server_proc)
     try:
         server_proc.send_signal(signal.SIGTERM)
         await asyncio.wait_for(server_proc.wait(), timeout=5)
@@ -918,13 +953,7 @@ async def _start_e2e_server(workspace: str, python: str):
     port = e2e_port(workspace)
     await _run_demo_setup(workspace)
     command, env = _demo_launch(workspace, python, port)
-    server_proc = await asyncio.create_subprocess_exec(
-        *command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-        cwd=workspace,
-        env=env,
-    )
+    server_proc = await _launch_demo_server(command, workspace, env)
 
     # Sprint G4 — wait for the server to become ready instead of a blind sleep.
     # `is_dead` stops the wait the moment the process has already exited —
@@ -950,7 +979,16 @@ async def _start_e2e_server(workspace: str, python: str):
 
 
 async def run_e2e_tests(state: AgentState) -> dict:
-    """Start the app, run Playwright E2E tests, then stop the app."""
+    """Start the app, run Playwright E2E tests, then stop the app — and any
+    demo server a cancelled run left between its launch and its `finally`."""
+    try:
+        return await _run_e2e_tests(state)
+    finally:
+        if state.get("workspace"):
+            await stop_demo_servers(state["workspace"])
+
+
+async def _run_e2e_tests(state: AgentState) -> dict:
     claude = state.get("claude")
     workspace = state.get("workspace")
 
@@ -976,10 +1014,7 @@ async def run_e2e_tests(state: AgentState) -> dict:
     if demo_launch_error:
         # The server never came up — running pytest against it would only
         # reproduce the same connection failure. Say why instead.
-        try:
-            server_proc.kill()
-        except ProcessLookupError:
-            pass
+        await _stop_server(server_proc)
         run = _E2ERun(demo_launch_error, False)
     else:
         try:
@@ -1228,13 +1263,7 @@ async def capture_demo_screenshots(state: AgentState) -> dict:
     # Start the FastAPI app
     await _run_demo_setup(workspace)
     command, env = _demo_launch(workspace, python, port)
-    server_proc = await asyncio.create_subprocess_exec(
-        *command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-        cwd=workspace,
-        env=env,
-    )
+    server_proc = await _launch_demo_server(command, workspace, env)
 
     # Sprint G4 — wait for readiness instead of blind sleep. `is_dead` cuts
     # the wait short the moment the process has already exited, instead of
@@ -1429,13 +1458,7 @@ async def record_demo_video(state: AgentState) -> dict:
     # Start the FastAPI app
     await _run_demo_setup(workspace)
     command, env = _demo_launch(workspace, python, port)
-    server_proc = await asyncio.create_subprocess_exec(
-        *command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-        cwd=workspace,
-        env=env,
-    )
+    server_proc = await _launch_demo_server(command, workspace, env)
 
     # Sprint G4 — wait for readiness instead of blind sleep. `is_dead` cuts
     # the wait short the moment the process has already exited, instead of
@@ -1957,7 +1980,50 @@ def _merge_captures(*parts: dict) -> dict:
     return merged
 
 
+def _lanes_in_all() -> int:
+    """How many capture lanes run at once in this process, every cycle
+    together: ``SWARM_QA_LANES_IN_ALL`` (default 2). Each lane is a demo
+    server and a Chromium; two cycles' QA side by side were four of each in
+    a 4 GB container (A1 bis, C5)."""
+    try:
+        return max(1, int(os.environ.get("SWARM_QA_LANES_IN_ALL", "2")))
+    except ValueError:
+        return 2
+
+
+_LANE_SLOTS: dict[int, asyncio.Semaphore] = {}
+
+
+def _lane_slots() -> asyncio.Semaphore:
+    loop_id = id(asyncio.get_running_loop())
+    slots = _LANE_SLOTS.get(loop_id)
+    if slots is None:
+        _LANE_SLOTS.clear()  # a loop that no longer runs holds nothing
+        slots = _LANE_SLOTS[loop_id] = asyncio.Semaphore(_lanes_in_all())
+    return slots
+
+
+@asynccontextmanager
+async def _lane_slot(state: AgentState, lane: str):
+    """One of the process's capture slots for this lane, said when it waits."""
+    slots = _lane_slots()
+    if slots.locked():
+        log.info("QA %s: every capture slot is taken — waiting for another cycle's demo", lane)
+        await say(state, f"Waiting for another cycle's demo capture to finish ({lane})")
+    async with slots:
+        yield
+
+
 async def run_captures(state: AgentState) -> dict:
+    """The capture lanes, then whatever demo server a cancelled lane left."""
+    try:
+        return await _run_capture_lanes(state)
+    finally:
+        if state.get("workspace"):
+            await stop_demo_servers(state["workspace"])
+
+
+async def _run_capture_lanes(state: AgentState) -> dict:
     """The demo captures, in two lanes that each own their demo server.
 
     The screenshot walk launches on ``e2e_port() + 1`` and the video walk on
@@ -1988,15 +2054,20 @@ async def run_captures(state: AgentState) -> dict:
 
     async def screenshots_lane() -> dict:
         try:
-            shots = await capture_demo_screenshots({**state, "demo_server_ready": first_boot})
-            return _merge_captures(shots, await capture_before_after_per_story({**state, **shots}))
+            async with _lane_slot(state, "screenshots"):
+                shots = await capture_demo_screenshots({**state, "demo_server_ready": first_boot})
+                return _merge_captures(shots, await capture_before_after_per_story({**state, **shots}))
         finally:
             first_boot.set()
 
     async def video_lane() -> dict:
+        # The slot after the wait, never before: a video lane holding one
+        # while it waits for its own screenshot lane could hold the slot
+        # that lane needs (two cycles, two slots: a deadlock).
         await first_boot.wait()
-        stories = await record_story_video(state)
-        return _merge_captures(stories, await record_demo_video({**state, **stories}))
+        async with _lane_slot(state, "video"):
+            stories = await record_story_video(state)
+            return _merge_captures(stories, await record_demo_video({**state, **stories}))
 
     if _capture_concurrency() < 2:
         merged = _merge_captures(await screenshots_lane(), await video_lane())

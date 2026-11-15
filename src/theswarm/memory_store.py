@@ -210,15 +210,17 @@ async def append_entries(
     """Append new entries to existing memory."""
     if not new_entries:
         return True
-
-    existing = await load_entries(github)
-    combined = existing + new_entries
+    from theswarm.main_writes import file_lock, repo_of
 
     agents = {e["agent"] for e in new_entries}
     categories = {e["category"] for e in new_entries}
     msg = f"chore: update agent memory [{', '.join(sorted(categories))}] — {', '.join(sorted(agents))}"
 
-    return await save_entries(github, combined, branch=branch, message=msg)
+    # Read and written under one lock: two cycles each wrote back what they
+    # had read plus their own, and the second dropped the first's (A1 bis, C4).
+    async with file_lock(repo_of(github), MEMORY_JSONL_PATH):
+        existing = await load_entries(github)
+        return await save_entries(github, existing + new_entries, branch=branch, message=msg)
 
 
 def query(
@@ -461,6 +463,21 @@ Return ONLY the JSON array. No prose.
 
 
 async def compact_memory(
+    github,
+    claude,
+    *,
+    branch: str = "main",
+    threshold: int = 50,
+) -> bool:
+    """`_compact` under the memory's lock: a compaction rewrites the whole
+    file from what it read, and an append landing meanwhile was lost."""
+    from theswarm.main_writes import file_lock, repo_of
+
+    async with file_lock(repo_of(github), MEMORY_JSONL_PATH):
+        return await _compact(github, claude, branch=branch, threshold=threshold)
+
+
+async def _compact(
     github,
     claude,
     *,

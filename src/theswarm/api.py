@@ -172,6 +172,32 @@ def set_agent_settings(service) -> None:
     _AGENT_SETTINGS = service
 
 
+_FEATURE_READER = None
+FEATURE_READ_SECONDS = 15.0
+
+
+def set_feature_reader(reader) -> None:
+    """`async (repo, issue) -> the story it is a sub-task of, or None` — how
+    the gate learns that two pinned issues are one feature (A1 bis, C2). The
+    server sets it; None (tests, the CLI) compares the pinned issues alone."""
+    global _FEATURE_READER
+    _FEATURE_READER = reader
+
+
+async def feature_of(repo: str, issue: int | None) -> int | None:
+    """The feature a cycle pinned to `issue` builds: the story when the issue
+    is one of its sub-tasks, else the issue. Unreadable (GitHub slow or down)
+    is the issue itself: a cycle never waits on the read, only on the rule."""
+    if issue is None or _FEATURE_READER is None:
+        return issue
+    try:
+        parent = await asyncio.wait_for(_FEATURE_READER(repo, int(issue)), FEATURE_READ_SECONDS)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("The feature of %s#%s could not be read (%s) — the issue stands for it", repo, issue, exc)
+        return issue
+    return int(parent) if parent else issue
+
+
 def set_preflight(preflight) -> None:
     """DevOps D2: the go/no-go asked before any cycle starts (the server sets
     it to the watch's `preflight`; None asks nobody — tests, the CLI)."""
@@ -860,7 +886,8 @@ async def run_api_cycle(cycle_id: str, repo: str, *args, **kwargs) -> None:
     tracker = get_cycle_tracker()
     gate = cycle_gate()
     issue = kwargs.get("issue_number")
-    waits = not gate.fits_now(repo, issue)
+    feature = await feature_of(repo, issue)
+    waits = not gate.fits_now(repo, issue, feature)
     if waits:
         log.info(
             "Cycle %s queued on %s (%d running there, %d at most; %d cycles at once in all)",
@@ -877,7 +904,7 @@ async def run_api_cycle(cycle_id: str, repo: str, *args, **kwargs) -> None:
             (record.created_at if record else "") or datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
     try:
-        async with gate.hold(cycle_id, repo, issue):
+        async with gate.hold(cycle_id, repo, issue, feature if feature != issue else None):
             # Always, not only when this call wrote it: a cycle a restart
             # started again may start at once, and its row is the old one.
             await _queue_note("remove", cycle_id)

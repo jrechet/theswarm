@@ -44,21 +44,22 @@ async def append_cycle_log(config, result: dict) -> bool:
     line = json.dumps(entry, separators=(",", ":")) + "\n"
     path = "docs/cycle-history.jsonl"
 
+    from theswarm.main_writes import file_lock
+
     try:
-        # Read existing content
-        try:
-            existing = await github.get_file_content(path)
-        except Exception:
-            existing = ""
-
-        updated = existing + line
-
-        await github.update_file(
-            path=path,
-            content=updated,
-            branch="main",
-            commit_message=f"chore: cycle log {entry['date']} — ${entry['cost_usd']:.2f}, {entry['prs_opened']} PRs",
-        )
+        # Read and written under one lock: two cycles side by side each
+        # wrote back what they had read plus their line (A1 bis, C4).
+        async with file_lock(config.github_repo, path):
+            try:
+                existing = await github.get_file_content(path)
+            except Exception:
+                existing = ""
+            await github.update_file(
+                path=path,
+                content=existing + line,
+                branch="main",
+                commit_message=f"chore: cycle log {entry['date']} — ${entry['cost_usd']:.2f}, {entry['prs_opened']} PRs",
+            )
         log.info("Cycle log: appended entry for %s", entry["date"])
         return True
     except Exception:

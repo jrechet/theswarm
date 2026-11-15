@@ -185,14 +185,24 @@ class TestTheMergePass:
 
         assert github.merged == [] and result["updating_prs"] == [499]
 
-    async def test_an_approval_of_this_cycle_merges_as_before(self):
-        github = _GitHub([_pr()], behind={"feat/issue-496-fix": 1})
+    async def test_an_approval_of_this_cycle_that_holds_main_merges_as_before(self):
+        github = _GitHub([_pr()])
         review = {"pr_number": 499, "decision": "APPROVE"}
 
         await techlead.merge_approved_prs(
             {"github": github, "github_repo": "jrechet/espace-client", "reviews": [review]})
 
         assert github.merged == [499] and github.updated == []
+
+    async def test_an_approval_of_this_cycle_behind_main_is_updated_too(self):
+        """A1 bis, C3: another cycle (or a sibling PR) moved main since."""
+        github = _GitHub([_pr()], behind={"feat/issue-496-fix": 1})
+        review = {"pr_number": 499, "decision": "APPROVE"}
+
+        result = await techlead.merge_approved_prs(
+            {"github": github, "github_repo": "jrechet/espace-client", "reviews": [review]})
+
+        assert github.updated == [499] and github.merged == [] and result["updating_prs"] == [499]
 
     async def test_an_earlier_approval_that_conflicts_goes_back_to_the_dev(self):
         github = _GitHub([_pr()], behind={"feat/issue-496-fix": 2}, update_ok=False)

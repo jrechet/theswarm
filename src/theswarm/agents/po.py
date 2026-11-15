@@ -89,6 +89,16 @@ async def select_daily_issues(state: AgentState) -> dict:
         return stub_result(Role.PO, "select_daily_issues",
                            "select 2-3 issues from backlog, add label status:ready")
 
+    # A cycle pinned to a feature builds that feature (the TechLead breaks
+    # it down whatever its label): the backlog is the owner's and the
+    # unpinned cycles'. The morning plan moved up to three other stories to
+    # "ready" in every Play, and wrote a dated plan on main that the next
+    # cycle overwrote (A1 bis, C4, C6).
+    target = state.get("target_issue")
+    if target:
+        log.info("PO: a cycle pinned to #%s — the backlog is left as it is, no plan written", target)
+        return {"daily_plan": "", "result": f"Pinned to #{target}: no daily plan", "tokens_used": 0}
+
     # Fetch backlog issues (status:backlog label)
     backlog = await github.get_issues(labels=["status:backlog"])
     if not backlog:
@@ -255,6 +265,13 @@ async def write_daily_report(state: AgentState) -> dict:
     if not daily_report or github is None:
         return stub_result(Role.PO, "write_daily_report",
                            "write daily report summarising US delivered, metrics, risks")
+
+    # A pinned cycle's report is its feature's, kept with the cycle (its
+    # result, the demo): a dated file on main is the day's, and two cycles
+    # side by side overwrote each other's (A1 bis, C4).
+    if state.get("target_issue"):
+        log.info("PO: a pinned cycle's report stays with the cycle — nothing written on main")
+        return {"result": "Report kept with the cycle", "tokens_used": 0}
 
     today = datetime.now().strftime("%Y-%m-%d")
     path = f"docs/daily-reports/{today}.md"
