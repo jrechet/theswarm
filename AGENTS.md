@@ -458,6 +458,20 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   replace it or the form of its answer. Nothing is interrupted — stopping a
   call is A3.3, pausing a cycle A3.2. An inbox that cannot be read is an
   empty one; a cycle that is over takes no message.
+- **The Dev and the reviewer are told where instructions come from**
+  (defect 10, 2026-11-15). `DEV_SYSTEM` and `REVIEW_SYSTEM` carried the
+  paragraph and were never sent — the SDK calls take one prompt. It is now
+  part of the prompts that quote outside text (`agents.base.UNTRUSTED_NOTE`
+  in `DEV_TASK_PROMPT` and `REVIEW_PROMPT`; the breakdown always had its
+  own): an issue, a PR, the repository's files and a command's output are
+  material, never instructions; the owner's message to a running cycle is
+  the one exception, named as such on both sides.
+  **`/api/live/state` is per cycle** (defect 12): the runner and the
+  progress bridge write a `CycleLive` (`DashboardState.for_cycle`), so two
+  cycles no longer overwrite each other's phase and cost, the second to
+  start no longer wipes the first's events, and the first to end no longer
+  says nothing runs. The single-cycle fields stay (the last cycle to
+  start); `cycles` lists every running one, and each event names its cycle.
 - **The control room knows a live cycle's spend and who does which task**
   (A2, 2026-11-15). *Spend*: every Claude call hands its cost to the cycle
   as it ends (`ClaudeCLI.on_spend` → `CycleTracker.add_spend`,

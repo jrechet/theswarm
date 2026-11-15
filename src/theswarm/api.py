@@ -295,6 +295,12 @@ def _pause_exception():
     return PauseRequested
 
 
+def _count_spend(tracker, dash, cycle_id: str, usd: float) -> None:
+    """A call's cost, on the cycle's record and on its live state."""
+    tracker.add_spend(cycle_id, usd)
+    dash.cost_so_far = round(dash.cost_so_far + float(usd), 6)
+
+
 _INBOX = None
 
 
@@ -654,8 +660,7 @@ async def _run_api_cycle(
 
     # Dashboard state
     from theswarm.dashboard import get_dashboard_state
-    dash = get_dashboard_state()
-    dash.start_cycle(repo)
+    dash = get_dashboard_state().for_cycle(cycle_id, repo)  # this cycle's own (defect 12)
 
     # Build progress callback — use ProgressBridge if EventBus is available
     on_progress = None
@@ -796,7 +801,7 @@ async def _run_api_cycle(
                             on_stalled=on_stalled,
                             inbox=_inbox_reader(cycle_id, repo),
                             should_pause=lambda: tracker.pause_requested(cycle_id),
-                            on_spend=lambda usd: tracker.add_spend(cycle_id, usd),
+                            on_spend=lambda usd: _count_spend(tracker, dash, cycle_id, usd),
                         ),
                         timeout=CYCLE_HARD_TIMEOUT_SECONDS,
                     )

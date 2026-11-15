@@ -56,3 +56,39 @@ features:
     expected_paths: ["**/*.py"]
     max_cost_usd: 8
     max_duration_s: 3600
+  # Added 2026-11-15: the batches of the A1 bis proof built the ones above in a day.
+  - id: todo-search
+    text: |-
+      Search my todos
+      GET /api/v1/todos/search?q=... returns the signed-in user's todos whose title contains the text, whatever the case, newest first; an empty list when none does; 422 for a text shorter than 2 characters; 401 without a token.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: todo-reopen
+    text: |-
+      Reopen a todo
+      POST /api/v1/todos/{id}/reopen marks a done todo of the signed-in user not done and returns it; 409 when it is not done; 404 for an unknown todo or someone else's; 401 without a token.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: todo-clear-done
+    text: |-
+      Clear my done todos
+      DELETE /api/v1/todos/done deletes the signed-in user's done todos and answers {"deleted": N}; 0 when there is none; nobody else's todos are touched; 401 without a token.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: todo-priority
+    text: |-
+      Give a todo a priority
+      A todo takes an optional priority (low, normal or high; normal when left out) on create and on PATCH, and returns it; GET /api/v1/todos?priority=high lists the signed-in user's todos of that priority; 422 for any other value.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
+  - id: me-delete
+    text: |-
+      Delete my account
+      DELETE /api/v1/me with {"password": "..."} deletes the signed-in user and their todos and answers 204; the token no longer works afterwards; 403 when the password is wrong; 401 without a token.
+    expected_paths: ["**/*.py"]
+    max_cost_usd: 8
+    max_duration_s: 3600
