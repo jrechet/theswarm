@@ -230,7 +230,7 @@ un YAML n'exprime pas ce protocole.
 
 ### Jalons
 
-- **B1 — le persona est une donnée (4 jours).** Un enregistrement par projet :
+- **B1 — le persona est une donnée (4 jours). Première tranche livrée le 2026-11-15** : table `personas` par projet avec défaut d'instance (nom, description, consignes, modèle et effort optionnels), lue par chaque cycle à son démarrage, consignes en tête du contexte des quatre rôles, éditeur dans Réglages → Agents, stations du théâtre nommées par l'équipe. Reste : y fondre `agent_settings` et les affectations de rôles. Un enregistrement par projet :
   identifiant, nom, description, consignes, modèle, effort, profil, outils,
   budgets. Il remplace `agent_settings`, `role_assignments` et les tables
   mortes de prompts. `Réglages → Agents` devient l'éditeur de personas ; les
@@ -259,8 +259,8 @@ aussi d'outil de test.
 
 ## 4. Décisions à prendre par le propriétaire
 
-1. Gabarits avec points d'insertion (proposé) ou toile libre ?
-2. La vérité de l'équipe : en base avec export YAML (proposé) ou dans le dépôt ?
+1. Gabarits avec points d'insertion ou toile libre ? **Décidé le 2026-11-15 : gabarits.**
+2. La vérité de l'équipe : en base avec export YAML ou dans le dépôt ? **Décidé le 2026-11-15 : en base, avec export YAML.**
 3. La fenêtre d'abonnement : la prod garde une part réservée, ou passe sur une
    clé d'API pour ne plus dépendre de l'usage personnel ?
 4. La forge : poser `FORGE_TOKEN` ou retirer le montage hybride.

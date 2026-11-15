@@ -102,7 +102,7 @@ async def load_context(state: AgentState) -> dict[str, Any]:
     project_id = state.get("project_id") or state.get("team_id") or ""
     codename = codenames.get(role) if role else None
 
-    persona = _build_persona_preamble(role, codename, project_id)
+    persona = _build_persona_preamble(role, codename, project_id, (state.get("personas") or {}).get(role or ""))
 
     if github is None:
         log.warning("No GitHub client — skipping context load")
@@ -151,11 +151,24 @@ async def load_context(state: AgentState) -> dict[str, Any]:
 
 
 def _build_persona_preamble(
-    role: str | None, codename: str | None, project_id: str,
+    role: str | None, codename: str | None, project_id: str, words: dict | None = None,
 ) -> str:
-    """Return a short persona line so the agent knows who it is."""
+    """Who the agent is — and, since phase B (B1), what the owner says this
+    role is on this project: its name, its description, its instructions.
+    They are the owner's words, set in Settings → Agents; they add to the
+    task, they never replace the form of the answer a prompt asks for."""
     if not role:
         return ""
+    if words and (words.get("description") or words.get("instructions") or words.get("name")):
+        name = words.get("name") or role.upper()
+        lines = [f"## Persona\n\nYou are **{name}**, the {role.upper()} on project `{project_id or 'default'}`."
+                 + (f" Sign your outputs as {codename}." if codename else "")]
+        if words.get("description"):
+            lines.append(words["description"])
+        if words.get("instructions"):
+            lines.append("### Instructions from the owner of this project\n\n" + words["instructions"]
+                         + "\n\nThey add to the task below; the form of the answer a prompt asks for stands.")
+        return "\n\n".join(lines)
     if codename:
         line = (
             f"## Persona\n\n"

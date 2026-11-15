@@ -70,5 +70,69 @@
     </label>
     {{ ui.btn('Apply to all', type='submit', testid='agents-apply-all') }}
   </form>
+
+  {# ── Phase B, B1: who each role is ─────────────────────────────── #}
+  <section id="team" class="flex flex-col gap-3 pt-2" aria-labelledby="team-title" data-testid="team">
+    <div class="flex flex-col gap-0.5">
+      <h2 id="team-title" class="m-0 text-[16px] font-semibold tracking-tight">Who each role is</h2>
+      <span class="text-[13px] text-muted max-w-[72ch]">A name, a description and your instructions for a role. The instructions enter every prompt of that role, above its task; they add to the task, they do not replace it. Set them for every project, or for one project only — an empty field inherits. A change applies from the next cycle. The four roles of a cycle are here; DevOps works outside it.</span>
+    </div>
+    {% if not team_available %}<p class="m-0 text-[13px] text-muted border border-dashed border-line-strong rounded-[10px] px-4 py-3">Personas need the database.</p>
+    {% else %}
+    <nav class="flex flex-wrap items-center gap-1 text-[13px]" aria-label="Whose team" data-testid="team-scopes">
+      <a href="{{ base }}/settings/agents#team" {% if not team_scope %}aria-current="page"{% endif %} class="h-8 inline-flex items-center px-3 rounded-md {% if not team_scope %}bg-raised text-ink font-medium{% else %}text-muted hover:text-ink hover:bg-raised{% endif %}">Every project</a>
+      {% for p in team_projects %}
+      <a href="{{ base }}/settings/agents?team={{ p | urlencode }}#team" {% if team_scope == p %}aria-current="page"{% endif %} class="h-8 inline-flex items-center px-3 rounded-md font-mono text-[12px] {% if team_scope == p %}bg-raised text-ink font-medium{% else %}text-muted hover:text-ink hover:bg-raised{% endif %}">{{ p }}</a>
+      {% endfor %}
+    </nav>
+    {% if team_saved %}<p class="m-0 text-[13px] text-ok border border-ok/40 bg-ok-wash rounded-[10px] px-4 py-3" data-testid="team-saved" role="status">Saved. The next cycle{% if team_scope %} on {{ team_scope }}{% endif %} meets this role as written.</p>{% endif %}
+    <div class="flex flex-col gap-3">
+      {% for m in team_members %}
+      <form method="post" action="{{ base }}/settings/agents/persona" class="flex flex-col gap-3 px-4 py-3.5 bg-surface border border-line rounded-[10px]" data-testid="persona" data-key="{{ m.key }}" data-set="{{ 'true' if m.set else 'false' }}">
+        <input type="hidden" name="team" value="{{ team_scope }}">
+        <input type="hidden" name="key" value="{{ m.key }}">
+        <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <span class="font-medium text-[14px]">{{ m.role }}{% if m.resolved_name != m.role %} <span class="text-muted font-normal">· called {{ m.resolved_name }}</span>{% endif %}</span>
+          <span class="text-[12px] text-faint">{% if m.set %}set {{ m.updated }}{% elif team_scope %}inherits every project's{% else %}as built in{% endif %}</span>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <label class="flex flex-col gap-1 text-[12px] text-muted flex-[1_1_180px] min-w-0">Name
+            <input type="text" id="persona-{{ m.key }}-name" name="name" maxlength="{{ name_max }}" value="{{ m.name }}" placeholder="{{ m.inherits_name }}"
+                   class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink placeholder:text-faint" data-testid="persona-name">
+          </label>
+          <label class="flex flex-col gap-1 text-[12px] text-muted flex-[3_1_320px] min-w-0">Description
+            <input type="text" id="persona-{{ m.key }}-description" name="description" maxlength="{{ description_max }}" value="{{ m.description }}" placeholder="{{ m.inherits_description or 'One sentence on who this role is' }}"
+                   class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink placeholder:text-faint" data-testid="persona-description">
+          </label>
+        </div>
+        <label class="flex flex-col gap-1 text-[12px] text-muted">Instructions
+          <textarea id="persona-{{ m.key }}-instructions" name="instructions" rows="3" maxlength="{{ instructions_max }}"
+                    placeholder="{% if m.inherits_instructions %}Inherits the instructions written for every project{% else %}What this role must always do or never do here{% endif %}"
+                    class="px-2 py-1.5 border border-line-strong rounded-md bg-surface text-[13px] text-ink placeholder:text-faint leading-[1.5]" data-testid="persona-instructions">{{ m.instructions }}</textarea>
+        </label>
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          {% if team_scope %}
+          <div class="flex flex-wrap gap-3">
+            <label class="flex flex-col gap-1 text-[12px] text-muted">Model on this project
+              <select id="persona-{{ m.key }}-model" name="model" class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink" data-testid="persona-model">
+                <option value="" {% if not m.model %}selected{% endif %}>As above</option>
+                {% for key, label in models %}<option value="{{ key }}" {% if m.model == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+            </label>
+            <label class="flex flex-col gap-1 text-[12px] text-muted">Effort
+              <select id="persona-{{ m.key }}-effort" name="effort" class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink" data-testid="persona-effort">
+                <option value="" {% if not m.effort %}selected{% endif %}>Claude Code's default</option>
+                {% for key, label in efforts %}<option value="{{ key }}" {% if m.effort == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+            </label>
+          </div>
+          {% else %}<span></span>{% endif %}
+          {{ ui.btn('Save ' ~ m.role, type='submit', testid='persona-save') }}
+        </div>
+      </form>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </section>
 </div>
 {% endblock %}
