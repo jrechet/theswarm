@@ -162,3 +162,39 @@ class TestSubscribeUnsubscribe:
 
         # Queue still has 50 items (the new one was dropped)
         assert queue.qsize() == 50
+
+
+class TestTwoCyclesAtOnce:
+    """Defect 12: the live state was one for the process. Two cycles side by
+    side overwrote each other's phase and cost, the second to start wiped the
+    first's events, and the first to end said nothing was running."""
+
+    def test_each_cycle_keeps_its_own_phase_cost_and_events(self):
+        state = DashboardState()
+        a = state.for_cycle("aaa", "o/app")
+        a.current_phase = "Dev: implementing"
+        a.push_event("Dev", "Edit src/a.py")
+        b = state.for_cycle("bbb", "o/other")
+        b.current_phase = "QA: running tests"
+        b.cost_so_far = 1.5
+        b.push_event("QA", "pytest")
+
+        live = state.to_json()
+        assert live["cycle_running"] is True
+        assert {c["cycle_id"]: c["current_phase"] for c in live["cycles"]} == {
+            "aaa": "Dev: implementing", "bbb": "QA: running tests"}
+        assert [e["cycle_id"] for e in live["recent_events"]] == ["aaa", "bbb"]  # the second wiped nothing
+        assert live["current_repo"] == "o/other" and live["cost_so_far"] == 1.5  # the last to start
+
+    def test_the_first_to_end_does_not_say_nothing_runs(self):
+        state = DashboardState()
+        a = state.for_cycle("aaa", "o/app")
+        b = state.for_cycle("bbb", "o/other")
+        b.current_phase = "QA"
+        a.end_cycle()
+
+        live = state.to_json()
+        assert live["cycle_running"] is True and [c["cycle_id"] for c in live["cycles"]] == ["bbb"]
+        assert live["current_phase"] == "QA"
+        b.end_cycle()
+        assert state.to_json()["cycle_running"] is False and state.to_json()["cycles"] == []

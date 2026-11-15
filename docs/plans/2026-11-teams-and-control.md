@@ -71,9 +71,9 @@ seul ne l'aurait signalé.
 | 18 ✔ | Un découpage vide est pris pour « rien à faire » : le cycle finit « completed » sans rien construire | concert-tour-app#897 « Change a venue » (2026-11-15) : `Breakdown.tasks` acceptait `[]` |
 | 19 ✔ | Deux cycles fusionnent à la même seconde : GitHub refuse la seconde fusion (« Base branch was modified », 405), la PR reste ouverte, la sous-tâche qui en dépend n'est jamais construite ; la PR Renovate fusionnée par les deux est comptée par les deux | concert-tour-app#917/#927 et #925 (2026-11-15, troisième lot) |
 | 9 ✔ | Deux Dev en parallèle partagent une seule station « Dev » : on ne sait pas qui fait quelle tâche | un seul `current_role`, pas d'identifiant de tâche sur les événements |
-| 10 | Les prompts du Dev et du relecteur n'ont pas le paragraphe anti-injection | `DEV_SYSTEM`, `REVIEW_SYSTEM` : constantes mortes |
+| 10 ✔ | Les prompts du Dev et du relecteur n'ont pas le paragraphe anti-injection | `DEV_SYSTEM`, `REVIEW_SYSTEM` : constantes mortes |
 | 11 ✔ | Le manifeste d'évaluation est épuisé : le harness ne mesure plus rien de neuf | 45 features, toutes livrées |
-| 12 | `/api/live/state` est un singleton : deux cycles s'y écrasent | `dashboard.py:18-93` |
+| 12 ✔ | `/api/live/state` est un singleton : deux cycles s'y écrasent | `dashboard.py:18-93` |
 | 14 ✔ | Le découpage peut créer une sous-tâche `role:qa` que seul un Dev (`role:dev`) saurait prendre : elle reste ouverte, la story aussi | swarm-todo-app#28 |
 | 15 ✔ | La fusion en squash d'une sous-tâche ferme la story : le commit du Dev disait `Closes #31` (la story, recopié des critères du découpage), et l'endpoint (#34) n'a jamais été construit | swarm-todo-app#31, course hebdomadaire du 2026-11-14 |
 | 13 | 69 des 120 services construits au démarrage ne sont lus nulle part (restes de la V1) | `app.py` |
@@ -141,15 +141,17 @@ l'historique des phases vit en mémoire et se perd à un redéploiement).
    prochain appel d'outil par le hook `PreToolUse` qui existe déjà
    (`additionalContext`) — aucun changement de transport — et en tête du
    prompt au nœud suivant.
-2. *Pause et reprise* **(code écrit le 2026-11-15, à voir en prod)** aux frontières de nœud : `paused` est une annulation
+2. *Pause et reprise* **(livrée le 2026-11-15, vue en prod)** aux frontières de nœud : `paused` est une annulation
    demandée qui garde l'espace de travail et libère la place ; la reprise est
    le chemin du redémarrage (`resume_cycle_id`), qui répare aussi le défaut 5.
-3. *« Arrête, fais plutôt ceci »* **(code écrit le 2026-11-15, vérifié sur un appel réel ; par coupure du flux et reprise de session, le chemin du timeout, plutôt que `ClaudeSDKClient`)** : passer de `query()` à `ClaudeSDKClient`
+3. *« Arrête, fais plutôt ceci »* **(livrée le 2026-11-15, vue en prod ; par coupure du flux et reprise de session, le chemin du timeout, plutôt que `ClaudeSDKClient`)** : passer de `query()` à `ClaudeSDKClient`
    (`interrupt()` puis `query()` dans la même session). Le message est aussi
    posé sur l'issue derrière `CHANGES_MARKER` pour que le relecteur le lise.
 Les horloges (appel, phase, cycle) ne comptent pas le temps de pause.
 
-**A4 — ménage (2 jours).** Retirer les 69 services morts et leurs tables,
+**A3 vu en prod le 2026-11-15** (swarm-todo-app#71, cycles 4cda4d36a74f puis 4fc2ff909b78) : un message lu par le Dev 2 s après l'envoi, à son appel d'outil suivant ; « Stop and say » a coupé l'appel 1 s après et le Dev a repris avec le message ; la pause a été prise à la fin de l'itération (PR ouverte, arrêt avant la revue, 0,61 $) ; Resume a terminé la feature (deux PR fusionnées, story fermée, 2,13 $). Le code livré suit les deux messages (`total` au lieu de `count`, et le champ `done`).
+
+**A4 — ménage (2 jours).** Défauts 10 et 12 corrigés le 2026-11-15 ; restent les services morts et les vocabulaires de rôles. Retirer les 69 services morts et leurs tables,
 unifier les quatre vocabulaires de rôles en un seul, défaut 10, défaut 12.
 C'est le préalable de la phase B : on ne rend pas configurable ce qui existe
 en quatre exemplaires.
