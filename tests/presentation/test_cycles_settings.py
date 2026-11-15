@@ -61,13 +61,21 @@ async def test_a_number_out_of_bounds_is_refused_and_nothing_changes(web):
     client, _ = web
     r = await client.post("/settings/cycles", data={"in-all": "40", "repo:jrechet/concert-tour-app": "2"})
     assert r.status_code == 400 and 'data-testid="cycles-error"' in r.text
-    assert max_concurrent_cycles() == 2 and repo_max_cycles("jrechet/concert-tour-app") == 1
+    assert max_concurrent_cycles() == 2 and repo_max_cycles("jrechet/concert-tour-app") == 2  # its default
 
 
 async def test_the_instances_default_leaves_no_row(web):
     client, app = web
-    await client.post("/settings/cycles", data={"in-all": "2", "repo:jrechet/concert-tour-app": "1"})
+    await client.post("/settings/cycles", data={"in-all": "2", "repo:jrechet/concert-tour-app": "2"})
     assert await app.state.cycle_limits._repo.all() == {}
+
+
+async def test_one_at_a_time_is_now_a_choice_and_is_kept(web):
+    """Two is the default since 2026-11-15: an owner's 1 is written down."""
+    client, app = web
+    await client.post("/settings/cycles", data={"in-all": "2", "repo:jrechet/concert-tour-app": "1"})
+    assert await app.state.cycle_limits._repo.all() == {"jrechet/concert-tour-app": 1}
+    assert repo_max_cycles("jrechet/concert-tour-app") == 1
 
 
 async def test_a_member_is_refused(web, monkeypatch):

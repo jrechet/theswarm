@@ -77,14 +77,30 @@ async def test_two_features_on_one_project_run_side_by_side_when_the_owner_allow
         await _finish(h, [ta, tb])
 
 
-async def test_by_default_a_project_runs_one_at_a_time():
-    set_cycle_limits(_Limits(in_all=2))
+async def test_by_default_a_project_runs_two_at_a_time():
+    """Owner, 2026-11-15, after A1 bis was proven: two by default."""
+    set_cycle_limits(_Limits(in_all=3))
     h = _Harness()
     with patch.object(api_mod, "_run_api_cycle", h.body):
         a, ta = h.start("o/app", 265)
         b, tb = h.start("o/app", 218)
+        c, tc = h.start("o/app", 300)
         await _settle()
-        assert h.entered() == [a]
+        assert h.entered() == [a, b]
+        await _finish(h, [ta, tb, tc])
+
+
+async def test_the_swarm_s_own_repository_still_runs_one_at_a_time():
+    """A cycle's end-of-cycle merge there redeploys the service under the other."""
+    from theswarm.config import SELF_REPO
+
+    set_cycle_limits(_Limits(in_all=2))
+    h = _Harness()
+    with patch.object(api_mod, "_run_api_cycle", h.body):
+        a, ta = h.start(SELF_REPO, 265)
+        b, tb = h.start(SELF_REPO, 218)
+        await _settle()
+        assert h.entered() == [a] and gate_mod.default_repo_max(SELF_REPO) == 1
         await _finish(h, [ta, tb])
 
 
@@ -136,7 +152,7 @@ async def test_the_number_in_all_bounds_every_project():
 
 
 async def test_raising_a_number_lets_the_waiting_in_at_once():
-    set_cycle_limits(_Limits(in_all=2))
+    set_cycle_limits(_Limits(in_all=2, o__app=1))
     h = _Harness()
     with patch.object(api_mod, "_run_api_cycle", h.body):
         a, ta = h.start("o/app", 265)
@@ -150,9 +166,9 @@ async def test_raising_a_number_lets_the_waiting_in_at_once():
 
 
 def test_a_project_running_several_gives_each_cycle_a_clone_of_its_own():
-    set_cycle_limits(_Limits(o__app=2))
+    set_cycle_limits(_Limits(o__other=1))
     assert cycle_workspace("/w/alpha/app", "o/app", "abc123abc123") == "/w/alpha/app@abc123abc123"
-    assert cycle_workspace("/w/alpha/other", "o/other", "abc123abc123") == "/w/alpha/other"
+    assert cycle_workspace("/w/alpha/other", "o/other", "abc123abc123") == "/w/alpha/other"  # one at a time: its directory
 
 
 def test_what_a_clone_learns_is_its_repositorys():
@@ -163,4 +179,4 @@ def test_what_a_clone_learns_is_its_repositorys():
 
 def test_without_the_owners_numbers_the_environment_decides(monkeypatch):
     monkeypatch.setenv("SWARM_MAX_CONCURRENT_CYCLES", "2")
-    assert gate_mod.max_concurrent_cycles() == 2 and gate_mod.repo_max_cycles("o/app") == 1
+    assert gate_mod.max_concurrent_cycles() == 2 and gate_mod.repo_max_cycles("o/app") == 2

@@ -21,7 +21,7 @@
 
   {% if saved %}<p class="m-0 text-[13px] text-ok border border-ok/40 bg-ok-wash rounded-[10px] px-4 py-3" data-testid="cycles-saved" role="status">Saved.</p>{% endif %}
   {% if error %}<p class="m-0 text-[13px] text-bad border border-bad/40 bg-bad-wash rounded-[10px] px-4 py-3" data-testid="cycles-error" role="alert">{{ error }}</p>{% endif %}
-  {% if not available %}<p class="m-0 text-[13px] text-muted border border-dashed border-line-strong rounded-[10px] px-4 py-3">Cycle limits need the database: {{ in_all }} at once, one per project.</p>{% endif %}
+  {% if not available %}<p class="m-0 text-[13px] text-muted border border-dashed border-line-strong rounded-[10px] px-4 py-3">Cycle limits need the database: {{ in_all }} at once, two per project.</p>{% endif %}
 
   <form method="post" action="{{ base }}/settings/cycles" class="flex flex-col gap-3" data-testid="cycles-form">
     <div class="bg-surface border border-line rounded-[10px] overflow-hidden">
@@ -54,7 +54,7 @@
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 border-t border-line" data-testid="cycles-project" data-repo="{{ r.repo }}">
         <div class="flex flex-col gap-0.5 flex-[1_1_300px] min-w-0">
           <span class="font-medium text-[14px] font-mono">{{ r.repo }}</span>
-          <span class="text-[12px] text-faint">{{ r.running }} running now</span>
+          <span class="text-[12px] text-faint">{{ r.running }} running now · {{ r.default }} by default{% if r.default == 1 %} (a merge on the swarm's own repository redeploys it){% endif %}</span>
         </div>
         <label class="flex flex-col gap-1 text-[12px] text-muted">At once on this project
           <input type="number" name="repo:{{ r.repo }}" min="1" max="{{ max_per_repo }}" value="{{ r.max }}" required
