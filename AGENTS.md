@@ -569,7 +569,9 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   C2), and **a cycle without a feature
   runs alone** on its repository (it picks from the whole backlog); a cycle
   never passes an older one its repository holds back.
-  **Two features on one project (A1 bis, 2026-11-15)** — what else two
+  **Two features on one project (A1 bis, 2026-11-15; proven the same day by
+  three green batches at two cycles side by side on concert-tour-app, the
+  plan's table)** — what else two
   cycles on one repository shared, found by reading the code after the
   first parallel batch (#841's cycle merged a PR of #840's): a pinned
   cycle's review and merge keep to **its feature's PRs** and to PRs that
