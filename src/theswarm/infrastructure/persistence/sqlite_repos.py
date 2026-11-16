@@ -448,7 +448,7 @@ class SQLiteCycleRepository:
         await self._db.commit()
 
     async def reap_orphans(
-        self, *, max_age_seconds: int = 7200, reason: str = ORPHAN_REASON,
+        self, *, max_age_seconds: int = 7200, reason: str = ORPHAN_REASON, alive: frozenset[str] | set[str] = frozenset(),
     ) -> int:
         """Mark stale 'running' cycles as 'failed'.
 
@@ -469,7 +469,12 @@ class SQLiteCycleRepository:
             "SELECT id, phases_json FROM cycles WHERE status = 'running' AND started_at < ?",
             (cutoff,),
         )
-        rows = await cursor.fetchall()
+        # A row a task still stands behind is not an orphan, however old: a
+        # cycle waits a closed Claude window out for hours (A1), and that wait
+        # is not counted against its hard timeout. Cycle 3ad75f7c8a28
+        # (2026-11-15) was marked failed at its fourth hour while it waited,
+        # then finished — "completed", with this reason left on its row.
+        rows = [row for row in await cursor.fetchall() if row[0] not in alive]
         if not rows:
             return 0
 

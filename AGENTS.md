@@ -619,6 +619,16 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   continuation clones again as it does after a deploy. A pause is not taken
   inside a phase — stopping a call is A3.3 — nor while the cycle waits for
   Claude's window.
+- **The periodic reaper spares a cycle a task still runs** (2026-11-16).
+  `run_orphan_reap_loop` marked failed every `running` row older than the
+  hard timeout plus 30 min — age alone. Since A1 a cycle waits a closed
+  Claude window out for hours, uncounted against that timeout: cycle
+  3ad75f7c8a28 was marked "Orphaned by container restart" at its fourth
+  hour, under its own task, then finished — `completed`, with the orphan's
+  reason left on its row, and its harness run had read `failed` meanwhile.
+  The loop now hands the reaper the cycles the tracker still runs or queues
+  (`orphan_reaper.live_cycle_ids` → `reap_orphans(alive=…)`); the boot's
+  reap (age 0, no task survives a restart) is unchanged.
 - **A silence is said, and a silent call is cut** (A1, 2026-11-14). The
   watchdog's first warning for an agent of a phase (`cycle.stall_reporter`,
   `STALL_ROLES`) is an `AgentStalled` on the bus (`api._stall_publisher`),
