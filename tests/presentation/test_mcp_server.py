@@ -146,6 +146,17 @@ async def test_a_cycle_is_read_with_what_its_agents_said(web):
         progress_bridge._PHASE_HISTORY.pop(record.id, None)
 
 
+async def test_the_theater_link_is_the_host_and_the_base_path(web, monkeypatch):
+    """EXTERNAL_URL is the host; the first link handed out on prod lacked `/swarm` and answered 404."""
+    from theswarm.presentation.web.mcp.tools import _base_url
+
+    _, app = web
+    monkeypatch.setenv("EXTERNAL_URL", "https://bots.jrec.fr/")
+    assert _base_url(app.state) == "https://bots.jrec.fr/swarm"
+    monkeypatch.delenv("EXTERNAL_URL")
+    assert _base_url(app.state) == "/swarm"
+
+
 # ── Piloting ───────────────────────────────────────────────────────────
 
 

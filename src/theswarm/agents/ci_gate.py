@@ -38,6 +38,10 @@ CI_RED_SUMMARY = (
 )
 
 _OWN_CONTEXTS = frozenset({"theswarm/review"})
+# Every status the swarm writes on a head is its own word, never CI: the
+# review's, and each free persona's (`theswarm/extra-<key>`, B3) — a persona's
+# "failure" read as red CI would send the PR back a second time, as a bug.
+_OWN_PREFIX = "theswarm/"
 _RED = frozenset({"failure", "error", "timed_out", "action_required", "startup_failure"})
 _PENDING = frozenset({"pending", "queued", "in_progress", "waiting", "requested", "expected"})
 _NO_SIGNAL = frozenset({"cancelled", "skipped", "neutral", "stale"})
@@ -62,7 +66,8 @@ def ci_verdict(checks: list[dict]) -> CiVerdict:
     """What CI says about one commit, from its flattened statuses and check runs."""
     signals = [
         c for c in checks
-        if c.get("name") not in _OWN_CONTEXTS and c.get("state") not in _NO_SIGNAL
+        if c.get("name") not in _OWN_CONTEXTS and not str(c.get("name") or "").startswith(_OWN_PREFIX)
+        and c.get("state") not in _NO_SIGNAL
     ]
     failing = tuple(c for c in signals if c.get("state") in _RED)
     if failing:

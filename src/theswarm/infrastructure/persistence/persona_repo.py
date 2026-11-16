@@ -7,6 +7,7 @@ from datetime import datetime
 import aiosqlite
 
 from theswarm.domain.agents.persona import Persona
+from theswarm.domain.teams.extras import Extra
 
 
 class SQLitePersonaRepository:
@@ -89,3 +90,40 @@ class SQLitePersonaRepository:
             (thread_id, project, label, team, at),
         )
         await self._db.commit()
+
+    # ── free personas (v045) ──
+    async def list_extras(self) -> list[Extra]:
+        cursor = await self._db.execute("SELECT * FROM team_extras ORDER BY scope, key")
+        out: list[Extra] = []
+        for row in await cursor.fetchall():
+            try:
+                out.append(Extra(
+                    scope=row["scope"], key=row["key"], name=row["name"], prompt=row["prompt"], point=row["point"],
+                    effect=row["effect"], model=row["model"], enabled=bool(row["enabled"]),
+                    updated_by=row["updated_by"], updated_at=datetime.fromisoformat(row["updated_at"]),
+                ))
+            except ValueError:  # a row another version wrote: ignored, not fatal
+                continue
+        return out
+
+    async def save_extra(self, extra: Extra) -> None:
+        await self._db.execute(
+            """INSERT INTO team_extras (scope, key, name, prompt, point, effect, model, enabled, updated_by, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(scope, key) DO UPDATE SET name = excluded.name, prompt = excluded.prompt,
+                 point = excluded.point, effect = excluded.effect, model = excluded.model, enabled = excluded.enabled,
+                 updated_by = excluded.updated_by, updated_at = excluded.updated_at""",
+            (extra.scope, extra.key, extra.name, extra.prompt, extra.point, extra.effect, extra.model,
+             1 if extra.enabled else 0, extra.updated_by, extra.updated_at.isoformat()),
+        )
+        await self._db.commit()
+
+    async def delete_extra(self, scope: str, key: str) -> None:
+        await self._db.execute("DELETE FROM team_extras WHERE scope = ? AND key = ?", (scope, key))
+        await self._db.commit()
+
+    async def replace_extras(self, scope: str, extras: list[Extra]) -> None:
+        await self._db.execute("DELETE FROM team_extras WHERE scope = ?", (scope,))
+        await self._db.commit()
+        for extra in extras:
+            await self.save_extra(extra)

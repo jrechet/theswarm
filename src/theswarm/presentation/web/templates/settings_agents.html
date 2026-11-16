@@ -156,6 +156,92 @@
       {% endfor %}
     </div>
     {% endif %}
+
+    {# ── Phase B, B3: free personas at the flow's insertion points ──── #}
+    {% if team_available %}
+    <div id="extras" class="flex flex-col gap-3 pt-3" data-testid="extras">
+      <div class="flex flex-col gap-0.5">
+        <h3 class="m-0 text-[14px] font-semibold">Extra personas</h3>
+        <span class="text-[13px] text-muted max-w-[72ch]">Add your own to the flow, at one of its two insertion points. Before the merge, a persona reads each pull request the Tech Lead approved and either comments or sends it back to the Dev. After QA, it writes a note on the feature's issue. It reads the repository and never writes to it; if its call fails, the cycle goes on without it. {{ extras_max }} at most.</span>
+      </div>
+      {% if team_saved == 'extra' %}<p class="m-0 text-[13px] text-ok border border-ok/40 bg-ok-wash rounded-[10px] px-4 py-3" role="status" data-testid="extra-saved">Saved. The next cycle{% if team_scope %} on {{ team_scope }}{% endif %} runs with it.</p>{% endif %}
+      {% if extras_inherited %}<p class="m-0 text-[12px] text-faint" data-testid="extras-inherited">From every project: {% for e in extras_inherited %}{{ e.name }} ({{ e.point | lower }}{% if not e.enabled %}, off{% endif %}){% if not loop.last %}; {% endif %}{% endfor %}. A persona of the same name here replaces it.</p>{% endif %}
+      {% for e in extras %}{% set id = e.key %}
+      <form method="post" action="{{ base }}/settings/agents/extra" class="flex flex-col gap-3 px-4 py-3.5 bg-surface border border-line rounded-[10px]" data-testid="extra" data-key="{{ e.key }}">
+        <input type="hidden" name="team" value="{{ team_scope }}">
+        <input type="hidden" name="key" value="{{ e.key }}">
+          <div class="flex flex-wrap gap-3">
+            <label class="flex flex-col gap-1 text-[12px] text-muted flex-[1_1_180px] min-w-0">Name
+              <input type="text" id="extra-{{ id }}-name" name="name" maxlength="60" required value="{{ e.name }}" placeholder="Security reviewer"
+                     class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink placeholder:text-faint" data-testid="extra-name">
+            </label>
+            <label class="flex flex-col gap-1 text-[12px] text-muted min-w-0 max-w-full">Where
+              <select id="extra-{{ id }}-point" name="point" class="h-8 px-2 max-w-full border border-line-strong rounded-md bg-surface text-[13px] text-ink" data-testid="extra-point">
+                {% for key, label in extra_points %}<option value="{{ key }}" {% if e.point == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+            </label>
+            <label class="flex flex-col gap-1 text-[12px] text-muted min-w-0 max-w-full">Effect
+              <select id="extra-{{ id }}-effect" name="effect" class="h-8 px-2 max-w-full border border-line-strong rounded-md bg-surface text-[13px] text-ink" data-testid="extra-effect">
+                {% for key, label in extra_effects %}<option value="{{ key }}" {% if e.effect == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+            </label>
+            <label class="flex flex-col gap-1 text-[12px] text-muted">Model
+              <select id="extra-{{ id }}-model" name="model" class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink">
+                <option value="" {% if not e.model %}selected{% endif %}>As its role</option>
+                {% for key, label in models %}<option value="{{ key }}" {% if e.model == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+            </label>
+          </div>
+          <label class="flex flex-col gap-1 text-[12px] text-muted">What it looks for
+            <textarea id="extra-{{ id }}-prompt" name="prompt" rows="3" maxlength="{{ prompt_max }}" required
+                      placeholder="Refuse a secret, a token or a password written in the code or in a test."
+                      class="px-2 py-1.5 border border-line-strong rounded-md bg-surface text-[13px] text-ink placeholder:text-faint leading-[1.5]" data-testid="extra-prompt">{{ e.prompt }}</textarea>
+          </label>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <label class="inline-flex items-center gap-2 text-[13px] text-ink"><input type="checkbox" id="extra-{{ id }}-enabled" name="enabled" value="1" {% if e.enabled %}checked{% endif %}> In the flow</label>
+            <span class="flex gap-2">
+              <button type="submit" name="remove" value="1" formnovalidate class="h-8 px-3 border border-line-strong rounded-md bg-surface text-bad text-[13px] font-medium cursor-pointer hover:bg-bad-wash" data-testid="extra-remove">Remove</button>
+              {{ ui.btn('Save', type='submit', testid='extra-save') }}
+            </span>
+          </div>
+      </form>
+      {% endfor %}
+      {% if not extras_full %}{% set id = 'new' %}{% set e = {'name': '', 'prompt': '', 'point': 'before_merge', 'effect': 'comment', 'model': ''} %}
+      <form method="post" action="{{ base }}/settings/agents/extra" class="flex flex-col gap-3 px-4 py-3.5 border border-dashed border-line-strong rounded-[10px]" data-testid="extra-new">
+        <input type="hidden" name="team" value="{{ team_scope }}">
+        <span class="font-medium text-[13px]">Add a persona{% if team_scope %} to {{ team_scope }}{% else %} to every project{% endif %}</span>
+          <div class="flex flex-wrap gap-3">
+            <label class="flex flex-col gap-1 text-[12px] text-muted flex-[1_1_180px] min-w-0">Name
+              <input type="text" id="extra-{{ id }}-name" name="name" maxlength="60" required value="{{ e.name }}" placeholder="Security reviewer"
+                     class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink placeholder:text-faint" data-testid="extra-name">
+            </label>
+            <label class="flex flex-col gap-1 text-[12px] text-muted min-w-0 max-w-full">Where
+              <select id="extra-{{ id }}-point" name="point" class="h-8 px-2 max-w-full border border-line-strong rounded-md bg-surface text-[13px] text-ink" data-testid="extra-point">
+                {% for key, label in extra_points %}<option value="{{ key }}" {% if e.point == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+            </label>
+            <label class="flex flex-col gap-1 text-[12px] text-muted min-w-0 max-w-full">Effect
+              <select id="extra-{{ id }}-effect" name="effect" class="h-8 px-2 max-w-full border border-line-strong rounded-md bg-surface text-[13px] text-ink" data-testid="extra-effect">
+                {% for key, label in extra_effects %}<option value="{{ key }}" {% if e.effect == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+            </label>
+            <label class="flex flex-col gap-1 text-[12px] text-muted">Model
+              <select id="extra-{{ id }}-model" name="model" class="h-8 px-2 border border-line-strong rounded-md bg-surface text-[13px] text-ink">
+                <option value="" {% if not e.model %}selected{% endif %}>As its role</option>
+                {% for key, label in models %}<option value="{{ key }}" {% if e.model == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+              </select>
+            </label>
+          </div>
+          <label class="flex flex-col gap-1 text-[12px] text-muted">What it looks for
+            <textarea id="extra-{{ id }}-prompt" name="prompt" rows="3" maxlength="{{ prompt_max }}" required
+                      placeholder="Refuse a secret, a token or a password written in the code or in a test."
+                      class="px-2 py-1.5 border border-line-strong rounded-md bg-surface text-[13px] text-ink placeholder:text-faint leading-[1.5]" data-testid="extra-prompt">{{ e.prompt }}</textarea>
+          </label>
+          <div class="flex justify-end">{{ ui.btn('Add', type='submit', testid='extra-add') }}</div>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
   </section>
 </div>
 {% endblock %}

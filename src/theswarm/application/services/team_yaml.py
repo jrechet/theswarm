@@ -25,6 +25,7 @@ import yaml
 
 from theswarm.domain.agents.persona import INSTANCE, Persona, PersonaError
 from theswarm.domain.agents.roles import CYCLE_ROLE_KEYS
+from theswarm.domain.teams.extras import MAX_PER_TEAM, Extra, ExtraError
 
 FORMAT = 1
 INSTANCE_NAME = "instance"
@@ -48,8 +49,11 @@ def _str(dumper, value):
 _Block.add_representer(str, _str)
 
 
-def dump(scope: str, personas: list[Persona]) -> str:
-    """The scope's personas as a team file; stable, so two equal teams are equal text."""
+_EXTRA_FIELDS = ("name", "point", "effect", "prompt", "model", "enabled")
+
+
+def dump(scope: str, personas: list[Persona], extras: list[Extra] | tuple = ()) -> str:
+    """The scope's personas (and free personas) as a team file; stable, so two equal teams are equal text."""
     body: dict = {"format": FORMAT, "team": scope or INSTANCE_NAME, "template": TEMPLATE, "personas": {}}
     by_key = {p.key: p for p in personas if p.scope == scope}
     for key in CYCLE_ROLE_KEYS:
@@ -57,12 +61,50 @@ def dump(scope: str, personas: list[Persona]) -> str:
         if persona is None or persona.empty:
             continue
         body["personas"][key] = {f: getattr(persona, f) for f in _FIELDS if getattr(persona, f)}
+    mine = sorted((e for e in extras if e.scope == scope), key=lambda e: e.key)
+    if mine:  # absent when there is none: a team file written before them reads the same
+        body["extras"] = {
+            e.key: {"name": e.name, "point": e.point, "effect": e.effect, "prompt": e.prompt,
+                    **({"model": e.model} if e.model else {}), **({} if e.enabled else {"enabled": False})}
+            for e in mine
+        }
     return yaml.dump(body, Dumper=_Block, sort_keys=False, allow_unicode=True, width=100)
 
 
 def load(text: str, scope: str, *, by: str = "owner") -> list[Persona]:
-    """The personas a team file gives `scope`, every one validated; raises
-    `TeamYamlError` naming what is wrong."""
+    """The personas a team file gives `scope` (see `load_team`)."""
+    return load_team(text, scope, by=by)[0]
+
+
+def _extras(raw, scope: str, by: str) -> list[Extra]:
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        raise TeamYamlError("`extras` is a mapping of a persona's key to its fields.")
+    if len(raw) > MAX_PER_TEAM:
+        raise TeamYamlError(f"{MAX_PER_TEAM} free personas at most in a team, not {len(raw)}.")
+    out: list[Extra] = []
+    for key, fields in raw.items():
+        if not isinstance(fields, dict):
+            raise TeamYamlError(f"extras.{key}: a mapping of {', '.join(_EXTRA_FIELDS)}.")
+        unknown = sorted(set(fields) - set(_EXTRA_FIELDS))
+        if unknown:
+            raise TeamYamlError(f"extras.{key}: {', '.join(unknown)} is not a field ({', '.join(_EXTRA_FIELDS)}).")
+        try:
+            out.append(Extra(
+                scope=scope or INSTANCE, key=str(key), name=str(fields.get("name") or key).strip(),
+                prompt=str(fields.get("prompt") or "").strip(), point=str(fields.get("point") or ""),
+                effect=str(fields.get("effect") or "comment"), model=str(fields.get("model") or ""),
+                enabled=fields.get("enabled", True) is not False, updated_by=by,
+            ))
+        except ExtraError as exc:
+            raise TeamYamlError(f"extras.{key}: {exc}") from exc
+    return out
+
+
+def load_team(text: str, scope: str, *, by: str = "owner") -> tuple[list[Persona], list[Extra]]:
+    """(the personas, the free personas) a team file gives `scope`, every
+    one validated; raises `TeamYamlError` naming what is wrong."""
     if len(text or "") > MAX_YAML_CHARS:
         raise TeamYamlError(f"A team file of {MAX_YAML_CHARS} characters at most.")
     try:
@@ -101,4 +143,4 @@ def load(text: str, scope: str, *, by: str = "owner") -> list[Persona]:
             raise TeamYamlError(str(exc)) from exc
         if not persona.empty:
             out.append(persona)
-    return out
+    return out, _extras(raw.get("extras"), scope, by)

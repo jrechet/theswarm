@@ -516,6 +516,29 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   the MCP's `start_feature(flow=…)`). Each template names its insertion
   points (`before_dev`, `before_merge`, `after_qa`) — where free personas
   go in the second half.
+- **Free personas at the flow's insertion points** (phase B, B3 — second
+  half, 2026-11-16; `domain/teams/extras.py`, `agents/extras.py`,
+  `team_extras` v045). What the owner adds to a flow is never an edge of
+  the graph: a prompt, one of two **points**, one **effect**.
+  `before_merge` — in the merge pass, on each PR the TechLead approved
+  (`run_before_merge`; on SELF_REPO, on what would be held): the persona
+  reads the diff and the clone once per head and answers a validated
+  `ExtraVerdict`; `comment` posts its findings on the PR, `block` sends the
+  PR back to the Dev as a review's changes would (`_send_back_to_dev`), and
+  it does not merge. Its word is a commit status `theswarm/extra-<key>` on
+  the head — read back so it is not asked twice, and **never read as CI**
+  (`ci_gate` ignores every `theswarm/` context: a persona's failure read as
+  red CI would send the PR back a second time, as a bug). `after_qa` — the
+  node `extras_after_qa`, between QA and the report: one note on the
+  feature's issue, marked `<!-- swarm:extra <key> <cycle> -->` so a re-run
+  after a restart does not write it twice. **A free persona reads, it never
+  writes; a call that fails is a persona that did not speak** — it never
+  blocks a merge and never fails a cycle (a Claude window still does). The
+  instance's personas apply to every project; a project's of the same key
+  replaces it; `enabled: false` keeps one out of the flow; six at most.
+  They are in the team file (`extras:`), in the team a cycle pins, in
+  Settings → Agents ("Extra personas") and in the MCP's `get_team`.
+  `before_dev` is not offered yet: nothing reads a note there.
 - **The swarm is an MCP server** (phase B, B5 — read and pilot, 2026-11-15).
   `POST /mcp` (`routes/mcp_routes.py`, `presentation/web/mcp/`): MCP over
   Streamable HTTP, behind the wall — the access key as `Authorization:

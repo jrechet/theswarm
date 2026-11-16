@@ -49,13 +49,13 @@ TEMPLATES: tuple[FlowTemplate, ...] = (
     FlowTemplate(
         FEATURE, "Feature", "Break it into tasks, build each, review, film the result, report.",
         ("prepare", "po_morning", "techlead_breakdown", "dev_iter", "techlead_review", "dev_loop_end", "qa",
-         "po_evening", "merge_held", "finish", "cycle_log"),
-        ("before_dev", "before_merge", "after_qa"),
+         "extras_after_qa", "po_evening", "merge_held", "finish", "cycle_log"),
+        ("before_merge", "after_qa"),
     ),
     FlowTemplate(
         FIX, "Fix", "One task, no breakdown: build it, review it, check what was merged.",
-        ("prepare", "fix_intake", "dev_iter", "techlead_review", "dev_loop_end", "qa", "merge_held", "finish",
-         "cycle_log"),
+        ("prepare", "fix_intake", "dev_iter", "techlead_review", "dev_loop_end", "qa", "extras_after_qa", "merge_held",
+         "finish", "cycle_log"),
         ("before_merge", "after_qa"),
     ),
     FlowTemplate(
