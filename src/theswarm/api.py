@@ -746,6 +746,9 @@ async def _run_api_cycle(
                     models, words, team_label = await pinned(resume_cycle_id or cycle_id, repo)
                     if team_label:
                         log.info("Cycle %s runs with the team %s", cycle_id, team_label)
+                    extras_of = getattr(_PERSONAS, "extras_of_thread", None)
+                    if extras_of is not None:  # B3: the free personas of this thread's team
+                        cycle_config.extras = extras_of(resume_cycle_id or cycle_id)
                 else:
                     models, words = await _PERSONAS.for_cycle(repo)
                 cycle_config.agent_settings = models or cycle_config.agent_settings

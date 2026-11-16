@@ -627,6 +627,8 @@ async def techlead_review(state: CycleState, runtime: Runtime[CycleRuntime]) -> 
     for number in tl_state.get("updating_prs", []):
         await rt.progress("TechLead", f"PR #{number}: approved, main moved on — main merged in, "
                                       "merged once CI passes")
+    for number in tl_state.get("extra_blocked_prs", []):
+        await rt.progress("TechLead", f"PR #{number}: approved, sent back by a persona of the team — back to the Dev")
     for number in tl_state.get("foreign_prs", []):
         await rt.progress("TechLead", f"PR #{number}: approved, not the swarm's — left for its author")
     skipped = list(tl_state.get("skipped_prs", []))
@@ -801,6 +803,33 @@ async def qa(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     }
 
 
+async def extras_after_qa(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
+    """B3: the team's free personas placed after QA each write their note on
+    the feature's issue. A node of its own, safe to repeat: a note carries a
+    marker of its persona and its cycle, and is not written twice. Without
+    such a persona — every cycle before B3 — it does nothing."""
+    rt = runtime.context
+    placed = [e for e in (rt.base_state.get("extras") or []) if isinstance(e, dict) and e.get("point") == "after_qa"]
+    github, issue = rt.base_state.get("github"), state.get("target_issue")
+    if not placed or github is None or not issue:
+        return {}
+    from theswarm.agents import extras as extras_mod
+
+    qa_claude = _claude_for(rt, "qa")  # the notes are written on QA's Claude
+    try:
+        out = await asyncio.wait_for(extras_mod.run_after_qa(
+            {**rt.base_state, "claude": qa_claude}, github, issue=issue,
+            cycle_id=state.get("cycle_id", ""), delivered=await _delivered_prs(rt, state),
+            demo_report=state.get("demo_report"),
+        ), timeout=len(placed) * extras_mod.EXTRA_TIMEOUT_SECONDS + 60)
+    except asyncio.TimeoutError:
+        await rt.progress("QA", "The team's notes after QA took too long — the cycle goes on without them")
+        return {}
+    for name in out["spoke"]:
+        await rt.progress("QA", f"{name} wrote its note on #{issue}")
+    return _accounted(state, "extras_after_qa", out["tokens"], out["cost_usd"]) if out["cost_usd"] else {}
+
+
 def _stories_of(state: CycleState, titles: dict[int, str] | None = None) -> list[dict]:
     """What the cycle delivered, one entry per task: its PR (merged or still
     open), then the tasks the Dev found already on main.
@@ -960,6 +989,7 @@ def build_cycle_graph(checkpointer=None):
         ("techlead_review", techlead_review),
         ("dev_loop_end", dev_loop_end),
         ("qa", qa),
+        ("extras_after_qa", extras_after_qa),
         ("po_evening", po_evening),
         ("merge_held", merge_held),
         ("finish", finish),
@@ -985,7 +1015,8 @@ def build_cycle_graph(checkpointer=None):
         "dev_loop_end": "dev_loop_end",
     })
     graph.add_conditional_edges("dev_loop_end", _after_dev_loop_end, {"qa": "qa", "merge_held": "merge_held"})
-    graph.add_conditional_edges("qa", _after_qa, {"po_evening": "po_evening", "merge_held": "merge_held"})
+    graph.add_edge("qa", "extras_after_qa")  # B3: the team's free personas placed after QA
+    graph.add_conditional_edges("extras_after_qa", _after_qa, {"po_evening": "po_evening", "merge_held": "merge_held"})
     graph.add_edge("po_evening", "merge_held")
     graph.add_edge("merge_held", "finish")
     graph.add_edge("finish", "cycle_log")

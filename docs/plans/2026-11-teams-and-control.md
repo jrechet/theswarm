@@ -238,7 +238,7 @@ un YAML n'exprime pas ce protocole.
   Le théâtre dessine les stations depuis l'équipe (le gabarit HTML itère déjà).
 - **B2 — l'équipe par projet et son YAML (3 jours). Livré le 2026-11-15** : export et import YAML validés en entier, versions numérotées par portée, équipe épinglée par fil de cycle (une reprise rejoue la sienne). Équipe par défaut de
   l'instance, équipe d'un projet, export, import, versions, épinglage par cycle.
-- **B3 — gabarits et points d'insertion (6 jours). Première moitié écrite le 2026-11-15** : trois gabarits (Feature, Correctif, Revue seule) comme chemins du même graphe durable, le flux porté par un label de l'issue (`flow:fix`, `flow:review`), choix au Play (composer, page feature, MCP). Reste : les personas libres aux points d'insertion. Fabrique de nœuds, nœud
+- **B3 — gabarits et points d'insertion (6 jours). Première moitié écrite le 2026-11-15** : trois gabarits (Feature, Correctif, Revue seule) comme chemins du même graphe durable, le flux porté par un label de l'issue (`flow:fix`, `flow:review`), choix au Play (composer, page feature, MCP). **Seconde moitié écrite le 2026-11-16** : personas libres à deux points d'insertion (avant la fusion : commenter ou bloquer ; après QA : une note sur l'issue), en lecture seule, dans le fichier d'équipe et l'éditeur. Vu en prod : le flux Correctif lancé par le MCP (concert-tour-app#975). Fabrique de nœuds, nœud
   générique « persona libre », les trois gabarits, le choix du gabarit au
   Play (feature ou correctif).
 - **B4 — l'éditeur graphique (5 jours).** Le flux dessiné, glisser-déposer des

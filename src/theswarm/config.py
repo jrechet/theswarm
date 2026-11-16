@@ -38,6 +38,8 @@ class AgentState(TypedDict, total=False):
     codenames: dict[str, str]
     # The team's words for this cycle (phase B, B1): {role: {name, description, instructions}}
     personas: dict
+    # Free personas of the cycle's team (B3): [{key, name, prompt, point, effect, model}]
+    extras: list
     phase: str
     # Ports / clients
     github: Any        # GitHubClient
@@ -86,6 +88,7 @@ class AgentState(TypedDict, total=False):
     ci_red_prs: list[int]  # approved, CI red: not merged, sent back to the Dev
     ci_pending_prs: list[int]  # approved, CI still running past the wait: left open
     updating_prs: list[int]  # approved earlier, main merged in: merges once CI passes
+    extra_blocked_prs: list[int]  # approved, sent back by a free persona of the team (B3)
     closed_stories: list[int]  # stories whose last sub-task merged this pass: closed
     reviewed_prs: list[str]  # "number@head_sha" reviewed this cycle — once, unless the head moves
     skipped_prs: list[int]  # review call failed — left for the next pass, not marked reviewed
@@ -140,6 +143,8 @@ class CycleConfig:
     # Phase B, B1: what the owner says each role is on this project —
     # {role: {"name", "description", "instructions"}}, read when the cycle starts.
     personas: dict = field(default_factory=dict)
+    # Phase B, B3: the free personas the team adds at the flow's insertion points.
+    extras: list = field(default_factory=list)
     workspace_dir: str = ""  # auto-set if empty
 
     # Model routing: task category → model short name

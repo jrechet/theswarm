@@ -971,7 +971,17 @@ async def merge_approved_prs(state: AgentState, *, ci_wait_seconds: float | None
     # main redeploys this service, and the redeploy ends the cycle that just
     # merged — halfway through its own review phase, before QA ever runs.
     if state.get("github_repo") == SELF_REPO:
-        held = own
+        held, sent_back = own, []
+        if held and state.get("extras"):
+            # B3: the team's free personas read what would be held for the
+            # end of the cycle; one that blocks sends it back now.
+            from theswarm.agents import extras as extras_mod
+
+            by_number = {p["number"]: p for p in await github.get_open_prs()}
+            for number in list(held):
+                if number in by_number and (await extras_mod.run_before_merge(state, github, by_number[number]))["blocked_by"]:
+                    sent_back.append(number)
+            held = [n for n in held if n not in sent_back]
         if held:
             log.info("Holding approved PRs %s on %s: merging would redeploy "
                      "this service mid-cycle", held, SELF_REPO)
@@ -983,6 +993,7 @@ async def merge_approved_prs(state: AgentState, *, ci_wait_seconds: float | None
             "merged_prs": [],
             "held_prs": held,
             "foreign_prs": foreign,
+            "extra_blocked_prs": sent_back,
             "tokens_used": 0,
         }
 
@@ -996,6 +1007,8 @@ async def merge_approved_prs(state: AgentState, *, ci_wait_seconds: float | None
     ci_wait = SharedWait(seconds=ci_wait_seconds)
     merged_tasks: list[int] = []
     updating: list[int] = []
+    extra_blocked: list[int] = []
+    extras_cost, extras_tokens = 0.0, 0
     for review in reviews:
         pr_number = review["pr_number"]
         decision = review.get("decision", "")
@@ -1018,6 +1031,17 @@ async def merge_approved_prs(state: AgentState, *, ci_wait_seconds: float | None
                     open_pr = p
                     break
 
+            # B3: the team's free personas placed before the merge read the
+            # approved PR first; one that blocks sends it back to the Dev.
+            if state.get("extras") and open_pr:
+                from theswarm.agents import extras as extras_mod
+
+                gate = await extras_mod.run_before_merge(state, github, {"number": pr_number, **open_pr})
+                extras_cost += gate["cost_usd"]
+                extras_tokens += gate["tokens"]
+                if gate["blocked_by"]:
+                    extra_blocked.append(pr_number)
+                    continue
             outcome, open_pr = await _merge_once_ready(
                 github, pr_number, open_pr, head_branch, ci_wait=ci_wait,
                 tell=getattr(state.get("claude"), "on_event", None),
@@ -1079,6 +1103,8 @@ async def merge_approved_prs(state: AgentState, *, ci_wait_seconds: float | None
         summary.append(f"CI still running, left open: {ci_pending}")
     if updating:
         summary.append(f"Main merged in, merging once CI passes: {updating}")
+    if extra_blocked:
+        summary.append(f"Sent back by a persona of the team: {extra_blocked}")
     if foreign:
         summary.append(f"Approved, left for its author: {foreign}")
 
@@ -1091,8 +1117,12 @@ async def merge_approved_prs(state: AgentState, *, ci_wait_seconds: float | None
         "ci_red_prs": ci_red,
         "ci_pending_prs": ci_pending,
         "updating_prs": updating,
+        "extra_blocked_prs": extra_blocked,
         "closed_stories": closed_stories,
-        "tokens_used": 0,
+        "tokens_used": extras_tokens,
+        # The state keeps the last write: the review's cost stands, plus what
+        # the free personas' calls cost in this pass (nothing without them).
+        **({"cost_usd": float(state.get("cost_usd") or 0.0) + extras_cost} if extras_cost else {}),
     }
 
 

@@ -245,6 +245,7 @@ def _build_base_state(config: CycleConfig) -> dict:
         "project_id": config.project_id or config.team_id,
         "codenames": dict(config.codenames or {}),
         "personas": dict(getattr(config, "personas", None) or {}),
+        "extras": list(getattr(config, "extras", None) or []),
         "github": None,
         "claude": None,
         "workspace": None,

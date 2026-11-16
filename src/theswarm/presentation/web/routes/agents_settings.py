@@ -109,8 +109,21 @@ async def _team_context(request: Request) -> dict:
                 "set": row is not None,
                 "updated": f"{row.updated_at:%d %b %H:%M UTC} by {row.updated_by}".lstrip("0") if row and row.updated_by else "",
             })
+    from theswarm.domain.teams.extras import EFFECTS, MAX_PER_TEAM, POINTS, PROMPT_MAX
+
+    stored = service.extras_of(scope) if service is not None else []
+    inherited = [e for e in (service.extras_of("") if service is not None and scope else [])
+                 if e.key not in {x.key for x in stored}]
+    extras_context = {
+        "extras": [{"key": e.key, "name": e.name, "prompt": e.prompt, "point": e.point, "effect": e.effect,
+                    "model": e.model, "enabled": e.enabled} for e in stored],
+        "extras_inherited": [{"name": e.name, "point": dict(POINTS).get(e.point, e.point), "enabled": e.enabled}
+                             for e in inherited],
+        "extra_points": POINTS, "extra_effects": EFFECTS, "extras_max": MAX_PER_TEAM, "prompt_max": PROMPT_MAX,
+        "extras_full": len(stored) >= MAX_PER_TEAM,
+    }
     versions = await service.versions(scope, limit=5) if service is not None else []
-    return {"team_yaml": service.export_yaml(scope) if service is not None else "",
+    return {**extras_context, "team_yaml": service.export_yaml(scope) if service is not None else "",
             "team_versions": [{"version": v["version"], "by": v["created_by"],
                                "at": str(v["created_at"])[:16].replace("T", " ")} for v in versions],
             "team_available": service is not None, "team_scope": scope, "team_projects": projects,
@@ -151,6 +164,42 @@ async def save_persona(request: Request):
 
     where = f"team={quote(scope, safe='')}&" if scope else ""
     return RedirectResponse(f"{state.base_path}/settings/agents?{where}team_saved={key}#team", status_code=303)
+
+
+@router.post("/settings/agents/extra")
+async def save_extra(request: Request):
+    """B3: add, change or remove a free persona of a team (the instance's or one project's)."""
+    from urllib.parse import quote
+
+    from theswarm.domain.teams.extras import ExtraError
+    from theswarm.presentation.web.routes.customers import _refused, current_actor
+
+    state = request.app.state
+    actor = await _owner(request)
+    if actor is None:
+        return _refused(request, await current_actor(request))
+    service = getattr(state, "personas", None)
+    if service is None:
+        return await _render(request, error="Personas need the database.", status_code=503)
+    form = await request.form()
+    scope, key = str(form.get("team") or ""), str(form.get("key") or "")
+    if scope and scope not in await _projects(state):
+        return await _render(request, error="That project is not on this page.", status_code=400)
+    try:
+        if form.get("remove"):
+            await service.delete_extra(scope, key, by=actor.login)
+        else:
+            await service.save_extra(
+                scope, key=key, name=str(form.get("name") or ""), prompt=str(form.get("prompt") or ""),
+                point=str(form.get("point") or ""), effect=str(form.get("effect") or "comment"),
+                model=str(form.get("model") or ""), enabled=form.get("enabled") is not None or not key, by=actor.login,
+            )
+    except ExtraError as exc:
+        return await _render(request, error=str(exc), status_code=400)
+    log.info("Free persona %s of %s %s by %s", key or form.get("name"), scope or "the instance",
+             "removed" if form.get("remove") else "saved", actor.login)
+    where = f"team={quote(scope, safe='')}&" if scope else ""
+    return RedirectResponse(f"{state.base_path}/settings/agents?{where}team_saved=extra#extras", status_code=303)
 
 
 @router.get("/settings/agents/team.yaml")

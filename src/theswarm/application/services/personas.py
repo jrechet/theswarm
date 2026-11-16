@@ -25,12 +25,18 @@ class PersonaService:
         self._repo = repo
         self._agent_settings = agent_settings
         self._rows: dict[tuple[str, str], Persona] = {}
+        self._extras: dict[tuple[str, str], Any] = {}  # free personas (B3), by (scope, key)
+        self._thread_extras: dict[str, list[dict]] = {}  # the ones a thread's team was pinned with
 
     async def refresh(self) -> None:
         try:
             self._rows = {(p.scope, p.key): p for p in await self._repo.list_all()}
         except Exception:  # noqa: BLE001 — the last read stands
             log.exception("Personas: reading them failed")
+        try:
+            self._extras = {(e.scope, e.key): e for e in await self._repo.list_extras()}
+        except Exception:  # noqa: BLE001 — the last read stands (or none: the flow as built in)
+            log.exception("Personas: reading the free personas failed")
 
     def stored(self, scope: str, key: str) -> Persona | None:
         return self._rows.get((scope, key))
@@ -97,15 +103,48 @@ class PersonaService:
     def export_yaml(self, scope: str = INSTANCE) -> str:
         from theswarm.application.services import team_yaml
 
-        return team_yaml.dump(scope, self._of(scope))
+        return team_yaml.dump(scope, self._of(scope), self.extras_of(scope))
+
+    # ── B3: free personas at a flow's insertion points ──
+
+    def extras_of(self, scope: str = INSTANCE) -> list:
+        """What the owner wrote for this scope, enabled or not, by key."""
+        return [e for (s, _), e in sorted(self._extras.items()) if s == scope]
+
+    def extras_for(self, project: str = INSTANCE) -> list:
+        """The free personas a cycle of `project` meets: the instance's, a
+        project's of the same key in its place, the disabled ones left out."""
+        merged = {e.key: e for e in self.extras_of(INSTANCE)}
+        if project:
+            merged.update({e.key: e for e in self.extras_of(project)})
+        return [e for _, e in sorted(merged.items()) if e.enabled]
+
+    async def save_extra(self, scope: str, *, name: str, prompt: str, point: str, effect: str = "comment",
+                         model: str = "", enabled: bool = True, key: str = "", by: str = "owner"):
+        from theswarm.domain.teams.extras import MAX_PER_TEAM, Extra, ExtraError, key_from
+
+        extra = Extra(scope=scope, key=key or key_from(name), name=name.strip(), prompt=prompt.strip(), point=point,
+                      effect=effect, model=model, enabled=enabled, updated_by=by)
+        if (scope, extra.key) not in self._extras and len(self.extras_of(scope)) >= MAX_PER_TEAM:
+            raise ExtraError(f"{MAX_PER_TEAM} free personas at most in a team")
+        await self._repo.save_extra(extra)
+        await self.refresh()
+        await self._record_version(scope, by)
+        return extra
+
+    async def delete_extra(self, scope: str, key: str, *, by: str = "owner") -> None:
+        await self._repo.delete_extra(scope, key)
+        await self.refresh()
+        await self._record_version(scope, by)
 
     async def import_yaml(self, scope: str, text: str, *, by: str = "owner") -> int:
         """Replace `scope`'s personas with the file's, all validated first.
         Returns the new version (the current one when nothing changed)."""
         from theswarm.application.services import team_yaml
 
-        personas = team_yaml.load(text, scope, by=by)
+        personas, extras = team_yaml.load_team(text, scope, by=by)
         await self._repo.replace_scope(scope, personas)
+        await self._repo.replace_extras(scope, extras)
         await self.refresh()
         return await self._record_version(scope, by)
 
@@ -143,14 +182,22 @@ class PersonaService:
             kept = None
         if kept is not None:
             team = json.loads(kept["team"])
+            self._thread_extras[thread_id] = list(team.get("extras") or [])
             return ({k: tuple(v) for k, v in team.get("models", {}).items()}, team.get("words", {}), kept["label"])
         models, words = await self.for_cycle(project)
+        extras = [e.as_dict() for e in self.extras_for(project)]
+        self._thread_extras[thread_id] = extras
         try:
             latest = await self._repo.latest_versions()
             label = f"{project} v{latest.get(project, 0)} · instance v{latest.get(INSTANCE, 0)}"
-            await self._repo.pin(thread_id, project, label, json.dumps({"models": models, "words": words}),
+            await self._repo.pin(thread_id, project, label,
+                                 json.dumps({"models": models, "words": words, "extras": extras}),
                                  datetime.now(timezone.utc).isoformat(timespec="seconds"))
         except Exception:  # noqa: BLE001 — the cycle runs on today's team; only the pin is missing
             log.exception("Personas: the team of thread %s could not be pinned", thread_id)
             label = ""
         return models, words, label
+
+    def extras_of_thread(self, thread_id: str) -> list[dict]:
+        """The free personas of the team `for_thread` last answered for this thread."""
+        return list(self._thread_extras.get(thread_id, []))

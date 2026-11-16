@@ -36,8 +36,10 @@ async def _known_project(state, name: str) -> str:
 
 
 def _base_url(state) -> str:
+    # EXTERNAL_URL is the host; the app lives under its base path (`/swarm` on prod).
+    # The first link the MCP handed out on prod (2026-11-16) lacked it and answered 404.
     external = (os.environ.get("EXTERNAL_URL") or "").rstrip("/")
-    return external or getattr(state, "base_path", "")
+    return f"{external}{getattr(state, 'base_path', '')}"
 
 
 def _live(record) -> dict:
@@ -141,6 +143,8 @@ async def get_team(state, arguments: dict) -> dict:
                    "instructions": team[key].instructions or None,
                    "model": team[key].model or "the instance's default", "effort": team[key].effort or "Claude Code's default"}
                   for key in CYCLE_ROLE_KEYS],
+        "extra_personas": [{"name": e.name, "where": e.point, "effect": e.effect, "looks_for": e.prompt}
+                           for e in service.extras_for(project)],
         "team_yaml": service.export_yaml(project),
         "note": "The YAML holds only what the owner wrote for this scope; a role or a field left out inherits.",
     }
