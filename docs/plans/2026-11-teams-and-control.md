@@ -243,7 +243,7 @@ un YAML n'exprime pas ce protocole.
   Play (feature ou correctif).
 - **B4 — l'éditeur graphique (5 jours). Écrit le 2026-11-16** : les trois flux dessinés (rôles, garanties du code, emplacements), un persona libre glissé d'un point d'insertion à l'autre, seuls les emplacements acceptent un dépôt ; vérifié dans un navigateur. Le flux dessiné, glisser-déposer des
   personas sur les emplacements, validation en direct, aperçu du YAML.
-- **B5 — le MCP (4 jours). Lecture et pilotage livrés le 2026-11-15** (`/mcp`, huit outils, protocole écrit sur place et vérifié avec le client officiel) ; **propositions d'équipe écrites le 2026-11-16** (`propose_team`, acceptées ou refusées dans Réglages → Agents). Reste l'outil qui lit un dépôt pour proposer une équipe. Serveur MCP HTTP monté dans l'application,
+- **B5 — le MCP (4 jours). Lecture et pilotage livrés le 2026-11-15** (`/mcp`, huit outils, protocole écrit sur place et vérifié avec le client officiel) ; **propositions d'équipe écrites le 2026-11-16** (`propose_team`, acceptées ou refusées dans Réglages → Agents). L'outil qui lit un dépôt et rédige un brouillon d'équipe (`draft_team`, sans appel à Claude) est écrit le même jour. **B5 est terminé.** Serveur MCP HTTP monté dans l'application,
   derrière le mur (clé d'accès en Bearer), outils : lister projets et équipes,
   lire et proposer une équipe, valider un YAML, créer un persona, lancer une
   feature, lire l'état d'un cycle, lui écrire, le mettre en pause. Les
