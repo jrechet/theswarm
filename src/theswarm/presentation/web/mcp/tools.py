@@ -163,6 +163,19 @@ async def validate_team_yaml(state, arguments: dict) -> dict:
             "note": "Valid. Nothing was changed: the owner imports a team in Settings → Agents."}
 
 
+async def draft_team(state, arguments: dict) -> dict:
+    """A first team for a project, written from what its repository says. No Claude call, nothing changed."""
+    from theswarm.application.services import team_draft
+    from theswarm.tools.github import GitHubClient
+
+    project = await _known_project(state, str(arguments["project"]))
+    files = await team_draft.read_facts(GitHubClient(project))
+    facts = team_draft.describe(files)
+    return {"project": project, "read": sorted(files), "facts": facts, "team_yaml": team_draft.draft(project, facts),
+            "note": "A draft from the repository's own files — nothing was changed. Read it, change what the "
+                    "project needs, then propose_team; the owner accepts it in Settings → Agents."}
+
+
 async def propose_team(state, arguments: dict) -> dict:
     """A team file kept for the owner to accept or refuse: nothing applies before that."""
     from theswarm.application.services import team_yaml
@@ -263,6 +276,9 @@ TOOLS: dict[str, Tool] = {tool.name: tool for tool in (
     Tool("validate_team_yaml", "Check a team file without changing anything; says what is wrong when it is.",
          validate_team_yaml, {"yaml": {"type": "string", "description": "The team file's text"}, "project": _REPO},
          ("yaml",)),
+    Tool("draft_team", "Draft a first team for a project from what its repository says: its language, how its "
+                       "tests run, its CI, its rules. Returns the facts found and a team file; changes nothing.",
+         draft_team, {"project": _REPO}, ("project",)),
     Tool("propose_team", "Propose a team for a project (or for every project): a team file and why. Nothing "
                          "applies until the owner accepts it in Settings → Agents. Read get_team first and send "
                          "the whole file: an accepted proposal replaces what is written for that team.",

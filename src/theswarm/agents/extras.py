@@ -117,8 +117,13 @@ def _verdict(result) -> ExtraVerdict | None:
 
 
 def _comment(extra: dict, verdict: ExtraVerdict, marker: str = "") -> str:
+    """A persona's word as a comment. Before the merge it opens on its verdict;
+    after QA it is a note, signed and nothing more — the first one on prod
+    (concert-tour-app#977) read "Changelog writer — nothing to change"."""
     lines = [marker] if marker else []
-    lines.append(f"**{extra['name']}** — {'nothing to change' if verdict.ok else 'something to change'}")
+    note = extra.get("point") == AFTER_QA and verdict.ok
+    lines.append(f"**{extra['name']}**" if note
+                 else f"**{extra['name']}** — {'nothing to change' if verdict.ok else 'something to change'}")
     if verdict.summary:
         lines += ["", verdict.summary]
     if verdict.findings:

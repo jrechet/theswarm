@@ -591,6 +591,14 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   and is a new version), **Refuse** stands; a decided proposal is not
   decided twice. A wrong file is not proposed; three open proposals at most
   per team.
+  **`draft_team(project)`** ("crée une équipe pour ce projet",
+  `application/services/team_draft.py`) reads the repository's own files —
+  `pyproject.toml`, `requirements.txt`, `package.json`, `go.mod`,
+  `Cargo.toml`, `theswarm.yaml`, the CI workflow, its rules — and writes a
+  team file whose instructions are those facts, said to the role that needs
+  them. **No Claude call, nothing guessed** (a fact not found is a line
+  left out), nothing changed: the agent reads the draft, changes it, and
+  proposes it.
 - **One table of roles** (A4, 2026-11-15): `domain/agents/roles.py` —
   each role's key ("techlead", what is stored and compared), voice
   ("TechLead", what an agent speaks under in the feed and the watchdog —
