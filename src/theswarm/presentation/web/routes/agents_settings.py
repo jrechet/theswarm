@@ -109,7 +109,11 @@ async def _team_context(request: Request) -> dict:
                 "set": row is not None,
                 "updated": f"{row.updated_at:%d %b %H:%M UTC} by {row.updated_by}".lstrip("0") if row and row.updated_by else "",
             })
-    return {"team_available": service is not None, "team_scope": scope, "team_projects": projects,
+    versions = await service.versions(scope, limit=5) if service is not None else []
+    return {"team_yaml": service.export_yaml(scope) if service is not None else "",
+            "team_versions": [{"version": v["version"], "by": v["created_by"],
+                               "at": str(v["created_at"])[:16].replace("T", " ")} for v in versions],
+            "team_available": service is not None, "team_scope": scope, "team_projects": projects,
             "team_members": members, "name_max": NAME_MAX, "description_max": DESCRIPTION_MAX,
             "instructions_max": INSTRUCTIONS_MAX, "team_saved": request.query_params.get("team_saved", "")}
 
@@ -147,6 +151,52 @@ async def save_persona(request: Request):
 
     where = f"team={quote(scope, safe='')}&" if scope else ""
     return RedirectResponse(f"{state.base_path}/settings/agents?{where}team_saved={key}#team", status_code=303)
+
+
+@router.get("/settings/agents/team.yaml")
+async def team_file(request: Request):
+    """B2: the team of the instance or of one project (`?team=owner/name`) as YAML."""
+    from fastapi.responses import PlainTextResponse
+
+    from theswarm.presentation.web.routes.customers import _refused, current_actor
+
+    state = request.app.state
+    if await _owner(request) is None:
+        return _refused(request, await current_actor(request))
+    service = getattr(state, "personas", None)
+    scope = request.query_params.get("team", "")
+    if service is None or (scope and scope not in await _projects(state)):
+        return PlainTextResponse("No such team.\n", status_code=404)
+    await service.refresh()
+    return PlainTextResponse(service.export_yaml(scope), media_type="text/yaml; charset=utf-8")
+
+
+@router.post("/settings/agents/team/import")
+async def import_team(request: Request):
+    """B2: replace a team's personas with a YAML file's — validated whole, or nothing changes."""
+    from urllib.parse import quote
+
+    from theswarm.application.services.team_yaml import TeamYamlError
+    from theswarm.presentation.web.routes.customers import _refused, current_actor
+
+    state = request.app.state
+    actor = await _owner(request)
+    if actor is None:
+        return _refused(request, await current_actor(request))
+    service = getattr(state, "personas", None)
+    if service is None:
+        return await _render(request, error="Personas need the database.", status_code=503)
+    form = await request.form()
+    scope = str(form.get("team") or "")
+    if scope and scope not in await _projects(state):
+        return await _render(request, error="That project is not on this page.", status_code=400)
+    try:
+        version = await service.import_yaml(scope, str(form.get("yaml") or ""), by=actor.login)
+    except TeamYamlError as exc:
+        return await _render(request, error=f"The team file was not imported: {exc}", status_code=400)
+    log.info("Team of %s imported by %s (version %s)", scope or "the instance", actor.login, version)
+    where = f"team={quote(scope, safe='')}&" if scope else ""
+    return RedirectResponse(f"{state.base_path}/settings/agents?{where}team_saved=import#team", status_code=303)
 
 
 @router.get("/settings/agents", response_class=HTMLResponse)

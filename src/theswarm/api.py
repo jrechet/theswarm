@@ -739,7 +739,15 @@ async def _run_api_cycle(
         # project or the instance chose one, and the owner's words for the role.
         if _PERSONAS is not None:
             try:
-                models, words = await _PERSONAS.for_cycle(repo)
+                # B2: the team this thread started with — a continuation after a
+                # deploy or a pause runs the same one, whatever was edited since.
+                pinned = getattr(_PERSONAS, "for_thread", None)
+                if pinned is not None:
+                    models, words, team_label = await pinned(resume_cycle_id or cycle_id, repo)
+                    if team_label:
+                        log.info("Cycle %s runs with the team %s", cycle_id, team_label)
+                else:
+                    models, words = await _PERSONAS.for_cycle(repo)
                 cycle_config.agent_settings = models or cycle_config.agent_settings
                 cycle_config.personas = words
             except Exception:  # noqa: BLE001 — the roles as the code defines them

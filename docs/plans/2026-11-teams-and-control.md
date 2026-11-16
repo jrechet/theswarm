@@ -236,7 +236,7 @@ un YAML n'exprime pas ce protocole.
   mortes de prompts. `Réglages → Agents` devient l'éditeur de personas ; les
   quatre rôles moteurs sont les personas par défaut, consignes éditables.
   Le théâtre dessine les stations depuis l'équipe (le gabarit HTML itère déjà).
-- **B2 — l'équipe par projet et son YAML (3 jours).** Équipe par défaut de
+- **B2 — l'équipe par projet et son YAML (3 jours). Livré le 2026-11-15** : export et import YAML validés en entier, versions numérotées par portée, équipe épinglée par fil de cycle (une reprise rejoue la sienne). Équipe par défaut de
   l'instance, équipe d'un projet, export, import, versions, épinglage par cycle.
 - **B3 — gabarits et points d'insertion (6 jours).** Fabrique de nœuds, nœud
   générique « persona libre », les trois gabarits, le choix du gabarit au
