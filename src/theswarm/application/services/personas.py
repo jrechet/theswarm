@@ -18,6 +18,7 @@ from theswarm.domain.agents.roles import ROLES
 log = logging.getLogger(__name__)
 
 _WORDS = ("name", "description", "instructions")
+MAX_OPEN_PROPOSALS = 3  # per team: an agent cannot bury the owner under proposals
 
 
 class PersonaService:
@@ -201,3 +202,42 @@ class PersonaService:
     def extras_of_thread(self, thread_id: str) -> list[dict]:
         """The free personas of the team `for_thread` last answered for this thread."""
         return list(self._thread_extras.get(thread_id, []))
+
+    # ── B5: a team an agent proposes; the owner decides ──
+
+    async def propose(self, scope: str, text: str, *, why: str = "", by: str = "mcp") -> int:
+        """Keep a team file as a proposal — validated, applied to nothing.
+        Raises `TeamYamlError` when the file is wrong: a proposal the owner
+        could not accept is not worth their look."""
+        from datetime import datetime, timezone
+
+        from theswarm.application.services import team_yaml
+
+        team_yaml.load_team(text, scope, by=by)
+        open_ones = await self._repo.proposals(scope=scope)
+        if len(open_ones) >= MAX_OPEN_PROPOSALS:
+            raise team_yaml.TeamYamlError(
+                f"{MAX_OPEN_PROPOSALS} proposals already wait for the owner on this team — none was added")
+        return await self._repo.add_proposal(scope, text, " ".join(why.split())[:500], by,
+                                             datetime.now(timezone.utc).isoformat(timespec="seconds"))
+
+    async def open_proposals(self, scope: str | None = None) -> list[dict]:
+        try:
+            return await self._repo.proposals(scope=scope)
+        except Exception:  # noqa: BLE001
+            log.exception("Personas: reading the proposals failed")
+            return []
+
+    async def decide(self, proposal_id: int, *, accept: bool, by: str = "owner") -> dict | None:
+        """Accept (the file is imported, as the owner's own import would be) or
+        refuse an open proposal. None when it is not open any more."""
+        from datetime import datetime, timezone
+
+        row = await self._repo.proposal(proposal_id)
+        if row is None or row["status"] != "open":
+            return None
+        if accept:
+            await self.import_yaml(row["scope"], row["body"], by=by)
+        await self._repo.decide_proposal(proposal_id, "accepted" if accept else "refused", by,
+                                         datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        return {**row, "status": "accepted" if accept else "refused"}

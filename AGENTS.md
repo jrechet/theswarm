@@ -558,9 +558,15 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   `say_to_cycle` (the theater's field, `stop` for "Stop and say"),
   `pause_cycle` — piloting, by the same doors as the pages. A tool that
   cannot do what was asked answers `isError` in words; one that breaks says
-  its name and the exception's type, never its insides. **Changing a team
-  is not a tool**: an agent's change to a team will be a proposal the owner
-  accepts (B5's second half).
+  its name and the exception's type, never its insides. **An agent never
+  changes a team; it proposes one** (B5's second half, 2026-11-16):
+  `propose_team(yaml, why, project)` keeps a validated team file in
+  `team_proposals` (v046) — the model of the DevOps proposals. Settings →
+  Agents shows it with its reason and the file; **Accept** imports it as
+  the owner's own import would (it replaces what is written for that team,
+  and is a new version), **Refuse** stands; a decided proposal is not
+  decided twice. A wrong file is not proposed; three open proposals at most
+  per team.
 - **One table of roles** (A4, 2026-11-15): `domain/agents/roles.py` —
   each role's key ("techlead", what is stored and compared), voice
   ("TechLead", what an agent speaks under in the feed and the watchdog —

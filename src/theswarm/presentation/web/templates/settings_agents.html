@@ -85,6 +85,21 @@
       <a href="{{ base }}/settings/agents?team={{ p | urlencode }}#team" {% if team_scope == p %}aria-current="page"{% endif %} class="h-8 inline-flex items-center px-3 rounded-md font-mono text-[12px] {% if team_scope == p %}bg-raised text-ink font-medium{% else %}text-muted hover:text-ink hover:bg-raised{% endif %}">{{ p }}</a>
       {% endfor %}
     </nav>
+    {% for p in team_proposals %}
+    <div id="proposals" class="flex flex-col gap-2 px-4 py-3.5 border border-live/50 bg-live-wash rounded-[10px]" data-testid="team-proposal" data-id="{{ p.id }}">
+      <span class="font-medium text-[14px]">A team is proposed{% if team_scope %} for {{ team_scope }}{% else %} for every project{% endif %}
+        <span class="text-[12px] text-muted font-normal">· by {{ p.by }}, {{ p.at }} UTC</span></span>
+      {% if p.why %}<p class="m-0 text-[13px] text-ink max-w-[72ch]">{{ p.why }}</p>{% endif %}
+      <label class="flex flex-col gap-1 text-[12px] text-muted" for="proposal-{{ p.id }}">The file it would put in place of today's
+        <textarea id="proposal-{{ p.id }}" readonly rows="8" class="px-2 py-1.5 border border-line rounded-md bg-surface text-[12px] text-ink font-mono leading-[1.5]">{{ p.body }}</textarea>
+      </label>
+      <div class="flex justify-end gap-2">
+        <form method="post" action="{{ base }}/settings/agents/proposals/{{ p.id }}/refuse">{{ ui.btn('Refuse', type='submit', testid='proposal-refuse') }}</form>
+        <form method="post" action="{{ base }}/settings/agents/proposals/{{ p.id }}/accept">{{ ui.btn('Accept', kind='primary', type='submit', testid='proposal-accept') }}</form>
+      </div>
+    </div>
+    {% endfor %}
+    {% if team_saved == 'refused' %}<p class="m-0 text-[13px] text-muted border border-line rounded-[10px] px-4 py-3" role="status" data-testid="team-saved">Refused. Nothing was changed.</p>{% endif %}
     {% if team_saved == 'import' %}<p class="m-0 text-[13px] text-ok border border-ok/40 bg-ok-wash rounded-[10px] px-4 py-3" data-testid="team-saved" role="status">Imported. The next cycle{% if team_scope %} on {{ team_scope }}{% endif %} runs with this team.</p>
     {% elif team_saved %}<p class="m-0 text-[13px] text-ok border border-ok/40 bg-ok-wash rounded-[10px] px-4 py-3" data-testid="team-saved" role="status">Saved. The next cycle{% if team_scope %} on {{ team_scope }}{% endif %} meets this role as written.</p>{% endif %}
     <details class="bg-surface border border-line rounded-[10px]" data-testid="team-file">

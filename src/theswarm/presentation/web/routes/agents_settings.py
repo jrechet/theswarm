@@ -123,6 +123,10 @@ async def _team_context(request: Request) -> dict:
         "extras_full": len(stored) >= MAX_PER_TEAM,
     }
     versions = await service.versions(scope, limit=5) if service is not None else []
+    proposals = await service.open_proposals(scope) if service is not None else []
+    extras_context["team_proposals"] = [
+        {"id": p["id"], "why": p["why"], "by": p["proposed_by"], "at": str(p["created_at"])[:16].replace("T", " "),
+         "body": p["body"]} for p in proposals]
     return {**extras_context, "team_yaml": service.export_yaml(scope) if service is not None else "",
             "team_versions": [{"version": v["version"], "by": v["created_by"],
                                "at": str(v["created_at"])[:16].replace("T", " ")} for v in versions],
@@ -200,6 +204,33 @@ async def save_extra(request: Request):
              "removed" if form.get("remove") else "saved", actor.login)
     where = f"team={quote(scope, safe='')}&" if scope else ""
     return RedirectResponse(f"{state.base_path}/settings/agents?{where}team_saved=extra#extras", status_code=303)
+
+
+@router.post("/settings/agents/proposals/{proposal_id}/{decision}")
+async def decide_proposal(request: Request, proposal_id: int, decision: str):
+    """B5: the owner accepts (the file is imported) or refuses a team an agent proposed."""
+    from urllib.parse import quote
+
+    from theswarm.application.services.team_yaml import TeamYamlError
+    from theswarm.presentation.web.routes.customers import _refused, current_actor
+
+    state = request.app.state
+    actor = await _owner(request)
+    if actor is None:
+        return _refused(request, await current_actor(request))
+    service = getattr(state, "personas", None)
+    if service is None or decision not in ("accept", "refuse"):
+        return await _render(request, error="That is not a decision this page takes.", status_code=400)
+    try:
+        decided = await service.decide(proposal_id, accept=decision == "accept", by=actor.login)
+    except TeamYamlError as exc:  # valid when proposed, not any more (a role renamed since)
+        return await _render(request, error=f"The proposal could not be applied: {exc}", status_code=400)
+    if decided is None:
+        return await _render(request, error="That proposal is not waiting any more.", status_code=409)
+    log.info("Team proposal %s %s by %s", proposal_id, decided["status"], actor.login)
+    where = f"team={quote(decided['scope'], safe='')}&" if decided["scope"] else ""
+    saved = "import" if decision == "accept" else "refused"
+    return RedirectResponse(f"{state.base_path}/settings/agents?{where}team_saved={saved}#team", status_code=303)
 
 
 @router.get("/settings/agents/team.yaml")

@@ -127,3 +127,31 @@ class SQLitePersonaRepository:
         await self._db.commit()
         for extra in extras:
             await self.save_extra(extra)
+
+    # ── teams an agent proposes (v046) ──
+    async def add_proposal(self, scope: str, body: str, why: str, by: str, at: str) -> int:
+        cursor = await self._db.execute(
+            "INSERT INTO team_proposals (scope, body, why, proposed_by, created_at) VALUES (?, ?, ?, ?, ?)",
+            (scope, body, why, by, at),
+        )
+        await self._db.commit()
+        return int(cursor.lastrowid or 0)
+
+    async def proposals(self, *, status: str = "open", scope: str | None = None, limit: int = 20) -> list[dict]:
+        sql, args = "SELECT * FROM team_proposals WHERE status = ?", [status]
+        if scope is not None:
+            sql, args = sql + " AND scope = ?", [*args, scope]
+        cursor = await self._db.execute(sql + " ORDER BY id DESC LIMIT ?", (*args, limit))
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def proposal(self, proposal_id: int) -> dict | None:
+        cursor = await self._db.execute("SELECT * FROM team_proposals WHERE id = ?", (proposal_id,))
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def decide_proposal(self, proposal_id: int, status: str, by: str, at: str) -> None:
+        await self._db.execute(
+            "UPDATE team_proposals SET status = ?, decided_by = ?, decided_at = ? WHERE id = ? AND status = 'open'",
+            (status, by, at, proposal_id),
+        )
+        await self._db.commit()
