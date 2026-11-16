@@ -926,6 +926,8 @@ async def finish(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
     result = {
         "date": state.get("date", ""),
         "backend": _resolve_backend_mode(),
+        # B6: the team this cycle ran with, so a harness run is measured against its team
+        "team": getattr(rt.config, "team_label", "") or "",
         "tokens": total_tokens,
         "cost_usd": total_cost,
         "prs": prs,

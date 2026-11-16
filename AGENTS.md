@@ -539,6 +539,16 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   They are in the team file (`extras:`), in the team a cycle pins, in
   Settings → Agents ("Extra personas") and in the MCP's `get_team`.
   `before_dev` is not offered yet: nothing reads a note there.
+- **A team is measured** (phase B, B6, 2026-11-16). "Modular" without it
+  means "not measured". A cycle's result names the team it ran with
+  (`team`, the label its thread pinned: "owner/name v3 · instance v1" —
+  each edit of a team is a version, so each version is a team to compare);
+  both harnesses write it on the scored record. `evals.by_team`: over the
+  same history, per team — features asked, built, verified on the running
+  app, broken, the median cost and duration of a build; measured runs only;
+  a run from before teams, or on a team nobody edited (v0 · v0), is "the
+  built-in team". `GET /api/evals/teams?repo=`, and a "By team" table in
+  the project page's Reliability panel once two teams have runs.
 - **The swarm is an MCP server** (phase B, B5 — read and pilot, 2026-11-15).
   `POST /mcp` (`routes/mcp_routes.py`, `presentation/web/mcp/`): MCP over
   Streamable HTTP, behind the wall — the access key as `Authorization:

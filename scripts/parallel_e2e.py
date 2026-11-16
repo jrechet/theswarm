@@ -187,6 +187,7 @@ def scored(run: dict, feature: "evals.Feature | None", batch_id: str) -> dict:
         error=str(run.get("error") or ""),
     )
     return {"repo": run["repo"], **evals.score(feature, observed), "cycle_id": run.get("cycle"),
+            "team": str(result.get("team") or ""),
             "issue": run.get("story"), "batch": batch_id,
             "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds")}
 

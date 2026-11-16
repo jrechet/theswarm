@@ -562,6 +562,7 @@ def run_one(repo: str, feature_text: str, feature: "evals.Feature | None",
     )
     result = {"repo": repo, **evals.score(feature, observed)}
     result["cycle_id"] = cycle_id
+    result["team"] = str(cycle_result.get("team") or "")  # B6: which team built it
     result["issue"] = issue
     result["timestamp"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     previous = evals.last_measured(past_runs(repo, history))

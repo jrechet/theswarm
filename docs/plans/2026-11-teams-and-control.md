@@ -251,7 +251,7 @@ un YAML n'exprime pas ce protocole.
   propriétaire accepte — le modèle des propositions DevOps. « Crée une équipe
   pour ce projet » : un outil qui lit le dépôt (langage, tests, CI) et propose
   une équipe à partir des gabarits.
-- **B6 — la mesure (2 jours).** Comparaison d'équipes dans le harness.
+- **B6 — la mesure (2 jours). Écrit le 2026-11-16** : chaque mesure du harness porte l'équipe (et sa version) qui l'a produite ; comparaison par équipe sur la même histoire (demandées, construites, vérifiées, coût et durée médians), API et tableau sur la page projet. Comparaison d'équipes dans le harness.
 
 Ordre conseillé : A0 → A1 → A3.1 → A2 → A3.2 → A4 → B1 → B2 → B5 (lecture et
 pilotage) → B3 → B4 → B5 (équipes) → B6. Le MCP de pilotage vient tôt : il sert
