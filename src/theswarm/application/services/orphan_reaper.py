@@ -37,7 +37,27 @@ def reap_max_age_seconds() -> int:
 
 
 class CycleReaperPort(Protocol):
-    async def reap_orphans(self, *, max_age_seconds: int) -> int: ...
+    async def reap_orphans(self, *, max_age_seconds: int, alive: frozenset[str] = frozenset()) -> int: ...
+
+
+def live_cycle_ids() -> frozenset[str]:
+    """The cycles a task of this process still runs or holds in its queue.
+
+    Age alone no longer tells an orphan from a live cycle: since A1 a cycle
+    waits a closed Claude window out — hours, not counted against its hard
+    timeout — and one past the age cutoff was reaped under its own task."""
+    try:
+        from theswarm.api import get_cycle_tracker
+
+        tracker = get_cycle_tracker()
+        return frozenset(
+            cycle_id for cycle_id, task in tracker._tasks.items()
+            if not task.done() and getattr(tracker.get(cycle_id), "status", None) is not None
+            and tracker.get(cycle_id).status.value in ("running", "queued")
+        )
+    except Exception:  # noqa: BLE001 — no tracker to ask: the age rule alone, as before
+        log.exception("The live cycles could not be read")
+        return frozenset()
 
 
 async def run_orphan_reap_loop(
@@ -45,6 +65,7 @@ async def run_orphan_reap_loop(
     *,
     max_age_seconds: int,
     interval_seconds: float = DEFAULT_REAP_INTERVAL_SECONDS,
+    alive=live_cycle_ids,
 ) -> None:
     """Reap stale 'running' cycles every ``interval_seconds``, forever.
 
@@ -55,7 +76,7 @@ async def run_orphan_reap_loop(
     while True:
         await asyncio.sleep(interval_seconds)
         try:
-            n = await cycle_repo.reap_orphans(max_age_seconds=max_age_seconds)
+            n = await cycle_repo.reap_orphans(max_age_seconds=max_age_seconds, alive=alive())
             if n:
                 log.info("Periodic reap: %d stale running cycle(s) marked failed", n)
         except Exception:

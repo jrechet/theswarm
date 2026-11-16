@@ -47,6 +47,18 @@ async def test_a_cycle_killed_seconds_ago_is_reaped(repo):
     assert cycle.status == CycleStatus.FAILED
 
 
+async def test_a_cycle_a_task_still_runs_is_never_an_orphan(repo):
+    """3ad75f7c8a28 (2026-11-15): four hours old, waiting for Claude's window —
+    marked failed under its own task, then finished with the orphan's reason on its row."""
+    await _running(repo, "3ad75f7c8a28", age_seconds=5 * 3600)
+    await _running(repo, "deadbeef0000", age_seconds=5 * 3600)
+
+    assert await repo.reap_orphans(max_age_seconds=3 * 3600, alive=frozenset({"3ad75f7c8a28"})) == 1
+
+    assert (await repo.get(CycleId("3ad75f7c8a28"))).status == CycleStatus.RUNNING
+    assert (await repo.get(CycleId("deadbeef0000"))).status == CycleStatus.FAILED
+
+
 async def test_old_orphans_are_reaped_too(repo):
     await _running(repo, "aaaaaaaaaaaa", age_seconds=99_999)
     assert await repo.reap_orphans(max_age_seconds=0) == 1
