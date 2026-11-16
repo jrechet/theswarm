@@ -242,6 +242,7 @@ async def test_after_qa_a_persona_writes_its_note_once():
     assert out["spoke"] == ["Changelog writer"] and len(claude.prompts) == 1  # the reviewer is not placed here
     note = github.issue_comments[10][0]
     assert "<!-- swarm:extra changelog abc123abc123 -->" in note and "the venue search" in note
+    assert "**Changelog writer**\n" in note and "nothing to change" not in note  # a note, not a verdict
     assert "PR #7" in claude.prompts[0] and "unit_tests: pass" in claude.prompts[0]
 
     again = await extras.run_after_qa(state, github, issue=10, cycle_id="abc123abc123", delivered=delivered,
