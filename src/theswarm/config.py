@@ -145,6 +145,8 @@ class CycleConfig:
     personas: dict = field(default_factory=dict)
     # Phase B, B3: the free personas the team adds at the flow's insertion points.
     extras: list = field(default_factory=list)
+    # B6: which team this cycle runs with ("owner/name v3 · instance v1"), for the measure.
+    team_label: str = ""
     workspace_dir: str = ""  # auto-set if empty
 
     # Model routing: task category → model short name

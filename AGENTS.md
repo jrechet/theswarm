@@ -539,6 +539,30 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   They are in the team file (`extras:`), in the team a cycle pins, in
   Settings → Agents ("Extra personas") and in the MCP's `get_team`.
   `before_dev` is not offered yet: nothing reads a note there.
+- **The flow is drawn, and a persona is dragged to a point** (phase B, B4,
+  2026-11-16). Settings → Agents, "The flow": the three flows side by side
+  (`templates.DRAWINGS`), each step a **role** (with the name the team
+  gives it), a **gate** (what the code guarantees whatever the team: the
+  merge on green CI, a fix's intake) or a **slot** (an insertion point,
+  with the free personas placed there). A persona written for the team on
+  the page is dragged from one slot to another (`POST
+  /settings/agents/extra/move`, HTML5 drag and drop, no library); a
+  project's page shows every project's personas where they are, not
+  movable. **Only a slot takes a drop**, so no flow that does not ship can
+  be drawn — the validation is the shape of the editor; an effect the new
+  point does not take becomes a comment, and the page says so. A move is a
+  version of the team; the file under "This team as a file" is the YAML
+  preview. The persona's own form ("Where") does the same without a mouse.
+- **A team is measured** (phase B, B6, 2026-11-16). "Modular" without it
+  means "not measured". A cycle's result names the team it ran with
+  (`team`, the label its thread pinned: "owner/name v3 · instance v1" —
+  each edit of a team is a version, so each version is a team to compare);
+  both harnesses write it on the scored record. `evals.by_team`: over the
+  same history, per team — features asked, built, verified on the running
+  app, broken, the median cost and duration of a build; measured runs only;
+  a run from before teams, or on a team nobody edited (v0 · v0), is "the
+  built-in team". `GET /api/evals/teams?repo=`, and a "By team" table in
+  the project page's Reliability panel once two teams have runs.
 - **The swarm is an MCP server** (phase B, B5 — read and pilot, 2026-11-15).
   `POST /mcp` (`routes/mcp_routes.py`, `presentation/web/mcp/`): MCP over
   Streamable HTTP, behind the wall — the access key as `Authorization:
@@ -558,9 +582,15 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   `say_to_cycle` (the theater's field, `stop` for "Stop and say"),
   `pause_cycle` — piloting, by the same doors as the pages. A tool that
   cannot do what was asked answers `isError` in words; one that breaks says
-  its name and the exception's type, never its insides. **Changing a team
-  is not a tool**: an agent's change to a team will be a proposal the owner
-  accepts (B5's second half).
+  its name and the exception's type, never its insides. **An agent never
+  changes a team; it proposes one** (B5's second half, 2026-11-16):
+  `propose_team(yaml, why, project)` keeps a validated team file in
+  `team_proposals` (v046) — the model of the DevOps proposals. Settings →
+  Agents shows it with its reason and the file; **Accept** imports it as
+  the owner's own import would (it replaces what is written for that team,
+  and is a new version), **Refuse** stands; a decided proposal is not
+  decided twice. A wrong file is not proposed; three open proposals at most
+  per team.
 - **One table of roles** (A4, 2026-11-15): `domain/agents/roles.py` —
   each role's key ("techlead", what is stored and compared), voice
   ("TechLead", what an agent speaks under in the feed and the watchdog —

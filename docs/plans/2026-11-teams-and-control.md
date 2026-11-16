@@ -241,9 +241,9 @@ un YAML n'exprime pas ce protocole.
 - **B3 — gabarits et points d'insertion (6 jours). Première moitié écrite le 2026-11-15** : trois gabarits (Feature, Correctif, Revue seule) comme chemins du même graphe durable, le flux porté par un label de l'issue (`flow:fix`, `flow:review`), choix au Play (composer, page feature, MCP). **Seconde moitié écrite le 2026-11-16** : personas libres à deux points d'insertion (avant la fusion : commenter ou bloquer ; après QA : une note sur l'issue), en lecture seule, dans le fichier d'équipe et l'éditeur. Vu en prod : le flux Correctif lancé par le MCP (concert-tour-app#975). Fabrique de nœuds, nœud
   générique « persona libre », les trois gabarits, le choix du gabarit au
   Play (feature ou correctif).
-- **B4 — l'éditeur graphique (5 jours).** Le flux dessiné, glisser-déposer des
+- **B4 — l'éditeur graphique (5 jours). Écrit le 2026-11-16** : les trois flux dessinés (rôles, garanties du code, emplacements), un persona libre glissé d'un point d'insertion à l'autre, seuls les emplacements acceptent un dépôt ; vérifié dans un navigateur. Le flux dessiné, glisser-déposer des
   personas sur les emplacements, validation en direct, aperçu du YAML.
-- **B5 — le MCP (4 jours). Lecture et pilotage livrés le 2026-11-15** (`/mcp`, huit outils, protocole écrit sur place et vérifié avec le client officiel) ; restent les propositions d'équipe. Serveur MCP HTTP monté dans l'application,
+- **B5 — le MCP (4 jours). Lecture et pilotage livrés le 2026-11-15** (`/mcp`, huit outils, protocole écrit sur place et vérifié avec le client officiel) ; **propositions d'équipe écrites le 2026-11-16** (`propose_team`, acceptées ou refusées dans Réglages → Agents). Reste l'outil qui lit un dépôt pour proposer une équipe. Serveur MCP HTTP monté dans l'application,
   derrière le mur (clé d'accès en Bearer), outils : lister projets et équipes,
   lire et proposer une équipe, valider un YAML, créer un persona, lancer une
   feature, lire l'état d'un cycle, lui écrire, le mettre en pause. Les
@@ -251,7 +251,7 @@ un YAML n'exprime pas ce protocole.
   propriétaire accepte — le modèle des propositions DevOps. « Crée une équipe
   pour ce projet » : un outil qui lit le dépôt (langage, tests, CI) et propose
   une équipe à partir des gabarits.
-- **B6 — la mesure (2 jours).** Comparaison d'équipes dans le harness.
+- **B6 — la mesure (2 jours). Écrit le 2026-11-16** : chaque mesure du harness porte l'équipe (et sa version) qui l'a produite ; comparaison par équipe sur la même histoire (demandées, construites, vérifiées, coût et durée médians), API et tableau sur la page projet. Comparaison d'équipes dans le harness.
 
 Ordre conseillé : A0 → A1 → A3.1 → A2 → A3.2 → A4 → B1 → B2 → B5 (lecture et
 pilotage) → B3 → B4 → B5 (équipes) → B6. Le MCP de pilotage vient tôt : il sert

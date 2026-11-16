@@ -314,6 +314,18 @@ async def api_list_eval_runs(request: Request, repo: str = "", limit: int = 50) 
     return JSONResponse({"runs": await store.list_for_repo(repo, limit=max(1, min(limit, 500)))})
 
 
+@router.get("/evals/teams")
+async def api_eval_teams(request: Request, repo: str = "", limit: int = 500) -> JSONResponse:
+    """B6: each team's measure on a repository — features asked, built, verified
+    on the running app, the median cost and duration of a build."""
+    from theswarm import evals
+
+    store = getattr(request.app.state, "eval_run_repo", None)
+    if store is None or not repo:
+        return JSONResponse({"teams": []})
+    return JSONResponse({"teams": evals.by_team(await store.list_for_repo(repo, limit=max(1, min(limit, 500))))})
+
+
 @router.post("/claude/probe")
 async def api_claude_probe() -> JSONResponse:
     """Can Claude answer right now? The harness asks before it opens an

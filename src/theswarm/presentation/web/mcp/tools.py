@@ -3,9 +3,8 @@
 Each tool takes the app's `state` and its arguments, and answers a plain
 dict. Reading is free. Piloting does what the owner does on the pages, by
 the same doors: `start_feature` is the composer's "Create and play",
-`say_to_cycle` the theater's field, `pause_cycle` its Pause. Changing a team
-is not here: an agent's change to a team is a proposal the owner accepts
-(the second half of B5).
+`say_to_cycle` the theater's field, `pause_cycle` its Pause. A team is never changed from here: `propose_team` keeps a team file for
+the owner, who accepts or refuses it on Settings → Agents.
 """
 
 from __future__ import annotations
@@ -164,6 +163,25 @@ async def validate_team_yaml(state, arguments: dict) -> dict:
             "note": "Valid. Nothing was changed: the owner imports a team in Settings → Agents."}
 
 
+async def propose_team(state, arguments: dict) -> dict:
+    """A team file kept for the owner to accept or refuse: nothing applies before that."""
+    from theswarm.application.services import team_yaml
+
+    service = getattr(state, "personas", None)
+    if service is None:
+        raise ToolError("Teams need the database")
+    project = arguments.get("project") or ""
+    if project:
+        await _known_project(state, project)
+    try:
+        proposal_id = await service.propose(project, str(arguments["yaml"]), why=str(arguments.get("why") or ""))
+    except team_yaml.TeamYamlError as exc:
+        raise ToolError(f"Not proposed: {exc}") from exc
+    return {"proposal": proposal_id, "team_of": project or "every project", "status": "waiting for the owner",
+            "where": f"{_base_url(state)}/settings/agents" + (f"?team={project}" if project else "") + "#proposals",
+            "note": "Nothing was changed. The owner accepts or refuses it in Settings → Agents."}
+
+
 async def start_feature(state, arguments: dict) -> dict:
     """The composer's "Create and play", or Play on an issue that exists."""
     from theswarm.presentation.web.routes.common import start_targeted_cycle
@@ -245,6 +263,12 @@ TOOLS: dict[str, Tool] = {tool.name: tool for tool in (
     Tool("validate_team_yaml", "Check a team file without changing anything; says what is wrong when it is.",
          validate_team_yaml, {"yaml": {"type": "string", "description": "The team file's text"}, "project": _REPO},
          ("yaml",)),
+    Tool("propose_team", "Propose a team for a project (or for every project): a team file and why. Nothing "
+                         "applies until the owner accepts it in Settings → Agents. Read get_team first and send "
+                         "the whole file: an accepted proposal replaces what is written for that team.",
+         propose_team, {"yaml": {"type": "string", "description": "The whole team file (format: 1)"},
+                        "why": {"type": "string", "description": "Why this team, in a sentence or two"},
+                        "project": _REPO}, ("yaml",), writes=True),
     Tool("start_feature", "Start a cycle that builds one feature on a project: give a title (and a description) "
                           "to create its issue, or the issue_number of an existing one. Spends the owner's Claude "
                           "window and opens pull requests on the project.", start_feature,

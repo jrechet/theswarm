@@ -219,6 +219,30 @@
             title="{{ run.feature or 'feature' }} — {{ 'built, but broken on the running app' if broken else 'built' if run.passed else ('already delivered' if delivered_before else ('interrupted by a restart' if interrupted else 'failed')) }}{% if run.cost_usd is defined %} · ${{ '%.2f' | format(run.cost_usd) }}{% endif %}{% if run.duration_s %} · {{ (run.duration_s / 60) | round | int }} min{% endif %}{% if run.ci and run.ci != 'none' %} · CI {{ run.ci }}{% endif %}{% if run.unmerged %} · not merged: {% for pr in run.unmerged %}#{{ pr }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}{% if run.qa %}{% for gate, status in run.qa.items() if status == 'fail' %}{{ ' · QA ' if loop.first }}{{ gate }} {{ status }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}"></li>
         {% endfor %}
       </ol>
+          {% if evals.by_team and evals.by_team | length > 1 %}
+      <div class="overflow-x-auto" data-testid="evals-teams">
+        <table class="w-full text-[12px] border-collapse">
+          <caption class="text-left text-[12px] text-faint pb-1">By team — the same history, each team on what it delivered</caption>
+          <thead><tr class="text-faint text-left">
+            <th class="font-medium py-1 pr-3">Team</th><th class="font-medium py-1 pr-3 text-right">Asked</th>
+            <th class="font-medium py-1 pr-3 text-right">Built</th><th class="font-medium py-1 pr-3 text-right">Verified</th>
+            <th class="font-medium py-1 pr-3 text-right">Median cost</th><th class="font-medium py-1 text-right">Median time</th>
+          </tr></thead>
+          <tbody>
+            {% for t in evals.by_team %}
+            <tr class="border-t border-line">
+              <td class="py-1 pr-3 font-mono text-ink">{{ t.team }}</td>
+              <td class="py-1 pr-3 text-right font-mono tabular-nums">{{ t.runs }}</td>
+              <td class="py-1 pr-3 text-right font-mono tabular-nums">{{ t.built }} <span class="text-faint">({{ (t.built_rate * 100) | round | int }}%)</span></td>
+              <td class="py-1 pr-3 text-right font-mono tabular-nums">{{ t.verified }}{% if t.broken %} <span class="text-bad">· {{ t.broken }} broken</span>{% endif %}</td>
+              <td class="py-1 pr-3 text-right font-mono tabular-nums">{% if t.median_cost_usd is not none %}${{ '%.2f' | format(t.median_cost_usd) }}{% else %}—{% endif %}</td>
+              <td class="py-1 text-right font-mono tabular-nums">{% if t.median_duration_s %}{{ (t.median_duration_s / 60) | round | int }} min{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
     </section>
     {% endif %}
 

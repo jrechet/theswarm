@@ -64,6 +64,26 @@ TEMPLATES: tuple[FlowTemplate, ...] = (
         ("before_merge",),
     ),
 )
+# How each flow is drawn (B4): its steps in the order work travels. A `role`
+# step is an engine role at work, a `gate` what the code guarantees whatever
+# the team, a `slot` an insertion point — the only place a drop is taken.
+DRAWINGS: dict[str, tuple[tuple[str, str, str], ...]] = {
+    FEATURE: (
+        ("role", "po", "Plan"), ("role", "techlead", "Break down"), ("role", "dev", "Build"),
+        ("role", "techlead", "Review"), ("slot", "before_merge", "Before the merge"),
+        ("gate", "merge", "Merge on green CI"), ("role", "qa", "Test and film"),
+        ("slot", "after_qa", "After QA"), ("role", "po", "Report"),
+    ),
+    FIX: (
+        ("gate", "intake", "The issue is the task"), ("role", "dev", "Build"), ("role", "techlead", "Review"),
+        ("slot", "before_merge", "Before the merge"), ("gate", "merge", "Merge on green CI"),
+        ("role", "qa", "Test and film"), ("slot", "after_qa", "After QA"),
+    ),
+    REVIEW: (
+        ("role", "techlead", "Review"), ("slot", "before_merge", "Before the merge"),
+        ("gate", "merge", "Merge on green CI"),
+    ),
+}
 TEMPLATE_KEYS: tuple[str, ...] = tuple(t.key for t in TEMPLATES)
 _BY_KEY = {t.key: t for t in TEMPLATES}
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -365,6 +366,55 @@ def last_measured(entries: list[dict]) -> dict | None:
     """The most recent run that measured something — what a new run is
     compared with to call a regression."""
     return next((e for e in reversed(entries) if is_measured(e)), None)
+
+
+BUILT_IN_TEAM = "the built-in team"
+_UNTOUCHED = re.compile(r" v0 · instance v0$")
+
+
+def team_name(label: str | None) -> str:
+    """A run's team, as a page says it: the pinned label, or the built-in
+    team for a run before teams existed or one nobody edited."""
+    text = str(label or "").strip()
+    return BUILT_IN_TEAM if not text or _UNTOUCHED.search(text) else text
+
+
+def _median(values: list[float]) -> float | None:
+    ordered = sorted(values)
+    if not ordered:
+        return None
+    middle = len(ordered) // 2
+    return ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+
+
+def by_team(entries: list[dict]) -> list[dict]:
+    """Each team's measure over the same history (phase B, B6): how many
+    features it was asked, how many it built, how many the running app
+    verified, and the median cost and duration of a build. "Modular" without
+    this means "not measured": a change of team is compared with the team
+    before it on what it delivers. Measured runs only; the built-in team
+    first, then by first appearance."""
+    teams: dict[str, dict] = {}
+    for e in entries:
+        if not is_measured(e):
+            continue
+        row = teams.setdefault(team_name(e.get("team")), {"runs": 0, "built": 0, "verified": 0, "broken": 0,
+                                                           "_costs": [], "_durations": []})
+        row["runs"] += 1
+        if e.get("passed"):
+            row["built"] += 1
+            if e.get("cost_usd") is not None:
+                row["_costs"].append(float(e["cost_usd"]))
+            if e.get("duration_s"):
+                row["_durations"].append(float(e["duration_s"]))
+        row["verified"] += 1 if e.get("behaviour") == BEHAVIOUR_VERIFIED else 0
+        row["broken"] += 1 if e.get("behaviour") == BEHAVIOUR_BROKEN else 0
+    out = []
+    for name, row in teams.items():
+        out.append({"team": name, "runs": row["runs"], "built": row["built"], "verified": row["verified"],
+                    "broken": row["broken"], "built_rate": row["built"] / row["runs"],
+                    "median_cost_usd": _median(row["_costs"]), "median_duration_s": _median(row["_durations"])})
+    return sorted(out, key=lambda r: r["team"] != BUILT_IN_TEAM)
 
 
 def trend(entries: list[dict], window: int = TREND_WINDOW) -> dict[str, Any]:

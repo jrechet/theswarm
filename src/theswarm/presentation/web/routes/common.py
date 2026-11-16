@@ -282,7 +282,8 @@ async def _evals_trend(state, repo: str) -> dict:
         entries = await store.list_for_repo(repo) if store is not None else []
         if not entries:
             entries = evals.read_history(evals.HISTORY_PATH, repo)
-        return evals.trend(entries)
+        # B6: each team's measure over the whole history, beside the recent trend
+        return {**evals.trend(entries), "by_team": evals.by_team(entries)}
     except Exception:  # noqa: BLE001 — a page, not a judge
         log.exception("V2: reading the eval history for %s failed", repo)
         return evals.trend([])
