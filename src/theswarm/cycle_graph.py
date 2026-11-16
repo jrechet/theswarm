@@ -89,6 +89,10 @@ class CycleState(TypedDict, total=False):
     # so a resume targets it too: the first resume (83b584194589) came back
     # untargeted and its Dev built #212, an unrelated backlog issue.
     target_issue: int | None
+    # The flow this cycle follows (phase B, B3): "feature", "fix" or "review",
+    # read off the pinned issue's labels by `prepare`. Absent in a checkpoint
+    # written before B3: the feature flow, which is what every cycle was.
+    template: str
 
 
 @dataclass
@@ -263,7 +267,58 @@ async def prepare(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
             # idle for 300s (warning 1/3)" in Seq on 2026-09-25).
             if rt.watchdog is not None:
                 rt.watchdog.retire("System")
+    return {"template": await _flow_of(rt, state)}
+
+
+async def _flow_of(rt: CycleRuntime, state: CycleState) -> str:
+    """The flow the pinned issue asks for (its `flow:*` label); the feature
+    flow for an unpinned cycle, in stub mode, or when the issue cannot be read."""
+    from theswarm.domain.teams.templates import FEATURE, flow_of_labels, template
+
+    target, github = state.get("target_issue"), rt.base_state.get("github")
+    if not target or github is None or not rt.config.is_real_mode:
+        return FEATURE
+    try:
+        issue = await github.get_issue(target)
+    except Exception as exc:  # noqa: BLE001 — unreadable: the whole flow, as before
+        log.warning("The flow of #%s could not be read (%s) — the feature flow", target, exc)
+        return FEATURE
+    flow = flow_of_labels((issue or {}).get("labels"))
+    if flow != FEATURE:
+        await rt.progress("System", f"Flow: {template(flow).name} — {template(flow).what}")
+    return flow
+
+
+async def fix_intake(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
+    """The fix flow's first step: the pinned issue *is* the task. No Claude
+    call — the issue is marked a Dev task, ready, and the Dev takes it
+    (`dev._pick_targeted` takes a pinned `role:dev` issue whatever its
+    status). Safe to repeat: adding a label twice changes nothing."""
+    rt = runtime.context
+    await rt.enter("fix_intake")
+    target, github = state.get("target_issue"), rt.base_state.get("github")
+    if target and github is not None:
+        await rt.progress("TechLead", f"Fix: #{target} is one task — no breakdown, straight to the Dev")
+        try:
+            await github.add_labels(target, ["role:dev", "status:ready"])
+            await github.remove_label(target, "status:backlog")
+        except Exception as exc:  # noqa: BLE001 — the Dev then finds no task and the cycle says so
+            log.warning("Fix intake: #%s could not be marked a task (%s)", target, exc)
     return {}
+
+
+def _after_prepare(state: CycleState) -> str:
+    return {"fix": "fix_intake", "review": "techlead_review"}.get(state.get("template", ""), "po_morning")
+
+
+def _after_dev_loop_end(state: CycleState) -> str:
+    # Review only: nothing was built, there is nothing to film.
+    return "merge_held" if state.get("template") == "review" else "qa"
+
+
+def _after_qa(state: CycleState) -> str:
+    # A fix has no evening report: what was merged was checked, that is the answer.
+    return "merge_held" if state.get("template") == "fix" else "po_evening"
 
 
 async def po_morning(state: CycleState, runtime: Runtime[CycleRuntime]) -> dict:
@@ -898,6 +953,7 @@ def build_cycle_graph(checkpointer=None):
     graph = StateGraph(CycleState, context_schema=CycleRuntime)
     for name, fn in (
         ("prepare", prepare),
+        ("fix_intake", fix_intake),
         ("po_morning", po_morning),
         ("techlead_breakdown", techlead_breakdown),
         ("dev_iter", dev_iter),
@@ -911,7 +967,12 @@ def build_cycle_graph(checkpointer=None):
     ):
         graph.add_node(name, _pausable(name, fn))
     graph.set_entry_point("prepare")
-    graph.add_edge("prepare", "po_morning")
+    # The flow (B3): feature goes through the plan and the breakdown, a fix
+    # straight to the Dev, a review straight to the TechLead.
+    graph.add_conditional_edges("prepare", _after_prepare, {
+        "po_morning": "po_morning", "fix_intake": "fix_intake", "techlead_review": "techlead_review",
+    })
+    graph.add_edge("fix_intake", "dev_iter")
     graph.add_edge("po_morning", "techlead_breakdown")
     graph.add_edge("techlead_breakdown", "dev_iter")
     graph.add_conditional_edges("dev_iter", _after_dev_iter, {
@@ -923,8 +984,8 @@ def build_cycle_graph(checkpointer=None):
         "dev_iter": "dev_iter",
         "dev_loop_end": "dev_loop_end",
     })
-    graph.add_edge("dev_loop_end", "qa")
-    graph.add_edge("qa", "po_evening")
+    graph.add_conditional_edges("dev_loop_end", _after_dev_loop_end, {"qa": "qa", "merge_held": "merge_held"})
+    graph.add_conditional_edges("qa", _after_qa, {"po_evening": "po_evening", "merge_held": "merge_held"})
     graph.add_edge("po_evening", "merge_held")
     graph.add_edge("merge_held", "finish")
     graph.add_edge("finish", "cycle_log")

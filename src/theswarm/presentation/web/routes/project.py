@@ -248,6 +248,12 @@ def live_cards(base: str, records: list) -> list[dict]:
     return cards
 
 
+def _flow_of_issue(issue: dict) -> str:
+    from theswarm.domain.teams.templates import flow_of_labels
+
+    return flow_of_labels(issue.get("labels"))
+
+
 def _issue_row(issue: dict, status: str, running, urls: dict) -> dict:
     number = issue.get("number")
     cycle = next((r for r in common._as_list(running) if getattr(r, "issue_number", None) == number), None)
@@ -328,7 +334,7 @@ async def project_page(request: Request, slug: str, name: str, new: int | None =
 
 @router.post("/c/{slug}/p/{name}/features")
 async def compose(request: Request, slug: str, name: str, body: str = Form(default=""),
-                  play: str = Form(default="")):
+                  play: str = Form(default=""), flow: str = Form(default="feature")):
     """Free text in, a GitHub issue out — and a cycle on it when asked."""
     state = request.app.state
     base = state.base_path
@@ -352,6 +358,8 @@ async def compose(request: Request, slug: str, name: str, body: str = Form(defau
     log.info("project: composed issue %r on %s (play=%s)", title, project.repo, bool(play))
     if not isinstance(number, int):
         return RedirectResponse(urls["page"], status_code=303)
+    if flow in ("fix", "review"):  # the flow is the issue's label, whether it is played now or later
+        await common.set_flow(str(project.repo), number, flow)
     if play:
         record = await common.start_targeted_cycle(
             state, project.repo.owner, project.repo.name, number, f"Play on issue #{number}",
@@ -361,11 +369,15 @@ async def compose(request: Request, slug: str, name: str, body: str = Form(defau
 
 
 @router.post("/c/{slug}/p/{name}/features/{number}/play")
-async def play(request: Request, slug: str, name: str, number: int):
+async def play(request: Request, slug: str, name: str, number: int, flow: str = Form(default="")):
+    """Play an issue. `flow` (the feature page's choice) is written on the
+    issue first; left out, the issue keeps the flow it has."""
     state = request.app.state
     customer, project = await _resolve(state, slug, name)
     if project is None:
         raise HTTPException(status_code=404, detail="No such project")
+    if flow in ("feature", "fix", "review"):
+        await common.set_flow(str(project.repo), number, flow)
     record = await common.start_targeted_cycle(
         state, project.repo.owner, project.repo.name, number, f"Play on issue #{number}",
     )
@@ -462,6 +474,7 @@ async def feature_page(request: Request, slug: str, name: str, number: int):
         "building": building,
         "cycle_href": f"{base}/cycles/{running.id}" if building else "",
         "play_url": f"{urls['play']}{number}/play",
+        "flow": _flow_of_issue(issue),  # B3: the flow its labels ask for, preselected on Play
         "cycles": await _recent_cycles(state, project, base, limit=10, issue_number=number),
         "error": pinned.error,
     })

@@ -238,12 +238,12 @@ un YAML n'exprime pas ce protocole.
   Le théâtre dessine les stations depuis l'équipe (le gabarit HTML itère déjà).
 - **B2 — l'équipe par projet et son YAML (3 jours). Livré le 2026-11-15** : export et import YAML validés en entier, versions numérotées par portée, équipe épinglée par fil de cycle (une reprise rejoue la sienne). Équipe par défaut de
   l'instance, équipe d'un projet, export, import, versions, épinglage par cycle.
-- **B3 — gabarits et points d'insertion (6 jours).** Fabrique de nœuds, nœud
+- **B3 — gabarits et points d'insertion (6 jours). Première moitié écrite le 2026-11-15** : trois gabarits (Feature, Correctif, Revue seule) comme chemins du même graphe durable, le flux porté par un label de l'issue (`flow:fix`, `flow:review`), choix au Play (composer, page feature, MCP). Reste : les personas libres aux points d'insertion. Fabrique de nœuds, nœud
   générique « persona libre », les trois gabarits, le choix du gabarit au
   Play (feature ou correctif).
 - **B4 — l'éditeur graphique (5 jours).** Le flux dessiné, glisser-déposer des
   personas sur les emplacements, validation en direct, aperçu du YAML.
-- **B5 — le MCP (4 jours).** Serveur MCP HTTP monté dans l'application,
+- **B5 — le MCP (4 jours). Lecture et pilotage livrés le 2026-11-15** (`/mcp`, huit outils, protocole écrit sur place et vérifié avec le client officiel) ; restent les propositions d'équipe. Serveur MCP HTTP monté dans l'application,
   derrière le mur (clé d'accès en Bearer), outils : lister projets et équipes,
   lire et proposer une équipe, valider un YAML, créer un persona, lancer une
   feature, lire l'état d'un cycle, lui écrire, le mettre en pause. Les

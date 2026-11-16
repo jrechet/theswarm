@@ -453,6 +453,9 @@ def create_web_app(
     app.include_router(player.public_router)  # /d/{short}, outside the wall
     app.include_router(metrics.router)  # Prometheus text, behind the wall — a machine endpoint, not a page
     app.include_router(api.router)
+    from theswarm.presentation.web.routes import mcp_routes
+
+    app.include_router(mcp_routes.router)  # phase B, B5: /mcp — read and pilot, for an MCP client
     app.include_router(auth_routes.router)
     app.include_router(github_setup.router)
 
