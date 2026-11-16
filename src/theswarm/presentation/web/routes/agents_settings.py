@@ -74,6 +74,30 @@ async def _projects(state) -> list[str]:
         return []
 
 
+def _flows(service, scope: str) -> list[dict]:
+    """B4: each flow drawn — its steps, and in each slot the free personas
+    placed there. The ones written for this scope can be moved; the ones a
+    project inherits from every project are shown where they are."""
+    from theswarm.domain.teams.templates import DRAWINGS, TEMPLATES
+
+    team = service.team(scope)
+    own = {e.key for e in service.extras_of(scope)}
+    met = service.extras_for(scope) + [e for e in service.extras_of(scope) if not e.enabled]
+    flows = []
+    for flow in TEMPLATES:
+        steps = []
+        for kind, key, label in DRAWINGS[flow.key]:
+            step = {"kind": kind, "key": key, "label": label}
+            if kind == "role":
+                step["who"] = team[key].name
+            if kind == "slot":
+                step["chips"] = [{"key": e.key, "name": e.name, "effect": e.effect, "movable": e.key in own,
+                                  "enabled": e.enabled} for e in sorted(met, key=lambda e: e.key) if e.point == key]
+            steps.append(step)
+        flows.append({"key": flow.key, "name": flow.name, "what": flow.what, "steps": steps})
+    return flows
+
+
 async def _team_context(request: Request) -> dict:
     """Phase B, B1 — who each role is, for the instance or the project the
     page is on (`?team=owner/name`): the stored words, and what an empty
@@ -122,6 +146,7 @@ async def _team_context(request: Request) -> dict:
         "extra_points": POINTS, "extra_effects": EFFECTS, "extras_max": MAX_PER_TEAM, "prompt_max": PROMPT_MAX,
         "extras_full": len(stored) >= MAX_PER_TEAM,
     }
+    extras_context["flows"] = _flows(service, scope) if service is not None else []
     versions = await service.versions(scope, limit=5) if service is not None else []
     proposals = await service.open_proposals(scope) if service is not None else []
     extras_context["team_proposals"] = [
@@ -231,6 +256,39 @@ async def decide_proposal(request: Request, proposal_id: int, decision: str):
     where = f"team={quote(decided['scope'], safe='')}&" if decided["scope"] else ""
     saved = "import" if decision == "accept" else "refused"
     return RedirectResponse(f"{state.base_path}/settings/agents?{where}team_saved={saved}#team", status_code=303)
+
+
+@router.post("/settings/agents/extra/move")
+async def move_extra(request: Request):
+    """B4: a free persona dropped on another insertion point of the flow. Only
+    a point is a target, so no drop draws a flow that does not ship; an effect
+    the new point does not take becomes a comment."""
+    from fastapi.responses import JSONResponse
+
+    from theswarm.domain.teams.extras import COMMENT, EFFECTS_AT, ExtraError
+    from theswarm.presentation.web.routes.customers import current_actor
+
+    state = request.app.state
+    actor = await _owner(request)
+    service = getattr(state, "personas", None)
+    if actor is None or service is None:
+        refused = await current_actor(request)
+        return JSONResponse({"moved": False, "why": "The owner moves the team's personas."},
+                            status_code=403 if refused is None or not refused.is_owner else 503)
+    form = await request.form()
+    scope, key, point = str(form.get("team") or ""), str(form.get("key") or ""), str(form.get("point") or "")
+    extra = next((e for e in service.extras_of(scope) if e.key == key), None)
+    if extra is None or point not in EFFECTS_AT:
+        return JSONResponse({"moved": False, "why": "That persona or that point is not of this team."}, status_code=400)
+    effect = extra.effect if extra.effect in EFFECTS_AT[point] else COMMENT
+    try:
+        await service.save_extra(scope, key=key, name=extra.name, prompt=extra.prompt, point=point, effect=effect,
+                                 model=extra.model, enabled=extra.enabled, by=actor.login)
+    except ExtraError as exc:
+        return JSONResponse({"moved": False, "why": str(exc)}, status_code=400)
+    log.info("Free persona %s of %s moved to %s by %s", key, scope or "the instance", point, actor.login)
+    return JSONResponse({"moved": True, "point": point, "effect": effect,
+                         "note": "" if effect == extra.effect else "It comments there: nothing is left to block."})
 
 
 @router.get("/settings/agents/team.yaml")

@@ -539,6 +539,20 @@ Le dépôt est hybride : il vit sur GitHub (référence) et sur la forge Forgejo
   They are in the team file (`extras:`), in the team a cycle pins, in
   Settings → Agents ("Extra personas") and in the MCP's `get_team`.
   `before_dev` is not offered yet: nothing reads a note there.
+- **The flow is drawn, and a persona is dragged to a point** (phase B, B4,
+  2026-11-16). Settings → Agents, "The flow": the three flows side by side
+  (`templates.DRAWINGS`), each step a **role** (with the name the team
+  gives it), a **gate** (what the code guarantees whatever the team: the
+  merge on green CI, a fix's intake) or a **slot** (an insertion point,
+  with the free personas placed there). A persona written for the team on
+  the page is dragged from one slot to another (`POST
+  /settings/agents/extra/move`, HTML5 drag and drop, no library); a
+  project's page shows every project's personas where they are, not
+  movable. **Only a slot takes a drop**, so no flow that does not ship can
+  be drawn — the validation is the shape of the editor; an effect the new
+  point does not take becomes a comment, and the page says so. A move is a
+  version of the team; the file under "This team as a file" is the YAML
+  preview. The persona's own form ("Where") does the same without a mouse.
 - **A team is measured** (phase B, B6, 2026-11-16). "Modular" without it
   means "not measured". A cycle's result names the team it ran with
   (`team`, the label its thread pinned: "owner/name v3 · instance v1" —

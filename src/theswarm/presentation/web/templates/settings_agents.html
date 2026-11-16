@@ -172,6 +172,87 @@
     </div>
     {% endif %}
 
+    {# ── Phase B, B4: the flow, drawn; a persona is dragged to a point ── #}
+    {% if team_available and flows %}
+    <div id="flow" class="flex flex-col gap-3 pt-3" data-testid="flow-editor" data-team="{{ team_scope }}" data-move="{{ base }}/settings/agents/extra/move">
+      <div class="flex flex-col gap-0.5">
+        <h3 class="m-0 text-[14px] font-semibold">The flow</h3>
+        <span class="text-[13px] text-muted max-w-[72ch]">What a cycle goes through, for each of the three flows you choose at Play. The solid steps are the team's roles; the barred ones are what the code guarantees whatever the team; the dashed ones are where your own personas go. Drag a persona to another dashed step — or change "Where" in its form below.</span>
+      </div>
+      <p class="m-0 text-[13px] text-ink" role="status" aria-live="polite" data-testid="flow-status" hidden></p>
+      {% for f in flows %}
+      <div class="flex flex-col gap-2 px-4 py-3.5 bg-surface border border-line rounded-[10px]" data-testid="flow" data-flow="{{ f.key }}">
+        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          <span class="font-medium text-[14px]">{{ f.name }}</span><span class="text-[12px] text-muted">{{ f.what }}</span>
+        </div>
+        <ol class="list-none m-0 p-0 flex flex-wrap items-stretch gap-x-1.5 gap-y-2" aria-label="{{ f.name }} flow">
+          {% for st in f.steps %}
+          <li class="flex items-stretch gap-1.5">
+            {% if st.kind == 'role' %}
+            <span class="flex flex-col justify-center gap-0.5 px-3 py-2 min-w-[6.5rem] border border-line-strong rounded-md bg-raised" data-step="role">
+              <span class="text-[13px] font-medium">{{ st.label }}</span><span class="text-[11px] text-muted">{{ st.who }}</span>
+            </span>
+            {% elif st.kind == 'gate' %}
+            <span class="flex flex-col justify-center px-3 py-2 min-w-[6.5rem] border-y border-x-4 border-line-strong rounded-sm bg-surface" data-step="gate" title="Guaranteed by the code, whatever the team">
+              <span class="text-[12px] font-medium text-muted">{{ st.label }}</span>
+            </span>
+            {% else %}
+            <span class="flow-slot flex flex-col gap-1 px-2.5 py-2 min-w-[8.5rem] border border-dashed border-line-strong rounded-md" data-step="slot" data-point="{{ st.key }}" data-testid="slot-{{ st.key }}">
+              <span class="text-[11px] uppercase tracking-[0.06em] text-faint">{{ st.label }}</span>
+              {% for c in st.chips %}
+              <span class="flow-chip inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] font-medium {% if c.enabled %}bg-live-wash text-live-deep{% else %}bg-raised text-faint line-through{% endif %} {% if c.movable %}cursor-grab{% endif %}"
+                    {% if c.movable %}draggable="true" tabindex="0" data-key="{{ c.key }}" title="Drag to another dashed step"{% else %}title="From every project's team"{% endif %} data-testid="chip-{{ c.key }}">{{ c.name }}{% if c.effect == 'block' %} <span class="font-normal">· blocks</span>{% endif %}</span>
+              {% else %}<span class="text-[12px] text-faint">nobody yet</span>{% endfor %}
+            </span>
+            {% endif %}
+            {% if not loop.last %}<span class="self-center text-faint" aria-hidden="true">→</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ol>
+      </div>
+      {% endfor %}
+    </div>
+    <script>
+    (function () {
+      var editor = document.querySelector('[data-testid="flow-editor"]');
+      if (!editor) return;
+      var status = editor.querySelector('[data-testid="flow-status"]');
+      var dragged = null;
+      function say(text) { status.textContent = text; status.hidden = !text; }
+      editor.querySelectorAll('.flow-chip[draggable="true"]').forEach(function (chip) {
+        chip.addEventListener('dragstart', function (event) {
+          dragged = chip.dataset.key;
+          event.dataTransfer.setData('text/plain', dragged);
+          event.dataTransfer.effectAllowed = 'move';
+        });
+        chip.addEventListener('dragend', function () { dragged = null; });
+      });
+      editor.querySelectorAll('.flow-slot').forEach(function (slot) {
+        slot.addEventListener('dragover', function (event) {
+          if (dragged) { event.preventDefault(); slot.classList.add('bg-live-wash'); }
+        });
+        slot.addEventListener('dragleave', function () { slot.classList.remove('bg-live-wash'); });
+        slot.addEventListener('drop', function (event) {
+          event.preventDefault();
+          slot.classList.remove('bg-live-wash');
+          var key = dragged || event.dataTransfer.getData('text/plain');
+          if (!key) return;
+          var body = new URLSearchParams({team: editor.dataset.team, key: key, point: slot.dataset.point});
+          say('Moving…');
+          fetch(editor.dataset.move, {method: 'POST', body: body, headers: {'Accept': 'application/json'}})
+            .then(function (r) { return r.json(); })
+            .then(function (answer) {
+              if (!answer.moved) { say(answer.why || 'It could not be moved.'); return; }
+              window.location.hash = 'flow';
+              window.location.reload();
+            })
+            .catch(function () { say('It could not be moved: the server did not answer.'); });
+        });
+      });
+    })();
+    </script>
+    {% endif %}
+
     {# ── Phase B, B3: free personas at the flow's insertion points ──── #}
     {% if team_available %}
     <div id="extras" class="flex flex-col gap-3 pt-3" data-testid="extras">
