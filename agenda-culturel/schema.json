@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["meta", "events"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["cities", "week_start", "week_end", "generated_at"],
+      "additionalProperties": false,
+      "properties": {
+        "cities": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "week_start": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+        "week_end": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+        "generated_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"}
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id","title","date","time","venue","city","audience","category","price","is_free","status","continuous","source_url","notes"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+          "time": {"type": "string"},
+          "venue": {"type": "string"},
+          "city": {"type": "string"},
+          "audience": {"enum": ["adult", "child", "family"]},
+          "category": {"enum": ["concert","dj","theatre","expo","salon","atelier","autre"]},
+          "price": {"type": "string"},
+          "is_free": {"type": "boolean"},
+          "status": {"enum": ["confirmed", "sold_out", "cancelled"]},
+          "continuous": {"type": "boolean"},
+          "source_url": {"type": "string", "pattern": "^https?://"},
+          "notes": {"type": "string"}
+        }
+      }
+    }
+  }
+}

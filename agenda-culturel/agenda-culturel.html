@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agenda culturel de la semaine</title>
+<style>
+:root{--bg:#fff;--fg:#1c1c1e;--mut:#5b6068;--card:#f4f4f6;--line:#d8d8de;--acc:#a54d08}
+@media(prefers-color-scheme:dark){:root{--bg:#16161a;--fg:#ececf0;--mut:#a0a4ad;--card:#222228;--line:#33333b;--acc:#f0a35c}}
+body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,sans-serif;max-width:1100px;margin-inline:auto}
+h1{font-size:1.4rem;margin:.2em 0}.mut{color:var(--mut);font-size:.9rem}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+select,input{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
+.days{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.day{border:1px solid var(--line);border-radius:8px;padding:8px}.day h2{font-size:1rem;margin:0 0 6px;text-transform:capitalize}
+.ev{background:var(--card);border-radius:6px;padding:8px;margin:6px 0}.ev b{display:block}
+.tag{display:inline-block;font-size:.75rem;border:1px solid var(--line);border-radius:10px;padding:0 6px;margin-right:4px}
+.cancelled{opacity:.6}.cancelled b{text-decoration:line-through}.warn{color:var(--acc);font-weight:600}
+a{color:var(--acc);text-decoration:underline}
+</style></head><body>
+<h1>Agenda culturel</h1><div id="meta" class="mut"></div>
+<div class="bar">
+<select id="aud"><option value="">Tous publics</option><option value="adult">Adultes</option><option value="child">Enfant</option><option value="family">Famille</option></select>
+<select id="cat"><option value="">Toutes catégories</option></select>
+<select id="city"><option value="">Toutes villes</option></select>
+<input id="q" type="search" placeholder="Rechercher…">
+</div>
+<h2 style="font-size:1.05rem">En continu cette semaine</h2><div id="cont"></div>
+<div class="days" id="days"></div>
+<script id="embedded" type="application/json">{"meta":{"cities":[],"week_start":"1970-01-05","week_end":"1970-01-11","generated_at":"1970-01-01T00:00:00Z"},"events":[]}</script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const AUD={adult:'Adultes',child:'Enfant',family:'Famille'};
+let data;
+async function load(){
+  try{const r=await fetch('./agenda.json',{cache:'no-store'});if(!r.ok)throw 0;data=await r.json();}
+  catch{data=JSON.parse($('embedded').textContent);$('meta').textContent='Données embarquées (agenda.json introuvable). ';}
+  const m=data.meta;
+  $('meta').textContent+=`${m.cities.join(', ')} — du ${m.week_start} au ${m.week_end} — généré le ${m.generated_at}`;
+  for(const [id,key] of [['cat','category'],['city','city']])
+    [...new Set(data.events.map(e=>e[key]))].sort().forEach(v=>$(id).add(new Option(v,v)));
+  for(const id of ['aud','cat','city','q'])$(id).addEventListener('input',render);
+  render();
+}
+function card(e){
+  const st=e.status==='cancelled'?'<span class="warn">Annulé</span> ':e.status==='sold_out'?'<span class="warn">Complet</span> ':'';
+  return `<div class="ev ${e.status}"><b>${esc(e.title)}</b>${st}<span class="tag">${AUD[e.audience]}</span><span class="tag">${esc(e.category)}</span><br>
+  ${esc(e.time)} · ${esc(e.venue)}, ${esc(e.city)} · ${esc(e.price)}<br>
+  ${e.notes?`<span class="mut">${esc(e.notes)}</span><br>`:''}<a href="${esc(e.source_url)}" target="_blank" rel="noopener">Source</a></div>`;
+}
+function render(){
+  const f=e=>(!$('aud').value||e.audience===$('aud').value)&&(!$('cat').value||e.category===$('cat').value)
+    &&(!$('city').value||e.city===$('city').value)
+    &&(!$('q').value||(e.title+e.venue+e.notes).toLowerCase().includes($('q').value.toLowerCase()));
+  const evs=data.events.filter(f);
+  $('cont').innerHTML=evs.filter(e=>e.continuous).map(card).join('')||'<p class="mut">Rien.</p>';
+  const start=new Date(data.meta.week_start+'T12:00:00Z');let h='';
+  for(let i=0;i<7;i++){
+    const d=new Date(start.getTime()+i*864e5),iso=d.toISOString().slice(0,10);
+    const l=d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',timeZone:'UTC'});
+    const day=evs.filter(e=>!e.continuous&&e.date===iso);
+    h+=`<section class="day"><h2>${l}</h2>${day.map(card).join('')||'<p class="mut">Aucun événement confirmé.</p>'}</section>`;
+  }
+  $('days').innerHTML=h;
+}
+load();
+</script></body></html>
